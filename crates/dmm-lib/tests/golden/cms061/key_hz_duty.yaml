@@ -1,0 +1,13 @@
+# Duty with the leads open, after a remote Hz/Duty in Hz
+# Captured 2026-11-06 from a UNI-T UT217A (the CMS061) over Bluetooth (issue #45, @jkay-png, 0.10.0-dev f2dea939 report, step key_hz_duty).
+raw_hex: "E1 11 F0 00 00 00 A3 11 F0 00 00 00 04 00 00"
+mode: "Duty %"
+value: "0"
+unit: "%"
+range_label: ""
+flags:
+  auto_range: true
+aux:
+  - label: "Hz"
+    value: "0.000"
+    unit: "Hz"

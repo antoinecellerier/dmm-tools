@@ -1,0 +1,14 @@
+# DC V under a remote Max/Min, with the running maximum beside it
+# Captured 2026-11-06 from a UNI-T UT217A (the CMS061) over Bluetooth (issue #45, @jkay-png, 0.10.0-dev f2dea939 report, step key_minmax).
+raw_hex: "21 10 F0 1D 01 00 21 10 F0 1D 01 00 20 00 00"
+mode: "DC V"
+value: "28.5"
+unit: "V"
+range_label: ""
+flags:
+  max: true
+  dc: true
+aux:
+  - label: "Max"
+    value: "28.5"
+    unit: "V"

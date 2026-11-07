@@ -1,0 +1,9 @@
+# Inrush with nothing in the jaws, after a remote Inrush in AC A
+# Captured 2026-11-06 from a UNI-T UT217A (the CMS061) over Bluetooth (issue #45, @jkay-png, 0.10.0-dev f2dea939 report, step key_inrush).
+raw_hex: "E2 00 F0 00 00 00 A3 01 F0 00 00 00 00 00 02"
+mode: "Inrush"
+value: "0"
+unit: "A"
+range_label: ""
+flags: {}
+aux: []

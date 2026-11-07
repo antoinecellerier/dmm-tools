@@ -157,9 +157,6 @@ and each still wants a capture of our own.
   as `hz_duty`, so it steps Hz/Duty instead (§7.3). Needs one sent `rel` there.
 - Max/Min (key 6) on a B33, which has no such key (§7.3) — settles §7.3.
   Needs a B33.
-- What Select does on a CMS in V,DC; no key on the meter carries that name, and
-  `01 01` changed nothing in scope mode (§10.8) — decides the SELECT tooltip
-  and whether the button stays. Needs `key_select`. (#45)
 - The first Max/Min press on a B35T+, B41T+, VC871, VC891, VC915 and VC925 PV,
   whose manuals give no order: MAX or MIN — decides whether the GUI's MAX/MIN
   fits them. Needs one press from off, reading the screen.
@@ -282,14 +279,12 @@ and each still wants a capture of our own.
 - Whether a meter streams and keeps its clock with no `#TIMEsync` written
   (§10.8) — decides whether a client may skip it. Needs an OW67B/69B or a
   VC871/891/915/925.
-- The CMS's MaxMin sub-value against the LCD's Max: the frames show the signed
-  running maximum (§9.4) — settles the "Max" label. Needs `maxmin` with the
-  three values on the LCD noted.
-- A duty other than 0 on a CMS (§9.4) — settles duty's scale. Needs
-  `capture --steps duty` on a square wave.
-- On the CMS, which reading is the large digits in Hz/A: the frames make
-  Hz the main reading, as in Hz/V, whose LCD showed the frequency (§9.4) —
-  decides whether the decoder swaps them. Needs `aca_hz` with an LCD photo.
+- The CMS's MaxMin sub-value against the LCD's Max and Min, and what sets MAX
+  or MIN: F1 set either (§9.4) — settles the sub-value's label, "Max" today and
+  the mode's name under MIN. Needs `maxmin` twice, the LCD's three values noted. (#45)
+- The CMS's Hz/A sub-value with a current in the jaws: AC A read 0 in every
+  frame so far (§9.4) — confirms its scale. Needs `aca_hz` clamped around a
+  conductor carrying AC. (#45)
 - Bluetooth off and idle-off on each model (OW67B 5 min; the others not
   stated, §9.4) — decides whether a long session ends by itself. Needs a
   connected meter left idle.

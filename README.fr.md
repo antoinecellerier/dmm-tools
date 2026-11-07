@@ -82,6 +82,17 @@ $ dmm-cli read --interval-ms 2500 --count 5
 | UNI-T UT71A/B, UT71C/D/E | 🧪 Expérimental | 🧪 Expérimental (adaptateur) | [#22](https://github.com/antoinecellerier/dmm-tools/issues/22) |
 | UNI-T UT8802, UT8802N | 🧪 Expérimental | — | [#12](https://github.com/antoinecellerier/dmm-tools/issues/12) |
 | UNI-T UT8803, UT8803E | 🧪 Expérimental | — | [#3](https://github.com/antoinecellerier/dmm-tools/issues/3) |
+| OWON CMS061 (UNI-T UT217A) | — | ✅ Vérifié (intégré) | [#45](https://github.com/antoinecellerier/dmm-tools/issues/45) |
+| OWON B33 | — | 🧪 Expérimental (intégré) | [#41](https://github.com/antoinecellerier/dmm-tools/issues/41) |
+| OWON B35T+ | — | 🧪 Expérimental (intégré) | [#42](https://github.com/antoinecellerier/dmm-tools/issues/42) |
+| OWON B41T+ | — | 🧪 Expérimental (intégré) | [#43](https://github.com/antoinecellerier/dmm-tools/issues/43) |
+| OWON CM2100B | — | 🧪 Expérimental (intégré) | [#44](https://github.com/antoinecellerier/dmm-tools/issues/44) |
+| OWON CMS101 (UNI-T UT217B) | — | 🧪 Expérimental (intégré) | [#45](https://github.com/antoinecellerier/dmm-tools/issues/45) |
+| OWON OW18B/OW16B | — | 🧪 Expérimental (intégré) | [#39](https://github.com/antoinecellerier/dmm-tools/issues/39) |
+| OWON OW18E | — | 🧪 Expérimental (intégré) | [#40](https://github.com/antoinecellerier/dmm-tools/issues/40) |
+| OWON OW65B | — | 🧪 Expérimental (intégré) | [#46](https://github.com/antoinecellerier/dmm-tools/issues/46) |
+| OWON OW67B (Voltcraft VC871) | — | 🧪 Expérimental (intégré) | [#47](https://github.com/antoinecellerier/dmm-tools/issues/47) |
+| OWON OW69B (Voltcraft VC891) | — | 🧪 Expérimental (intégré) | [#48](https://github.com/antoinecellerier/dmm-tools/issues/48) |
 | ZOTEK ZT-5B (ANENG V05B) | — | ✅ Vérifié (intégré) | [#31](https://github.com/antoinecellerier/dmm-tools/issues/31) |
 | ZOTEK ZT-5BQ (ANENG ST207) | — | 🧪 Expérimental (intégré) | [#30](https://github.com/antoinecellerier/dmm-tools/issues/30) |
 | ZOTEK ZT-300AB (ANENG AN9002) | — | 🧪 Expérimental (intégré) | [#28](https://github.com/antoinecellerier/dmm-tools/issues/28) |
@@ -93,17 +104,6 @@ $ dmm-cli read --interval-ms 2500 --count 5
 | Brymen BM869s/BM867s | 🧪 Expérimental | — | [#34](https://github.com/antoinecellerier/dmm-tools/issues/34) |
 | Brymen BM788BT/BM787BT | — | 🧪 Expérimental (intégré) | [#33](https://github.com/antoinecellerier/dmm-tools/issues/33) |
 | EEVblog 121GW | — | 🧪 Expérimental (intégré) | [#32](https://github.com/antoinecellerier/dmm-tools/issues/32) |
-| OWON B33 | — | 🧪 Expérimental (intégré) | [#41](https://github.com/antoinecellerier/dmm-tools/issues/41) |
-| OWON B35T+ | — | 🧪 Expérimental (intégré) | [#42](https://github.com/antoinecellerier/dmm-tools/issues/42) |
-| OWON B41T+ | — | 🧪 Expérimental (intégré) | [#43](https://github.com/antoinecellerier/dmm-tools/issues/43) |
-| OWON CM2100B | — | 🧪 Expérimental (intégré) | [#44](https://github.com/antoinecellerier/dmm-tools/issues/44) |
-| OWON CMS061 (UNI-T UT217A) | — | 🟡 Partiellement vérifié (intégré) | [#45](https://github.com/antoinecellerier/dmm-tools/issues/45) |
-| OWON CMS101 (UNI-T UT217B) | — | 🧪 Expérimental (intégré) | [#45](https://github.com/antoinecellerier/dmm-tools/issues/45) |
-| OWON OW18B/OW16B | — | 🧪 Expérimental (intégré) | [#39](https://github.com/antoinecellerier/dmm-tools/issues/39) |
-| OWON OW18E | — | 🧪 Expérimental (intégré) | [#40](https://github.com/antoinecellerier/dmm-tools/issues/40) |
-| OWON OW65B | — | 🧪 Expérimental (intégré) | [#46](https://github.com/antoinecellerier/dmm-tools/issues/46) |
-| OWON OW67B (Voltcraft VC871) | — | 🧪 Expérimental (intégré) | [#47](https://github.com/antoinecellerier/dmm-tools/issues/47) |
-| OWON OW69B (Voltcraft VC891) | — | 🧪 Expérimental (intégré) | [#48](https://github.com/antoinecellerier/dmm-tools/issues/48) |
 | Voltcraft VC-880, VC650BT | 🧪 Expérimental | — | [#13](https://github.com/antoinecellerier/dmm-tools/issues/13) |
 | Voltcraft VC-890 | 🧪 Expérimental | — | [#14](https://github.com/antoinecellerier/dmm-tools/issues/14) |
 | Voltcraft VC915/VC925 PV | — | 🧪 Expérimental (intégré) | [#49](https://github.com/antoinecellerier/dmm-tools/issues/49) |

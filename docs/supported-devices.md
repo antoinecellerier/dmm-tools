@@ -259,7 +259,7 @@ Voltcraft meters, until the Bluetooth symbol shows.
 | B41T+ | 22000 | 🧪 Experimental ([#43](https://github.com/antoinecellerier/dmm-tools/issues/43)) | a mV position; no hFE |
 | CM2100B | 19999 | 🧪 Experimental ([#44](https://github.com/antoinecellerier/dmm-tools/issues/44)) | clamp: 2 A, 20 A and 100 A positions; NCV, ZERO; no temperature |
 | CMS101 / UNI-T UT217B | 20000 | 🧪 Experimental ([#45](https://github.com/antoinecellerier/dmm-tools/issues/45)) | clamp, 1000 A; oscilloscope mode; NCV, inrush; second display as a sub-value |
-| CMS061 / UNI-T UT217A | 20000 | 🟡 Partly verified ([#45](https://github.com/antoinecellerier/dmm-tools/issues/45)) | clamp, 600 A; oscilloscope mode; NCV, inrush; second display as a sub-value |
+| CMS061 / UNI-T UT217A | 20000 | ✅ Verified ([#45](https://github.com/antoinecellerier/dmm-tools/issues/45)) | clamp, 600 A; oscilloscope mode; NCV, inrush; second display as a sub-value |
 | OW65B | 6000 | 🧪 Experimental ([#46](https://github.com/antoinecellerier/dmm-tools/issues/46)) | LoZ, 4-20 mA; second display as a sub-value |
 | OW67B | 60000 | 🧪 Experimental ([#47](https://github.com/antoinecellerier/dmm-tools/issues/47)) | AC, DC and USB power; LoZ, 4-20 mA, peak; second display as a sub-value |
 | OW69B | 60000 | 🧪 Experimental ([#48](https://github.com/antoinecellerier/dmm-tools/issues/48)) | AC+DC V, low-pass; LoZ, 4-20 mA, peak; second display as a sub-value |
@@ -268,9 +268,9 @@ Voltcraft meters, until the Bluetooth symbol shows.
 | VC915 | 20000 | 🧪 Experimental ([#49](https://github.com/antoinecellerier/dmm-tools/issues/49)) | AC+DC V, low-pass, motor rotation; LoZ, 4-20 mA; second display as a sub-value |
 | VC925 PV | 20000 | 🧪 Experimental ([#49](https://github.com/antoinecellerier/dmm-tools/issues/49)) | solar with its LX-925 adapter; 2 kV DC, 1.5 kV AC; no A position; second display as a sub-value |
 
-A UT217A has run the CMS061's main modes, NCV, negative DC V and auto-detection
-([#45](https://github.com/antoinecellerier/dmm-tools/issues/45)); oscilloscope
-mode shows no reading, and its remote keys are still to confirm. No other
+A UT217A has run the CMS061's modes, NCV, negative DC V, every remote key and
+auto-detection ([#45](https://github.com/antoinecellerier/dmm-tools/issues/45));
+oscilloscope mode shows no reading, as the meter sends none. No other
 model has run yet: their decoding and remote keys come from OWON's and
 Voltcraft's apps, OWON's PC software and the manuals. The meter reports its
 model when it connects, which picks its entry; the OW16B opens as the

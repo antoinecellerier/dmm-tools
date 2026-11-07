@@ -1,0 +1,10 @@
+# DC V on a manual range after a remote Range, 28.6 V
+# Captured 2026-11-06 from a UNI-T UT217A (the CMS061) over Bluetooth (issue #45, @jkay-png, 0.10.0-dev f2dea939 report, step key_range).
+raw_hex: "21 00 F0 1E 01 00 22 00 F0 00 00 00 00 00 00"
+mode: "DC V"
+value: "28.6"
+unit: "V"
+range_label: ""
+flags:
+  dc: true
+aux: []

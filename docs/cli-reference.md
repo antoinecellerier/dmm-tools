@@ -79,7 +79,7 @@ A detected run prints one dim stderr line naming the meter and the `--device <id
 | `b35t+` | `b35+`, `owon-b35t+` | B35T+ (experimental) |
 | `b41t+` | `b41t`, `owon-b41t+` | B41T+ (experimental) |
 | `cm2100b` | `owon-cm2100b` | CM2100B (experimental) |
-| `cms061` | `owon-cms061` | CMS061 (partly verified) |
+| `cms061` | `owon-cms061` | CMS061 (verified) |
 | `cms101` | `owon-cms101` | CMS101 (experimental) |
 | `ow18b` | `ow16b`, `owon-ow18b`, `owon-ow16b` | OW18B/OW16B (experimental) |
 | `ow18e` | `owon-ow18e` | OW18E (experimental) |
@@ -99,7 +99,7 @@ A detected run prints one dim stderr line naming the meter and the `--device <id
 | `ut171` | `ut171a`, `ut171b`, `ut171c` | UT171A/B/C (experimental) |
 | `ut181a` | `ut181` | UT181A (partly verified) |
 | `ut202bt` |  | UT202BT (experimental) |
-| `ut217a` |  | UT217A (partly verified) |
+| `ut217a` |  | UT217A (verified) |
 | `ut217b` |  | UT217B (experimental) |
 | `ut803` |  | UT803 (experimental) |
 | `ut804` |  | UT804 (verified) |

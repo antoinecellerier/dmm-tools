@@ -529,8 +529,9 @@ pub(super) const VC925_METER_KEYS: MeterKeys = MeterKeys {
 };
 
 /// On the CMS, MaxMin is entered with one press and left with another
-/// (CMS101-UM p.27/22). OWON's app sends Select, but no key on the meter carries
-/// that name and what it does is open (spec §10.8).
+/// (CMS101-UM p.27/22). OWON's app sends Select, which no key on the meter
+/// carries; on a UT217A it took V,DC to V,AC and did nothing in scope mode,
+/// its effect elsewhere untried (spec §10.8, #45).
 const CMS_BUTTON_LABELS: &[ButtonLabel] = &[
     ButtonLabel {
         command: command::MINMAX,
@@ -540,7 +541,7 @@ const CMS_BUTTON_LABELS: &[ButtonLabel] = &[
     ButtonLabel {
         command: command::SELECT,
         label: None,
-        hover: Some("Send Select; effect on this meter unknown"),
+        hover: Some("Send Select; switches V,DC to V,AC"),
     },
 ];
 

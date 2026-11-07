@@ -515,7 +515,7 @@ key-hover-record-minimum-maximum-and-average-readings = Record minimum, maximum,
 # Used by: UT171A/B/C, UT181A
 key-hover-save-the-reading-to-the-meter = Save the reading to the meter's memory
 # Used by: CMS061, CMS101
-key-hover-send-select-effect-on-this-meter = Send Select; effect on this meter unknown
+key-hover-send-select-switches-v-dc-to = Send Select; switches V,DC to V,AC
 # Used by: VC915
 key-hover-show-3-phase-rotation-direction = Show 3-phase rotation direction
 # Used by: VC915

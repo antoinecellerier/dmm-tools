@@ -42,7 +42,7 @@ pub(super) fn steps(code: u8) -> Vec<CaptureStep> {
         35 => (b35t_plus(), b35_b41_keys()),
         41 => (b41t_plus(), b35_b41_keys()),
         21 => (cm2100b(), cm2100b_keys()),
-        101 | 61 => (cms(code), cms_keys()),
+        101 | 61 => (cms(), cms_keys()),
         65 => (ow65b(), ow65b_keys()),
         67 => (ow67b(), ow67b_keys()),
         69 => (ow69b(), ow69b_keys()),
@@ -53,6 +53,11 @@ pub(super) fn steps(code: u8) -> Vec<CaptureStep> {
         _ => return Vec::new(),
     };
     steps.extend(keys);
+    if code == 61 {
+        for step in &mut steps {
+            step.verified = CMS061_VERIFIED.contains(&step.id);
+        }
+    }
     steps
 }
 
@@ -1117,8 +1122,8 @@ const LEAD_ERROR: &[(Flag, bool)] = &[(Flag::LeadError, true)];
 /// is the jaws only; HOLD held zeroes DC A (p.13/8, p.18/13). The power key
 /// switches between the multimeter and the oscilloscope (p.13/8), where
 /// Bluetooth keeps streaming (spec §9.4). The CMS061's [`CMS061_VERIFIED`]
-/// steps are confirmed; `code` is the entry's model code.
-fn cms(code: u8) -> Vec<CaptureStep> {
+/// steps are confirmed.
+fn cms() -> Vec<CaptureStep> {
     let mut steps = steps::gate_steps(
         Volts::DcV,
         CaptureStep::basic(
@@ -1253,11 +1258,6 @@ fn cms(code: u8) -> Vec<CaptureStep> {
         .wait_for_enter()
         .expect(Expect::mode("Scope").value(ValueExpect::NoReading)),
     ]);
-    if code == 61 {
-        for step in &mut steps {
-            step.verified = CMS061_VERIFIED.contains(&step.id);
-        }
-    }
     steps
 }
 
@@ -1265,11 +1265,13 @@ fn cms(code: u8) -> Vec<CaptureStep> {
 /// its LCD showed them. Its OL was sampled mid-autorange, but its frames
 /// settle at OL MΩ, as the LCD showed. Hz and duty rest on the same LCD
 /// text, Hz first: only the hz step decodes in that order; duty's main and
-/// sub order is confirmed, its scale not, as every duty so far is 0. EF
+/// sub order is confirmed, and its scale by a 31.5 % beside 30.09 kHz. EF
 /// rests on the first capture's frames: its second run's step filed before
 /// the leads could move. The scope's frames carried no reading at an LCD
-/// reading of Rms 1.77 V. MaxMin's Max label, Hz/A and the keys wait for a
-/// run from the states their steps ask for.
+/// reading of Rms 1.77 V. Hz/A's large digits showed Hz, as decoded. Every
+/// key took effect from the state its step starts from, Max/Min's from a
+/// manual range rather than Auto. MaxMin waits for
+/// the LCD's values: its sub-value came under MAX in two runs, MIN in one.
 const CMS061_VERIFIED: &[&str] = &[
     "dcv",
     "dcv_short",
@@ -1296,13 +1298,22 @@ const CMS061_VERIFIED: &[&str] = &[
     "dca",
     "dca_zero",
     "aca",
+    "aca_hz",
     "inrush",
     "scope",
+    "key_select",
+    "key_hold",
+    "key_rel",
+    "key_range",
+    "key_minmax",
+    "key_hz_duty",
+    "key_inrush",
 ];
 
 /// The CMS entries' keys: Select, Range, Hold, Rel, Hz/Duty, Max/Min and
-/// Inrush, all taps (spec §10.8). The CMS has no SELECT key and no key
-/// named Hz/Duty, so those steps expect nothing.
+/// Inrush, all taps (spec §10.8). The CMS has no SELECT key, but Select took
+/// a UT217A from V,DC to V,AC (#45). It has no key named Hz/Duty, but Hz/Duty
+/// took the UT217A from Hz to duty.
 ///
 /// Each step's instruction has the operator set the meter up, or undo the
 /// step before, so each starts from a state: #45's run sent all seven within
@@ -1313,11 +1324,12 @@ fn cms_keys() -> Vec<CaptureStep> {
         key(
             "key_select",
             "Press the power key briefly if the oscilloscope shows, Tab⇌ briefly until the \
-             first menu page shows, then F2 until V,DC shows, leads open: we will send Select, \
-             which the CMS has no key for, so no change on the screen is a valid result.",
+             first menu page shows, then F2 until V,DC shows, leads open: we will send Select \
+             (V,AC should show). Press F2 until V,DC shows afterwards.",
             command::SELECT,
         )
-        .starts_from(Expect::mode("DC V")),
+        .starts_from(Expect::mode("DC V"))
+        .expect(Expect::mode("AC V")),
         key(
             "key_hold",
             "V,DC: we will send Hold (HOLD should show). Press HOLD briefly afterwards.",
@@ -1350,11 +1362,12 @@ fn cms_keys() -> Vec<CaptureStep> {
         key(
             "key_hz_duty",
             "Press Tab⇌ briefly until the first menu page shows, then F4 until Freq shows, \
-             leads open: we will send Hz/Duty. If % shows afterwards, press Tab⇌ briefly for \
-             the second menu page and F4.",
+             leads open: we will send Hz/Duty (% should show). Afterwards press Tab⇌ briefly \
+             for the second menu page and F4.",
             "hz_duty",
         )
-        .starts_from(Expect::mode("Hz")),
+        .starts_from(Expect::mode("Hz"))
+        .expect(Expect::mode("Duty %")),
         key(
             "key_inrush",
             "Press Tab⇌ briefly until the first menu page shows, then F1 until A,AC shows, \

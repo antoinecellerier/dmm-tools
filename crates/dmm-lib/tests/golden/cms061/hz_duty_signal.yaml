@@ -1,0 +1,13 @@
+# Hz at 30.09 kHz with 31.5 % duty beside it, as the LCD showed
+# Captured 2026-11-06 from a UNI-T UT217A (the CMS061) over Bluetooth (issue #45, @jkay-png, 0.10.0-dev f2dea939 report, step extra_0).
+raw_hex: "AA 11 F0 C1 0B 00 E1 11 F0 3B 01 00 04 00 00"
+mode: "Hz"
+value: "30.09"
+unit: "kHz"
+range_label: ""
+flags:
+  auto_range: true
+aux:
+  - label: "Duty"
+    value: "31.5"
+    unit: "%"

@@ -1,0 +1,14 @@
+# DC V under a remote Rel, with the 28.61 V reference beside it
+# Captured 2026-11-06 from a UNI-T UT217A (the CMS061) over Bluetooth (issue #45, @jkay-png, 0.10.0-dev f2dea939 report, step key_rel).
+raw_hex: "22 10 F0 00 00 00 22 10 F0 2D 0B 00 02 00 00"
+mode: "DC V"
+value: "0"
+unit: "V"
+range_label: ""
+flags:
+  rel: true
+  dc: true
+aux:
+  - label: "DC V"
+    value: "28.61"
+    unit: "V"

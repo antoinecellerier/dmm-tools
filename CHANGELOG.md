@@ -4,8 +4,8 @@
 
 ### Devices
 
+- **The OWON CMS061, sold as the UNI-T UT217A, is verified** — thanks to [@jkay-png](https://github.com/jkay-png) for the captures ([#45](https://github.com/antoinecellerier/dmm-tools/issues/45)).
 - **The Brymen BM827s (Minipa ET-2517A) and BM525s (Minipa ET-2615A) are partly verified** — thanks to [@SidineiSantosSousa](https://github.com/SidineiSantosSousa) for the captures ([#35](https://github.com/antoinecellerier/dmm-tools/issues/35), [#36](https://github.com/antoinecellerier/dmm-tools/issues/36)).
-- **The OWON CMS061, sold as the UNI-T UT217A, is partly verified** — thanks to [@jkay-png](https://github.com/jkay-png) for the capture ([#45](https://github.com/antoinecellerier/dmm-tools/issues/45)).
 - **The UNI-T UT217B is supported experimentally, as the OWON CMS101**
 
 ### GUI

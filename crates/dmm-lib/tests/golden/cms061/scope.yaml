@@ -1,0 +1,9 @@
+# The oscilloscope with the leads open, entered from AC A: V, and no reading
+# Captured 2026-11-06 from a UNI-T UT217A (the CMS061) over Bluetooth (issue #45, @jkay-png, 0.10.0-dev f2dea939 report, step scope).
+raw_hex: "A2 03 F0 00 00 00 A2 01 F0 00 00 00 00 00 04"
+mode: "Scope"
+value: "----"
+unit: "V"
+range_label: ""
+flags: {}
+aux: []

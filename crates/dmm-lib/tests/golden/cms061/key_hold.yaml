@@ -1,0 +1,11 @@
+# DC V held at 1.0133 V by a remote Hold
+# Captured 2026-11-06 from a UNI-T UT217A (the CMS061) over Bluetooth (issue #45, @jkay-png, 0.10.0-dev f2dea939 report, step key_hold).
+raw_hex: "24 00 F0 95 27 00 E1 01 F0 00 00 00 01 00 00"
+mode: "DC V"
+value: "1.0133"
+unit: "V"
+range_label: ""
+flags:
+  hold: true
+  dc: true
+aux: []

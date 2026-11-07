@@ -82,6 +82,17 @@ $ dmm-cli read --interval-ms 2500 --count 5
 | UNI-T UT71A/B, UT71C/D/E | 🧪 实验性 | 🧪 实验性（适配器） | [#22](https://github.com/antoinecellerier/dmm-tools/issues/22) |
 | UNI-T UT8802, UT8802N | 🧪 实验性 | — | [#12](https://github.com/antoinecellerier/dmm-tools/issues/12) |
 | UNI-T UT8803, UT8803E | 🧪 实验性 | — | [#3](https://github.com/antoinecellerier/dmm-tools/issues/3) |
+| OWON CMS061 (UNI-T UT217A) | — | ✅ 已验证（内置） | [#45](https://github.com/antoinecellerier/dmm-tools/issues/45) |
+| OWON B33 | — | 🧪 实验性（内置） | [#41](https://github.com/antoinecellerier/dmm-tools/issues/41) |
+| OWON B35T+ | — | 🧪 实验性（内置） | [#42](https://github.com/antoinecellerier/dmm-tools/issues/42) |
+| OWON B41T+ | — | 🧪 实验性（内置） | [#43](https://github.com/antoinecellerier/dmm-tools/issues/43) |
+| OWON CM2100B | — | 🧪 实验性（内置） | [#44](https://github.com/antoinecellerier/dmm-tools/issues/44) |
+| OWON CMS101 (UNI-T UT217B) | — | 🧪 实验性（内置） | [#45](https://github.com/antoinecellerier/dmm-tools/issues/45) |
+| OWON OW18B/OW16B | — | 🧪 实验性（内置） | [#39](https://github.com/antoinecellerier/dmm-tools/issues/39) |
+| OWON OW18E | — | 🧪 实验性（内置） | [#40](https://github.com/antoinecellerier/dmm-tools/issues/40) |
+| OWON OW65B | — | 🧪 实验性（内置） | [#46](https://github.com/antoinecellerier/dmm-tools/issues/46) |
+| OWON OW67B (Voltcraft VC871) | — | 🧪 实验性（内置） | [#47](https://github.com/antoinecellerier/dmm-tools/issues/47) |
+| OWON OW69B (Voltcraft VC891) | — | 🧪 实验性（内置） | [#48](https://github.com/antoinecellerier/dmm-tools/issues/48) |
 | ZOTEK ZT-5B (ANENG V05B) | — | ✅ 已验证（内置） | [#31](https://github.com/antoinecellerier/dmm-tools/issues/31) |
 | ZOTEK ZT-5BQ (ANENG ST207) | — | 🧪 实验性（内置） | [#30](https://github.com/antoinecellerier/dmm-tools/issues/30) |
 | ZOTEK ZT-300AB (ANENG AN9002) | — | 🧪 实验性（内置） | [#28](https://github.com/antoinecellerier/dmm-tools/issues/28) |
@@ -93,17 +104,6 @@ $ dmm-cli read --interval-ms 2500 --count 5
 | Brymen BM869s/BM867s | 🧪 实验性 | — | [#34](https://github.com/antoinecellerier/dmm-tools/issues/34) |
 | Brymen BM788BT/BM787BT | — | 🧪 实验性（内置） | [#33](https://github.com/antoinecellerier/dmm-tools/issues/33) |
 | EEVblog 121GW | — | 🧪 实验性（内置） | [#32](https://github.com/antoinecellerier/dmm-tools/issues/32) |
-| OWON B33 | — | 🧪 实验性（内置） | [#41](https://github.com/antoinecellerier/dmm-tools/issues/41) |
-| OWON B35T+ | — | 🧪 实验性（内置） | [#42](https://github.com/antoinecellerier/dmm-tools/issues/42) |
-| OWON B41T+ | — | 🧪 实验性（内置） | [#43](https://github.com/antoinecellerier/dmm-tools/issues/43) |
-| OWON CM2100B | — | 🧪 实验性（内置） | [#44](https://github.com/antoinecellerier/dmm-tools/issues/44) |
-| OWON CMS061 (UNI-T UT217A) | — | 🟡 部分验证（内置） | [#45](https://github.com/antoinecellerier/dmm-tools/issues/45) |
-| OWON CMS101 (UNI-T UT217B) | — | 🧪 实验性（内置） | [#45](https://github.com/antoinecellerier/dmm-tools/issues/45) |
-| OWON OW18B/OW16B | — | 🧪 实验性（内置） | [#39](https://github.com/antoinecellerier/dmm-tools/issues/39) |
-| OWON OW18E | — | 🧪 实验性（内置） | [#40](https://github.com/antoinecellerier/dmm-tools/issues/40) |
-| OWON OW65B | — | 🧪 实验性（内置） | [#46](https://github.com/antoinecellerier/dmm-tools/issues/46) |
-| OWON OW67B (Voltcraft VC871) | — | 🧪 实验性（内置） | [#47](https://github.com/antoinecellerier/dmm-tools/issues/47) |
-| OWON OW69B (Voltcraft VC891) | — | 🧪 实验性（内置） | [#48](https://github.com/antoinecellerier/dmm-tools/issues/48) |
 | Voltcraft VC-880, VC650BT | 🧪 实验性 | — | [#13](https://github.com/antoinecellerier/dmm-tools/issues/13) |
 | Voltcraft VC-890 | 🧪 实验性 | — | [#14](https://github.com/antoinecellerier/dmm-tools/issues/14) |
 | Voltcraft VC915/VC925 PV | — | 🧪 实验性（内置） | [#49](https://github.com/antoinecellerier/dmm-tools/issues/49) |

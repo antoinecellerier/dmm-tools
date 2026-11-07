@@ -1,0 +1,9 @@
+# The oscilloscope on a 30.1 kHz signal at Rms 1.77 V, entered from Capacitance: V, and the frame still holds its OL
+# Captured 2026-11-06 from a UNI-T UT217A (the CMS061) over Bluetooth (issue #45, @jkay-png, 0.10.0-dev f2dea939 report, step extra_3).
+raw_hex: "9A 03 F0 C3 20 10 E1 01 F0 00 00 00 00 00 04"
+mode: "Scope"
+value: "----"
+unit: "V"
+range_label: ""
+flags: {}
+aux: []

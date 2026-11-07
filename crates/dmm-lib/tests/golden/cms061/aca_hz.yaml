@@ -1,0 +1,13 @@
+# Hz/A on AC A with nothing in the jaws: Hz in the large digits, AC A beside it
+# Captured 2026-11-06 from a UNI-T UT217A (the CMS061) over Bluetooth (issue #45, @jkay-png, 0.10.0-dev f2dea939 report, step aca_hz).
+raw_hex: "A2 11 F0 00 00 00 E2 10 F0 00 00 00 04 00 00"
+mode: "Hz"
+value: "0"
+unit: "Hz"
+range_label: ""
+flags:
+  auto_range: true
+aux:
+  - label: "AC A"
+    value: "0.00"
+    unit: "A"

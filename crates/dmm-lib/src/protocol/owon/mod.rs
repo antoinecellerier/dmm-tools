@@ -162,13 +162,12 @@ pub(crate) struct OwonProtocol {
 }
 
 /// How far real meters have confirmed `model`. A UT217A, the CMS061, has
-/// run its main modes, NCV and negative DC V, and been detected after a
-/// restart (#45); its remote keys, MaxMin's sub-value and the scope have not.
-/// PartlyVerified keeps the warning and the badge linking to the issue. No
-/// other OWON or Voltcraft meter has run the tool.
+/// run its modes, NCV, negative DC V, the scope and every remote key, and
+/// been detected after a restart (#45); MaxMin's sub-value against the LCD
+/// is open. No other OWON or Voltcraft meter has run the tool.
 const fn stability(model: &Model) -> Stability {
     match model.code {
-        61 => Stability::PartlyVerified,
+        61 => Stability::Verified,
         _ => Stability::Experimental,
     }
 }
@@ -1153,7 +1152,7 @@ mod tests {
             assert_eq!(profile.family_name, "OWON");
             assert_eq!(profile.id, entry.id);
             let stability = if m.code == 61 {
-                Stability::PartlyVerified
+                Stability::Verified
             } else {
                 Stability::Experimental
             };

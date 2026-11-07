@@ -1,0 +1,10 @@
+# V,AC with the leads open, after a remote Select in V,DC
+# Captured 2026-11-06 from a UNI-T UT217A (the CMS061) over Bluetooth (issue #45, @jkay-png, 0.10.0-dev f2dea939 report, step key_select).
+raw_hex: "62 00 F0 00 00 00 A2 01 F0 00 00 00 04 00 00"
+mode: "AC V"
+value: "0"
+unit: "V"
+range_label: ""
+flags:
+  auto_range: true
+aux: []

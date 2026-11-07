@@ -902,12 +902,18 @@ the OW65, OW67 and VC871, while the CMS's MaxMin row shows Min, Max and Avg
 in MaxMin the live value as the main reading, status bit 5 (MAX) and the
 signed running maximum as the sub-value: it held in all 384 MaxMin frames of
 two captures, through a rise from -39.19 V to -28.59 V and a dip to -39.23 V
-under a -39.19 V sub-value [HARDWARE]. The frame sends no Min or Avg, and OWON's
-app shows the sub-value unlabelled (PE:5952-6085) [VENDOR, app]. Its match
-with the LCD's Max is [UNVERIFIED]. In Hz it sends Hz as the main reading and
-duty as the sub-value, and in duty the two swapped, its LCD showing both with
-the selected one in the large digits [HARDWARE]. Its duty was 0 in all 670
-frames carrying one, so duty's scale is [UNVERIFIED]. Also the frequency or duty beside AC V and Hz; W with VA, V, A, PF
+under a -39.19 V sub-value [HARDWARE]. A third capture's F1 MaxMin set status
+bit 4 (MIN) instead, its sub-value staying at 28.61 V while the reading rose
+to 28.66 V [HARDWARE]; what selects bit 4 or 5 is [UNVERIFIED]. The frame
+sends no Avg, and OWON's app shows the sub-value unlabelled (PE:5952-6085)
+[VENDOR, app]. The sub-value's match with the LCD's Max or Min is
+[UNVERIFIED]. In Hz it sends Hz as the main reading and duty as the
+sub-value, and in duty the two swapped, its LCD showing both with the
+selected one in the large digits [HARDWARE]. Duty is tenths of a percent
+with decimal code 1: `3B 01` read 31.5 %, as its LCD showed beside 30.09 kHz
+[HARDWARE]. In Hz/A it sends Hz as the main reading and AC A as the
+sub-value, and its LCD shows Hz in the large digits [HARDWARE]; the AC A
+was 0 in every frame, so its scale is [UNVERIFIED]. Also the frequency or duty beside AC V and Hz; W with VA, V, A, PF
 or Hz on the power functions; VAC or VDC beside AC+DC (VC915-UM p.73); the
 voltage in Motor (p.76); irradiance or temperature in PV mode (VC925-UM
 p.69). Cites: OW65-UM p.26/21-27/22; OW67-UM p.14/9, p.27/22-32/27;
@@ -1104,8 +1110,9 @@ its logger takes it (`home_page.dart:1121`), with no OSC check found in
 `realtime_data_logger.dart`, 2026-11-06 [VENDOR, app].
 
 A UT217A sets bit 17 in its Inrush mode and bit 18 in scope mode
-(§9.4) [HARDWARE]. Its Inrush status was 0x20000 entered by F3 and 0x20004,
-AUTO set, by a remote `0D 01` from MaxMin (§10.8) [HARDWARE].
+(§9.4) [HARDWARE]. Its Inrush status was 0x20000 entered by F3 or by a
+remote `0D 01` from AC A, and 0x20004, AUTO set, by a remote `0D 01` from
+MaxMin (§10.8) [HARDWARE].
 
 ### 10.7 VC871 (code 87)
 
@@ -1155,8 +1162,15 @@ On a UT217A over Bluetooth (#45, @jkay-png), the first frame after each write sh
 [HARDWARE]: `03 01` set HOLD in scope mode, `04 01` set REL in AC A, `06 01` set
 MaxMin in AC A, and `0D 01` entered Inrush and left MaxMin. `01 01` changed nothing
 in scope mode and `05 01` nothing in AC A's MaxMin. `02 01` in AC A under REL left
-REL with AUTO set, at decimal code 1 for 7 frames and then 2. None ran from the
-DC V or Hz the keys' effects are named for.
+REL with AUTO set, at decimal code 1 for 7 frames and then 2.
+
+From the states the keys' effects are named for, the same UT217A's first
+frame after each write, about 500 ms later, showed [HARDWARE]: `01 01` took
+V,DC to V,AC; `03 01` set HOLD in V,DC, and also in mV,AC; `04 01` set REL in
+V,DC with the reading as the sub-value; `02 01` in V,DC cleared AUTO and went
+from decimal code 2 to 1; `06 01` in V,DC set MAX with the running maximum as
+the sub-value (§9.4); `05 01` in Hz went to duty; and `0D 01` in AC A set
+Inrush (§10.6).
 
 ### 10.9 Offline words
 
