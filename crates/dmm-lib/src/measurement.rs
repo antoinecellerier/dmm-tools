@@ -41,6 +41,11 @@ impl MeasuredValue {
     /// left to show.
     pub(crate) const UNRECOGNISED: Self = Self::NoReading("?");
 
+    /// Whether this is [`Self::UNRECOGNISED`]: no word the meter shows.
+    pub(crate) fn is_unrecognised(&self) -> bool {
+        matches!(self, Self::NoReading("?"))
+    }
+
     /// `value` as a reading, `None` when it is not finite: NaN or an infinity
     /// is no number a meter measured.
     pub fn finite(value: f64) -> Option<Self> {

@@ -59,7 +59,8 @@ impl ValueExpect {
             (ValueExpect::Negative, MeasuredValue::Normal(v)) => v.is_finite() && *v < 0.0,
             (ValueExpect::Finite, MeasuredValue::Normal(v)) => v.is_finite(),
             (ValueExpect::NcvDetected, MeasuredValue::NcvLevel(level)) => *level >= 1,
-            (ValueExpect::NoReading, MeasuredValue::NoReading(_)) => true,
+            // `?` is text nothing recognised, not the meter's word.
+            (ValueExpect::NoReading, v @ MeasuredValue::NoReading(_)) => !v.is_unrecognised(),
             (ValueExpect::Zero, MeasuredValue::Normal(v)) => *v == 0.0,
             _ => false,
         }
@@ -454,6 +455,12 @@ mod tests {
         assert_eq!(
             Expect::new().value(ValueExpect::NoReading).check(&idle),
             Ok(())
+        );
+        let mut unread = finite.clone();
+        unread.value = MeasuredValue::UNRECOGNISED;
+        assert_eq!(
+            reason(Expect::new().value(ValueExpect::NoReading).check(&unread)),
+            Err("value is ?, want a word instead of a reading".to_string())
         );
         assert_eq!(
             reason(Expect::new().value(ValueExpect::NoReading).check(&finite)),
