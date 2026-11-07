@@ -845,15 +845,18 @@ VC915-UM p.88, VC925-UM p.94. Also [KNOWN]:
   is one channel, 5 MSa/s (CMS101-UM p.30/25-33/28, p.37/32). Whether
   Bluetooth streams in scope mode is not stated; the ᛒ icon is part of the
   scope's status bar (p.31/26). A UT217A keeps streaming in scope mode, each
-  frame with OSC (§10.6) set at prefix 4, decimal code 2: main function 15
-  while its LCD showed the current ("Rms: 00.1A"), and 14 while it showed the
-  voltage ("Rms: 0.00V") [HARDWARE]. Those are the power functions' codes,
-  which the CMS has no other use for. The main reading is 0 in all 727 scope
-  frames of two captures, including at LCD readings of 00.04 A and 00.1 A
-  [HARDWARE]; whether it ever carries the Rms is [UNVERIFIED]. G24 bit 12 is
-  clear (bytes 6-8 hold the stale Hz word other modes carry), but entered from
-  Hz/A it is set, and the sub word repeats Hz/A's AC A word, also 0 [HARDWARE].
-  OWON's app treats these frames as no reading to show: the device list's row
+  frame with OSC (§10.6) set and AUTO clear: main function 15 while its LCD
+  showed the current ("Rms: 00.1A"), and 14 while it showed the voltage
+  ("Rms: 0.00V") [HARDWARE]. Those are the power functions' codes, which the
+  CMS has no other use for. The reading word, decimal code, prefix and sub
+  words are copied from the last multimeter frame, so the frames carry no
+  scope reading [HARDWARE]. Entered from Capacitance showing OL, all 679 frames kept its OL
+  reading word (`C3 20 10`), decimal code 2 and prefix m: 14 at function 15,
+  then 665 at 14 while the LCD read a 30.1 kHz signal at Rms 1.77 V. Entered
+  from AC A or its Inrush, the reading was 0 at LCD readings of 00.04 A and
+  00.1 A.
+  Entered from Hz/A, G24 bit 12 stays set and the sub word repeats Hz/A's
+  AC A word [HARDWARE]. OWON's app treats these frames as no reading to show: the device list's row
   becomes "OSC State" with no value (DLN:762-795, :2169-2578), and the control
   page closes on the first one (DCVM:1034-1054;
   `device_control_page_large.dart:4982-5035`) [VENDOR, app]. It names 14 and

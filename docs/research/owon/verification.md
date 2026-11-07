@@ -282,9 +282,6 @@ and each still wants a capture of our own.
 - Whether a meter streams and keeps its clock with no `#TIMEsync` written
   (§10.8) — decides whether a client may skip it. Needs an OW67B/69B or a
   VC871/891/915/925.
-- Whether a CMS's scope frames carry a reading: 0 so far, at LCD readings up to 00.1 A ([§9.4](reverse-engineered-protocol.md#94-the-15-byte-meters)) — decides
-  the no reading shown, and whether the sub word carries Freq; a number is reported as
-  unrecognised. Needs `scope` on a DC source and a clamped AC current, Rms and Freq noted.
 - The CMS's MaxMin sub-value against the LCD's Max: the frames show the signed
   running maximum (§9.4) — settles the "Max" label. Needs `maxmin` with the
   three values on the LCD noted.

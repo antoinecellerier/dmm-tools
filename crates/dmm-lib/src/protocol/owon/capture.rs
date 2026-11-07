@@ -1267,8 +1267,9 @@ fn cms(code: u8) -> Vec<CaptureStep> {
 /// text, Hz first: only the hz step decodes in that order; duty's main and
 /// sub order is confirmed, its scale not, as every duty so far is 0. EF
 /// rests on the first capture's frames: its second run's step filed before
-/// the leads could move. MaxMin's Max label, Hz/A, the scope and the keys
-/// wait for a run from the states their steps ask for.
+/// the leads could move. The scope's frames carried no reading at an LCD
+/// reading of Rms 1.77 V. MaxMin's Max label, Hz/A and the keys wait for a
+/// run from the states their steps ask for.
 const CMS061_VERIFIED: &[&str] = &[
     "dcv",
     "dcv_short",
@@ -1296,6 +1297,7 @@ const CMS061_VERIFIED: &[&str] = &[
     "dca_zero",
     "aca",
     "inrush",
+    "scope",
 ];
 
 /// The CMS entries' keys: Select, Range, Hold, Rel, Hz/Duty, Max/Min and

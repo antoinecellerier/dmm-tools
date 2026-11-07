@@ -10,8 +10,8 @@
 //! marker, reading bit 19, status bits 11 and 19-23, functions 30-31 and 13
 //! on a model without NCV, decimal-point code 5, an NCV level or Motor value
 //! off its table, and a sub-display word without its marker. Values the
-//! spec documents stay silent. A CMS's scope shows no reading, and reports a
-//! number if one ever comes (spec §9.4).
+//! spec documents stay silent. A CMS's scope shows its unit and no reading
+//! (spec §9.4).
 
 use super::decode::{
     self, AMP_UNITS, AUTO, DP_5, DP_OL, DP_UL, HOLD, LOW_BATTERY, MAX, MIN, REL, Unit, VOLT_UNITS,
@@ -114,9 +114,10 @@ fn function_of(f: u8, model: &Model) -> Option<Function> {
             label: mode,
             unit,
         }),
-        // The CMS measures no power: its scope sends these (spec §9.4).
-        code::POWER_W if model.cms_readings => named("Scope", "V", Prefixed(&VOLT_UNITS)),
-        code::POWER_VA if model.cms_readings => named("Scope", "A", Prefixed(&AMP_UNITS)),
+        // The CMS measures no power: its scope sends these, with the last
+        // multimeter frame's prefix (spec §9.4).
+        code::POWER_W if model.cms_readings => named("Scope", "V", Bare("V")),
+        code::POWER_VA if model.cms_readings => named("Scope", "A", Bare("A")),
         code::POWER_W => named("Power W", "W", Prefixed(&WATT_UNITS)),
         code::POWER_VA => named("Power VA", "VA", Prefixed(&VA_UNITS)),
         code::POWER_FACTOR => named("Power factor", "PF", Bare("")),
@@ -288,12 +289,10 @@ pub(super) fn decode(p: &[u8], model: &Model) -> Result<Measurement> {
         report("status bits");
     }
 
-    // Zero in every scope frame whatever the LCD read, and the sub word only
-    // repeats the mode before (spec §9.4), so a CMS's scope shows no number.
+    // A CMS's scope frame copies the last multimeter frame, function aside:
+    // its reading and sub words are that frame's (spec §9.4), so it shows no
+    // number.
     let scope = model.cms_readings && status & OSC != 0;
-    if scope && u24(&p[3..6]) & MAGNITUDE != 0 {
-        report("scope reading");
-    }
     let (value, display_raw) = if scope || (main.is_none() && gear.function > code::HV_AC) {
         // Otherwise the app's lookup throws: no reading (spec §10.5).
         (MeasuredValue::NoReading("----"), None)
@@ -794,7 +793,6 @@ pub(crate) mod tests {
                 .mode
                 .into_owned()
         };
-        // A scope frame's value is 0: a number would be reported.
         let scope = frame(g24(1, 4, 1, false), 0, 0, 0, OSC);
         assert_eq!(quiet(&scope, &CMS101).mode, "Scope");
         assert_eq!(at(INRUSH, &CMS101), "Inrush");
@@ -869,8 +867,9 @@ pub(crate) mod tests {
     }
 
     /// #45, a UT217A's frames: its scope sends function 15 for the current
-    /// and 14 for the voltage. Zero came with LCD readings of 00.04 A and
-    /// 00.1 A, so neither word counts as a reading, and HOLD still shows.
+    /// and 14 for the voltage, and HOLD still shows. The reading, point and
+    /// prefix are the last multimeter frame's: zero after AC A while the LCD read
+    /// 00.1 A, and Capacitance's OL in mF while it read Rms 1.77 V.
     #[test]
     fn a_cms_scope_shows_its_unit_and_no_reading() {
         let hex = |s: &str| -> Vec<u8> {
@@ -884,6 +883,9 @@ pub(crate) mod tests {
             // Entered from Hz/A: bit 12 set, the sub word still AC A's.
             ("E2 13 F0 00 00 00 E2 10 F0 00 00 00 00 00 04", "A", false),
             ("E2 13 F0 00 00 00 E2 10 F0 00 00 00 01 00 04", "A", true),
+            // Entered from Capacitance, OL in mF.
+            ("DA 03 F0 C3 20 10 E1 01 F0 00 00 00 00 00 04", "A", false),
+            ("9A 03 F0 C3 20 10 E1 01 F0 00 00 00 00 00 04", "V", false),
         ] {
             for model in [&CMS061, &CMS101] {
                 let m = quiet(&hex(frame), model);
@@ -894,15 +896,6 @@ pub(crate) mod tests {
                 assert_eq!(m.flags.hold, hold, "{frame}");
             }
         }
-    }
-
-    /// A number in a CMS's scope frame would show the frames carry the Rms
-    /// after all: it stays blank, but is reported, not lost to the display.
-    #[test]
-    fn a_number_in_a_cms_scope_frame_is_reported() {
-        let (m, reports) = reported(&frame(g24(14, 4, 2, false), 3930, 0, 0, OSC), &CMS061);
-        assert_eq!(value(&m.value), value(&MeasuredValue::NoReading("----")));
-        assert_eq!(reports.len(), 1, "{reports:?}");
     }
 
     /// Elsewhere 14 and 15 stay power, and the status word's scope bit alone

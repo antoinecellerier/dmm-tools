@@ -77,7 +77,7 @@ pub(super) struct Model {
     pub(super) sub_follows_main: bool,
     /// The CMS's own readings: the CMS061 and, by its shared manual, the
     /// CMS101 (spec §9.4). In its scope, functions 14 and 15 are volts and
-    /// amps, and no frame has carried a reading so far.
+    /// amps, and the rest of the frame copies the last multimeter frame.
     pub(super) cms_readings: bool,
 }
 
