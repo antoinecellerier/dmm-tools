@@ -34,9 +34,12 @@ read yet: everything below comes from UNI-T's uci.dll and manuals.
 - The range byte, `0x30`-`0x36`, per mode and range (§2.3, §5), inductance's µH
   at range 0 first — decides `display_unit`'s prefixes. Needs readings on
   several ranges of each function, noting the LCD's unit. (#3)
-- Inductance R and capacitance R at range 1, kΩ in the lookup where the manual's
-  rows run 60 Ω, 600 Ω, 6 kΩ, and µA on every range where its rows cross to 6 mA
-  (§2.3, §5) — decides `display_unit`'s arms. Needs those functions. (#3)
+- The range byte on each equivalent-resistance row, 60 Ω to 2 MΩ, in L-R and C-R
+  (§5) — decides `display_unit`'s Ω arm for 0x0D/0x10, k from range 1. Needs
+  `ind_r` and `cap_r` on each range, noting the LCD's unit. (#3)
+- Which dial position, µA or mA, reads the 6 mA row, and in what unit (§5) —
+  decides the current modes' fixed prefixes. Needs `dcua`/`dcma` (or AC) near
+  6 mA. (#3)
 
 ## Display
 
@@ -46,6 +49,9 @@ read yet: everything below comes from UNI-T's uci.dll and manuals.
 - Whether a negative reading spells `-` in the display field too — settles
   the spec's display bytes (§2.3); the parser signs the value and digits from
   bit 3 either way. Needs `dcv_negative`. (#3)
+- How SCR's `ERR` arrives: spelled in the display bytes, or digits with the
+  error flag (§2.3) — decides the display check, which refuses `E`/`R` as an
+  invalid frame, and the flag, not surfaced. Needs `scr`, gate lead off. (#3)
 
 ## Flags
 

@@ -431,6 +431,23 @@ UT8803 mode bytes 0x15 and 0x16 are not referenced in the DMM parser
 code — they are simply allowed by the `0x16 < bVar1` range check.
 No disambiguation logic exists in uci.dll for these two mode values.
 
+### 7. Vendor re-audit (2026-11-06, second read 2026-11-07)
+
+Two independent reads compared the unit and prefix lookups, the status
+word and the reject path with the user manual's range rows and the
+programming manuals. Both read the 2018 `lib/C/Unicode/uci.dll` through
+the decompilation and its disassembly (`objdump -d -M intel`), and the
+2020 `examples/UCI/VC/UCIDEMO/Unicode/uci.dll` debug build, which has no
+decompilation, by disassembly alone, decoding jump tables and strings
+from the file's bytes. The user manual and datasheet were read from page
+renders: the manual has no usable text layer and the datasheet's is
+corrupt. No vendor binary was executed. Results went to the spec:
+unit type 10 (§4.4), D20-D23 (§3.2), the per-mode prefix arms and the
+reject path (§2.3), SCR's `ERR` (§2.3), the current and
+equivalent-resistance rows (§5) and the worked example (§7.2).
+`UT8803.msi` stays unopened: `innoextract` and `7z` refuse its
+InstallShield stream.
+
 ## What Was Determined
 
 ### From the Programming Manual (highest confidence)
@@ -564,6 +581,7 @@ Consulted after the vendor analysis above, for validation only.
 | Alternating-byte checksum | Ghidra | "Weighted checksum" | N/A | To verify² |
 | Mode/range tables | Programming manual + Ghidra | Empirical tables | N/A | To verify |
 | Inductance at range 0 (read 2026-11-06) | µH: SDK V2.3's lookup and the manual's rows | `µH`, then `mH` ×3, `H` ×3 | N/A | ✓ |
+| hFE unit (read 2026-11-06) | β: uci.dll unit type 8, programming and user manuals | Blank, marked FIXME | N/A | — |
 | UT8802 different format | Ghidra (0xAC header, 8-byte) | N/A | N/A | — |
 | UT632/803/804 same protocol | Programming manual | Listed as compatible | N/A | ✓ |
 

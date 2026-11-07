@@ -275,6 +275,16 @@ at line 25014: `if (0x16 < bVar1)` → reject. This corresponds to the
 **Range byte**: Has a `0x30` prefix, masked with `- 0x30`, max value
 6 after masking. Same encoding as UT61E+. [VENDOR]
 
+**Out-of-table mode or range byte**: the parser rejects the whole frame
+and returns -1116 (`0xFFFFFBA4`), the same code as for a bad UT8802
+position. That code travels up the read path, which retries and then
+fails, so `uci_ReadX` returns an error: no reading, no default unit and
+no stale value reaches the application. [VENDOR] (The read path is a
+reading of static code, never executed; both reads found the retry loop,
+but only the first, 2026-11-06, followed the error up to `uci_ReadX`; no meaning for -1116 was found
+in `uci.h` or `ucidef.h`, 2026-11-07, and what UNI-T's application shows
+on it is unknown.)
+
 **Display value parsing**: The function `FUN_1001fce0` is a **buffer
 append** function, not a byte transformation. It appends raw bytes to
 a dynamically-growing buffer (checking capacity, reallocating via
@@ -283,6 +293,13 @@ copied verbatim into the string buffer. After accumulation,
 `FUN_1017f410` converts the string to a float value. The display bytes
 are therefore **raw values** (not ASCII with 0x30 prefix like the
 range byte). [VENDOR]
+
+**ERR in SCR**: the UT8803E user manual (PDF p.18 and p.28) and its
+datasheet (p.8) list `ERR` as an SCR reading, for a bad contact
+[KNOWN]. How the frame carries it is unknown [UNVERIFIED]: the five
+display bytes may spell it, or digits may come with the Error flag
+(byte 15 bit 2, high D0, the programming manual's "current data error or
+current display Err"). The vendor parser branches on neither. [VENDOR]
 
 **Flag bit construction**: The parser builds a 32-bit status word
 (at `param_4 + 0x14`) by combining extracted bits from the flag bytes.
@@ -351,10 +368,13 @@ into the status word's AC/DC field and the reading's unit. [VENDOR]
   other mode 0.
 - `FUN_1001cff0` (lines 23789-23829), the base unit per mode: 2 (Ω) also
   for the IndR/CapR ESR sub-modes, the default 0xF (no unit) for
-  IndQ/CapD.
+  IndQ/CapD, 10 (H, §4.4) for inductance.
 - `FUN_1001cdc0` (lines 23644-23700), the magnitude prefix per (mode,
-  range): 0=n, 1=µ, 2=m, 3=none, 4=k, 5=M. It gives none for the Ω and Hz
-  modes at range 6 as at range 0, and m for capacitance above range 5. For
+  range): 0=n, 1=µ, 2=m, 3=none, 4=k, 5=M. Ω, continuity and both
+  equivalent-resistance modes (0x08, 0x09, 0x0D, 0x10) share one arm:
+  none at range 0, k at 1-3, M at 4-5, none at 6; the Hz mode reads the
+  same. The current modes ignore the range: µ for 0x02/0x05, m for
+  0x03/0x06, none for 0x04/0x07. Capacitance gives m above range 5. For
   inductance, the SDK's `lib/C/Unicode/uci.dll` (2018-12-28, MD5 222d86f1) gives
   m below range 4 and none above; its later
   `examples/UCI/VC/UCIDEMO/Unicode/uci.dll` (2020-12-14, MD5 68263e15; handler at
@@ -469,14 +489,14 @@ uses the macro:
 | D4-D5 | 0x3 | ACDC | AC&DC status: 0=OFF, 1=AC, 2=DC, 3=AC+DC |
 | D6 | 0x1 | AutoRange | 1=Auto range active |
 | D7 | 0x1 | OverLoad | 1=Overload (OL) |
-| D8-D11 | 0xF | UnitType | Physical unit type (V/A/ohm/Hz/C/F/F/hFE/%) |
+| D8-D11 | 0xF | UnitType | Physical unit type (V/A/ohm/Hz/C/F/F/hFE/%/H) |
 | D12-D14 | 0x7 | UnitMag | Physical unit magnitude (n/u/m/std/K/M/G) |
 | D15 | 0x1 | LowBat | 1=Low battery |
 | D16 | 0x1 | USBComm | 1=USB communication active |
 | D17 | 0x1 | Under | 1=Under range |
 | D18 | 0x1 | Over | 1=Over range |
 | D19 | 0x1 | Minus | 1=Display shows minus sign |
-| D20-D23 | 0xF | Position | Position coding (model-specific) |
+| D20-D23 | 0xF | Position | Position coding (model-specific). The UT8803 parser writes the range byte's low nibble here: the range index 0-6 [VENDOR] |
 | D24-D27 | 0xF | DotPos | Decimal point position (starts from 1) |
 | D28 | 0x1 | MAX | 1=MAX mode active (UT8802/UT8803) |
 | D29 | 0x1 | MIN | 1=MIN mode active (UT8802/UT8803) |
@@ -621,7 +641,13 @@ function and range:
 | 7 | Capacitance | F |
 | 8 | Triode hFE | beta |
 | 9 | Percentage | % |
+| 10 | Inductance | H [VENDOR] |
 | 0xF | No display | (none) |
+
+Type 10 is not in the manual's table: uci.dll returns it for the
+inductance mode and names it `H` [VENDOR]. The manual's sample `GetUnit`
+has eleven entries with a blank at index 10, so it prints no unit for an
+inductance reading [KNOWN].
 
 ### 4.5 Physical Unit Magnitude (D12-D14)
 
@@ -682,6 +708,12 @@ function and range:
 | 60mA-600mA | 100uA |
 | 10A | 10mA |
 
+Both current tables cross from µA to mA at the 6 mA row, while the vendor
+prefix is fixed per mode (§2.3). The 1 µA resolution fits either 5999 µA
+on the µA position or 5.999 mA on the mA position; which dial position
+owns the 6 mA row, and the range byte the meter sends on each row, are
+unknown [UNVERIFIED].
+
 ### Resistance
 | Range | Resolution |
 |-------|-----------|
@@ -691,6 +723,15 @@ function and range:
 | 600k ohm | 100 ohm |
 | 6M ohm | 1k ohm |
 | 60M ohm | 10k ohm |
+
+### Equivalent Resistance (R)
+The manual (PDF p.26) gives one table, without saying whether it covers
+the inductance R, the capacitance R or both: 60 ohm, 600 ohm, 6k ohm,
+60k ohm, 600k ohm, 2M ohm. The vendor lookup (§2.3) gives no prefix at
+range 0, k at 1-3 and M at 4-5 (the resistance arm), which does not fit
+these rows if they number from 0: it would tag 600 ohm as k and 600k ohm
+as M. The range byte the meter sends on each row is unknown
+[UNVERIFIED].
 
 ### Capacitance
 | Range | Resolution |
@@ -778,7 +819,8 @@ The UT8803 DMM uses a pure binary protocol.
 
 ### 7.2 Flag Decoding Example
 
-Given `flags = 0x2013345` (from programming manual example, 50.23 Hz):
+Given `flags = 0x2013345` (from the programming manual's example, a
+UT8802N showing 50.23 Hz; the example prints the low 32 bits only):
 
 ```
 Low 32 bits: 0x02013345
@@ -793,8 +835,9 @@ D16    = 0x1 = USB communication active
 D17    = 0x0 = Not under
 D18    = 0x0 = Not over
 D19    = 0x0 = No minus sign
-D20-D23 = 0x0 = Position 0
+D20-D23 = 0x0 = Position 0 (on a UT8803, the range index: §3.2)
 D24-D27 = 0x2 = Decimal point position 2
+D28-D31 = 0x0 = No MAX, MIN, REL or HOLD
 ```
 
 ---
@@ -814,6 +857,9 @@ D24-D27 = 0x2 = Decimal point position 2
 | UT8803 position coding (23 positions) | **[KNOWN]** | Programming manual |
 | UT8802 position coding (range-specific) | **[KNOWN]** | Programming manual |
 | Physical unit type/magnitude tables | **[KNOWN]** | Programming manual |
+| Unit type 10 = H, absent from the manual's table | **[VENDOR]** | uci.dll: unit lookup and unit strings |
+| D20-D23 = range index on the UT8803 | **[VENDOR]** | uci.dll: range byte & 0xF into the status word |
+| Out-of-table mode or range rejects the frame (-1116) | **[VENDOR]** | uci.dll: parser return, read path (static) |
 | AC/DC status coding | **[KNOWN]** | Programming manual |
 | Models sharing protocol | **[KNOWN]** | Programming manual |
 | UT805A uses serial (not HID) | **[KNOWN]** | Programming manual |
