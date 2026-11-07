@@ -20,6 +20,7 @@
 - **The UT61+ and UT161 meters get a Hz/% button**
 - **The UT181A gets a SAVE button**
 - **More OWON and Voltcraft keys get buttons** — Inrush, 4-20mA, Display, Lo or LPF, COMP, AC/DC and MOTOR, and an x on the Voltcraft REL.
+- **The UT171 gets remote buttons** — HOLD, REL, RANGE, AUTO, MAX/MIN, PEAK, Hz/% and STORE.
 - **The integral takes a readable prefix** — `12.340 nAh`, not `0.0000 mAh`.
 - **The Device list shows each brand's own model names, in name order** — the UNI-T UT217A, Minipa, ANENG and BSIDE meters under their brand; ANENG's were listed beside ZOTEK's.
 - **A meter picked by another brand's name keeps that name** — a UT217A shows as the UNI-T UT217A, in the top bar, messages and exports.
@@ -33,6 +34,7 @@
 - **`read` reconnects to a meter whose link drops** — a pulled cable or lost Bluetooth link ended the run; `--no-reconnect` keeps that.
 - **`read` statistics and `--integrate` carry on when the meter auto-ranges** — they restarted at each decade step; figures keep the meter's ranges, as 31.300 MΩ beside 0.04 Ω.
 - **`dmm-cli command` on the VC-880, VC650BT and VC-890 takes the common names** — `range`, `auto`, `minmax`, `exit_minmax`; the old names still work.
+- **`dmm-cli command` drives the UT171's keys** — `hold`, `rel`, `range`, `auto`, `minmax`, `peak`, `hz` and `save`.
 - **The integral takes a readable prefix** — `12.340 nAh`, not `0.0000 mAh`.
 - **`--help` lists each brand's own model names in name order, such as `ut217a` under UNI-T**
 - **A meter picked by another brand's name keeps that name** — `--device ut217a` shows the UNI-T UT217A in messages and exports.

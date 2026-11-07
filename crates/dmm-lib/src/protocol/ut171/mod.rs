@@ -14,15 +14,16 @@
 //!
 //! See docs/research/ut171/reverse-engineered-protocol.md
 
+mod command;
 pub(crate) mod devices;
 mod parse;
 
-use crate::error::{Result, Unsupported};
+use crate::error::Result;
 use crate::measurement::Measurement;
 use crate::protocol::framing::{self, FrameErrorRecovery};
 use crate::protocol::unrecognised::report_unknown;
 use crate::protocol::{
-    DeviceFamily, DeviceProfile, Evidence, Fingerprint, MeterKeys, Probing, Protocol, Stability,
+    DeviceFamily, DeviceProfile, Evidence, Fingerprint, Probing, Protocol, Stability,
 };
 use crate::transport::Transport;
 use log::{debug, warn};
@@ -36,8 +37,6 @@ pub(crate) use parse::all_units;
 
 /// Family label for [`report_unknown`].
 const FAMILY: &str = "ut171";
-
-const UT171_COMMANDS: &[&str] = &["connect", "pause"];
 
 /// Payload lengths of the short replies of the measurement type that spec
 /// §10's cross-reference records (`[UNVERIFIED]`).
@@ -67,6 +66,8 @@ fn pause_frame() -> Vec<u8> {
 pub(crate) struct Ut171Protocol {
     rx_buf: Vec<u8>,
     profile: DeviceProfile,
+    /// What the last reading showed, for the commands that depend on it.
+    last: Option<command::Shown>,
 }
 
 impl Default for Ut171Protocol {
@@ -79,15 +80,16 @@ impl Ut171Protocol {
     pub(crate) fn new() -> Self {
         Self {
             rx_buf: Vec::with_capacity(128),
+            last: None,
             profile: DeviceProfile {
                 family_name: "UT171",
                 id: "ut171",
                 stability: Stability::Experimental,
-                supported_commands: UT171_COMMANDS,
+                supported_commands: command::UT171_COMMANDS,
                 // The square wave's duty and width (spec §5.9).
                 max_aux_values: 2,
                 verification_issue: Some(4),
-                meter_keys: MeterKeys::NONE,
+                meter_keys: command::METER_KEYS,
             },
         }
     }
@@ -100,6 +102,8 @@ impl Protocol for Ut171Protocol {
 
     fn discard_input(&mut self, transport: &dyn Transport) -> Result<()> {
         self.rx_buf.clear();
+        // What the meter shows now is the next reading's to say.
+        self.last = None;
         crate::protocol::framing::discard_queued(transport)
     }
 
@@ -126,7 +130,9 @@ impl Protocol for Ut171Protocol {
             },
             "ut171",
         )?;
-        parse_measurement(&payload)
+        let measurement = parse_measurement(&payload)?;
+        self.last = Some(command::Shown::of(&measurement));
+        Ok(measurement)
     }
 
     fn parse_payload(&self, payload: &[u8]) -> Result<Measurement> {
@@ -134,14 +140,7 @@ impl Protocol for Ut171Protocol {
     }
 
     fn send_command(&mut self, transport: &dyn Transport, command: &str) -> Result<()> {
-        let frame = match command {
-            "connect" => connect_frame(),
-            "pause" => pause_frame(),
-            _ => return Err(Unsupported::Command(command.to_string()).into()),
-        };
-        debug!("ut171: sending command {command}: {:02X?}", frame);
-        transport.write(&frame)?;
-        Ok(())
+        self.send_key(transport, command)
     }
 
     fn profile(&self) -> &DeviceProfile {
@@ -149,8 +148,9 @@ impl Protocol for Ut171Protocol {
     }
 
     fn capture_steps(&self) -> Vec<crate::protocol::CaptureStep> {
+        use crate::flags::Flag;
         use crate::protocol::steps::{self, Ohms, Volts};
-        use crate::protocol::{CaptureStep, Expect, Need};
+        use crate::protocol::{CaptureStep, Expect, Need, RangeExpect, command};
 
         let [vdc, dcv_short, dcv_negative, ohm, ohm_body, ohm_short] = steps::gate_steps(
             Volts::VDc,
@@ -161,15 +161,6 @@ impl Protocol for Ut171Protocol {
                 "Set meter to Resistance. Leave leads open (should show OL).",
             ),
         );
-
-        // The flag steps assert only the mode: which bit each key sets rests
-        // on UNI-T's software alone (spec §5.3), so the raw frames are the
-        // answer.
-        let key_step = |id, instruction| {
-            CaptureStep::basic(id, instruction)
-                .wait_for_enter()
-                .expect(Expect::mode("V DC"))
-        };
 
         vec![
             vdc,
@@ -242,28 +233,58 @@ impl Protocol for Ut171Protocol {
             CaptureStep::basic("ncv", "Set meter to NCV. Hold near a live wire.")
                 .needs(&[Need::LiveWire])
                 .expect(Expect::mode("NCV")),
-            key_step(
-                "hold",
-                "V DC: press HOLD, then Enter. Press HOLD again afterwards.",
-            ),
-            key_step(
-                "rel",
-                "V DC: press REL, then Enter. Long-press REL afterwards to leave it.",
-            ),
-            key_step(
-                "max_min",
-                "V DC: press MAX MIN three times (MAX, AVG, MIN), then Enter. Long-press it afterwards.",
-            ),
-            key_step(
-                "manual_range",
-                "V DC: press RANGE, then Enter. Long-press RANGE afterwards for auto.",
-            ),
-            CaptureStep::basic(
-                "peak",
-                "V AC: long-press MAX MIN for Peak, then Enter. Long-press it again afterwards.",
+            // The keys, sent by the tool once the meter shows the state they
+            // start from, and the flag each sets by UNI-T's software (spec
+            // §4.7, §5.3). RANGE comes before REL, which forces manual range
+            // (manual p.10).
+            CaptureStep::with_command("hold", "V DC: we will send HOLD.", command::HOLD, 3)
+                .starts_from(Expect::mode("V DC"))
+                .expect(Expect::new().flags(&[(Flag::Hold, true)])),
+            CaptureStep::with_command(
+                "hold_off",
+                "We will send HOLD again to turn it off.",
+                command::HOLD,
+                3,
             )
-            .wait_for_enter()
-            .expect(Expect::mode("V AC")),
+            .expect(Expect::new().flags(&[(Flag::Hold, false)])),
+            CaptureStep::with_command(
+                "manual_range",
+                "V DC: we will switch to a manual range.",
+                command::RANGE,
+                3,
+            )
+            .starts_from(Expect::mode("V DC").range(RangeExpect::Auto))
+            .expect(Expect::new().range(RangeExpect::Manual)),
+            CaptureStep::with_command("auto", "We will set auto-range.", command::AUTO, 3)
+                .expect(Expect::new().range(RangeExpect::Auto)),
+            CaptureStep::with_command("rel", "V DC: we will send REL.", command::REL, 3)
+                .starts_from(Expect::mode("V DC"))
+                .expect(Expect::new().flags(&[(Flag::Rel, true)])),
+            CaptureStep::with_command("rel_off", "We will leave REL.", command::EXIT_REL, 3)
+                .expect(Expect::new().flags(&[(Flag::Rel, false)])),
+            CaptureStep::with_command("minmax", "We will enter MAX/MIN.", command::MINMAX, 3)
+                .expect(Expect::new().flags(&[(Flag::Max, true)])),
+            CaptureStep::with_command(
+                "minmax_off",
+                "We will leave MAX/MIN.",
+                command::EXIT_MINMAX,
+                3,
+            )
+            .expect(Expect::new().flags(&[
+                (Flag::Max, false),
+                (Flag::Avg, false),
+                (Flag::Min, false),
+            ])),
+            CaptureStep::with_command("peak", "V AC: we will enter Peak hold.", command::PEAK, 3)
+                .starts_from(Expect::mode("V AC")),
+            CaptureStep::with_command("peak_off", "We will leave Peak hold.", command::PEAK, 3),
+            CaptureStep::with_command(
+                "hz_key",
+                "V AC: we will press Hz% to step the second display.",
+                "hz",
+                3,
+            )
+            .starts_from(Expect::mode("V AC")),
         ]
     }
 }

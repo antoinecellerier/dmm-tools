@@ -492,6 +492,8 @@ key-hover-enter-max-min-click-again-to = Enter MAX/MIN; click again to leave it
 key-hover-hold-the-meter-s-rel-key = Hold the meter's REL key (1 kHz low-pass filter)
 # Used by: CMS061, CMS101
 key-hover-measure-inrush-current-click-again-to = Measure inrush current; click again to leave it
+# Used by: UT171A/B/C
+key-hover-peak-hold-in-ac-v-and = Peak hold in AC V and A — click to enter or leave
 # Used by: OW18B/OW16B, OW18E
 key-hover-press-the-meter-s-hz-duty = Press the meter's Hz/Duty△/ᛒ key briefly
 # Used by: CM2100B
@@ -502,13 +504,15 @@ key-hover-rel-in-ac-and-hz-steps = REL; in AC and Hz, steps Hz/Duty
 key-hover-read-a-4-20-ma-loop = Read a 4-20 mA loop as a percentage
 # Used by: ZT-5566SE
 key-hover-record-maximum-and-minimum-readings = Record maximum and minimum readings
+# Used by: UT171A/B/C
+key-hover-record-maximum-average-and-minimum-readings-2 = Record maximum, average and minimum readings — click to cycle, × to exit
 # Used by: UT181A
 key-hover-record-maximum-average-and-minimum-readings = Record maximum, average and minimum readings — × to exit
 # Used by: VC-880, VC-890, VC650BT
 key-hover-record-maximum-minimum-and-average-readings = Record maximum, minimum, and average readings — click to cycle, × to exit
 # Used by: 121GW
 key-hover-record-minimum-maximum-and-average-readings = Record minimum, maximum, and average readings — click to cycle, × to exit
-# Used by: UT181A
+# Used by: UT171A/B/C, UT181A
 key-hover-save-the-reading-to-the-meter = Save the reading to the meter's memory
 # Used by: CMS061, CMS101
 key-hover-send-select-effect-on-this-meter = Send Select; effect on this meter unknown
@@ -524,6 +528,8 @@ key-hover-swap-hz-pct-and-voltage = Swap Hz/% and voltage
 key-hover-swap-the-main-and-second-displays = Swap the main and second displays
 # Used by: OW69B
 key-hover-switch-the-low-pass-filter-on = Switch the low-pass filter on or off
+# Used by: UT171A/B/C
+key-hover-take-the-reading-as-the-reference = Take the reading as the reference — × to exit
 # Used by: OW18B/OW16B, OW18E
 key-hover-toggle-the-backlight-and-an-ow18 = Toggle the backlight and an OW18's flashlight
 # Used by: VC871, VC891, VC915, VC925 PV

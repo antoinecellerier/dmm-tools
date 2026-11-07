@@ -422,6 +422,8 @@ impl Localizer {
                 tr!(self, "error-rejected-by-meter", sent = self.sent(sent))
             }
             Rejected::ZeroNeedsCapacitance => tr!(self, "error-rejected-zero-needs-capacitance"),
+            Rejected::RelNeedsReading => tr!(self, "error-rejected-rel-needs-reading"),
+            Rejected::RelIsOn => tr!(self, "error-rejected-rel-is-on"),
             Rejected::OtherModel {
                 code,
                 model,
@@ -688,7 +690,9 @@ mod tests {
             }],
             Some(R::SwitchDidNothing { .. }) => sent().into_iter().map(R::ByMeter).collect(),
             Some(R::ByMeter(_)) => vec![R::ZeroNeedsCapacitance],
-            Some(R::ZeroNeedsCapacitance) => vec![R::OtherModel {
+            Some(R::ZeroNeedsCapacitance) => vec![R::RelNeedsReading],
+            Some(R::RelNeedsReading) => vec![R::RelIsOn],
+            Some(R::RelIsOn) => vec![R::OtherModel {
                 code: 41,
                 model: "OWON B41T+",
                 opened: "OWON B35T+",

@@ -253,6 +253,16 @@ pub enum Rejected {
     #[error("ZERO works in capacitance only")]
     ZeroNeedsCapacitance,
 
+    /// REL takes the reading on the display as its reference, and the
+    /// display shows no number (UT171).
+    #[error("REL needs a number on the display")]
+    RelNeedsReading,
+
+    /// REL is on, and the display shows the difference, not the reading a
+    /// new reference would take (UT171).
+    #[error("REL is already on; leave REL first")]
+    RelIsOn,
+
     /// The meter reports another model than the one it was opened as, so its
     /// keys stay off (OWON). `model` and `opened` are the entries' display
     /// names, `id` the reported entry's registry id.
@@ -550,6 +560,11 @@ mod tests {
                 Rejected::ZeroNeedsCapacitance,
                 "ZERO works in capacitance only",
             ),
+            (
+                Rejected::RelNeedsReading,
+                "REL needs a number on the display",
+            ),
+            (Rejected::RelIsOn, "REL is already on; leave REL first"),
             (
                 Rejected::OtherModel {
                     code: 41,

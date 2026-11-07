@@ -143,18 +143,18 @@ A row of buttons shown when connected and receiving data (visible in the
 | Button | Description |
 |---|---|
 | **HOLD** | Toggle hold mode. Reads **HOLD/AutoHOLD** on the 121GW, which steps to AutoHOLD too. |
-| **REL** | Toggle relative mode. On the Voltcraft VC871, VC891, VC915 and VC925 PV, a click zeroes the reading and **x** exits. On the OWON OW18B, OW16B and OW18E, in AC V, AC A and Hz a click steps Hz/Duty. |
+| **REL** | Toggle relative mode. On the Voltcraft VC871, VC891, VC915 and VC925 PV, a click zeroes the reading and **x** exits. On the UT171, a click takes the reading as the reference and **x** exits. On the OWON OW18B, OW16B and OW18E, in AC V, AC A and Hz a click steps Hz/Duty. |
 | **RANGE** | Press RANGE on the meter: one step through the manual ranges. To jump to a range, use the range dropdown under the reading. |
 | **AUTO** | Return to auto-range |
-| **MAX/MIN** | Click to enter or cycle MAX ↔ MIN. Shows stored value. **x** exits. On the OWON OW65B, OW67B and OW69B, the Voltcraft VC871, VC891 and VC915, and the ZOTEK ZT-300AB and ZT-5566SE, no **x**: leave MAX/MIN on the meter. Reads **MAX/MIN/AVG** on the VC-880, VC650BT and VC-890 and **MIN/MAX/AVG** on the 121GW, which cycle AVG too. |
-| **PEAK** | Click to enter or cycle P-MAX ↔ P-MIN. Shows stored peak. **x** exits. On the OW67B, OW69B, VC871 and VC891, a press of the Peak key only. Reads **1ms PEAK** on the 121GW, AC V only. |
+| **MAX/MIN** | Click to enter or cycle MAX ↔ MIN. Shows stored value. **x** exits. On the OWON OW65B, OW67B and OW69B, the Voltcraft VC871, VC891 and VC915, and the ZOTEK ZT-300AB and ZT-5566SE, no **x**: leave MAX/MIN on the meter. Reads **MAX/MIN/AVG** on the VC-880, VC650BT and VC-890 and **MIN/MAX/AVG** on the 121GW, which cycle AVG too, as the UT171 does. |
+| **PEAK** | Click to enter or cycle P-MAX ↔ P-MIN. Shows stored peak. **x** exits. On the OW67B, OW69B, VC871 and VC891, a press of the Peak key only. Reads **1ms PEAK** on the 121GW, AC V only. On the UT171, a click enters or leaves Peak hold, AC V and AC A only. |
 | **SELECT** | Cycle sub-modes. Reads **SHIFT** on the VC-880, VC650BT and VC-890 and **MODE** on the 121GW. |
 | **LIGHT** | Toggle backlight, and the flashlight on an OW18 |
 | **ZERO** | Zero the reading (shown in capacitance on ZOTEK meters, and in DC A, capacitance and voltage on the OWON CM2100B) |
 | **1kHz** | Switch the 1 kHz low-pass filter on or off (121GW, shown in AC modes only) |
 | **Hz/Duty** | Step through frequency and duty (OWON meters and the Voltcraft VC891 with a Hz/Duty key, shown in AC V, AC A, Hz and duty only) |
-| **Hz/%** | Step through frequency and duty (UT61+ and UT161 series, shown in AC V, AC mV, AC µA, AC mA, AC A, Hz and duty only) |
-| **SAVE** | Save the reading to the meter's memory (UT181A) |
+| **Hz/%** | Step through frequency and duty (UT61+ and UT161 series, shown in AC V, AC mV, AC µA, AC mA, AC A, Hz and duty only; UT171, shown in AC and AC+DC V and A, LoZ, VFC and Hz only) |
+| **SAVE** | Save the reading to the meter's memory (UT181A; reads **STORE** on the UT171) |
 | **Inrush** | Measure inrush current (OWON CMS101 and CMS061, UNI-T UT217A and UT217B, shown in AC A only) |
 | **4-20mA** | Read a 4-20 mA loop as a percentage (OWON OW67B and OW69B, shown in DC mA, AC mA and the loop reading; Voltcraft VC871, VC891, VC915 and VC925 PV, shown in DC mA and the loop reading) |
 | **Display** | Change what the displays show (OWON OW67B and Voltcraft VC871, shown in power readings only; Voltcraft VC915, shown in AC V, Hz and duty only; Voltcraft VC925 PV) |

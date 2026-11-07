@@ -81,6 +81,29 @@ frames is what UNI-T's software reads.
   on ([§4.3](reverse-engineered-protocol.md#43-streaming-commands----vendor))
   — decides whether `init` must send it. Needs a trace before `connect`. (#4)
 
+## Remote keys
+
+None of these has been sent to a meter. Each decides whether its button stays.
+
+- HOLD `07 5A`, AUTO `02 00`, MAX/MIN `05 01`/`05 00`, Hz% `03 5A` and STORE
+  `0B 5A` ([§4.7](reverse-engineered-protocol.md#47-function-range-and-key-commands----vendor)):
+  does the meter act as on its own key? Needs the `hold`, `auto`, `minmax`,
+  `hz_key` steps and a STORE press. (#4)
+- RANGE as `02 <row>`: the current row from auto, the next one in manual, and
+  whether the meter refuses it where the manual has no RANGE (continuity,
+  diode, temperature) (§4.7) — decides the stepping. Needs `manual_range`. (#4)
+- REL as `04 01` with the reading's own float: does the meter zero on it as on
+  its key, and `04 00` leave (§4.7) — decides the REL button. Needs `rel`, `rel_off`. (#4)
+- Peak as `06 01`/`06 00`, chosen by byte 5 bit 6, and which bit tells P-Max
+  from P-Min (§4.7, §5.3) — decides the PEAK button and a Peak flag. Needs
+  `peak`, `peak_off`. (#4)
+- The reply: OK, ER or NO within 300 ms, and the connect frame's own reply, if
+  any, which the first key's wait may take for its own
+  ([§5.11](reverse-engineered-protocol.md#511-replies-types-0x01-and-0x72)) —
+  decides the reply wait. Needs any key step. (#4)
+- MAX/MIN while REL or Peak is on: UNI-T's software sends nothing then, and we
+  send it (§4.7) — decides whether to hold it back. Needs `minmax` under REL. (#4)
+
 ## Detection and the adapter
 
 - What detection's probes do to a UT171, and its frames against the UT181A's:

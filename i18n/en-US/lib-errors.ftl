@@ -174,6 +174,8 @@ error-rejected-switch-did-nothing = { $setting } { $target } did nothing; the me
 # below, or a setting's name and a state.
 error-rejected-by-meter = { $sent } rejected by the meter
 error-rejected-zero-needs-capacitance = ZERO works in capacitance only
+error-rejected-rel-needs-reading = REL needs a number on the display
+error-rejected-rel-is-on = REL is already on; leave REL first
 # $code is a number, $model and $opened are meters (e.g. OWON B41T+), $id a
 # meter's ID as --device takes it. "Auto-detect" is the GUI's Device
 # choice.

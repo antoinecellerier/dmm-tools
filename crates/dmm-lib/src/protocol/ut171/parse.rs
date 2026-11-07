@@ -45,6 +45,7 @@ const AUTO_SAVE: u8 = 0x02;
 const LOW_BATTERY: u8 = 0x04;
 const BAR_PRESENT: u8 = 0x08;
 const REL: u8 = 0x10;
+const PEAK: u8 = 0x40;
 const HOLD: u8 = 0x80;
 
 // Status byte B, wire byte 6 (§5.3).
@@ -57,6 +58,12 @@ const AGGREGATE_BIT5: u8 = 0x20;
 const AGGREGATE_BIT6: u8 = 0x40;
 const STATUS_B_DOCUMENTED: u8 =
     AUTO_RANGE | HIGH_VOLTAGE | NOT_LOGGED | AGGREGATE_BIT5 | AGGREGATE_BIT6;
+
+/// Whether Peak is on: byte 5 bit 6 (§5.3). It says neither P-MAX nor P-MIN,
+/// so it sets no flag; the Peak key's command follows it.
+pub(super) fn peak_on(payload: &[u8]) -> bool {
+    payload.get(1).is_some_and(|status| status & PEAK != 0)
+}
 
 /// The payload length status byte A announces (§3.4): the fixed part, plus
 /// the aux block, the bar float and the auto-save minutes it flags.

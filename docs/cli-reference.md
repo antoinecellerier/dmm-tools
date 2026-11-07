@@ -542,6 +542,16 @@ dmm-cli command <ACTION>          # send a command
 
 | Command | Description |
 |---|---|
+| `hold` | Toggle Hold mode |
+| `range` | Manual range: the current range from auto, then the next one |
+| `auto` | Return to auto-range |
+| `rel` | Take the reading as the REL reference |
+| `exit_rel` | Leave REL |
+| `minmax` | Enter Max/Min, then step MAX, AVG, MIN |
+| `exit_minmax` | Exit Max/Min |
+| `peak` | Enter Peak hold, or leave it (AC V and AC A) |
+| `hz` | Hz% button: step the second display through frequency and duty |
+| `save` | Save the reading to the meter's memory |
 | `connect` | Start measurement streaming |
 | `pause` | Stop measurement streaming |
 
