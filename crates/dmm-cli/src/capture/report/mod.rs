@@ -594,8 +594,8 @@ mod tests {
     #[test]
     fn status_bit_overload_is_shown_as_ol() {
         for (id, payload) in [
-            // DC V, digits 1234.5, sign byte bit 6 (OL).
-            ("ut8802", vec![0x05, 0x45, 0x23, 0x01, 0x01, 0x00, 0x40]),
+            // DC V, digits 1234.5, frame byte 6 bit 6 (OL).
+            ("ut8802", vec![0x05, 0x45, 0x23, 0x01, 0x01, 0x40, 0x00]),
             // Ω, display "    0", frame byte 14 bit 2 (OL).
             (
                 "ut8803",

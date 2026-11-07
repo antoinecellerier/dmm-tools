@@ -142,7 +142,7 @@ The UT8802 uses a simpler wire format than the UT8803:
 
 ```
 +------+------+------+------+------+------+------+------+
-| 0xAC | pos  | d1d2 | d3d4 | d5xx | dp+f | stat | sign |
+| 0xAC | pos  | d4d5 | d2d3 | x d1 | dirdp| stat | err  |
 +------+------+------+------+------+------+------+------+
  byte 0 byte 1 byte 2 byte 3 byte 4 byte 5 byte 6 byte 7
 ```
@@ -155,16 +155,17 @@ The UT8802 uses a simpler wire format than the UT8803:
 | 3 | Digits 2-3 | High nibble (`>>4`): digit 2; Low nibble (`&0xF`): digit 3 | Display digits |
 | 4 | Digit 1 | Low nibble (`&0xF`): digit 1 (MSD); High nibble: unused | Most significant digit |
 | 5 | DP + Flags | Low nibble (`&0xF`): decimal point position (0-4); Bits 4-5 (`>>4 & 3`): diode/SCR probe direction; Bits 6-7: never read [VENDOR] | Decimal placement + probe direction |
-| 6 | Status | All 8 bits extracted individually | Bargraph or secondary status [UNVERIFIED] |
-| 7 | Sign + Flags | Bit 7 (`>>7`): polarity (1=negative); Bits 0-6: status flags | Sign + HOLD/REL/MAX/MIN/AUTO |
+| 6 | Status + Sign | Each bit read separately (§3.5) | MIN, MAX, AUTO (inverted), REL, HOLD, over-range, OL; bit 7 polarity (1=negative) |
+| 7 | Error | Bit 7 (`>>7`) only (§3.6) | Error flag; bits 0-6 never used [VENDOR] |
 
 **Frame size**: Fixed 8 bytes. No length byte, no checksum. [VENDOR]
 
 **Validation**: The vendor parser checks: non-null buffer, length >= 8,
 header byte 0xAC, position code valid in FUN_1001c7b0, and decimal point
-position < 5 (frame silently skipped otherwise,
-uci_dll_decompiled.txt:24709-24726). There is no checksum verification
-and no per-nibble digit validation. [VENDOR]
+position < 5 (uci_dll_decompiled.txt:24709-24726). A frame failing any of
+these is not skipped silently: the parser returns -1116 (`0xFFFFFBA4`),
+which its caller passes up as a failed read. There is no checksum
+verification and no per-nibble digit validation. [VENDOR]
 
 ### 3.2 Display Encoding -- [VENDOR]
 
@@ -187,18 +188,18 @@ What non-decimal nibble values the device actually sends (blank digits,
 overload) is [UNVERIFIED].
 
 **Decimal point insertion**: The decimal point position from byte 5 low
-nibble determines where `'.'` is inserted. Position 0 = no decimal
-(integer), position 1 = one digit after decimal, etc. Maximum
-position is 4. The `'.'` character is inserted at
-`(end_of_digits - decimal_position)`. [VENDOR]
+nibble determines where `'.'` is inserted: position 1 = one digit after
+the point, and so on up to 4. The `'.'` character is inserted at
+`(end_of_digits - decimal_position)` whatever the position, so at 0 the
+vendor's display string ends in `'.'`; the value is an integer. [VENDOR]
 
-**Overload detection**: Byte 7 bit 6 is the sole overload mechanism:
+**Overload detection**: Byte 6 bit 6 is the sole overload mechanism:
 when set, the vendor skips the atof, stores a sentinel value, and
 replaces the display with the literal `"  0L "`
 (uci_dll_decompiled.txt:24806-24821). Digit nibbles are not involved.
 [VENDOR]
 
-**Sign**: Byte 7 bit 7 determines polarity. When set, the parsed
+**Sign**: Byte 6 bit 7 determines polarity. When set, the parsed
 numeric value is negated (multiplied by -1.0). The digit string never
 carries a sign: the vendor passes the bit to its string builder as a
 separate argument (`FUN_1001c950`, line 24813). [VENDOR]
@@ -324,33 +325,32 @@ ACDC field, which actually comes from a position-code lookup
 What byte 5 bits 4-5 contain outside diode/SCR positions is
 [UNVERIFIED] — the vendor never reads them there.
 
-For diode mode (position 0x23), these bits encode probe direction:
-- Value 0: both directions valid (bits 2+3 of high status set)
-- Value 1: left-to-right only (bit 2 set)
+What they set in the high status word, which the programming manual
+names D2 "from right to left" and D3 "from left to right" [KNOWN]:
 
-For SCR mode (position 0x2A), similar direction encoding applies.
-[VENDOR, partially UNVERIFIED due to Ghidra decompiler artifacts: the
-decompile compares this 2-bit value against 0x10 and 0x11]
+| Position | Value 0 | Value 1 | Values 2, 3 |
+|----------|---------|---------|-------------|
+| 0x23 Diode | D2 and D3 | D2 | neither |
+| 0x2A SCR | neither | D2 | neither |
 
-### 3.5 Byte 7 Status Flags -- [VENDOR]
+Every other position clears both. [VENDOR]
 
-Byte 7 carries the sign bit and multiple status flags. The exact bit
-assignments are complicated by Ghidra stack variable aliasing, but the
-debug format string confirms these fields are extracted:
+### 3.5 Byte 6 Status Flags -- [VENDOR]
+
+Byte 6 carries the sign bit and the status flags. The parser turns it
+into a bitset and takes each flag from it; the debug format string names
+the fields:
 
 ```
 "ACDC:%s,dotpos:%d,fun:%d,isauto:%d,ismax:%d,ismin:%d,ishold:%d,isrel:%d,isOL:%d,diodeDirectio:0x%x"
 ```
 
-Known bit assignments (resolved 2026-04-19 from a second Ghidra pass
-over `FUN_1001e0a0`, status-word construction at lines 24768-24773 and
-debug format at line 24865):
+Bit assignments, from `FUN_1001e0a0`'s status-word construction and the
+debug format (how they were read: approach doc, "Byte 6 or byte 7"):
 
 - **Bit 0**: MIN → D29
 - **Bit 1**: MAX → D28
-- **Bit 2**: AUTO, **inverted logic** (bit clear = auto ON). Vendor
-  expression `(byte)~(byte)((uint)param_2[7] >> 2) & 1` maps this to
-  status-word D6.
+- **Bit 2**: AUTO, **inverted logic** (bit clear = auto ON) → D6
 - **Bit 3**: REL → D30
 - **Bit 4**: HOLD → D31
 - **Bit 5**: Over-range → D18
@@ -358,15 +358,16 @@ debug format at line 24865):
 - **Bit 7**: Sign/polarity (1 = negative) → D19. Vendor multiplies the
   parsed float by -1 when set.
 
-[VENDOR]. Derived from the decompile; not yet seen on a meter
-([verification](verification.md#flags)).
+The programming manual's 50.23 Hz example (`flags = 0x2013345`) has D6
+set, auto range, and every other flag clear [KNOWN]. [VENDOR]. Not yet
+seen on a meter ([verification](verification.md#flags)).
 
-### 3.6 Byte 6 Purpose -- [UNVERIFIED]
+### 3.6 Byte 7 Error Flag -- [VENDOR]
 
-Byte 6 is passed to `FUN_1001b9b0(byte6, 0)` which constructs a bitset
-from its individual bits. This function likely builds a bargraph or
-secondary status indicator. The result is stored but its exact
-consumption is unclear from the parser alone.
+Byte 7 bit 7 goes to the high status word's D0, the programming manual's
+"Error flag: 1: the current data error or the current display Err". Bits
+0-6 are never used. [VENDOR] What the meter sends there is
+[UNVERIFIED].
 
 ### 3.7 Status Word Construction -- [VENDOR]
 
@@ -378,19 +379,22 @@ the UT8803 protocol doc). The flag format string confirms:
 |------|-------|------------|
 | D0-D3 | FuncCode | From FUN_1001c7b0 (position → function lookup) |
 | D4-D5 | ACDC | From `FUN_1001ca30(position)` — see §3.4 |
-| D6 | AutoRange | From byte 7 bit 2 (**inverted**) |
-| D7 | OverLoad | From byte 7 bit 6 — see §3.2 |
+| D6 | AutoRange | From byte 6 bit 2 (**inverted**) |
+| D7 | OverLoad | From byte 6 bit 6 — see §3.2 |
 | D8-D11 | UnitType | From FUN_1001cf30 (position → unit lookup) |
 | D12-D14 | UnitMag | From FUN_1001cd30 (position → prefix lookup) |
-| D19 | Minus | From byte 7 bit 7 (sign/polarity) — see §3.5 |
+| D18 | Over-range | From byte 6 bit 5 — see §3.5 |
+| D19 | Minus | From byte 6 bit 7 (sign/polarity) — see §3.5 |
 | D24-D27 | DotPos | From byte 5 low nibble (decimal position) |
-| D28 | MAX | From byte 7 bit 1 — see §3.5 |
-| D29 | MIN | From byte 7 bit 0 — see §3.5 |
-| D30 | REL | From byte 7 bit 3 — see §3.5 |
-| D31 | HOLD | From byte 7 bit 4 — see §3.5 |
+| D28 | MAX | From byte 6 bit 1 — see §3.5 |
+| D29 | MIN | From byte 6 bit 0 — see §3.5 |
+| D30 | REL | From byte 6 bit 3 — see §3.5 |
+| D31 | HOLD | From byte 6 bit 4 — see §3.5 |
 
-The high 32-bit status word (at `param_4 + 0x18`) is also constructed,
-with D2-D3 encoding diode/SCR probe direction from byte 5 bits 4-5.
+D16 is always set; D20-D23 are left as the caller zeroed them. The high
+32-bit status word (at `param_4 + 0x18`) carries the error flag from byte
+7 bit 7 in D0 (§3.6), D2-D3 from byte 5 bits 4-5 (§3.4) and the position
+code in D8-D15.
 
 ---
 
@@ -706,7 +710,7 @@ frame headers (§2.3). On the wire:
 | Mode/range | Combined in position code | Separate mode + range bytes |
 | Checksum | None | Alternating-byte sum, 16-bit BE |
 | Decimal point | Byte 5 low nibble | Implied by range |
-| Sign | Byte 7 bit 7 | Flag byte bit |
+| Sign | Byte 6 bit 7 | Flag byte bit |
 | Inductance support | No | Yes (L/Q/R sub-measurements) |
 | Display count | 2000 (4.5 digits) | 6000 (5999) |
 
@@ -744,7 +748,7 @@ exact model; detection is written up in
 | UT8802: no checksum | [VENDOR] | Ghidra: no checksum code |
 | UT8802: position codes 0x01-0x2D | [KNOWN] | Programming manual page 10 |
 | UT8802: position-to-function mapping | [VENDOR] | Ghidra FUN_1001c7b0 matches manual |
-| UT8802: AUTO flag inverted logic | [VENDOR] | Ghidra: `~(byte7>>2)` |
+| UT8802: AUTO flag inverted logic | [VENDOR] | uci.dll: byte 6 bit 2, inverted, to D6 |
 | QinHeng: primary init = 2400 baud + 0x5A trigger | [VENDOR] | Ghidra FUN_1001d360 + disassembly |
 | QinHeng: fallback init = 19200 baud, no trigger | [VENDOR] | Ghidra FUN_1001d270 + disassembly |
 | QinHeng: VID 0x1A86, PID 0xE008 | [KNOWN] | Programming manual |
@@ -772,8 +776,9 @@ UT805A, unsupported, is in [candidates](../new-device-candidates.md#not-yet-inve
 
 ## 9. Cross-Reference with Community Sources
 
-Consulted for the CH9325 on 2026-04-09 and again on 2026-09-16, after the
-vendor analysis above, for validation only. The UT803/UT804 comparison
+Consulted for the CH9325 on 2026-04-09 and again on 2026-09-16, and for
+the UT8802's flag byte on 2026-11-06, after the vendor analysis above, for
+validation only. The UT803/UT804 comparison
 is in `../ut803/reverse-engineered-protocol.md` §8.
 
 | Finding | Our RE | sigrok (wiki and libsigrok) | Lukas Schwarz | `he2325u.cpp` | Agreement |
@@ -791,6 +796,13 @@ is in `../ut803/reverse-engineered-protocol.md` §8.
 table that §4.1 carried from 2026-04-09 to 2026-09-16 was built from
 these sources and read bytes 3-4 as "often 0x03/0x00", which none of
 them says.
+
+**UT8802 flag byte (§3.5), 2026-11-06.** Among the community sources
+fetched then (philpagel/ut8803e, hskim7639/UNI-T, gulux/Uni-T-CP2110,
+pyLabLib, libreble/multimeter, olegv142/ut61xpy, QtDMM), none was found
+decoding the UT8802's flags independently. QtDMM's UT8802 decoder was
+written from this spec (its PR #394), so it says nothing for or against
+byte 6.
 
 Reference implementations:
 

@@ -36,26 +36,29 @@ spec, [`../ut8803/`](../ut8803/reverse-engineered-protocol.md).
 - Digit order, MSD in byte 4's low nibble, and the point in byte 5's ([§3.2](reverse-engineered-protocol.md#32-display-encoding----vendor))
   — decides `parse_measurement`'s nibble order. Needs any reading with
   distinct digits, noting the LCD. (#12)
-- Overload: byte 7 bit 6, 0x0C nibbles, both or neither, and when bit 5
-  (over-range) sets (§3.2, [§3.5](reverse-engineered-protocol.md#35-byte-7-status-flags----vendor))
+- Overload: byte 6 bit 6, 0x0C nibbles, both or neither, and when bit 5
+  (over-range) sets (§3.2, [§3.5](reverse-engineered-protocol.md#35-byte-6-status-flags----vendor))
   — decides whether the 0x0C digit check stays. Needs `ohm` with leads open. (#12)
 - Which nibble a blank leading digit sends, 0x0 or another (§3.2) — decides
   `bcd_to_char` and the extractor's valid nibbles. Needs a reading under
   10000 counts. (#12)
-- Byte 7 bit 7 on a negative reading (§3.2) — confirms the sign and the `-`
-  in the display text. Needs `dcv_negative`. (#12)
+- Byte 6 bit 7 on a negative reading, byte 7 bit 7 clear (§3.2) — confirms
+  the sign comes from byte 6, as uci.dll reads it. Needs `dcv_negative`. (#12)
 
 ## Flags
 
-- HOLD, REL, MAX and MIN at byte 7 bits 4, 3, 1 and 0, and AUTO on bit 2
-  clear (§3.5) — decides the flags `parse_measurement` sets. Needs each key
-  pressed with the trace running; no capture step covers them yet. (#12)
+- HOLD, REL, MAX, MIN at byte 6 bits 4, 3, 1, 0, AUTO on bit 2 clear (§3.5)
+  — decides the byte `parse_measurement` reads. Needs steps `hold`, `rel`,
+  `max_min`, `manual_range`. (#12)
 
 ## Other bytes
 
-- What byte 6 carries, a bar graph or other status ([§3.6](reverse-engineered-protocol.md#36-byte-6-purpose----unverified))
-  — decides whether it becomes a reading field. Needs traces across modes,
-  one with a reading swept towards full scale. (#12)
+- What byte 7 bits 0-6 carry, which uci.dll never uses ([§3.6](reverse-engineered-protocol.md#36-byte-7-error-flag----vendor));
+  a `frame byte 7` report says they are set — decides whether a field there
+  gets documented and its report silenced. Needs traces across modes. (#12)
+- When byte 7 bit 7, the error flag, sets, and what digits come with it
+  (§3.6) — decides whether it becomes a reading state. Needs an SCR trace
+  with the gate lead off, which the `scr` step doesn't ask for. (#12)
 - Byte 5 bits 4-5: the diode and SCR direction values, and anything outside
   them ([§3.4](reverse-engineered-protocol.md#34-byte-5-flags-bits-4-5----vendor))
   — decides whether they stay unread elsewhere. Needs `diode`, `scr`. (#12)

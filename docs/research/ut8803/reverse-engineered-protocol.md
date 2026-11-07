@@ -784,7 +784,7 @@ Given `flags = 0x2013345` (from programming manual example, 50.23 Hz):
 Low 32 bits: 0x02013345
 D0-D3  = 0x5 = Frequency
 D4-D5  = 0x0 = OFF (no AC/DC for frequency)
-D6     = 0x0 = Not auto range (manual shows 0 here)
+D6     = 0x1 = Auto range (low byte 0x45)
 D7     = 0x0 = No overload
 D8-D11 = 0x3 = Hz (Frequency)
 D12-D14 = 0x3 = standard (no prefix)

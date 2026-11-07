@@ -3,7 +3,7 @@
 //! Streaming protocol: the host sends nothing after CP2110 init, and the
 //! meter streams 8-byte measurement frames continuously.
 //!
-//! Frame format: `AC [position] [d1d2] [d3d4] [d5xx] [dp+flags] [status] [sign]`
+//! Frame format: `AC [position] [d4d5] [d2d3] [xd1] [dir+dp] [status+sign] [error]`
 //!
 //! Key difference from UT8803: single-byte 0xAC header, BCD-encoded display,
 //! combined position codes (function + range), no checksum.
@@ -248,6 +248,33 @@ impl Protocol for Ut8802Protocol {
             CaptureStep::basic("scr", "Set meter to SCR (thyristor test)")
                 .needs(&[Need::Scr])
                 .expect(Expect::mode("SCR")),
+            // Which byte carries the key flags rests on the vendor DLL alone
+            // (spec §3.5), so these assert nothing: the raw frames are the
+            // answer. No UT8802 manual names the keys.
+            CaptureStep::basic(
+                "hold",
+                "DC V: press HOLD, then Enter; skip if it has none. Press HOLD again afterwards.",
+            )
+            .wait_for_enter()
+            .expect(Expect::mode("DC V")),
+            CaptureStep::basic(
+                "rel",
+                "DC V: press REL, then Enter; skip if it has none. Press REL again afterwards.",
+            )
+            .wait_for_enter()
+            .expect(Expect::mode("DC V")),
+            CaptureStep::basic(
+                "max_min",
+                "DC V: press MAX/MIN, then Enter; skip if it has none. Exit MAX/MIN afterwards.",
+            )
+            .wait_for_enter()
+            .expect(Expect::mode("DC V")),
+            CaptureStep::basic(
+                "manual_range",
+                "DC V: press RANGE, then Enter; skip if it has none. Return to auto range afterwards.",
+            )
+            .wait_for_enter()
+            .expect(Expect::mode("DC V")),
         ]
     }
 }
@@ -301,8 +328,9 @@ fn report_position(position: u8) {
 ///   direction (bits 4-5, consumed only for positions 0x23/0x2A,
 ///   spec §3.4 — NOT AC/DC coupling);
 ///   bits 6-7 are never read, and are reported if set
-/// - byte 5: status/bargraph byte [UNVERIFIED purpose]
-/// - byte 6: sign (bit 7) + status flags (bits 0-6)
+/// - byte 5: status flags, sign in bit 7 (spec §3.5)
+/// - byte 6: error flag in bit 7, bits 0-6 never read and reported if set
+///   (spec §3.6)
 pub(crate) fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
     check_len("ut8802", payload, 7)?;
 
@@ -318,12 +346,13 @@ pub(crate) fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
             payload,
         ));
     }
-    let sign_byte = payload[6];
+    let status = payload[5];
 
-    // Frame byte 4 carries only the MSD in its low nibble, and frame byte 5
-    // only the decimal point and bits 4-5; the vendor never reads the rest
+    // Frame byte 4 carries only the MSD in its low nibble, frame byte 5 only
+    // the decimal point and bits 4-5, and frame byte 7 only the error flag
+    // in bit 7; the vendor never reads the rest
     // (docs/research/uci-bench-family/reverse-engineered-protocol.md §3.1,
-    // §3.2, §3.4), so a bit set there is undocumented.
+    // §3.2, §3.4, §3.6), so a bit set there is undocumented.
     if payload[3] & 0xF0 != 0 {
         report_unknown(
             "ut8802",
@@ -338,6 +367,13 @@ pub(crate) fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
             format_args!("frame byte 5 = {:#04x}", payload[4]),
         );
     }
+    if payload[6] & 0x7F != 0 {
+        report_unknown(
+            "ut8802",
+            "status bits",
+            format_args!("frame byte 7 = {:#04x}", payload[6]),
+        );
+    }
 
     // Look up position code
     let (mode, unit, range_label): (Cow<'static, str>, &'static str, &'static str) =
@@ -348,7 +384,7 @@ pub(crate) fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
             (unknown_mode(position), "", "")
         };
 
-    let (display_str, overload) = display_text(payload, dp_pos, sign_byte);
+    let (display_str, overload) = display_text(payload, dp_pos, status);
 
     // Parse numeric value
     let value = if overload {
@@ -358,14 +394,13 @@ pub(crate) fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
         display_number("ut8802", &trimmed)
     };
 
-    // Flag bit positions from the vendor's UT8802 parser (status-word
-    // construction, spec §3.7). Tracing each source bit through the shift
-    // chain back to frame byte 7 (`payload[6]`) and matching the status-word
-    // bits to the debug format string (spec §3.5) gives:
+    // Frame byte 6's bits, as the vendor's status word takes them
+    // (docs/research/uci-bench-family/reverse-engineered-protocol.md §3.5,
+    // §3.7):
     //
     //   bit 0: MIN  (→ status-word D29)
     //   bit 1: MAX  (→ D28)
-    //   bit 2: AUTO **inverted** (→ D6 via `~bit2`) [VENDOR]
+    //   bit 2: AUTO **inverted** (→ D6)
     //   bit 3: REL  (→ D30)
     //   bit 4: HOLD (→ D31)
     //   bit 5: Over (→ D18; not surfaced by StatusFlags)
@@ -373,12 +408,13 @@ pub(crate) fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
     //   bit 7: sign (→ D19, folded into the display string by
     //         `display_text`)
     //
-    // See docs/research/uci-bench-family/reverse-engineered-protocol.md §3.5.
-    let auto_range = sign_byte & 0x04 == 0;
-    let hold = sign_byte & 0x10 != 0;
-    let rel = sign_byte & 0x08 != 0;
-    let max_flag = sign_byte & 0x02 != 0;
-    let min_flag = sign_byte & 0x01 != 0;
+    // Frame byte 7 bit 7 is the error flag (§3.6), which no StatusFlags
+    // field carries.
+    let auto_range = status & 0x04 == 0;
+    let hold = status & 0x10 != 0;
+    let rel = status & 0x08 != 0;
+    let max_flag = status & 0x02 != 0;
+    let min_flag = status & 0x01 != 0;
 
     let flags = StatusFlags {
         hold,
@@ -412,9 +448,9 @@ pub(crate) fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
 
 /// The display string from the five digit nibbles — leading zeros blanked,
 /// then the decimal point and the sign, both left off on overload — and
-/// whether the reading is over range (`sign_byte` bit 6, or an 'L' digit).
-/// `dp_pos` must be 0-4.
-fn display_text(payload: &[u8], dp_pos: u8, sign_byte: u8) -> (String, bool) {
+/// whether the reading is over range (`status` bit 6, or an 'L' digit).
+/// `status` is frame byte 6. `dp_pos` must be 0-4.
+fn display_text(payload: &[u8], dp_pos: u8, status: u8) -> (String, bool) {
     debug_assert!(dp_pos <= 4, "parse_measurement rejects dp_pos {dp_pos}");
     // Decode the 5 display nibbles, MSD first. The vendor parser fills its
     // display buffer as [b3 lo, b2 hi, b2 lo, b1 hi, b1 lo] (payload
@@ -429,7 +465,7 @@ fn display_text(payload: &[u8], dp_pos: u8, sign_byte: u8) -> (String, bool) {
         payload[1] & 0x0F,
     ];
 
-    // The vendor's only overload mechanism is byte 6 bit 6: it skips the
+    // The vendor's only overload mechanism is frame byte 6 bit 6: it skips the
     // atof and substitutes a sentinel plus the literal display "  0L "
     // (spec §3.2). The digit-nibble 0x0C ('L')
     // check below is kept as a defensive secondary — the vendor never
@@ -437,7 +473,7 @@ fn display_text(payload: &[u8], dp_pos: u8, sign_byte: u8) -> (String, bool) {
     //
     // On either source the digits are not what the meter shows, so
     // `parse_measurement` drops them; the point and sign are left off too.
-    let mut overload = sign_byte & 0x40 != 0;
+    let mut overload = status & 0x40 != 0;
     let mut chars: Vec<char> = Vec::with_capacity(6); // 5 digits + possible decimal point
     for &n in &nibbles {
         let ch = bcd_to_char(n);
@@ -474,10 +510,10 @@ fn display_text(payload: &[u8], dp_pos: u8, sign_byte: u8) -> (String, bool) {
     }
 
     // The digits never carry a sign: the vendor hands its string builder the
-    // digit string and byte 6 bit 7 separately (spec §3.2).
+    // digit string and frame byte 6 bit 7 separately (spec §3.2).
     // Every display and export path prefers `display_raw` for a normal
     // value, so the sign has to be in the string, not only on the float.
-    if sign_byte & 0x80 != 0 && !overload {
+    if status & 0x80 != 0 && !overload {
         chars.insert(0, '-');
     }
 
@@ -552,12 +588,11 @@ mod tests {
         position: u8,
         digits: [u8; 5],
         dp_pos: u8,
-        acdc_bits: u8,
+        direction: u8,
         status: u8,
-        sign_flags: u8,
+        error: u8,
     ) -> Vec<u8> {
-        frame::test_frame_ut8802(position, digits, dp_pos, acdc_bits, status, sign_flags)[1..]
-            .to_vec()
+        frame::test_frame_ut8802(position, digits, dp_pos, direction, status, error)[1..].to_vec()
     }
 
     /// The one payload whose every parsed field is pinned: an ordinary DC V
@@ -689,12 +724,12 @@ raw_payload=7"#
         }
     }
 
-    /// Bit 7 of the sign byte negates the value, and the sign reaches the
+    /// Frame byte 6 bit 7 negates the value, and the sign reaches the
     /// display string too: display and CSV render `display_raw`, so a
     /// negative reading used to show and export unsigned.
     #[test]
     fn parse_negative() {
-        let payload = make_payload(0x05, [1, 2, 3, 4, 5], 1, 0x02, 0x00, 0x80);
+        let payload = make_payload(0x05, [1, 2, 3, 4, 5], 1, 0x02, 0x80, 0x00);
         let m = parse_measurement(&payload).unwrap();
         assert!(matches!(m.value, MeasuredValue::Normal(v) if (v - (-1234.5)).abs() < 1e-6));
         assert_eq!(m.display_raw.as_deref(), Some("-1234.5"));
@@ -704,7 +739,7 @@ raw_payload=7"#
     /// UT61E+ spells its own display, and the number still parses.
     #[test]
     fn parse_negative_with_leading_blank() {
-        let payload = make_payload(0x05, [0, 1, 2, 3, 4], 2, 0x02, 0x00, 0x80);
+        let payload = make_payload(0x05, [0, 1, 2, 3, 4], 2, 0x02, 0x80, 0x00);
         let m = parse_measurement(&payload).unwrap();
         assert!(matches!(m.value, MeasuredValue::Normal(v) if v == -12.34));
         assert_eq!(m.display_raw.as_deref(), Some("- 12.34"));
@@ -713,7 +748,7 @@ raw_payload=7"#
     /// Overload wins: the sign bit set beside OL leaves no digits behind.
     #[test]
     fn parse_negative_overload_carries_no_digits() {
-        let payload = make_payload(0x05, [1, 2, 3, 4, 5], 1, 0x02, 0x00, 0xC0);
+        let payload = make_payload(0x05, [1, 2, 3, 4, 5], 1, 0x02, 0xC0, 0x00);
         let m = parse_measurement(&payload).unwrap();
         assert!(matches!(m.value, MeasuredValue::Overload));
         assert_eq!(m.display_raw, None);
@@ -729,7 +764,7 @@ raw_payload=7"#
         assert!(matches!(m.value, MeasuredValue::Normal(v) if (v - 1234.5).abs() < 1e-6));
     }
 
-    /// Vendor overload = byte 6 bit 6, with ordinary digits on the wire
+    /// Vendor overload = frame byte 6 bit 6, with ordinary digits on the wire
     /// (spec §3.2).
     ///
     /// The digits are dropped: capture's confirmation line and the JSON
@@ -738,7 +773,7 @@ raw_payload=7"#
     /// showed OL.
     #[test]
     fn overload_from_status_bit() {
-        let payload = make_payload(0x05, [1, 2, 3, 4, 5], 1, 0x00, 0x00, 0x40);
+        let payload = make_payload(0x05, [1, 2, 3, 4, 5], 1, 0x00, 0x40, 0x00);
         let m = parse_measurement(&payload).unwrap();
         assert_eq!(
             snapshot(&m),
@@ -779,36 +814,36 @@ raw_payload=7"#
         assert!(m.flags.auto_range);
 
         // Bit 2 set = auto OFF
-        let payload = make_payload(0x05, [1, 2, 3, 4, 5], 1, 0x02, 0x00, 0x04);
+        let payload = make_payload(0x05, [1, 2, 3, 4, 5], 1, 0x02, 0x04, 0x00);
         let m = parse_measurement(&payload).unwrap();
         assert!(!m.flags.auto_range);
     }
 
     #[test]
     fn parse_hold_flag() {
-        // HOLD = byte 7 bit 4 (status-word D31)
-        let payload = make_payload(0x01, [1, 2, 3, 4, 5], 0, 0x00, 0x00, 0x10);
+        // HOLD = frame byte 6 bit 4 (status-word D31)
+        let payload = make_payload(0x01, [1, 2, 3, 4, 5], 0, 0x00, 0x10, 0x00);
         let m = parse_measurement(&payload).unwrap();
         assert!(m.flags.hold);
     }
 
     #[test]
     fn parse_rel_flag() {
-        // REL = byte 7 bit 3 (D30)
-        let payload = make_payload(0x01, [1, 2, 3, 4, 5], 0, 0x00, 0x00, 0x08);
+        // REL = frame byte 6 bit 3 (D30)
+        let payload = make_payload(0x01, [1, 2, 3, 4, 5], 0, 0x00, 0x08, 0x00);
         let m = parse_measurement(&payload).unwrap();
         assert!(m.flags.rel);
     }
 
     #[test]
     fn parse_max_min_flags() {
-        // MAX = byte 7 bit 1 (D28), MIN = byte 7 bit 0 (D29)
-        let payload = make_payload(0x01, [1, 2, 3, 4, 5], 0, 0x00, 0x00, 0x02);
+        // MAX = frame byte 6 bit 1 (D28), MIN = bit 0 (D29)
+        let payload = make_payload(0x01, [1, 2, 3, 4, 5], 0, 0x00, 0x02, 0x00);
         let m = parse_measurement(&payload).unwrap();
         assert!(m.flags.max);
         assert!(!m.flags.min);
 
-        let payload = make_payload(0x01, [1, 2, 3, 4, 5], 0, 0x00, 0x00, 0x01);
+        let payload = make_payload(0x01, [1, 2, 3, 4, 5], 0, 0x00, 0x01, 0x00);
         let m = parse_measurement(&payload).unwrap();
         assert!(!m.flags.max);
         assert!(m.flags.min);
@@ -1019,13 +1054,19 @@ raw_payload=7"#
         assert_eq!(reports, ["ut8802: unrecognised position code: 0x07"]);
     }
 
-    /// A sign byte of 0xAC reads each frame's header as a position between
-    /// its real ones, and that must not break the run.
+    /// A 0xAC in either of a frame's last two bytes starts a false frame
+    /// between its real ones, and that must not break the run.
     #[test]
-    fn a_sign_byte_of_0xac_does_not_hide_an_unlisted_position() {
-        let frame = frame::test_frame_ut8802(0x07, [1, 2, 3, 4, 5], 1, 0x02, 0x00, 0xAC);
-        let (_, reports) = read_reporting(vec![frame.repeat(5)]);
-        assert_eq!(reports, ["ut8802: unrecognised position code: 0x07"]);
+    fn a_0xac_in_the_last_bytes_does_not_hide_an_unlisted_position() {
+        for (status, error) in [(0xAC, 0x00), (0x00, 0xAC)] {
+            let frame = frame::test_frame_ut8802(0x07, [1, 2, 3, 4, 5], 1, 0x02, status, error);
+            let (_, reports) = read_reporting(vec![frame.repeat(5)]);
+            assert_eq!(
+                reports,
+                ["ut8802: unrecognised position code: 0x07"],
+                "{status:#04x}, {error:#04x}"
+            );
+        }
     }
 
     /// A run past what one read examines still ends in the report.
@@ -1088,12 +1129,12 @@ raw_payload=7"#
         assert!(reports.is_empty(), "{reports:?}");
     }
 
-    /// A sign byte of 0xAC reads as a header when a stream is joined just
-    /// before the real one, and the header then as a position. Any frame that
+    /// A status byte of 0xAC (negative, over range, REL, manual range) reads
+    /// as a header when a stream is joined just before it. Any frame that
     /// reads ends the question.
     #[test]
     fn a_stream_joined_mid_frame_is_not_reported() {
-        let good = frame::test_frame_ut8802(0x05, [1, 2, 3, 4, 5], 1, 0x02, 0x00, 0xAC);
+        let good = frame::test_frame_ut8802(0x05, [1, 2, 3, 4, 5], 1, 0x02, 0xAC, 0x00);
         for joined_at in 1..good.len() {
             let mut stream = good[joined_at..].to_vec();
             stream.extend_from_slice(&good.repeat(3));
@@ -1153,8 +1194,36 @@ raw_payload=7"#
         );
     }
 
+    /// Frame byte 7 carries only the error flag (spec §3.6): flags there set
+    /// nothing and are reported, so a meter that sends them there says so.
+    #[test]
+    fn flags_in_frame_byte_7_set_nothing_and_are_reported() {
+        let clean = make_payload(0x05, [1, 2, 3, 4, 5], 1, 0x02, 0x00, 0x00);
+        for bit in 0..7 {
+            let mut payload = clean.clone();
+            payload[6] = 1 << bit;
+            assert_eq!(
+                reports_leaving_reading_unchanged(&payload, &clean),
+                [format!(
+                    "ut8802: unrecognised status bits: frame byte 7 = {:#04x}",
+                    1 << bit
+                )]
+            );
+        }
+    }
+
+    /// The error flag is not the sign: frame byte 7 bit 7 leaves the value
+    /// as it is, silently.
+    #[test]
+    fn the_error_flag_does_not_negate() {
+        let clean = make_payload(0x05, [1, 2, 3, 4, 5], 1, 0x02, 0x00, 0x00);
+        let payload = make_payload(0x05, [1, 2, 3, 4, 5], 1, 0x02, 0x00, 0x80);
+        assert!(reports_leaving_reading_unchanged(&payload, &clean).is_empty());
+    }
+
     /// Every documented value — each position, digit nibble, decimal point,
-    /// probe direction, byte 6 value and byte 7 flag — parses silently.
+    /// probe direction, frame byte 6 value and frame byte 7's error flag —
+    /// parses silently.
     #[test]
     fn documented_frames_report_nothing() {
         let ((), reports) = crate::protocol::capture_reports(|| {
@@ -1171,8 +1240,10 @@ raw_payload=7"#
                 let payload = make_payload(0x05, [nibble, 1, 2, 3, 4], 0, 0, 0, 0);
                 parse_measurement(&payload).unwrap();
             }
-            for byte in 0..=0xFF {
-                parse_measurement(&make_payload(0x05, [0; 5], 1, 0, byte, byte)).unwrap();
+            for status in 0..=0xFF {
+                for error in [0x00, 0x80] {
+                    parse_measurement(&make_payload(0x05, [0; 5], 1, 0, status, error)).unwrap();
+                }
             }
         });
         assert!(reports.is_empty(), "{reports:?}");

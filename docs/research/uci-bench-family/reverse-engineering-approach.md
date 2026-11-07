@@ -35,6 +35,11 @@ Added since:
    `../ut803/reverse-engineered-protocol.md` §9)
 7. **UT805A user manual** (UNI-T, `references/ut800/ut805a/`, added
    2026-04-10) -- the UT805A's ASCII serial protocol (spec §5.4)
+8. **Other uci.dll builds in the SDK** (added 2026-11-06), read with
+   `objdump`: the 2020-12-14 debug build under
+   `examples/UCI/VC/UCIDEMO/Unicode/`, the 2018-12-28 ASCII and x64
+   builds and the 2018-08-06 build. They settle the UT8802's flag byte
+   ("Byte 6 or byte 7" below)
 
 Checked 2026-09-19, nothing new: the UT8802N and UT8803N programming
 manuals (编程手册 REV.2) and every other bench programming manual on
@@ -46,9 +51,11 @@ V1.1 above, Chinese or English
 
 - No community implementations were consulted during the uci.dll
   analysis
-- Opened for the CH9325 only, after that analysis: 2026-04-09 (approval
+- Opened for the CH9325, after that analysis: 2026-04-09 (approval
   not recorded) and 2026-09-16 (with approval) -- see
   [Cross-Reference with Community Sources](#cross-reference-with-community-sources)
+- Opened for the UT8802's flag byte on 2026-11-06, with approval, after
+  the first read of the disassembly: spec §9
 
 ## What Each Source Provides for New Models
 
@@ -88,7 +95,7 @@ relevant to the new models:
 **UT8802 parser (FUN_1001e0a0, line 24660)**:
 - Complete 8-byte frame layout with 0xAC header
 - BCD digit encoding (5 nibbles from bytes 2-4)
-- Decimal point, sign, and flag extraction from bytes 5-7
+- Decimal point, sign, flag and error-flag extraction from bytes 5-7
 - No checksum -- only header and position code validation
 
 **Position-to-function lookup (FUN_1001c7b0, line 23234)**:
@@ -116,7 +123,8 @@ relevant to the new models:
 - FUN_1001ca30: ACDC coupling lookup per position code
 - FUN_1001cd30: unit prefix/scale lookup per position code
 - FUN_1001cf30: unit category lookup per position code
-- FUN_1001b9b0: bitset construction (likely bargraph) from byte 6
+- FUN_1001b9b0: `std::bitset<8>` constructor, which builds the status
+  flags from byte 6 (see "Byte 6 or byte 7" below)
 
 ## Analysis Techniques Used
 
@@ -179,8 +187,8 @@ manual tables:
 | UT8802: BCD nibble encoding (5 digits) | **[VENDOR]** | Ghidra: digit extraction code |
 | UT8802: no checksum validation | **[VENDOR]** | Ghidra: no checksum code in parser |
 | UT8802: position code → function via switch | **[VENDOR]** | Ghidra: FUN_1001c7b0 |
-| UT8802: byte 7 carries sign + status flags | **[VENDOR]** | Ghidra: bit extraction code |
-| UT8802: AUTO flag has inverted logic | **[VENDOR]** | Ghidra: `~(byte7 >> 2)` |
+| UT8802: byte 6 carries sign + status flags; byte 7 bit 7 the error flag | **[VENDOR]** | Disassembly of four builds (2026-11-06, -07) |
+| UT8802: AUTO flag has inverted logic | **[VENDOR]** | Disassembly: byte 6 bit 2, inverted |
 | QinHeng primary init: feature report + 0x5A | **[VENDOR]** | Ghidra: FUN_1001d360 |
 | QinHeng fallback init: different report, no trigger | **[VENDOR]** | Ghidra: FUN_1001d270 |
 | CP2110 init: enable + config, no UART write | **[VENDOR]** | Ghidra: FUN_1001d460 (0x5A misattributed until 2026-06) |
@@ -196,7 +204,33 @@ manual tables:
 | ~~UT632/803/804 use same wire format as UT8802 or UT8803~~ | superseded | The UT803/UT804 send neither header (spec §2.3) |
 | QinHeng feature reports: primary=2400, fallback=19200 baud | **[VENDOR]** | Disassembly: little-endian rate word at bytes 1-2 (VA 0x1001D38F-0x1001D3AD, 0x1001D2B2-0x1001D2CD) |
 | ~~UT805A serial likely uses same measurement frame format~~ | superseded | Its manual documents an ASCII protocol (spec §5.4) |
-| Byte 6 in UT8802 frame is bargraph/progress indicator | **[DEDUCED]** | Passed to bitset construction function FUN_1001b9b0 |
+| ~~Byte 6 in UT8802 frame is bargraph/progress indicator~~ | superseded | It carries the status flags (spec §3.5) |
+
+### Byte 6 or byte 7
+
+Until 2026-11-07 the spec read the UT8802's flags and sign from byte 7
+and called byte 6 a bar graph. The decompile showed
+`FUN_1001b9b0(local_18[6],0)` followed by shifts of `local_18`, which read
+as arithmetic on the frame pointer. The disassembly settles it:
+`FUN_1001b9b0` is `std::bitset<8>`'s constructor, called with `this`
+pointing at the slot that held the frame pointer, so it overwrites that
+slot with byte 6's bits, and every flag is then read from it. The only
+use of byte 7 is `byte7 >> 7`, which goes to the high word's D0, the
+error flag; the 2020 debug build also stores `byte7 & 0x7F` in a local it
+never reads, a read the 2018 build drops. Two reads of the disassembly
+agree, over the 2018 x86 (Unicode, ASCII, August) and x64 builds and the
+unoptimised 2020 debug build, which builds the bitset as a named local
+and tests each bit: one on 2026-11-06, before community sources were
+opened for it, and one on 2026-11-07 by a reader given neither the first
+read nor those sources. The programming manual's 50.23 Hz example fits
+but cannot tell byte 6 from byte 7: its flags are all clear but AUTO.
+No frame from a meter tests it ([verification](verification.md#flags)).
+
+The same parser compares byte 5 bits 4-5 against 0x10 and 0x11, in the
+2018 build and in the unoptimised 2020 build alike. Those comparisons
+can never match a 2-bit value, so the direction table in spec §3.4 is
+what the vendor does, whatever was meant; earlier revisions called them
+a decompiler artifact.
 
 ### What Still Requires Device Verification
 
@@ -204,8 +238,9 @@ Listed in [verification.md](verification.md).
 
 ## Cross-Reference with Community Sources
 
-Consulted for the CH9325 only, after the vendor analysis above, for
-validation (2026-04-09, again 2026-09-16). The finding-by-finding table
+Consulted for the CH9325, after the vendor analysis above, for
+validation (2026-04-09, again 2026-09-16), and for the UT8802's flag byte
+(2026-11-06, spec §9). The finding-by-finding table
 is in `reverse-engineered-protocol.md` §9. In short: the sigrok wiki and
 code, Lukas Schwarz and `he2325u.cpp` agree with the DLL on the rate
 encoding and the `0xF0` + length receive framing, and all send `0x03` in

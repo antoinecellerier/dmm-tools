@@ -8,7 +8,7 @@ use log::trace;
 /// Header byte for UT8802 frames.
 pub(super) const UT8802_HEADER: [u8; 1] = [0xAC];
 
-/// Fixed frame length for UT8802: header(1) + position(1) + digits(3) + dp_flags(1) + status(1) + sign(1) = 8.
+/// Fixed frame length for UT8802: header(1) + position(1) + digits(3) + dp and direction(1) + status(1) + error(1) = 8.
 pub(super) const UT8802_FRAME_LEN: usize = 8;
 
 /// Valid BCD nibble values: 0x0-0x9 (digits), 0x0A (treated as zero), 0x0C (overload 'L').
@@ -36,8 +36,9 @@ fn is_valid_ut8802_position(pos: u8) -> bool {
 /// Extract a frame using UT8802 format: `0xAC` header, fixed 8-byte frame, no checksum.
 ///
 /// The UT8802 wire protocol has no checksum field (all 8 bytes are data).
-/// To compensate, we validate the position code and BCD nibbles — this is
-/// stricter than the vendor parser, which only checks the header byte.
+/// The vendor parser checks the header, the position code and the decimal
+/// point (spec §3.1); this also refuses digit nibbles the meter isn't known
+/// to send, to make up for the missing checksum.
 ///
 /// Returns `Ok(Some((payload, consumed)))` where payload is bytes 1..8 (7 bytes),
 /// `Ok(None)` if incomplete, `Err` on validation failure (invalid position code
@@ -109,26 +110,31 @@ pub(super) fn extract_frame_ut8802(buf: &[u8]) -> Result<Option<(Vec<u8>, usize)
 
 /// The position code of the buffer's first whole frame, when the table doesn't
 /// list it and the frame's decimal point is one the vendor accepts (spec §3.2,
-/// §3.3). Not a header byte: a sign byte of `0xAC` ahead of a frame reads that
-/// frame's header as its position.
+/// §3.3). A `0xAC` in a frame's last two bytes starts a false frame whose
+/// position or the byte after it is the next frame's header, and so is
+/// refused: otherwise the false frame's position would come between the
+/// real ones. A real frame whose digits 4-5 byte is `0xAC` is refused too,
+/// and a `0xAC` in an undocumented digit byte can still start a false frame:
+/// neither is a nibble pair the meter is known to send.
 pub(super) fn unlisted_position(buf: &[u8]) -> Option<u8> {
     let (_, frame) = locate(buf, &UT8802_HEADER, UT8802_FRAME_LEN)?;
     let (position, dp_pos) = (frame[1], frame[5] & 0x0F);
-    (!is_valid_ut8802_position(position) && position != UT8802_HEADER[0] && dp_pos <= 4)
-        .then_some(position)
+    let next_header = frame[1..=2].contains(&UT8802_HEADER[0]);
+    (!is_valid_ut8802_position(position) && !next_header && dp_pos <= 4).then_some(position)
 }
 
 /// Build a valid UT8802 frame from components. `digits` is MSD-first; on
 /// the wire d1 is byte 4's low nibble, d2/d3 byte 3's high/low and d4/d5
-/// byte 2's high/low (spec §3.2).
+/// byte 2's high/low (spec §3.2). `direction` is frame byte 5's bits 4-5,
+/// `status` frame byte 6 (flags and sign) and `error` frame byte 7.
 #[cfg(test)]
 pub(super) fn test_frame_ut8802(
     position: u8,
     digits: [u8; 5],
     dp_pos: u8,
-    acdc_bits: u8,
+    direction: u8,
     status: u8,
-    sign_flags: u8,
+    error: u8,
 ) -> Vec<u8> {
     vec![
         0xAC,
@@ -136,9 +142,9 @@ pub(super) fn test_frame_ut8802(
         (digits[3] << 4) | digits[4],
         (digits[1] << 4) | digits[2],
         digits[0], // high nibble unused
-        (acdc_bits << 4) | dp_pos,
+        (direction << 4) | dp_pos,
         status,
-        sign_flags,
+        error,
     ]
 }
 

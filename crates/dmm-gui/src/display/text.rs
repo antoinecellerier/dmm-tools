@@ -34,7 +34,7 @@ fn format_display_raw(raw: &str) -> String {
 ///
 /// The parsed `MeasuredValue` decides first: several protocols flag overload
 /// through a status bit while still sending ordinary digits in the display
-/// field (UT8802 `sign_byte & 0x40`, UT8803 `payload[12] & 0x04`). Preferring
+/// field (UT8802 frame byte 6 bit 6, UT8803 frame byte 14 bit 2). Preferring
 /// `display_raw` there would render an out-of-range reading as a plausible
 /// number. `display_raw` still wins for normal readings, which is what keeps
 /// the on-screen width steady.
