@@ -7,6 +7,13 @@ use super::*;
 impl Triage<'_> {
     pub(super) fn findings(&self) -> Vec<String> {
         let mut out = Vec::new();
+        if self.report.no_terminal {
+            out.push(
+                "[warn] all or part of this run had no terminal: check which readings \
+                 were confirmed at the meter, and the detection check"
+                    .to_string(),
+            );
+        }
         for step in &self.steps {
             let r = step.result;
             match r.status {

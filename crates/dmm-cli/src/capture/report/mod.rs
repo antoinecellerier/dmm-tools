@@ -63,6 +63,10 @@ pub(crate) struct CaptureReport {
     /// rather than skipped by the operator.
     #[serde(skip_serializing_if = "is_false", default)]
     pub unverified_only: bool,
+    /// Some or all of the run had no terminal, so nobody was asked to confirm
+    /// its readings or restart the meter for the detection check.
+    #[serde(skip_serializing_if = "is_false", default)]
+    pub no_terminal: bool,
     /// Wire events lost to the recorder's bound, so a truncated trace is
     /// visible as one.
     #[serde(skip_serializing_if = "is_zero", default)]

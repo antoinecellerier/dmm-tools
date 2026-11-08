@@ -124,6 +124,10 @@ so it never replaces a report in progress or an earlier failure. Only a timeout 
 to enable transmission; an answer the parser refuses, or a link that fails, ends the run on its
 own error, which may name the `--device` to choose.
 
+A run without a terminal still leaves a report, whose frames stay useful, but nobody was there to
+confirm its readings or restart the meter (#7, #35, #36). It warns at both ends and sets
+`no_terminal: true`, which `triage` flags.
+
 One file to attach stays the rule: no sidecar trace.
 
 ## C. Trust tiers

@@ -809,6 +809,19 @@ pub(super) mod tests {
     }
 
     #[test]
+    fn a_run_without_a_terminal_is_flagged() {
+        let mut report = ut61eplus_report(vec![]);
+        assert!(!triage(&report).contains("no terminal"));
+
+        report.no_terminal = true;
+        let text = triage(&report);
+        assert!(
+            text.contains("[warn] all or part of this run had no terminal"),
+            "{text}"
+        );
+    }
+
+    #[test]
     fn a_plan_is_not_a_report() {
         let path = write_temp(
             "plan.yaml",

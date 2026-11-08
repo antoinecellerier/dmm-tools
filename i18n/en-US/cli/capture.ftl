@@ -80,6 +80,9 @@ capture-resuming = Resuming — already-captured steps will be skipped.
 capture-unreadable = Found { $path } but couldn't parse it.
 # $yes is the key that answers: y.
 capture-overwrite-unreadable = Overwrite? { $yes }=start fresh, any other key=abort:
+# After "Warning:", at the start and the end of a run whose output goes
+# through a pipe or into a file.
+capture-not-a-terminal = capture's output is piped or redirected, so it can't wait for you at the meter, have you confirm the readings or check auto-detection. Run it directly in a terminal for a valid report.
 # $path is the report file the run writes.
 capture-output-file = Output file: { $path }
 

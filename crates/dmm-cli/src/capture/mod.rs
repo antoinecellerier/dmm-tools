@@ -97,6 +97,9 @@ pub(crate) fn cmd_capture(
     };
 
     let input = Input::start();
+    if !input.is_tty() {
+        warn_no_terminal(l);
+    }
     if let Some(named) = dmm.named_other_model() {
         let opened = crate::open::meter_listing(device);
         let named = dmm_lib::protocol::registry::named_under_pick(Some(opened), named);
@@ -117,6 +120,8 @@ pub(crate) fn cmd_capture(
     report.picked_as = picked_as(device);
     report.plan = plan_path.clone();
     report.unverified_only = unverified_only;
+    // Stays set on a resume from a terminal: the earlier steps went unconfirmed.
+    report.no_terminal |= !input.is_tty();
     // Everything on the wire so far is the detection probe (when the meter
     // was not named), the init handshake and the name query.
     report.init_frames = recording::lock(&recorder)
@@ -194,6 +199,9 @@ pub(crate) fn cmd_capture(
                 )
             );
             eprintln!("{}", unfinished_hint(l, plan_path.is_some()));
+        }
+        if !run.input.is_tty() {
+            warn_no_terminal(l);
         }
         return Err(e);
     }
@@ -300,8 +308,23 @@ pub(crate) fn cmd_capture(
     if let Some(hint) = resume_hint(l, covered, total, plan_path.is_some()) {
         eprintln!("{hint}");
     }
-    eprintln!("{}", tr!(l, "capture-attach", url = feedback_url));
+    if input.is_tty() {
+        eprintln!("{}", tr!(l, "capture-attach", url = feedback_url));
+    } else {
+        warn_no_terminal(l);
+    }
     Ok(())
+}
+
+/// A run with nobody at a terminal still files a report, but the steps that
+/// rely on someone at the meter have gone unconfirmed. Said at the start and
+/// again at the end, where the eye lands once the run is over.
+fn warn_no_terminal(l: &dmm_shared::l10n::Localizer) {
+    eprintln!(
+        "{} {}",
+        crate::l10n::warning_label(),
+        tr!(l, "capture-not-a-terminal")
+    );
 }
 
 /// Whether `--unverified` left out every gate step because hardware has

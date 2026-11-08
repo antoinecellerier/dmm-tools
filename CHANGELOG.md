@@ -45,6 +45,7 @@
 - **`capture` holds each remote key until the meter is ready** — they went out at once, whatever the meter showed.
 - **`capture` asks a UT803 only for positions its dial has, hFE included** — it asked for tachometer, duty, 4-20 mA and ADP.
 - **`capture` shows a live status line while it reads the meter** — slow modes went quiet for many seconds.
+- **`capture` warns when its output is piped or redirected** — such a run can't confirm readings, and it didn't say so.
 
 ### Bug fixes
 
