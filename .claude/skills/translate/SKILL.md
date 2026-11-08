@@ -79,7 +79,7 @@ Language: <lang>
    - `dmm-cli --lang <lang> --help`, and `--device mock read --count 3`.
    - A verify-gui shot of the Language row, showing the native name, and of the top bar at 700 px wide. Compare each shot with en-US at the same width and state: paused, the top bar wraps at 700 px in English too.
    - A history rewrite is followed by clippy and tests on every rewritten commit (`git rebase -x` in a worktree).
-6. **README.** Recommended, in a `docs:` commit of its own: draft `README.<lang>.md` from the English README and the glossary, following `.claude/rules/readme.md`; add the language to the row in `README.md` and in every copy; add its marker notes and a `gui-wide-layout.<lang>` row to `scripts/doc-screenshots.sh` and run that scene; fill the copy's `read` sample with `UPDATE_DOCS=1 cargo test -p dmm-cli docs_snippets`. Run the [native review](#native-review) with `target: "readme"`, then check its in-page links with `cargo test -p dmm-cli --test readme_languages`. Show the user the copy if they read the language.
+6. **README.** Recommended, in a `docs:` commit of its own: draft `README.<lang>.md` from the English README and the glossary, following `.claude/rules/readme.md`; add the language to the row in `README.md` and in every copy; add its marker notes and a `gui-wide-layout.<lang>` row to `scripts/doc-screenshots.sh` and run that scene; fill the copy's `read` sample with `UPDATE_DOCS=1 cargo test -p dmm-cli --test docs_snippets`. Run the [native review](#native-review) with `target: "readme"`, then check its in-page links with `cargo test -p dmm-cli --test readme_languages`. Show the user the copy if they read the language.
 
 ## Native review
 
@@ -104,19 +104,29 @@ Ask the user's go-ahead first: for the apps it runs twelve reviewers per languag
 
 New or reworded English ships without its translations: it shows in English until they are filled in, at the latest by the release step in `docs/development.md`.
 
-1. `cargo test -p dmm-shared shipped_languages_are_complete -- --ignored` lists each language's missing messages, the optional ones (the specification text, `cli/capture.ftl`) aside; `shipped_languages_have_the_optional_text` lists those too.
-2. For a handful, translate them inline, following each language's `i18n/<lang>/STYLE.md` and `glossary.tsv`, and read each back for native feel as the [native review](#native-review) does. A missing file is copied from en-US, translated, and given an `ftl!` line per language next to the en-US one; until it has that line, `cargo test` names it. For more, run:
+1. At the release step, `scripts/l10n-reworded.py` lists the English reworded under the same ID since the last release: the steps below count such a message as translated. Where the meaning changed, apply [Rewording English later](#rewording-english-later) first, so the fill redrafts it.
+2. `cargo test -p dmm-shared shipped_languages_are_complete -- --ignored` lists each language's missing messages, the optional ones (the specification text, `cli/capture.ftl`) aside; `shipped_languages_have_the_optional_text` lists those too.
+3. For a handful, translate them inline, following each language's `i18n/<lang>/STYLE.md` and `glossary.tsv`, and read each back for native feel as the [native review](#native-review) does. A missing file is copied from en-US, translated, and given an `ftl!` line per language next to the en-US one; until it has that line, `cargo test` names it. For more, run:
 
    `Workflow({scriptPath: ".claude/skills/translate/scripts/fill-gaps.js", args: {repo: "<absolute repo path>", langs: [{lang: "fr", name: "French"}, …], writeModel?, optional?}})`
 
-   Per language, it runs a drafter, a reviewer of the added messages, and a fixer. `optional: true` drafts the optional messages too.
-3. Show the user the new messages in any language they read before committing.
-4. Commit each language's additions with the component prefixes of the files touched.
-5. At the release step, bring the README's translations up to date too: `docs/development.md`, release step 5.
+   - **What it does:** per language, a drafter, a reviewer of the added messages and a fixer; then one agent adds the `ftl!` lines of every new file and names any language left incomplete. `optional: true` drafts the optional messages too.
+   - **Before it:** get the user's go-ahead, as it runs three agents per language, and ask whether the drafters and fixers may use a lighter model (`writeModel: "sonnet"`).
+   - **While it runs,** make no Rust edits and no commits in the checkout.
+   - **After it,** save the result under `references/l10n/<lang>/workflow/fill-<date>/`.
+4. Check the result, reading `long_labels` only for the IDs just added, as it takes no filter:
+   - `cargo test -p dmm-shared translations`, and step 2's tests.
+   - `long_labels -- --ignored --nocapture`, then a verify-gui shot of what it lists, compared with en-US at the same width and state. It counts characters, so also shoot any added top-bar, connection or shortcut text in `ja` and `zh-CN`, whose characters are wider.
+   - `dmm-cli --lang <lang> --help`, and for dmm-gui, which has no `--lang`: `XDG_CONFIG_HOME=<empty dir> LANGUAGE=<lang> LC_ALL=<locale>.UTF-8 dmm-gui --help` (a saved setting beats the environment).
+5. Show the user the new messages in any language they read before committing.
+6. Commit in this order, as the hook tests the working tree and a new file without its `ftl!` line fails it:
+   1. Every language's new files with all their `ftl!` lines, in one commit.
+   2. One commit per language for its additions to existing files, with the component prefixes of the files touched.
+7. At the release step, bring the README's translations up to date too: `docs/development.md`, release step 5.
 
 ## Rewording English later
 
-- **A message whose meaning changes gets a new ID,** so stale translations fall back to English instead of saying the wrong thing. A rewording that keeps the meaning keeps its ID and its translations.
+- **A message whose meaning changes gets a new ID,** so stale translations fall back to English instead of saying the wrong thing; `translations_match_their_english` then names the old ID in each language, to remove. A rewording that keeps the meaning keeps its ID and its translations. `scripts/l10n-reworded.py` is the check on this rule.
 - **`cli-help.ftl` and `gui-help.ftl` are generated.** Regenerating one lists the IDs whose English changed (`docs/development.md`, "Translations"). Where the meaning changed, delete those messages from the other languages.
 
 ## Scripts
