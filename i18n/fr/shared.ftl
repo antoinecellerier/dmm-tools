@@ -105,6 +105,20 @@ no-meter-answered = Aucun multimètre n’a répondu
 # The meter picked or found has stopped answering. A notice title in the
 # GUI; dmm-cli starts a sentence with it (cli/connect.ftl).
 no-response = Pas de réponse du multimètre
+# Why a dropped link is not reconnected. $count (2 or more) USB cables the
+# open could take are plugged in, with no serial number of their own to tell
+# them apart. Each binary follows it with what to do.
+several-cables =
+    { $count ->
+        [one] { $count } câble USB utilisable par cette session est branché, et rien ne permet de le distinguer. Une reconnexion risquerait d’ouvrir le câble d’un autre multimètre.
+       *[other] { $count } câbles USB utilisables par cette session sont branchés, et rien ne permet de les distinguer. Une reconnexion risquerait d’ouvrir le câble d’un autre multimètre.
+    }
+# While a dropped link is being reopened: its cable has gone and another is
+# plugged in. Each binary follows it with how to use that other cable.
+waiting-for-own-cable = Un autre câble USB est branché, mais cette session attend celui qu’elle a ouvert.
+# Under a reading the meter shows on its own screen only, its frames carrying
+# none: a CMS or UT217's oscilloscope mode.
+screen-only-reading = En mode oscilloscope, lisez les mesures sur l’écran du multimètre
 # The GUI checkbox that lets a connection search over Bluetooth. The CLI
 # reads the same setting, so its help names the checkbox too.
 bluetooth-setting = Rechercher les appareils Bluetooth

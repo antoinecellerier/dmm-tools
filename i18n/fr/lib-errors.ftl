@@ -93,6 +93,8 @@ error-bluetooth-only-switched-off = le multimètre { $model } ne se connecte qu�
 error-bluetooth-only-not-built = le multimètre { $model } ne se connecte qu’en Bluetooth, mais cette version n’intègre pas la prise en charge du Bluetooth
 # $model is the meter, e.g. UNI-T UT60BT.
 error-bluetooth-only-usb-adapter = le multimètre { $model } ne se connecte qu’en Bluetooth, mais --adapter désigne un appareil USB : indiquez l’adresse Bluetooth du multimètre, ou retirez --adapter
+# Opening the meter was stopped part-way, by Disconnect or by quitting.
+error-cancelled = ouverture annulée
 
 ## Refused before it was sent: the meter, the link or the dial position
 ## cannot do it. After "unsupported command:". $setting is a setting's
@@ -176,6 +178,8 @@ error-rejected-switch-did-nothing = { $setting } { $target } n’a eu aucun effe
 # below, or a setting's name and a state.
 error-rejected-by-meter = le multimètre a refusé { $sent }
 error-rejected-zero-needs-capacitance = ZERO ne fonctionne qu’en mode capacité
+error-rejected-rel-needs-reading = REL ne fonctionne que si l’écran affiche un nombre
+error-rejected-rel-is-on = REL est déjà activé : quittez d’abord le mode REL
 # $code is a number, $model and $opened are meters (e.g. OWON B41T+), $id a
 # meter's ID as --device takes it. "Auto-detect" is the GUI's Device
 # choice.

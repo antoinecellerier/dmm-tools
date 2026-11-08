@@ -207,6 +207,8 @@ mode-scr = SCR
 mode-scope = Oscilloscope
 # Used by: 9 meters
 mode-solar = Solaire
+# Used by: UT171A/B/C
+mode-square-wave = Signal carré
 # Used by: BM525s/BM521s, BM788BT/BM787BT, BM829s/BM827s/BM822s/BM821s, BM869s/BM867s
 mode-t1 = T1
 # Used by: BM525s/BM521s, BM788BT/BM787BT, BM829s/BM827s/BM822s/BM821s, BM869s/BM867s
@@ -435,6 +437,8 @@ aux-pf = PF
 aux-peak-min = Crête min.
 # Used by: Mock UT61E+, UT181A
 aux-period = Période
+# Used by: UT171A/B/C
+aux-pulse-width = Largeur d’impulsion
 # Used by: UT181A, VC871
 aux-reference = Référence
 # Used by: 9 meters
@@ -471,15 +475,69 @@ key-current = Courant
 # Used by: Mock ZT-5B, ZT-300AB, ZT-5566SE, ZT-5B, ZT-5BQ
 key-diode-continuity = Diode / continuité
 
+## Meter key hovers: what a remote button does, or how to do it on the
+## meter. Keep the meter's key names as it prints them.
+
+# Used by: VC891, VC915
+key-hover-1-khz-low-pass-filter = Filtre passe-bas 1 kHz
+# Used by: 121GW
+key-hover-capture-1-ms-peaks-in-ac = Capturer les crêtes de 1 ms en mode AC V
+# Used by: OW67B, VC871
+key-hover-change-what-the-displays-show = Changer le contenu des écrans
+# Used by: VC915, VC925 PV
+key-hover-compare-the-reading-with-the-set = Comparer la mesure aux limites définies
+# Used by: CMS061, CMS101
+key-hover-enter-max-min-click-again-to = Passer en mode MAX/MIN : cliquez de nouveau pour le quitter
+
 ## Meter key hovers: how to do on the meter what a remote button does.
 ## Keep the meter's key names as it prints them.
 
 # Used by: 121GW
 key-hover-hold-the-meter-s-rel-key = Maintenir la touche REL du multimètre enfoncée (filtre passe-bas 1 kHz)
+# Used by: CMS061, CMS101
+key-hover-measure-inrush-current-click-again-to = Mesurer le courant d’appel : cliquez de nouveau pour quitter ce mode
+# Used by: UT171A/B/C
+key-hover-peak-hold-in-ac-v-and = Maintien de crête en AC V et AC A : cliquez pour entrer dans ce mode ou en sortir
 # Used by: OW18B/OW16B, OW18E
 key-hover-press-the-meter-s-hz-duty = Appuyer brièvement sur la touche Hz/Duty△/ᛒ du multimètre
 # Used by: CM2100B
 key-hover-press-the-meter-s-zero-key = Appuyer brièvement sur la touche ZERO/ᛒ du multimètre
+# Used by: OW18B/OW16B, OW18E
+key-hover-rel-in-ac-and-hz-steps = Activer REL ou, en AC et en Hz, alterner entre Hz et rapport cyclique
+# Used by: OW67B, OW69B, VC871, VC891, VC915, VC925 PV
+key-hover-read-a-4-20-ma-loop = Afficher le courant de boucle 4-20 mA en pourcentage
+# Used by: ZT-5566SE
+key-hover-record-maximum-and-minimum-readings = Enregistrer les valeurs maximale et minimale
+# Used by: UT171A/B/C
+key-hover-record-maximum-average-and-minimum-readings-2 = Enregistrer les valeurs maximale, moyenne et minimale : cliquez pour passer à la suivante, × pour quitter
+# Used by: UT181A
+key-hover-record-maximum-average-and-minimum-readings = Enregistrer les valeurs maximale, moyenne et minimale : × pour quitter
+# Used by: VC-880, VC-890, VC650BT
+key-hover-record-maximum-minimum-and-average-readings = Enregistrer les valeurs maximale, minimale et moyenne : cliquez pour passer à la suivante, × pour quitter
+# Used by: 121GW
+key-hover-record-minimum-maximum-and-average-readings = Enregistrer les valeurs minimale, maximale et moyenne : cliquez pour passer à la suivante, × pour quitter
+# Used by: UT171A/B/C, UT181A
+key-hover-save-the-reading-to-the-meter = Enregistrer la mesure dans la mémoire du multimètre
+# Used by: CMS061, CMS101
+key-hover-send-select-switches-v-dc-to = Envoyer Select pour passer de V,DC à V,AC
+# Used by: VC915
+key-hover-show-3-phase-rotation-direction = Afficher le sens de rotation triphasé
+# Used by: VC915
+key-hover-show-vac-or-vdc-on-the = Afficher VAC ou VDC sur l’écran secondaire
+# Used by: 121GW
+key-hover-step-through-hold-and-autohold = Parcourir les modes HOLD et AutoHOLD
+# Used by: VC915
+key-hover-swap-hz-pct-and-voltage = Intervertir Hz/% et la tension
+# Used by: VC925 PV
+key-hover-swap-the-main-and-second-displays = Intervertir les écrans principal et secondaire
+# Used by: OW69B
+key-hover-switch-the-low-pass-filter-on = Activer ou désactiver le filtre passe-bas
+# Used by: UT171A/B/C
+key-hover-take-the-reading-as-the-reference = Prendre la mesure actuelle comme référence : × pour quitter
+# Used by: OW18B/OW16B, OW18E
+key-hover-toggle-the-backlight-and-an-ow18 = Allumer ou éteindre le rétroéclairage et, sur un OW18, la lampe torche
+# Used by: VC871, VC891, VC915, VC925 PV
+key-hover-zero-the-reading-to-exit = Remettre la mesure à zéro : × pour quitter
 
 ## Model names with words in them: the simulated meters. Keep the part
 ## number as it is.

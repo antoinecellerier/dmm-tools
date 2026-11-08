@@ -236,3 +236,14 @@ settings-graph-lines-patterned = À motifs
     .hover = Valeurs secondaires en tirets et en pointillés, reconnaissables même sans la couleur
 settings-graph-lines-solid = Pleines
     .hover = Lignes continues, distinguées par la couleur et la légende
+
+## A toast at launch, when the settings file was there but could not be
+## loaded: the window opens with the default settings.
+
+# The file could not be understood, so a copy of it was kept before it is
+# written over. $path is the copy's full path, e.g.
+# /home/ana/.config/dmm-tools/settings.json.bad.
+settings-load-failed-kept = Impossible de lire votre fichier de paramètres : les valeurs par défaut sont utilisées. Une copie de ce fichier est conservée sous { $path }.
+# The file could not be opened at all. $path is its full path, e.g.
+# /home/ana/.config/dmm-tools/settings.json.
+settings-load-failed = Impossible de lire votre fichier de paramètres { $path } : les valeurs par défaut sont utilisées.

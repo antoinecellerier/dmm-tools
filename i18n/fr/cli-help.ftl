@@ -51,6 +51,9 @@ read--output =
 # dmm-cli read --count
 read--count =
     .help = Nombre de mesures (0 = illimité : jusqu’à Ctrl+C, ou jusqu’à la fin d’un fichier --replay)
+# dmm-cli read --no-reconnect
+read--no-reconnect =
+    .help = Terminer l’exécution quand la liaison avec le multimètre est perdue, au lieu de se reconnecter
 # dmm-cli read --integrate
 read--integrate =
     .help = Afficher l’intégrale cumulée dans le temps (charge pour les modes courant, V·s pour la tension)
@@ -83,7 +86,7 @@ read--replay =
     .help = Relire un fichier écrit par --format replay au lieu d’ouvrir un multimètre, jusqu’à la fin du fichier
 # dmm-cli read --import
 read--import =
-    .help = Lire un fichier CSV, JSON ou de relecture exporté au lieu d’ouvrir un multimètre, sans attendre : pour le convertir ou afficher son résumé
+    .help = Lire un fichier exporté (CSV, JSON ou relecture) au lieu d’ouvrir un multimètre, sans attendre : pour le convertir ou afficher son résumé
 # dmm-cli command
 command =
     .about = Envoyer au multimètre une commande qui équivaut à appuyer sur une touche. Lancez sans argument pour lister les commandes disponibles pour l’appareil sélectionné

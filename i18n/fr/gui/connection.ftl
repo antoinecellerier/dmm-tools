@@ -94,6 +94,30 @@ connection-no-response-auto =
     Activez la transmission des données du multimètre,
     ou choisissez son modèle dans Paramètres (⚙).
 
+# The meter answered, but with data that could not be read: a corrupt
+# frame, or a mode this tool does not know. The error itself follows.
+connection-bad-data = Le multimètre a envoyé des données illisibles
+# A toast once connected, when other cables were there to open and the session
+# took the first, with --adapter a command-line option kept as it is. $count is
+# 2 or more.
+connection-cables-at-open =
+    { $count ->
+        [one] { $count } câble USB utilisable par cette session est branché : il a été ouvert. Utilisez --adapter pour en choisir un autre.
+       *[other] { $count } câbles USB utilisables par cette session sont branchés : le premier trouvé a été ouvert. Utilisez --adapter pour en choisir un autre.
+    }
+# Follows connection-cables-at-open when nothing tells those cables apart.
+connection-cables-no-reconnect = Rien ne permet de distinguer ces câbles : sauf si --adapter indique le chemin d’un câble, une coupure de la liaison mettra fin à cette session.
+# A dropped link that was not reconnected. shared.ftl's several-cables
+# follows, then connection-several-cables-action. "Connect" is the top bar's
+# button.
+connection-several-cables = Liaison perdue
+connection-several-cables-action = Ne laissez branché que le câble de ce multimètre, puis cliquez sur Connecter.
+# A toast, when that notice ends a running recording. What it holds can still
+# be exported.
+connection-several-cables-recording = Enregistrement arrêté : la liaison a été coupée et le câble USB de ce multimètre ne se distingue pas des autres
+# Any other failure to connect or to keep reading. The error itself
+# follows, then connection-click-connect.
+connection-failed = Échec de la connexion
 # A meter that stopped answering in the middle of a session. $title is the
 # shared notice title, "No response from meter".
 connection-no-response-check = { $title } : vérifiez l’appareil sélectionné et la transmission des données

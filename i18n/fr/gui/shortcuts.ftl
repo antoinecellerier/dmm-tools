@@ -100,6 +100,9 @@ shortcuts-graph-cursors = Afficher / masquer les curseurs
 shortcuts-graph-mouse = Graphique (souris)
 shortcuts-mouse-drag = Faire défiler l’historique vers la gauche / la droite
     .gesture = Glisser
+# On a laptop touchpad: two fingers moved left or right together.
+shortcuts-mouse-swipe = Faire défiler l’historique vers la gauche / la droite
+    .gesture = Balayage à deux doigts
 # The box dragged out sets both the span of time and the range of values
 # shown.
 shortcuts-mouse-box-zoom = Zoomer sur le rectangle tracé (temps et valeur)
