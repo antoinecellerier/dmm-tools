@@ -237,6 +237,19 @@ const STEP_TIMEOUT: Duration = Duration::from_secs(45);
 /// command a no-op. The meter answers a button in a frame or two.
 const COMMAND_TIMEOUT: Duration = Duration::from_secs(3);
 
+/// How long a command's wait may run in all, from the key, once a new state
+/// has appeared. A UT61+ in AC+DC V sends its AC and DC frames in turn, about
+/// 0.67 s apart, and settling takes eight of them, ten when a range change
+/// sends unsettled frames first. Only a wait that has seen a new state gets
+/// this long.
+const COMMAND_SETTLE_LIMIT: Duration = Duration::from_secs(12);
+
+/// Whether a command's wait, past [`COMMAND_TIMEOUT`], goes on: only once the
+/// new state has appeared, and not for ever if it never settles.
+fn still_settling(waited: Duration, appeared: bool) -> bool {
+    appeared && waited < COMMAND_SETTLE_LIMIT
+}
+
 /// What the step before this one left behind.
 #[derive(Default)]
 pub(crate) struct PrevState {
@@ -348,6 +361,9 @@ fn watch_for_state(
             .unwrap_or_default();
         if waited >= timeout {
             if on_timeout == OnTimeout::GiveUp {
+                if still_settling(waited, watcher.appeared()) {
+                    continue;
+                }
                 return Ok(Watched::TimedOut(last));
             }
             if !hinted {
@@ -884,12 +900,12 @@ impl CaptureRun {
 
             for (i, s) in sample_data.iter().enumerate() {
                 eprintln!(
-                    "    {} mode={}({}) range={} display={:?}",
+                    "    {} mode={}({}) range={} {}",
                     style(format!("[{i}]")).dim(),
                     s.mode_byte,
                     s.mode,
                     s.range_label,
-                    s.shown()
+                    s.shown_fields()
                 );
             }
 
@@ -1132,6 +1148,20 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn a_command_waits_past_its_timeout_only_for_a_state_on_screen() {
+        let past_timeout = COMMAND_TIMEOUT + Duration::from_secs(1);
+        assert!(still_settling(past_timeout, true));
+        assert!(
+            !still_settling(past_timeout, false),
+            "a key that did nothing"
+        );
+        assert!(
+            !still_settling(COMMAND_SETTLE_LIMIT, true),
+            "a state that never settles"
+        );
     }
 
     /// A rejected frame used to end the step, so the report carried neither a

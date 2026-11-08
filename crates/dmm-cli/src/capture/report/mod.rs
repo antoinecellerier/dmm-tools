@@ -455,6 +455,33 @@ impl SampleData {
         }
     }
 
+    /// What a sample's line under its step prints: the main reading's digits,
+    /// by its name where it has one, then each sub-value by name. A frame with
+    /// no main reading (the AC component of a UT61+'s AC+DC V) has only its
+    /// sub-values to show.
+    pub(crate) fn shown_fields(&self) -> String {
+        let mut fields: Vec<String> = self
+            .present_aux()
+            .map(|a| format!("{}={:?}", a.label, a.value))
+            .collect();
+        if self.has_main_reading() || fields.is_empty() {
+            let name = self.main_label.as_deref().unwrap_or("display");
+            fields.insert(0, format!("{name}={:?}", self.shown()));
+        }
+        fields.join(" ")
+    }
+
+    /// Whether the frame carries a main reading, not only sub-values.
+    fn has_main_reading(&self) -> bool {
+        !self.value.is_empty()
+    }
+
+    /// The sub-values on the meter's screen: one whose display shows nothing
+    /// is filed with an empty value.
+    fn present_aux(&self) -> impl Iterator<Item = &AuxSample> {
+        self.aux.iter().filter(|a| !a.value.is_empty())
+    }
+
     /// The one-line rendering the operator is asked to compare against the
     /// meter's screen.
     ///
@@ -470,8 +497,9 @@ impl SampleData {
         // Appended, so single-display meters keep the line they had, and
         // rendered by the same helper `dmm-cli read` uses so the two can't
         // describe the same reading differently.
-        let aux = (!self.aux.is_empty()).then(|| {
-            dmm_lib::measurement::aux_summary_line(self.aux.iter().map(|a| {
+        let mut present = self.present_aux().peekable();
+        let aux = present.peek().is_some().then(|| {
+            dmm_lib::measurement::aux_summary_line(present.map(|a| {
                 (
                     a.label.as_str(),
                     a.value.as_str(),
@@ -483,7 +511,7 @@ impl SampleData {
         // A frame without a main reading: its sub-values take the value's
         // place, as `dmm-cli read` prints them.
         let (mut out, aux) = match aux {
-            Some(aux) if self.value.is_empty() => (aux, None),
+            Some(aux) if !self.has_main_reading() => (aux, None),
             aux => {
                 let name = self
                     .main_label
@@ -883,6 +911,46 @@ mod tests {
             assert_eq!(sample.summary(), expected);
             assert_eq!(sample.display_raw, "", "the report keeps the raw field");
         }
+    }
+
+    #[test]
+    fn a_sample_line_names_its_sub_values() {
+        use dmm_lib::measurement::AuxValue;
+
+        let mut m = make_test_measurement(0x02, 0x01, b"  5.000", (0x00, 0x00), (0x00, 0x00, 0x00));
+        let plain = SampleData::from_measurement(&m);
+        assert_eq!(plain.shown_fields(), r#"display="5.000""#);
+
+        m.aux_values = vec![AuxValue {
+            label: "AC".into(),
+            value: MeasuredValue::Normal(0.214),
+            unit: "".into(),
+            display_raw: Some("  0.214".to_string()),
+            elapsed_secs: None,
+        }];
+        let both = SampleData::from_measurement(&m);
+        assert_eq!(both.shown_fields(), r#"display="5.000" AC="0.214""#);
+
+        m.main_label = Some(dmm_lib::measurement::MainLabel::Dc);
+        let named = SampleData::from_measurement(&m);
+        assert_eq!(named.shown_fields(), r#"DC="5.000" AC="0.214""#);
+
+        m.value = MeasuredValue::Absent;
+        m.display_raw = None;
+        let sub_value_only = SampleData::from_measurement(&m);
+        assert_eq!(sub_value_only.shown_fields(), r#"AC="0.214""#);
+
+        // A display showing nothing is not on the screen to compare against.
+        m.aux_values.push(AuxValue {
+            label: "Max".into(),
+            value: MeasuredValue::Absent,
+            unit: "".into(),
+            display_raw: None,
+            elapsed_secs: None,
+        });
+        let blank_display = SampleData::from_measurement(&m);
+        assert_eq!(blank_display.shown_fields(), r#"AC="0.214""#);
+        assert!(!blank_display.summary().contains("Max"));
     }
 
     /// Resuming an interrupted capture reloads the report, so sub-values have

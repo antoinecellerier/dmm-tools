@@ -181,6 +181,9 @@ pub(crate) struct StateWatcher {
     /// Frames in a row that satisfied the expectation, or for a command
     /// judged by the parse, that showed a state other than the one before.
     matched: usize,
+    /// Whether any frame so far has shown what the wait is for, however many
+    /// frames have come between it and now.
+    appeared: bool,
     /// The last two signatures, newest first, and how many frames in a row
     /// have matched the one two frames back with only the flags moving: a
     /// meter alternating two states by design, as the UT61E+ does in AC+DC V
@@ -248,6 +251,7 @@ impl StateWatcher {
             armed: false,
             run: None,
             matched: 0,
+            appeared: false,
             previous: [None, None],
             alternating: 0,
             reported: None,
@@ -259,6 +263,12 @@ impl StateWatcher {
     pub(crate) fn gated(mut self) -> Self {
         self.gated = true;
         self
+    }
+
+    /// Whether a reading has shown what the wait is for, even if the meter
+    /// has not yet held it long enough to count as settled.
+    pub(crate) fn appeared(&self) -> bool {
+        self.appeared
     }
 
     /// Judge one reading.
@@ -291,6 +301,7 @@ impl StateWatcher {
             let expect = *expect;
             return match expect.check(m) {
                 Ok(()) => {
+                    self.appeared = true;
                     self.matched += 1;
                     // The expectation holding is not the meter having settled:
                     // an autoranging meter satisfies "Ω, OL" on every rung it
@@ -319,11 +330,9 @@ impl StateWatcher {
 
         if let Detector::StateChange { before, still } = &self.detector {
             let meets = still.is_none_or(|e| e.check(m).is_ok());
-            self.matched = if meets && !before.contains(&State::of(m)) {
-                self.matched + 1
-            } else {
-                0
-            };
+            let new_state = meets && !before.contains(&State::of(m));
+            self.appeared |= new_state;
+            self.matched = if new_state { self.matched + 1 } else { 0 };
             return if self.matched >= STABLE_FRAMES && settled && self.auto_advance {
                 Verdict::Ready
             } else {
@@ -334,7 +343,9 @@ impl StateWatcher {
         let Detector::RawDiff(Some(baseline)) = &self.detector else {
             return Verdict::Waiting;
         };
-        if baseline.changed(&m.raw_payload) && run >= STABLE_FRAMES && self.auto_advance {
+        let changed = baseline.changed(&m.raw_payload);
+        self.appeared |= changed;
+        if changed && run >= STABLE_FRAMES && self.auto_advance {
             Verdict::Ready
         } else {
             Verdict::Waiting
@@ -466,6 +477,32 @@ mod tests {
             assert_eq!(w.feed(&frame(i)), Verdict::Waiting, "frame {i}");
         }
         assert_eq!(w.feed(&frame(7)), Verdict::Ready);
+    }
+
+    /// The wait for a command extends on this: a key that changed nothing
+    /// must not count, however long the meter keeps answering.
+    #[test]
+    fn only_the_new_state_counts_as_progress() {
+        let before = [dcv(b" 0.0000"), dcv(b" 0.0000"), dcv(b" 0.0000")];
+        let mut w = StateWatcher::for_command(None, &before, true);
+        w.feed(&dcv(b"-0.0006"));
+        assert!(!w.appeared(), "digits flickering in the same state");
+
+        let mut held = dcv(b" 0.0000");
+        held.flags.hold = true;
+        w.feed(&held);
+        assert!(w.appeared(), "the flag the key set");
+
+        // One unsettled frame must not end a wait the state has shown up in.
+        w.feed(&dcv(b" 0.0000"));
+        assert!(w.appeared(), "a frame back in the earlier state");
+
+        // Judged by the raw bytes, as `--sniff` does.
+        let mut raw = StateWatcher::for_command(None, &before, false);
+        raw.feed(&dcv(b" 0.0000"));
+        assert!(!raw.appeared(), "the same bytes as before the key");
+        raw.feed(&acv(b" 0.0000"));
+        assert!(raw.appeared(), "a mode byte the key changed");
     }
 
     /// A command with no expectation, judged by the parse: the digits
