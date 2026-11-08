@@ -15,10 +15,14 @@ const WRITE = args.writeModel ? { model: args.writeModel } : {}
 // With optional, the optional text too (spec notes, capture's own text).
 const GAPS = args.optional ? 'shipped_languages_have_the_optional_text' : 'shipped_languages_are_complete'
 
-const common = (lang, name) => `
-You are bringing the ${name} (locale id \`${lang}\`) translation of the dmm-tools apps (dmm-gui desktop app, dmm-cli CLI for digital multimeters) up to date with its English, in ${REPO}. Work only in ${REPO}/i18n/${lang}/; never edit Rust code, en-US files, docs, other languages or anything else, and never commit, stash or push. Scratch files go under ${REPO}/references/l10n/${lang}/work/ (gitignored).
+// Every agent stays in the checkout it was given: another run's text would
+// steer a draft or a review without anyone seeing it.
+const STAY = lang => `Read nothing outside ${REPO}, and under its references/ only your own scratch files and the approved sources that references/l10n/${lang}/SOURCE.txt lists.`
 
-Read first, and follow: ${REPO}/i18n/${lang}/STYLE.md (section 0 "Rulings") and ${REPO}/i18n/${lang}/glossary.tsv, and ${REPO}/CONTRIBUTING.md section "Translations". Read the existing ${lang} file around each message you add, so the new text uses the words the language already uses for the same things.`
+const common = (lang, name) => `
+You are bringing the ${name} (locale id \`${lang}\`) translation of the dmm-tools apps (dmm-gui desktop app, dmm-cli CLI for digital multimeters) up to date with its English, in ${REPO}. Work only in ${REPO}/i18n/${lang}/; never edit Rust code, en-US files, docs, other languages or anything else, and never commit, stash or push. Scratch files go under ${REPO}/references/l10n/${lang}/work/ (gitignored). ${STAY(lang)}
+
+Read first, and follow: ${REPO}/i18n/${lang}/STYLE.md (section 0 "Rulings", and the section on how ${name} differs from English) and ${REPO}/i18n/${lang}/glossary.tsv, and ${REPO}/CONTRIBUTING.md section "Translations". Read the existing ${lang} file around each message you add, so the new text uses the words the language already uses for the same things.`
 
 const FINDINGS = {
   type: 'object',
@@ -41,11 +45,17 @@ const results = await pipeline(
 
 List what ${lang} lacks:
   cd ${REPO} && cargo test -q -p dmm-shared ${GAPS} -- --ignored 2>&1 | grep '^${lang}/'
-For each missing message, add its translation to the same file under i18n/${lang}/, at the place the en-US file has it (same order, same comments copied from en-US). A missing file: copy it from en-US and translate it; a later step compiles it in. Translate the text only: keep IDs, attributes, { $variables }, selectors and their keys, \`code\`, --options, command lines, numbers and units as they are. Then run
+For each missing message, add its translation to the same file under i18n/${lang}/, at the place the en-US file has it (same order, same comments copied from en-US). A missing file: copy it from en-US and translate it; a later step compiles it in. Translate the text only: keep IDs, attributes, { $variables }, selectors and their keys, \`code\`, --options, command lines, numbers and units as they are.
+
+Write each message as a native ${name} technical writer would: render what it tells the reader, and build the sentence the way ${name} builds it rather than following the English one. A glossary term covers the sense its row describes: where the English word is used in another sense, use the word ${name} has for that sense and report it as a glossary gap. Where the message's comment, or a search for its ID under ${REPO}/crates/, shows it is printed after or inside other text, write it so the whole line reads correctly, punctuation included.
+
+When the drafts are done, reread each one alone for native feel: calques of English syntax, word order and what each modifier attaches to, prepositions or particles, noun chains, verbs that do not go with their object, a register that sounds translated. Revise what you find. Then run
   cd ${REPO} && cargo test -q -p dmm-shared translations 2>&1 | grep -E '^${lang}/|test result'
 and the completeness command above until neither lists ${lang}. Return the IDs you added, with any you were unsure about (your choice and the alternative).`,
     { label: `draft:${lang}`, phase: 'Draft', ...WRITE }),
-  (draft, { lang, name }) => agent(`You review, without editing anything, the ${name} (${lang}) messages just added to ${REPO}/i18n/${lang}/ (\`cd ${REPO} && git diff -- i18n/${lang}/\` shows them, and \`git ls-files --others -- i18n/${lang}/\` lists any new file, to read whole; the drafter's report follows). Compare each with its English in ${REPO}/i18n/en-US/, against ${REPO}/i18n/${lang}/STYLE.md section 0 and glossary.tsv, and against how the rest of the ${lang} files word the same things. Read each one again for native feel alone, as a native ${name} technical writer: calques of English syntax, word order, prepositions or particles, noun chains, a register that sounds translated. Severity: critical (wrong meaning, broken text), major (glossary term not used, unidiomatic, inconsistent with the rest of the file), minor (style, punctuation). Give the corrected text for each.
+  (draft, { lang, name }) => agent(`${STAY(lang)}
+
+You review, without editing anything, the ${name} (${lang}) messages just added to ${REPO}/i18n/${lang}/ (\`cd ${REPO} && git diff -- i18n/${lang}/\` shows them, and \`git ls-files --others -- i18n/${lang}/\` lists any new file, to read whole; the drafter's report follows). Compare each with its English in ${REPO}/i18n/en-US/, against ${REPO}/i18n/${lang}/STYLE.md section 0 and glossary.tsv, and against how the rest of the ${lang} files word the same things. Read each one again for native feel alone, as a native ${name} technical writer: calques of English syntax, word order, prepositions or particles, noun chains, a register that sounds translated. Severity: critical (wrong meaning, broken text), major (glossary term not used, unidiomatic, inconsistent with the rest of the file), minor (style, punctuation). Give the corrected text for each.
 
 Drafter's report:
 ${draft ?? '(the drafter failed: report that in notes)'}`,

@@ -42,6 +42,8 @@ It lists problems as \`${LANG}/<path>: …\`. Fix every problem in YOUR files (i
 and shorten what you can among your files' entries.
 Cargo may wait on a lock while another agent builds: that's expected, just wait.
 
+Write each message as a native ${NAME} technical writer would: render what it tells the reader, and build the sentence the way ${NAME} builds it rather than following the English one. A glossary term covers the sense its row describes: where the English word is used in another sense, use the word ${NAME} has for that sense and report it as a glossary gap. Where the message's comment, or a search for its ID under ${REPO}/crates/, shows it is printed after or inside other text, write it so the whole line reads correctly, punctuation included. When the drafts are done, before the checks above, reread each one alone for native feel: calques of English syntax, word order and what each modifier attaches to, prepositions or particles, noun chains, verbs that do not go with their object, a register that sounds translated. Revise what you find.
+
 Return a short report: the files written, message count per file, any message you were unsure about (ID + your choice + the alternative), and glossary gaps you hit (an English term the glossary lacks, with the translation you chose).`
 
 const GROUPS = [

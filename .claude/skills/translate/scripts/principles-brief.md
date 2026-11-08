@@ -1,0 +1,3 @@
+Read <FINDINGS>: what a native-feel review of the <NAME> (<LANG>) translation of a multimeter app corrected. Read nothing else outside <REPO>.
+
+In <REPO>/i18n/<LANG>/STYLE.md, write the section "How <NAME> differs from English", replacing it if there is one, as the last numbered section: how <NAME> sentences differ from English ones, as general principles a translator can apply to any new text. Base them on what recurs in those corrections. At most 8, each one or two lines, most frequent first. Give an example only where the principle can't be understood without one. Leave out one-off corrections and single-term choices. Keep the sentence that opens the section. Edit nothing else, and return only the number of principles.

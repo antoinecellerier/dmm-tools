@@ -94,6 +94,8 @@ A draft passes a single review before it ships; this pass finds what that one mi
 
 Ask the user's go-ahead first: for the apps it runs twelve reviewers per language (four with `accuracy: false`), plus a fixer.
 
+After a review of the apps, refresh each language's "How \<Name\> differs from English" section of `STYLE.md`, or add it for a new language: one agent per language with `scripts/principles-brief.md`, filling in `<LANG>`, `<NAME>`, `<REPO>`, and `<FINDINGS>` (a file holding that language's findings from the workflow's result). Drafters read this section; reviewers keep to the rulings and the glossary.
+
 ## Reviewed
 
 `scripts/l10n-side-by-side.py <lang> <lang>.html` sets a language beside its English on one page, for a reviewer, or for the user when shown new messages, to read through. Once a native speaker has read the language in the app, set `reviewed: true` on its `SHIPPED` entry, and cut the note under its `README.<lang>.md` row down to the line naming the English README as the reference. For a language the user reads, the user's review counts. In the same change, update the CHANGELOG:
@@ -136,4 +138,8 @@ Run these through the Workflow tool; don't read them into context:
 - `scripts/fill-gaps.js`: the missing messages of the shipped languages.
 - `scripts/native-review.js`: accuracy and native-feel review of shipped languages or README copies, then a fixer per language.
 
-`scripts/glossary-brief.md` is the glossary agent's brief, with placeholders to fill in.
+`scripts/glossary-brief.md` is the glossary agent's brief, and `scripts/principles-brief.md` the brief for a style sheet's differences from English, both with placeholders to fill in.
+
+## Comparing prompts
+
+To compare two versions of a prompt, run each in its own worktree from the same commit, with no earlier run left in the checkout. Subagents are handed the user's latest message, and an agent told of another run will go and read it, so stash or remove earlier results rather than rely on the prompt. Judge blind, with the versions under anonymous labels, and check the agents' transcripts for reads outside their worktree.
