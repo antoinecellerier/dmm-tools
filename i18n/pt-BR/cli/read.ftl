@@ -96,6 +96,18 @@ read-unreadable-frame =
         [one] { $error } ({ $count } quadro ignorado até agora)
        *[other] { $error } ({ $count } quadros ignorados até agora)
     }
+# After "Warning:". The cable or Bluetooth link to the meter dropped, and the
+# run keeps trying to open it again until it comes back or the user presses
+# Ctrl+C. $error says why (lib-errors.ftl).
+read-link-lost = conexão com o multímetro perdida ({ $error }); reconectando (Ctrl+C encerra a execução)
+# After "Note:". The link is back and the readings resume.
+read-reconnected = conexão restabelecida; leituras retomadas
+# After "Warning:" and shared.ftl's several-cables: what lets a dropped link
+# reconnect. At the start of a run, or when a run waiting for its link gives up.
+read-several-cables-action = Para poder reconectar, execute o comando read novamente só com o cabo deste multímetro conectado, ou com --adapter e o caminho desse cabo.
+# After "Warning:" and shared.ftl's waiting-for-own-cable, once while the run
+# waits for a dropped link: how to use the other cable instead.
+read-own-cable-action = Para usar o outro cabo, pressione Ctrl+C e execute o comando read novamente.
 # After "Error:" (common.ftl), ending a --format replay run: a reading came
 # with no frame from the meter behind it, which a replay can't hold. $mode is
 # the reading's mode name (lib.ftl), e.g. DC V.

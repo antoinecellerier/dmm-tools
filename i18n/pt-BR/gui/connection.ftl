@@ -94,6 +94,31 @@ connection-no-response-auto =
     Ligue a transmissão de dados do multímetro,
     ou escolha o modelo em Configurações (⚙).
 
+# The meter answered, but with data that could not be read: a corrupt
+# frame, or a mode this tool does not know. The error itself follows.
+connection-bad-data = O multímetro enviou dados ilegíveis
+# A toast once connected, when other cables were there to open and the session
+# took the first, with --adapter a command-line option kept as it is. $count is
+# 2 or more.
+connection-cables-at-open =
+    { $count ->
+        [one] Há { $count } cabo USB conectado que esta sessão pode abrir, e ele foi aberto. Para escolher outro, use --adapter.
+       *[other] Há { $count } cabos USB conectados que esta sessão pode abrir, e o primeiro encontrado foi aberto. Para escolher outro, use --adapter.
+    }
+# Follows connection-cables-at-open when nothing tells those cables apart.
+connection-cables-no-reconnect = Não é possível distinguir esses cabos; por isso, se a conexão cair, esta sessão será encerrada, a menos que você indique o caminho de um cabo com --adapter.
+# A dropped link that was not reconnected. shared.ftl's several-cables
+# follows, then connection-several-cables-action. "Connect" is the top bar's
+# button.
+connection-several-cables = Conexão perdida
+connection-several-cables-action = Deixe conectado apenas o cabo deste multímetro e depois clique em Conectar.
+# A toast, when that notice ends a running recording. What it holds can still
+# be exported.
+connection-several-cables-recording = Gravação interrompida: a conexão caiu e não é possível distinguir o cabo USB deste multímetro dos demais
+# Any other failure to connect or to keep reading. The error itself
+# follows, then connection-click-connect.
+connection-failed = Falha na conexão
+
 # A meter that stopped answering in the middle of a session. $title is the
 # shared notice title, "No response from meter".
 connection-no-response-check = { $title }: verifique o dispositivo selecionado e a transmissão de dados

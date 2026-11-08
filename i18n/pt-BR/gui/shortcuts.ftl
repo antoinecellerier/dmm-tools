@@ -100,6 +100,9 @@ shortcuts-graph-cursors = Mostrar / ocultar os cursores
 shortcuts-graph-mouse = Gráfico (mouse)
 shortcuts-mouse-drag = Deslocar o histórico para a esquerda / direita
     .gesture = Arrastar
+# On a laptop touchpad: two fingers moved left or right together.
+shortcuts-mouse-swipe = Deslocar o histórico para a esquerda / direita
+    .gesture = Deslizar com dois dedos
 # The box dragged out sets both the span of time and the range of values
 # shown.
 shortcuts-mouse-box-zoom = Aplicar zoom ao retângulo delimitador (tempo e valor)

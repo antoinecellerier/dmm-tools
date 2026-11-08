@@ -276,3 +276,10 @@ percent	por cento	loc.	reading-unit-percent (spoken)	no approved source at hand
 SI prefixes	pico, nano, micro, mili, quilo, mega, giga	prefix	reading-unit-prefix-* (spoken)	no approved source at hand	Joined whole to the unit's name: «miliampère», «megahertz», «quiloohm».
 Screen reader updates	Anúncios do leitor de tela	s. m. pl.	settings-announce	no approved source at hand	The settings-announce-* hovers keep the verb «anunciar». Every reading → «Todas as leituras» (the Sample interval chip); Never → «Nunca».
 focus (keyboard)	foco	s. m.	settings-announce-focused	no approved source at hand	«tem o foco».
+peak hold	captura de picos	s. f.	key-hover-peak-hold-in-ac-v-and	Minipa ET-2517A/2615A PDF p.13 «sair do modo de captura de picos»	The same page also keeps the English «peak hold instantâneo». Minipa's CREST key is «Captura de Crista»; see peak.
+phase rotation direction (3-phase)	sentido de rotação das fases	s. m.	key-hover-show-3-phase-rotation-direction	no approved source found	«sequência de fases» is the equivalent term; no Minipa manual or MS-T entry covers either.
+square wave	onda quadrada	s. f.	mode-square-wave, note-sensitivity-2-5vp-square-wave-for	Minipa ET-2517A/2615A PDF p.22 «2.5Vp (onda quadrada)»	
+swipe (two-finger)	deslizar com dois dedos	v.	shortcuts-mouse-swipe	MS-T «swipe» → «deslizar o dedo»	MS-T also gives «passar o dedo».
+flashlight	lanterna	s. f.	key-hover-toggle-the-backlight-and-an-ow18	no approved source found	
+link dropped	a conexão caiu	v.	connection-cables-no-reconnect, connection-several-cables-recording, read--no-reconnect	no approved source found	Built on «conexão»; infinitive «cair».
+open (a cable)	abrir	v.	connection-cables-at-open, several-cables, waiting-for-own-cable	MS-T «open» → «abrir»	
