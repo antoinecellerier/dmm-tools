@@ -52,6 +52,13 @@ capture-status-partly-verified-detail = Esta ejecución es para los modos aún n
 capture-status-experimental = experimental: protocolo obtenido por ingeniería inversa, no confirmado
 capture-status-experimental-detail = Completa todos los pasos que puedas y comparte el informe.
 
+# Yellow and bold, after the status banner.
+capture-other-model = El multímetro se identifica como { $named }, no como el modelo { $opened } elegido al abrir la conexión.
+capture-other-model-detail = Los pasos y los botones remotos serían los del multímetro { $opened }.
+# $yes and $no are the keys that answer: y and n. Any other key quits.
+capture-other-model-confirm = ¿Capturarlo de todos modos como { $opened }? { $yes }/{ $no }:
+capture-other-model-rerun = Vuelve a ejecutar la captura con --device { $id }.
+
 ## A report from an earlier run is already in the file: resume it, start
 ## again or stop. Each prompt waits for one key, after a space.
 
@@ -116,6 +123,20 @@ capture-already-captured = paso { $step } ya capturado, se omite
 # Dim, once the tool has waited a while. $skip and $quit are the keys: s and
 # q.
 capture-press-enter = Presiona Intro cuando el multímetro esté listo ({ $skip }=omitir, { $quit }=terminar)
+# Dim, on a single line the run keeps rewriting while it waits for the meter.
+# $reading is the latest reading (5.5687 V [AUTO]); $frame counts the meter's
+# replies so far.
+capture-progress-watching = observando el multímetro · { $reading } · trama { $frame }
+# Dim, on that same line while a step's readings are taken: $done of $total
+# ("reading 4 of 12"), and $reading the latest one.
+capture-progress-reading = lectura { $done } de { $total } · { $reading }
+# Dim: a step that presses a button on the meter by remote control holds it
+# until the meter shows the state the instruction asks for. $skip and $quit
+# are the keys: s and q.
+capture-wait-start = Prepara el multímetro como se indica arriba: el comando se enviará en cuanto el multímetro esté listo (Intro=enviar ahora, { $skip }=omitir, { $quit }=terminar)
+# Dim: the meter left the state the step starts from just before the key
+# went out, so the step waits for it again.
+capture-wait-moved = El multímetro cambió de estado antes de que se enviara el comando: esperando a que vuelva a ese estado
 # When the terminal can't be read key by key. $skip and $quit are the keys:
 # s and q.
 capture-any-key = cualquier tecla=capturar, { $skip }=omitir, { $quit }=terminar:
@@ -125,9 +146,14 @@ capture-command-failed = Error en el comando: { $error }
 # Yellow: the tool pressed a button on the meter by remote control and the
 # meter didn't change. $command is the button's name as the tool sends it,
 # e.g. hold; $reading what the meter shows, e.g. 5.5687 V [AUTO].
-capture-did-nothing-shows = { $command } no tuvo efecto; el multímetro sigue mostrando { $reading }
+capture-did-nothing-shows = El comando { $command } no tuvo efecto; el multímetro sigue mostrando { $reading }
+# Yellow: the tool pressed a button on the meter by remote control and the
+# meter changed, but not to what the step waits for. $command is the button's
+# name as the tool sends it, e.g. hold; $reading what the meter shows, e.g.
+# 0.00 VA [HOLD].
+capture-command-missed = El comando { $command } no llevó al estado que espera este paso; el multímetro muestra ahora { $reading }
 # $command is the button's name as the tool sends it, e.g. hold.
-capture-did-nothing-silent = { $command } no tuvo efecto; el multímetro no envió ninguna lectura
+capture-did-nothing-silent = El comando { $command } no tuvo efecto; el multímetro no envió ninguna lectura
 # Yellow: the meter changed function while the step was reading it, so the
 # step starts over. $mode is the function the step is for, $other the one
 # the meter went to, e.g. Ω and Continuity.

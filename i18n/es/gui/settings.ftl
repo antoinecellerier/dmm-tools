@@ -236,3 +236,11 @@ settings-graph-lines-patterned = Discontinuas
     .hover = Líneas discontinuas y de puntos para los valores secundarios, distinguibles sin color
 settings-graph-lines-solid = Continuas
     .hover = Líneas continuas, distinguibles por el color y la leyenda
+
+# The file could not be understood, so a copy of it was kept before it is
+# written over. $path is the copy's full path, e.g.
+# /home/ana/.config/dmm-tools/settings.json.bad.
+settings-load-failed-kept = No se pudo leer el archivo de configuración, así que se usan los valores predeterminados. Se conserva una copia en { $path }.
+# The file could not be opened at all. $path is its full path, e.g.
+# /home/ana/.config/dmm-tools/settings.json.
+settings-load-failed = No se pudo leer el archivo de configuración { $path }, así que se usan los valores predeterminados.

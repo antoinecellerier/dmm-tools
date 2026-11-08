@@ -17,6 +17,9 @@ top-bar-imported-file = Archivo importado
 
 top-bar-connect = Conectar
     .hover = Abrir la conexión USB con el multímetro seleccionado ({ $keys })
+# In place of Connect while the meter is being opened: stops the attempt.
+top-bar-cancel = Cancelar
+    .hover = Detener el intento de conexión ({ $keys })
 top-bar-disconnect = Desconectar
     .hover = Cerrar la conexión activa con el multímetro ({ $keys })
 # A button; ▶ and ⏸ are part of it.
@@ -36,6 +39,9 @@ top-bar-reconnecting-hover = Reintentando la conexión automáticamente: haz cli
 top-bar-reconnecting-hover-error =
     Reintentando la conexión automáticamente: haz clic en Desconectar para dejar de intentarlo.
     Último error: { $error }
+# After shared.ftl's waiting-for-own-cable. "Disconnect" and "Connect" are the
+# top bar's button.
+top-bar-own-cable-action = Para usar el otro cable, haz clic en Desconectar y después en Conectar.
 top-bar-stop-retrying = Desconectar
     .hover = Dejar de reintentar y cerrar la conexión ({ $keys })
 
@@ -58,6 +64,10 @@ top-bar-status-link =
 # An imported file: $name is its meter, $file its file name.
 top-bar-status-file = { $name } · { $file }
 top-bar-disconnected = Desconectado
+# While the picked meter is being opened.
+top-bar-connecting = Conectando…
+# While Auto-detect asks the connected meter what it is.
+top-bar-detecting = Detectando…
 
 ## The status's hover: how the meter is connected, spelled out.
 ## $link is usb (a USB cable), adapter (a Bluetooth adapter plugged into the

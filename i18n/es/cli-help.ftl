@@ -51,6 +51,9 @@ read--output =
 # dmm-cli read --count
 read--count =
     .help = Número de lecturas (0 = ilimitado: hasta Ctrl+C o el final de un archivo de --replay)
+# dmm-cli read --no-reconnect
+read--no-reconnect =
+    .help = Terminar la ejecución si se pierde el enlace con el multímetro, sin intentar reconectar
 # dmm-cli read --integrate
 read--integrate =
     .help = Mostrar la integral acumulada en el tiempo (carga para los modos de corriente, V·s para la tensión)

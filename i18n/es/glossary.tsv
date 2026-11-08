@@ -284,3 +284,10 @@ percent	por ciento	loc.	reading-unit-percent (spoken)	no approved source at hand
 SI prefixes	pico, nano, micro, mili, kilo, mega, giga	prefix	reading-unit-prefix-* (spoken)	no approved source at hand	Joined whole to the unit's name: «miliamperio», «megahercio», «kiloohmio».
 Screen reader updates	Anuncios del lector de pantalla	s. m. pl.	settings-announce	no approved source at hand	The settings-announce-* hovers keep the verb «anunciar». Every reading → «Cada lectura» (the Sample interval chip); Never → «Nunca».
 focus (keyboard)	foco	s. m.	settings-announce-focused	no approved source at hand	«tiene el foco».
+record (a meter's MIN/MAX logging)	registrar	v.	key-hover-record-*, remote-min-max-exit, remote-min-max-no-exit	Fluke 80 Series V PDF p.4 «Modo de registro MIN MAX»	Not the Record button's «grabar».
+two-finger swipe	deslizar con dos dedos	v.	shortcuts-mouse-swipe.gesture	no approved source found	Gesture label «Deslizar con dos dedos».
+flashlight	linterna	s. f.	key-hover-toggle-the-backlight-and-an-ow18	no approved source found
+square wave	onda cuadrada	s. f.	mode-square-wave, note-sensitivity-2-5vp-square-wave-for	no approved source found
+open (a link or meter being opened)	abrir la conexión	v.	capture-other-model, error-rejected-other-model, error-wrong-meter-*	no approved source found	«elegido al abrir la conexión».
+3-phase rotation direction	sentido de rotación de las tres fases	s. m.	key-hover-show-3-phase-rotation-direction	no approved source found	Provisional. Not «secuencia de fases trifásica», which is redundant.
+graphics renderer	motor de renderizado	s. m.	dmm-gui--renderer	no approved source found

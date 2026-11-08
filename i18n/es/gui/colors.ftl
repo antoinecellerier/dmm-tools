@@ -123,6 +123,10 @@ colors-issue-low-contrast =
         [button] el contraste del texto del botón sobre el botón es de { $ratio }:1, por debajo del mínimo de { $floor }:1
        *[text] el contraste del texto sobre el fondo es de { $ratio }:1, por debajo del mínimo de { $floor }:1
     }
+# The theme's text on its frame, the surface of the top bar and Settings.
+colors-issue-frame-not-opaque = el texto no es opaco sobre el marco
+# As above, on the frame. $ratio and $floor are as above.
+colors-issue-frame-low-contrast = el contraste del texto sobre el marco es de { $ratio }:1, por debajo del mínimo de { $floor }:1
 # Another file in the folder gives its theme the same name. $name is the
 # name as the file has it, to put in your language's quotes; $file the
 # other file's name.
