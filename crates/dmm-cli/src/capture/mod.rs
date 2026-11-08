@@ -7,6 +7,7 @@ mod input;
 mod instructions;
 mod listing;
 mod plan;
+mod progress;
 pub(crate) mod recording;
 mod report;
 mod session;

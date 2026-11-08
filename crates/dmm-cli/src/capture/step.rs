@@ -2,6 +2,7 @@
 //! asks for, and the frames that wait puts on the wire.
 
 use super::input::{ErrorLog, Input};
+use super::progress::Progress;
 use super::recording::{self, SharedRecorder, WireEvent};
 use super::report::{
     CaptureReport, FrameRecord, SampleData, StepResult, StepStatus, already_captured,
@@ -94,11 +95,24 @@ pub(crate) fn capture_samples(
     n: usize,
     errors: &mut ErrorLog,
 ) -> dmm_lib::error::Result<Vec<Measurement>> {
+    capture_samples_showing(dmm, n, errors, |_, _| {})
+}
+
+/// [`capture_samples`], telling `on_sample` how many it has after each one.
+fn capture_samples_showing(
+    dmm: &mut BoxedDmm,
+    n: usize,
+    errors: &mut ErrorLog,
+    mut on_sample: impl FnMut(usize, &Measurement),
+) -> dmm_lib::error::Result<Vec<Measurement>> {
     let mut samples = Vec::new();
     let mut attempts = 0;
     while samples.len() < n && attempts < n * 5 {
         match dmm.request_measurement() {
-            Ok(m) => samples.push(m),
+            Ok(m) => {
+                on_sample(samples.len() + 1, &m);
+                samples.push(m);
+            }
             Err(e) => triage(e, errors)?,
         }
         attempts += 1;
@@ -328,6 +342,7 @@ fn watch_for_state(
     let start = Instant::now();
     let mut hinted = false;
     let mut last = None;
+    let mut progress = Progress::new(input);
     loop {
         match input.try_key()? {
             Some(Key::Enter) => return Ok(Watched::Ready(None)),
@@ -340,10 +355,15 @@ fn watch_for_state(
             Ok(m) => match watcher.feed(&m) {
                 Verdict::Ready => return Ok(Watched::Ready(Some(m))),
                 Verdict::Mismatch(reason) => {
-                    last = Some(m);
+                    progress.clear();
                     eprintln!("  {}", style(mismatch_line(l, &reason)).dim());
+                    progress.waiting(&m);
+                    last = Some(m);
                 }
-                Verdict::Waiting => last = Some(m),
+                Verdict::Waiting => {
+                    progress.waiting(&m);
+                    last = Some(m);
+                }
             },
             Err(Error::Timeout) => {}
             // `?` first: the wait may have no timeout, and a link that fails
@@ -368,6 +388,7 @@ fn watch_for_state(
             }
             if !hinted {
                 hinted = true;
+                progress.clear();
                 eprintln!(
                     "  {}",
                     style(tr!(l, "capture-press-enter", skip = "s", quit = "q")).dim()
@@ -746,7 +767,14 @@ impl CaptureRun {
 
                     // What the meter shows before the button is pressed, so a
                     // command that changes nothing can be told from one that works.
-                    let before = capture_samples(&mut self.dmm, STABLE_FRAMES, &mut errors)?;
+                    let mut progress = Progress::new(&self.input);
+                    let before = capture_samples_showing(
+                        &mut self.dmm,
+                        STABLE_FRAMES,
+                        &mut errors,
+                        |_, m| progress.waiting(m),
+                    )?;
+                    progress.clear();
                     // #45: a UT217A passed through mV,DC on its way to V,DC, and
                     // the key went out once the screen had moved on to mV,AC.
                     match seen {
@@ -874,8 +902,16 @@ impl CaptureRun {
                 };
             }
             let mut measurements: Vec<Measurement> = settled.into_iter().collect();
-            let wanted = step.samples.saturating_sub(measurements.len());
-            measurements.extend(capture_samples(&mut self.dmm, wanted, &mut errors)?);
+            let have = measurements.len();
+            let wanted = step.samples.saturating_sub(have);
+            let mut progress = Progress::new(&self.input);
+            measurements.extend(capture_samples_showing(
+                &mut self.dmm,
+                wanted,
+                &mut errors,
+                |got, m| progress.reading(have + got, step.samples, m),
+            )?);
+            progress.clear();
 
             // Only where the wait offers s and q: a meter that keeps leaving
             // would otherwise retake the step for ever.

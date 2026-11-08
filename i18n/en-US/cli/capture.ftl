@@ -128,6 +128,13 @@ capture-already-captured = { $step } already captured, skipping
 # Dim, once the tool has waited a while. $skip and $quit are the keys: s and
 # q.
 capture-press-enter = Press Enter when the meter is ready ({ $skip }=skip, { $quit }=finish)
+# Dim, on a single line the run keeps rewriting while it waits for the meter.
+# $reading is the latest reading (5.5687 V [AUTO]); $frame counts the meter's
+# replies so far.
+capture-progress-watching = watching the meter · { $reading } · frame { $frame }
+# Dim, on that same line while a step's readings are taken: $done of $total
+# ("reading 4 of 12"), and $reading the latest one.
+capture-progress-reading = reading { $done } of { $total } · { $reading }
 # Dim: a step that presses a button on the meter by remote control holds it
 # until the meter shows the state the instruction asks for. $skip and $quit
 # are the keys: s and q.
