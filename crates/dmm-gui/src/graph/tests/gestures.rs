@@ -67,6 +67,271 @@ fn plain_wheel_over_the_plot_leaves_the_graph_alone() {
     assert!(g.live, "plain wheel dropped out of live mode");
 }
 
+/// A touchpad scroll of `(x, y)` points in one frame, under 8 points so egui
+/// applies it in that pass.
+fn scroll_event(x: f32, y: f32) -> egui::Event {
+    egui::Event::MouseWheel {
+        unit: egui::MouseWheelUnit::Point,
+        delta: egui::vec2(x, y),
+        phase: egui::TouchPhase::Move,
+        source: egui::MouseWheelSource::Unknown,
+        modifiers: egui::Modifiers::NONE,
+    }
+}
+
+/// Scroll frames over the plot, one `(x, y)` a frame.
+fn plot_scroll(g: &mut Graph, ctx: &egui::Context, pointer: egui::Pos2, frames: &[(f32, f32)]) {
+    for &(x, y) in frames {
+        gesture_frame(g, ctx, pointer, &[scroll_event(x, y)]);
+    }
+}
+
+/// Enough idle frames, at egui's default step, to end a scroll gesture.
+fn end_plot_gesture(g: &mut Graph, ctx: &egui::Context, pointer: egui::Pos2) {
+    for _ in 0..10 {
+        gesture_frame(g, ctx, pointer, &[]);
+    }
+}
+
+/// The middle of what the plot shows: `view_center` means nothing while live.
+fn shown_center(g: &Graph) -> f64 {
+    let (x_min, x_max) = g.view_bounds();
+    (x_min + x_max) / 2.0
+}
+
+/// A positive scroll drags the trace right, as the mouse does, so older
+/// readings come into view; and the view has to leave live or the next sample
+/// would snap it back.
+#[test]
+fn a_sideways_swipe_over_the_plot_pans_to_older_data_and_leaves_live() {
+    let ctx = crate::app::styled_context();
+    let mut g = graph_over(200).0;
+    gesture_frame(&mut g, &ctx, over_plot(), &[]);
+    let center = shown_center(&g);
+    plot_scroll(&mut g, &ctx, over_plot(), &[(4.0, 0.0); 3]);
+    assert!(!g.live, "a swipe left the graph in live mode");
+    assert!(
+        g.view_center < center,
+        "swipe right should reveal older data: {} from {center}",
+        g.view_center
+    );
+}
+
+#[test]
+fn a_sideways_swipe_off_the_plot_changes_nothing() {
+    let ctx = crate::app::styled_context();
+    let mut g = graph_over(200).0;
+    gesture_frame(&mut g, &ctx, off_plot(), &[]);
+    plot_scroll(&mut g, &ctx, off_plot(), &[(4.0, 0.0); 3]);
+    assert!(g.live, "a swipe off the plot dropped out of live");
+}
+
+/// A page scroll drifts a little sideways; that must not pull the graph out
+/// of live.
+#[test]
+fn a_mostly_vertical_scroll_over_the_plot_stays_live() {
+    let ctx = crate::app::styled_context();
+    let mut g = graph_over(200).0;
+    gesture_frame(&mut g, &ctx, over_plot(), &[]);
+    plot_scroll(&mut g, &ctx, over_plot(), &[(1.0, 4.0); 6]);
+    assert!(g.live, "a page scroll's drift dropped out of live");
+}
+
+/// The direction is the gesture's, not each frame's: a lone sideways frame
+/// inside a vertical scroll doesn't count, before the decision or after it.
+#[test]
+fn a_stray_sideways_frame_in_a_vertical_scroll_stays_live() {
+    let ctx = crate::app::styled_context();
+    let mut g = graph_over(200).0;
+    gesture_frame(&mut g, &ctx, over_plot(), &[]);
+    plot_scroll(
+        &mut g,
+        &ctx,
+        over_plot(),
+        &[
+            (0.0, 4.0),
+            (0.5, 0.0),
+            (0.0, 4.0),
+            (0.0, 4.0),
+            (4.0, 0.0),
+            (4.0, 0.0),
+        ],
+    );
+    assert!(g.live, "a stray sideways frame dropped out of live");
+}
+
+/// A new gesture decides afresh, so a page scroll doesn't lock out the swipe
+/// that follows it.
+#[test]
+fn a_swipe_after_a_page_scroll_still_pans() {
+    let ctx = crate::app::styled_context();
+    let mut g = graph_over(200).0;
+    gesture_frame(&mut g, &ctx, over_plot(), &[]);
+    plot_scroll(&mut g, &ctx, over_plot(), &[(0.0, 4.0); 3]);
+    assert!(g.live);
+    end_plot_gesture(&mut g, &ctx, over_plot());
+    plot_scroll(&mut g, &ctx, over_plot(), &[(4.0, 0.0); 3]);
+    assert!(!g.live, "the swipe after a page scroll did nothing");
+}
+
+/// Back past the newest reading resumes live, as a drag does.
+#[test]
+fn a_swipe_past_the_newest_data_returns_to_live() {
+    let ctx = crate::app::styled_context();
+    let mut g = graph_over(200).0;
+    gesture_frame(&mut g, &ctx, over_plot(), &[]);
+    plot_scroll(&mut g, &ctx, over_plot(), &[(4.0, 0.0); 3]);
+    assert!(!g.live);
+    end_plot_gesture(&mut g, &ctx, over_plot());
+    plot_scroll(&mut g, &ctx, over_plot(), &[(-6.0, 0.0); 6]);
+    assert!(g.live, "swiping past the newest reading stayed frozen");
+}
+
+/// A frame of the swipe with nothing sideways in it is not a pan, or it would
+/// leave live just after the swipe reached it.
+#[test]
+fn a_vertical_frame_in_a_swipe_at_the_newest_data_stays_live() {
+    let ctx = crate::app::styled_context();
+    let mut g = graph_over(200).0;
+    gesture_frame(&mut g, &ctx, over_plot(), &[]);
+    plot_scroll(&mut g, &ctx, over_plot(), &[(-4.0, 0.0); 3]);
+    assert!(g.live);
+    plot_scroll(&mut g, &ctx, over_plot(), &[(0.0, 4.0)]);
+    assert!(g.live, "a frame with no sideways part dropped out of live");
+}
+
+/// Past the oldest reading there is nothing to show, and the way back would
+/// first have to undo the excess.
+#[test]
+fn a_pan_stops_at_the_oldest_reading() {
+    let mut g = graph_over(200).0;
+    g.apply_pan(1000.0);
+    let (data_min, _) = g.data_time_range();
+    assert_eq!(g.view_center, data_min + g.browse_width() / 2.0);
+}
+
+/// With every reading on screen there is nowhere to pan, and leaving live
+/// would only stop the graph following the next ones.
+#[test]
+fn a_swipe_over_the_plot_with_every_reading_shown_stays_live() {
+    let ctx = crate::app::styled_context();
+    let mut g = graph_with_a_minute_of_data();
+    gesture_frame(&mut g, &ctx, over_plot(), &[]);
+    plot_scroll(&mut g, &ctx, over_plot(), &[(4.0, 0.0); 3]);
+    assert!(g.live, "a swipe with nowhere to go dropped out of live");
+}
+
+/// On the strip, which fills the top of the frame `strip_frame` draws.
+fn over_strip() -> egui::Pos2 {
+    egui::pos2(400.0, 30.0)
+}
+
+/// One headless frame of the minimap alone, the pointer at `pointer`.
+fn strip_frame_at(g: &mut Graph, ctx: &egui::Context, pointer: egui::Pos2, events: &[egui::Event]) {
+    let tc = ThemeColors::new(true, ColorPreset::Default, &PaletteOverrides::default());
+    let mut input = vec![egui::Event::PointerMoved(pointer)];
+    input.extend_from_slice(events);
+    headless_frame(ctx, Some(gesture_screen()), None, input, |ui| {
+        g.show_minimap(
+            ui,
+            &crate::l10n::english(),
+            &tc,
+            &crate::markers::Markers::default(),
+        )
+    });
+}
+
+fn strip_frame(g: &mut Graph, ctx: &egui::Context, events: &[egui::Event]) {
+    strip_frame_at(g, ctx, over_strip(), events);
+}
+
+fn strip_scroll(g: &mut Graph, ctx: &egui::Context, frames: &[(f32, f32)]) {
+    for &(x, y) in frames {
+        strip_frame(g, ctx, &[scroll_event(x, y)]);
+    }
+}
+
+fn end_strip_gesture(g: &mut Graph, ctx: &egui::Context) {
+    for _ in 0..10 {
+        strip_frame(g, ctx, &[]);
+    }
+}
+
+/// A live 10 s window on a 200 s session, with the pointer already on the strip.
+fn strip_graph(ctx: &egui::Context) -> Graph {
+    let (mut g, _) = graph_over(200);
+    strip_frame(&mut g, ctx, &[]);
+    g
+}
+
+/// On the minimap the bracket moves the way the scroll goes, so left is older
+/// there: the opposite of a swipe on the plot, where the trace does.
+#[test]
+fn a_swipe_left_over_the_minimap_moves_the_bracket_to_older_data() {
+    let ctx = crate::app::styled_context();
+    let mut g = strip_graph(&ctx);
+    let center = shown_center(&g);
+    strip_scroll(&mut g, &ctx, &[(-4.0, 0.0); 3]);
+    assert!(!g.live, "a swipe left on the strip stayed live");
+    assert!(
+        g.view_center < center,
+        "swipe left should move the bracket to older data: {} from {center}",
+        g.view_center
+    );
+}
+
+#[test]
+fn a_swipe_right_past_the_newest_data_on_the_minimap_returns_to_live() {
+    let ctx = crate::app::styled_context();
+    let mut g = strip_graph(&ctx);
+    strip_scroll(&mut g, &ctx, &[(-4.0, 0.0); 3]);
+    assert!(!g.live);
+    end_strip_gesture(&mut g, &ctx);
+    strip_scroll(&mut g, &ctx, &[(6.0, 0.0); 6]);
+    assert!(g.live, "swiping past the newest reading stayed frozen");
+}
+
+#[test]
+fn a_mostly_vertical_scroll_over_the_minimap_stays_live() {
+    let ctx = crate::app::styled_context();
+    let mut g = strip_graph(&ctx);
+    strip_scroll(&mut g, &ctx, &[(1.0, 4.0); 6]);
+    assert!(g.live, "a page scroll's drift dropped out of live");
+}
+
+#[test]
+fn a_swipe_over_the_minimap_with_every_reading_shown_stays_live() {
+    let ctx = crate::app::styled_context();
+    let mut g = graph_with_a_minute_of_data();
+    strip_frame(&mut g, &ctx, &[]);
+    strip_scroll(&mut g, &ctx, &[(-4.0, 0.0); 3]);
+    assert!(g.live, "a swipe with nowhere to go dropped out of live");
+}
+
+/// A drag holds the bracket to the pointer; a swipe mustn't pull it away.
+#[test]
+fn a_swipe_during_a_minimap_drag_does_not_move_the_view() {
+    let ctx = crate::app::styled_context();
+    let mut g = strip_graph(&ctx);
+    let held = egui::pos2(200.0, 30.0);
+    let press = egui::Event::PointerButton {
+        pos: held,
+        button: egui::PointerButton::Primary,
+        pressed: true,
+        modifiers: egui::Modifiers::NONE,
+    };
+    strip_frame_at(&mut g, &ctx, held, &[press]);
+    assert!(
+        !g.live,
+        "the press should have frozen the view at the pointer"
+    );
+    let center = g.view_center;
+    for _ in 0..3 {
+        strip_frame_at(&mut g, &ctx, held, &[scroll_event(4.0, 0.0)]);
+    }
+    assert_eq!(g.view_center, center, "the swipe moved a held bracket");
+}
+
 /// Ctrl+wheel is the zoom gesture. Wheel up narrows the window, and the tick
 /// also has to leave live mode, or the zoom would be undone by the next
 /// sample snapping the view back.

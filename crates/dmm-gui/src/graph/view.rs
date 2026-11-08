@@ -10,6 +10,58 @@ use std::collections::BTreeMap;
 use super::field::NumberField;
 use super::{Graph, TIME_WINDOWS};
 
+/// How far a scroll travels, in points, before its direction is decided.
+const SWIPE_DECIDE_POINTS: f32 = 10.0;
+/// A pause this long, in seconds, ends one scroll gesture.
+const SWIPE_GAP_SECS: f64 = 0.15;
+
+/// Whether the scroll in progress is a sideways swipe, decided once for the
+/// whole gesture. Leaving live sticks, so a stray sideways frame in a page
+/// scroll mustn't count, and egui's wheel smoothing flushes the two axes at
+/// different rates, so one frame's x and y say little about the gesture.
+#[derive(Default)]
+pub(super) struct SwipeLatch {
+    /// What the gesture has moved while it is undecided.
+    travelled: egui::Vec2,
+    /// Sideways or not, once decided.
+    sideways: Option<bool>,
+    /// When the last scroll arrived, in egui's input time.
+    last: f64,
+}
+
+impl SwipeLatch {
+    /// Take a frame's scroll delta, returning the sideways points to apply.
+    /// The whole travel comes out on the frame that decides, so the first
+    /// few points of a swipe aren't lost.
+    fn feed(&mut self, delta: egui::Vec2, now: f64) -> Option<f32> {
+        if delta == egui::Vec2::ZERO {
+            return None;
+        }
+        // Not `is_scrolling()`: without an End phase an idle app runs no
+        // frame to clear it, and the next event simply carries it on.
+        if now - self.last > SWIPE_GAP_SECS {
+            self.travelled = egui::Vec2::ZERO;
+            self.sideways = None;
+        }
+        self.last = now;
+        match self.sideways {
+            // A frame with no sideways part isn't a pan: `apply_pan` leaves
+            // live on any call.
+            Some(true) => (delta.x != 0.0).then_some(delta.x),
+            Some(false) => None,
+            None => {
+                self.travelled += delta;
+                if self.travelled.length() < SWIPE_DECIDE_POINTS {
+                    return None;
+                }
+                let sideways = self.travelled.x.abs() > 2.0 * self.travelled.y.abs();
+                self.sideways = Some(sideways);
+                sideways.then_some(self.travelled.x)
+            }
+        }
+    }
+}
+
 /// The Y axes' fixed ranges, used while **Y:Fixed** is on.
 pub(super) struct YAxis {
     /// The axes keep fixed ranges instead of fitting the data.
@@ -451,19 +503,20 @@ impl Graph {
     /// and would push the view's right edge to or past the latest sample,
     /// snap back to live instead of letting the view drift into empty
     /// future-space.
+    ///
+    /// The other way it stops at the oldest sample: past it the view would
+    /// show nothing new, and the way back would first have to undo the excess.
     pub(super) fn apply_pan(&mut self, time_delta: f64) {
         if self.live {
             self.leave_live();
         }
-        self.view_center -= time_delta;
+        let (data_min, data_max) = self.data_time_range();
+        let half = self.browse_width() / 2.0;
+        self.view_center = (self.view_center - time_delta).max(data_min + half);
 
-        if time_delta < 0.0 {
-            let (_, data_max) = self.data_time_range();
-            let half = self.browse_width() / 2.0;
-            if self.view_center + half >= data_max {
-                self.view_center = data_max - half;
-                self.set_live(true);
-            }
+        if time_delta < 0.0 && self.view_center + half >= data_max {
+            self.view_center = data_max - half;
+            self.set_live(true);
         }
     }
 
@@ -488,6 +541,24 @@ impl Graph {
         self.time_window_secs = (shown / zoom_delta).clamp(2.0, 3600.0);
         self.frozen_width = None;
         self.view_center = cursor_t - (rel - 0.5) * self.time_window_secs;
+    }
+
+    /// The sideways points of a touchpad swipe over a surface of the graph
+    /// this frame, `over` saying the pointer is on that surface and it is
+    /// free to move. The pointer is on one surface at most, so a frame's
+    /// scroll is counted once.
+    ///
+    /// None while every reading is on screen: there is nowhere to pan, and a
+    /// light brush of the touchpad would leave live with nothing moving and
+    /// the next readings falling outside the frozen view.
+    pub(super) fn swipe_x(&mut self, ui: &Ui, over: bool) -> Option<f32> {
+        let (data_min, data_max) = self.data_time_range();
+        let (x_min, x_max) = self.view_bounds();
+        if !over || (x_min <= data_min && x_max >= data_max) {
+            return None;
+        }
+        let (delta, now) = ui.input(|i| (i.smooth_scroll_delta(), i.time));
+        self.swipe.feed(delta, now)
     }
 
     /// Pure helper: given the two corners of a bbox-zoom rectangle in data
@@ -607,13 +678,22 @@ impl Graph {
         // Handle drag: convert pixel delta to time delta. Works in live mode
         // too — apply_pan() snaps view_center to the current end of data and
         // drops out of live on the first drag frame so the pan has effect.
-        if plot_response.dragged() {
-            let drag_px = plot_response.drag_delta().x;
+        let secs_of = |px: f32| {
             let left = transform.value_from_position(plot_response.rect.left_top());
             let right = transform.value_from_position(plot_response.rect.right_top());
             let px_per_sec = plot_response.rect.width() as f64 / (right.x - left.x).max(1e-6);
-            let time_delta = drag_px as f64 / px_per_sec;
-            self.apply_pan(time_delta);
+            px as f64 / px_per_sec
+        };
+        if plot_response.dragged() {
+            self.apply_pan(secs_of(plot_response.drag_delta().x));
+        }
+
+        // A two-finger swipe sideways on a touchpad pans as a drag does. It
+        // comes as horizontal scroll, which the graph's scroll areas, being
+        // vertical, leave alone; the vertical part still scrolls the page.
+        let swipe_free = plot_response.contains_pointer() && !plot_response.dragged();
+        if let Some(swipe_px) = self.swipe_x(ui, swipe_free) {
+            self.apply_pan(secs_of(swipe_px));
         }
 
         // X-axis zoom on Ctrl + wheel — and on a touch pinch, which egui folds

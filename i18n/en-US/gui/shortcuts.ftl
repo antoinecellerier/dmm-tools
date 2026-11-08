@@ -100,6 +100,9 @@ shortcuts-graph-cursors = Toggle cursors
 shortcuts-graph-mouse = Graph (mouse)
 shortcuts-mouse-drag = Pan left / right through history
     .gesture = Drag
+# On a laptop touchpad: two fingers moved left or right together.
+shortcuts-mouse-swipe = Pan left / right through history
+    .gesture = Two-finger swipe
 # The box dragged out sets both the span of time and the range of values
 # shown.
 shortcuts-mouse-box-zoom = Zoom to bounding box (time & value)

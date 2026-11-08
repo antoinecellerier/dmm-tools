@@ -567,6 +567,8 @@ pub struct Graph {
     minimap_drag: MinimapDrag,
     /// The Shift+drag box zoom in progress, if any.
     box_zoom: Option<BoxZoom>,
+    /// The touchpad scroll in progress over the plot or the minimap.
+    swipe: view::SwipeLatch,
     /// What the plot's right-click menu was opened on.
     menu: Option<MenuPoint>,
     /// Put the focus on the menu's first entry again next frame.
@@ -643,6 +645,7 @@ impl Graph {
             a11y_label_sig: 0,
             minimap_drag: MinimapDrag::None,
             box_zoom: None,
+            swipe: view::SwipeLatch::default(),
             menu: None,
             menu_focus_pending: false,
             trace_choice: None,

@@ -260,9 +260,10 @@ more toolbar groups:
 
 | Action | Effect |
 |---|---|
-| **Ctrl + scroll wheel** (or pinch) | Zoom X axis centered on cursor (2s–3600s range); leaves live mode |
+| **Ctrl + scroll wheel** or **Ctrl + two-finger scroll** (Cmd on macOS; pinch on a touchscreen or macOS touchpad) | Zoom X axis centered on cursor (2s–3600s range); leaves live mode |
 | **Scroll wheel** | Scrolls the panel — the graph ignores it |
 | **Click & drag** | Pan left/right through history |
+| **Two-finger swipe sideways** (touchpad) | Pan left/right through history; leaves live mode |
 | **Shift + click & drag** | Draw a bounding box to zoom both time and value to the selected region, every Y axis included. Release to apply; press Escape to cancel. |
 | **Double-click** | Return to live mode with auto Y |
 | **Click** (cursors active) | Place cursor A or B, snapping to nearest data point |
@@ -303,6 +304,7 @@ A thin strip below the main plot showing the full capture history.
 - Overload bands mirror the main plot, widened to a pixel when narrower
 - Spikes stay visible however long the session runs
 - Click or drag the interior to jump to a specific time
+- Swipe sideways with two fingers on a touchpad to move the viewport
 - Drag the bracket edges to resize the viewport to an arbitrary time width
 - Clicking near the end re-enables live mode
 

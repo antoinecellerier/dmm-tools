@@ -37,6 +37,10 @@ threshold is `WIDE_LAYOUT_MIN_WIDTH` in `app/meter_fit.rs`.
 **Columns scroll like a page.** A short window scrolls each column rather than
 cropping it; the top bar stays pinned; the wheel scrolls and Ctrl+wheel zooms
 the graph. Users know these gestures from other apps, unlike nested scrollers.
+A two-finger swipe sideways is free, the columns scrolling only vertically, so
+it pans the graph. Under natural scrolling what is under the fingers follows
+them: the trace on the plot, the bracket on the minimap, so the same swipe goes
+opposite ways in time. The system's scroll direction setting flips both.
 
 **News floats as a toast.** A transient message sits over the top-right
 corner, so every layout shows it, minimal mode included, and a narrow top bar

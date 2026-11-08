@@ -250,6 +250,14 @@ The GUI marks readings (`N`, `Ctrl+N`) and exports the markers as `marker,note` 
 
 With nothing recorded the log lists only markers, though the graph's full readings are kept for Export…. A toggle showing them there would let the log's `+` mark any of them, as it does a recording's.
 
+### Touchpad gestures on Linux and Windows
+
+**Complexity:** Low
+
+A pinch on a Linux touchpad never reaches the app: winit 0.30 delivers no gesture events there. winit 0.31 adds them on Wayland, so once eframe moves to it a pinch should zoom the graph through the handler a touchscreen pinch already uses, leaving only a check on a touchpad. X11 stays without.
+
+On Windows winit has no touchpad gesture events, in 0.30 or so far in 0.31 ([winit#4602](https://github.com/rust-windowing/winit/issues/4602)). Precision touchpads are expected to send a pinch as Ctrl+wheel, which zooms the graph, and a sideways swipe as horizontal scroll, which pans it. Neither has been tried on a Windows laptop yet, and native gestures only matter if that check falls short.
+
 ### More entries in the plot's right-click menu
 
 **Complexity:** Low

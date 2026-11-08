@@ -157,6 +157,10 @@ fn graph_mouse(ui: &mut egui::Ui, l10n: &Localizer) {
             tr!(l10n, "shortcuts-mouse-drag"),
         ),
         (
+            tr!(l10n, "shortcuts-mouse-swipe.gesture"),
+            tr!(l10n, "shortcuts-mouse-swipe"),
+        ),
+        (
             tr!(l10n, "shortcuts-mouse-box-zoom.gesture"),
             tr!(l10n, "shortcuts-mouse-box-zoom"),
         ),

@@ -13,6 +13,7 @@
 - **Brazilian Portuguese, French, Japanese, Simplified Chinese and Spanish translations available** — pick one in Settings, **Language**, or let it follow the system's language; Portuguese, Japanese, Chinese and Spanish are machine-translated until reviewed.
 - **Choose how often a screen reader announces the reading** — every 5s by default, or only while the reading has focus.
 - **Screen readers say units by name, such as millivolts for mV** — they spelled the symbols out letter by letter.
+- **Pan the graph with a two-finger sideways swipe on a touchpad** — over the plot or the minimap.
 - **The graph hover lists every series and tags the height per axis** — it showed one value without a right axis, and no height with one.
 - **The graph, statistics and integral carry on when the meter auto-ranges** — they restarted at each decade step; figures keep the meter's ranges, as 31.300 MΩ beside 0.04 Ω. The graph menu's Copy now includes the unit.
 - **The Specifications panel covers the Brymen BM820s and BM520s series** — the Minipa ET-2517A and ET-2615A, which share their entries, show the same figures.

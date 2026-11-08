@@ -612,6 +612,15 @@ impl Graph {
             self.view_center = next.center;
         }
 
+        // A two-finger swipe on a touchpad moves the viewport the way the
+        // scroll goes, as dragging it does: the opposite sense to the plot,
+        // where the trace moves and the view goes against it.
+        let swipe_free =
+            pointer_response.contains_pointer() && self.minimap_drag == MinimapDrag::None;
+        if let Some(swipe_px) = self.swipe_x(ui, swipe_free) {
+            self.apply_pan(-swipe_px as f64 * scale.time_per_px());
+        }
+
         // Reset drag state when pointer is released
         if !pointer_response.is_pointer_button_down_on() {
             self.minimap_drag = MinimapDrag::None;

@@ -538,9 +538,7 @@ fn apply_pan_in_live_mode_drops_out_of_live() {
 
 #[test]
 fn apply_pan_in_live_mode_snaps_view_center_to_end() {
-    let mut g = Graph::new();
-    g.time_window_secs = 10.0;
-    g.push(1.0, Instant::now(), "DC V", "V", None);
+    let mut g = graph_over(200).0;
     // Zero-delta pan while live still snaps view_center to the end of
     // data — so the view doesn't visibly jump on drag start.
     g.apply_pan(0.0);
@@ -573,26 +571,24 @@ fn apply_pan_toward_newer_at_live_edge_returns_to_live() {
 fn apply_pan_toward_older_never_triggers_live_snap() {
     // Dragging back into history (time_delta > 0) must never flip live
     // on, even if the starting state is at the live edge.
-    let mut g = Graph::new();
-    g.time_window_secs = 10.0;
+    let mut g = graph_over(200).0;
     g.live = false;
-    g.view_center = -5.0; // right edge at 0 (data_max = 0 with empty history)
+    g.view_center = 195.0; // right edge at data_max
     g.apply_pan(3.0);
     assert!(!g.live);
-    assert!((g.view_center - -8.0).abs() < 1e-9);
+    assert!((g.view_center - 192.0).abs() < 1e-9);
 }
 
 #[test]
 fn apply_pan_toward_newer_below_live_edge_does_not_snap() {
     // Drag toward newer but still short of the live edge — just moves
     // view_center, does not re-enter live.
-    let mut g = Graph::new();
-    g.time_window_secs = 10.0;
+    let mut g = graph_over(200).0;
     g.live = false;
-    g.view_center = -50.0; // right edge at -45, well below data_max=0
+    g.view_center = 100.0; // right edge at 105, well below data_max
     g.apply_pan(-2.0);
     assert!(!g.live);
-    assert!((g.view_center - -48.0).abs() < 1e-9);
+    assert!((g.view_center - 102.0).abs() < 1e-9);
 }
 
 /// Push an NCV level as `Capture::ingest` hands it over.
