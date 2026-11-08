@@ -128,9 +128,9 @@ byte, 299.5–300.5 ms with every change within 30 ms of the beat (both
 issue #7 runs, 12–35 changes per mode). Other modes changed too rarely
 to fit [UNVERIFIED].
 
-One press differed. In AC+DC V on manual 2.2V, RANGE took the display to
-the 22V rung's three decimals while the range byte stayed 0x30, on all
-three frames before auto came back:
+One press differed on that unit. In AC+DC V on manual 2.2V, RANGE took the
+display to the 22V rung's three decimals while the range byte stayed 0x30,
+on all three frames before auto came back:
 
 ```
 19 30 20 20 30 2E 30 31 33 00 00 30 34 31   DC "  0.013"
@@ -145,10 +145,16 @@ A second UT161E answers Get Name with `UT161E` over a CH9329, and with 9 V
 on the leads in AC+DC V its range byte followed the decimals [VERIFIED]
 (issue #7, CH9329, @thomschlie, 2026-11-08): 0x30 to 0x31 on auto from 2.2V
 to 22V, 0x31 on the press that only cleared auto, and 0x32 with two decimals
-on the next. The press from manual 2.2V is [UNVERIFIED] on this unit. For
-two frames after each range change the meter set the HV bit and sent
-unsettled digits against the 9.32 V battery: `OL` then DC 9.590 V coming up
-from 2.2V, AC 53.52 V then DC 9.44 V on reaching 220V.
+on the next. For two frames after each range change the meter set the HV
+bit and sent unsettled digits against the 9.32 V battery: `OL` then DC
+9.590 V coming up from 2.2V, AC 53.52 V then DC 9.44 V on reaching 220V.
+
+With the leads open, the key from manual 2.2V took this unit to 0x31 and
+three decimals on the first frame after it, and the byte held for the 12
+readings that followed; the 12 readings taken after the same press on the
+meter's own button also read 0x31, the frames right after that press going
+unrecorded [VERIFIED] (issue #7, CH9329, @thomschlie, 2026-11-08). The 0x30
+above has been seen on one unit only, in one run.
 
 ### 2.3 Secondary-display frame — [VENDOR + VENDOR-DOC + MANUAL]
 
@@ -860,7 +866,7 @@ have confirmed is tagged [VERIFIED] where sections 3-6 and 9 state it.
 |--------|--------|--------|
 | Identical protocol across all 6 models | **VENDOR** | No model conditionals in framing or commands; the model name picks one of two range lists (§3) |
 | UT161 = UT61+ (binary-identical software) | **VENDOR** | 67/69 files match |
-| UT161E frames = UT61E+ frames | **VERIFIED** | Issue #7 captures, 20 modes; one AC+DC V range byte differs (§2.2) |
+| UT161E frames = UT61E+ frames | **VERIFIED** | Issue #7 captures, 20 modes; one AC+DC V range byte differed on one unit (§2.2) |
 | Shared VID/PID/baud/framing | **VENDOR** | Shared CP2110.dll |
 | Shared command set | **VENDOR** | Shared CustomDmm.dll |
 | 6,000 vs 22,000 count displays | **MANUAL** | UT61+ Series manual |

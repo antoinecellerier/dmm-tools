@@ -106,12 +106,6 @@ families are in the [verification backlog](../../verification-backlog.md).
   1, on which the vendor sources agree ([§5.6][s56]) — decides
   `temp_c`/`temp_f`. Needs a K-type thermocouple, steps `temp` and `tempf`. (#7)
 
-## The UT161E
-
-- AC+DC V, RANGE from manual 2.2V: the display took 22V resolution while the
-  range byte stayed 0x30 on one unit ([§2.2][s22]) — decides whether it needs
-  handling of its own. Needs AC+DC V, leads open, RANGE twice. (#7)
-
 ## UT60BT and UT202BT
 
 - A first reading from each, named and under `auto` — the open sends 0x5F,
@@ -184,7 +178,6 @@ a later manual or UNI-T's word.
 [e25]: ../ut61eplus/reverse-engineered-protocol.md#25-mode-byte-values--vendor
 [e27]: ../ut61eplus/reverse-engineered-protocol.md#27-flag-bytes--vendor
 [s10]: reverse-engineered-protocol.md#10-cross-reference-with-community-sources-community
-[s22]: reverse-engineered-protocol.md#22-ut61-vs-ut161--vendor
 [s23]: reverse-engineered-protocol.md#23-secondary-display-frame--vendor--vendor-doc--manual
 [s3]: reverse-engineered-protocol.md#3-available-modes-per-model--manual--vendor--vendor-doc
 [s31]: reverse-engineered-protocol.md#31-function-dial-positions-and-cycle-rings--manual
