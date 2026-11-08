@@ -100,6 +100,9 @@ shortcuts-graph-cursors = カーソルの切り替え
 shortcuts-graph-mouse = グラフ (マウス)
 shortcuts-mouse-drag = 履歴を左右にスクロール
     .gesture = ドラッグ
+# On a laptop touchpad: two fingers moved left or right together.
+shortcuts-mouse-swipe = 履歴を左右にスクロール
+    .gesture = 2 本指でスワイプ
 # The box dragged out sets both the span of time and the range of values
 # shown.
 shortcuts-mouse-box-zoom = 境界ボックスにズーム (時間と値)

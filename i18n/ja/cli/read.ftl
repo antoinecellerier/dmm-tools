@@ -92,6 +92,18 @@ read-alarm-breach = { $breach } ({ $reading })
 # on without it. $error says why (lib-errors.ftl); $count is how many have
 # been skipped so far.
 read-unreadable-frame = { $error } (これまでに { $count } 件をスキップ)
+# After "Warning:". The cable or Bluetooth link to the meter dropped, and the
+# run keeps trying to open it again until it comes back or the user presses
+# Ctrl+C. $error says why (lib-errors.ftl).
+read-link-lost = マルチメーターとのリンクが切断されたため、再接続しています。終了するには Ctrl+C を押してください。原因: { $error }
+# After "Note:". The link is back and the readings resume.
+read-reconnected = 再接続しました。測定値の読み取りを再開します。
+# After "Warning:" and shared.ftl's several-cables: what lets a dropped link
+# reconnect. At the start of a run, or when a run waiting for its link gives up.
+read-several-cables-action = 切断後に再接続できるようにするには、このマルチメーターのケーブルだけを接続するか、--adapter でそのケーブルのパスを指定して、read をもう一度実行してください。
+# After "Warning:" and shared.ftl's waiting-for-own-cable, once while the run
+# waits for a dropped link: how to use the other cable instead.
+read-own-cable-action = 別のケーブルを使用するには、Ctrl+C を押してから read をもう一度実行してください。
 # After "Error:" (common.ftl), ending a --format replay run: a reading came
 # with no frame from the meter behind it, which a replay can't hold. $mode is
 # the reading's mode name (lib.ftl), e.g. DC V.

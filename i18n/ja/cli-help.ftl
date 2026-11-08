@@ -51,6 +51,9 @@ read--output =
 # dmm-cli read --count
 read--count =
     .help = 測定値の件数 (0 = 無制限: Ctrl+C、または --replay ファイルの終わりで停止)
+# dmm-cli read --no-reconnect
+read--no-reconnect =
+    .help = マルチメーターとのリンクが切断されたら、再接続せずに実行を終了する
 # dmm-cli read --integrate
 read--integrate =
     .help = 時間積分の累計を表示する (電流モードでは電荷、電圧では V·s)

@@ -207,6 +207,8 @@ mode-scr = SCR
 mode-scope = オシロスコープ
 # Used by: 9 meters
 mode-solar = ソーラー
+# Used by: UT171A/B/C
+mode-square-wave = 方形波
 # Used by: BM525s/BM521s, BM788BT/BM787BT, BM829s/BM827s/BM822s/BM821s, BM869s/BM867s
 mode-t1 = T1
 # Used by: BM525s/BM521s, BM788BT/BM787BT, BM829s/BM827s/BM822s/BM821s, BM869s/BM867s
@@ -435,6 +437,8 @@ aux-pf = PF
 aux-peak-min = ピーク最小
 # Used by: Mock UT61E+, UT181A
 aux-period = 周期
+# Used by: UT171A/B/C
+aux-pulse-width = パルス幅
 # Used by: UT181A, VC871
 aux-reference = 基準値
 # Used by: 9 meters
@@ -470,16 +474,66 @@ key-capacitance = 静電容量
 key-current = 電流
 # Used by: Mock ZT-5B, ZT-300AB, ZT-5566SE, ZT-5B, ZT-5BQ
 key-diode-continuity = ダイオード/導通
+# Used by: VC891, VC915
+key-hover-1-khz-low-pass-filter = 1 kHz ローパスフィルター
+# Used by: 121GW
+key-hover-capture-1-ms-peaks-in-ac = AC V で 1 ms のピークを取得する
+# Used by: OW67B, VC871
+key-hover-change-what-the-displays-show = ディスプレイの表示内容を切り替える
+# Used by: VC915, VC925 PV
+key-hover-compare-the-reading-with-the-set = 測定値を設定した制限値と比較する
+# Used by: CMS061, CMS101
+key-hover-enter-max-min-click-again-to = MAX/MIN モードにする (もう一度クリックで解除)
 
 ## Meter key hovers: how to do on the meter what a remote button does.
 ## Keep the meter's key names as it prints them.
 
 # Used by: 121GW
 key-hover-hold-the-meter-s-rel-key = マルチメーターの REL キーを長押しする (1 kHz ローパスフィルター)
+# Used by: CMS061, CMS101
+key-hover-measure-inrush-current-click-again-to = 突入電流を測定する (もう一度クリックで解除)
+# Used by: UT171A/B/C
+key-hover-peak-hold-in-ac-v-and = AC V と AC A でピークをホールドする (クリックで開始/解除)
 # Used by: OW18B/OW16B, OW18E
 key-hover-press-the-meter-s-hz-duty = マルチメーターの Hz/Duty△/ᛒ キーを短く押す
 # Used by: CM2100B
 key-hover-press-the-meter-s-zero-key = マルチメーターの ZERO/ᛒ キーを短く押す
+# Used by: OW18B/OW16B, OW18E
+key-hover-rel-in-ac-and-hz-steps = REL (AC と Hz では Hz/Duty を順に切り替える)
+# Used by: OW67B, OW69B, VC871, VC891, VC915, VC925 PV
+key-hover-read-a-4-20-ma-loop = 4-20 mA ループ電流をパーセントで読み取る
+# Used by: ZT-5566SE
+key-hover-record-maximum-and-minimum-readings = 最大値と最小値を記録する
+# Used by: UT171A/B/C
+key-hover-record-maximum-average-and-minimum-readings-2 = 最大値、平均値、最小値を記録する (クリックで切り替え、× で終了)
+# Used by: UT181A
+key-hover-record-maximum-average-and-minimum-readings = 最大値、平均値、最小値を記録する (× で終了)
+# Used by: VC-880, VC-890, VC650BT
+key-hover-record-maximum-minimum-and-average-readings = 最大値、最小値、平均値を記録する (クリックで切り替え、× で終了)
+# Used by: 121GW
+key-hover-record-minimum-maximum-and-average-readings = 最小値、最大値、平均値を記録する (クリックで切り替え、× で終了)
+# Used by: UT171A/B/C, UT181A
+key-hover-save-the-reading-to-the-meter = 測定値をマルチメーターのメモリに保存する
+# Used by: CMS061, CMS101
+key-hover-send-select-switches-v-dc-to = Select を送信する (V,DC から V,AC に切り替わる)
+# Used by: VC915
+key-hover-show-3-phase-rotation-direction = 3 相の相回転方向を表示する
+# Used by: VC915
+key-hover-show-vac-or-vdc-on-the = サブ表示部に VAC または VDC を表示する
+# Used by: 121GW
+key-hover-step-through-hold-and-autohold = HOLD と AutoHOLD を順に切り替える
+# Used by: VC915
+key-hover-swap-hz-pct-and-voltage = Hz/% と電圧を入れ替える
+# Used by: VC925 PV
+key-hover-swap-the-main-and-second-displays = メイン表示部とサブ表示部を入れ替える
+# Used by: OW69B
+key-hover-switch-the-low-pass-filter-on = ローパスフィルターをオン/オフする
+# Used by: UT171A/B/C
+key-hover-take-the-reading-as-the-reference = 現在の測定値を基準値にする (× で終了)
+# Used by: OW18B/OW16B, OW18E
+key-hover-toggle-the-backlight-and-an-ow18 = バックライトと OW18 のライトをオン/オフする
+# Used by: VC871, VC891, VC915, VC925 PV
+key-hover-zero-the-reading-to-exit = 測定値をゼロにする (× で終了)
 
 ## Model names with words in them: the simulated meters. Keep the part
 ## number as it is.

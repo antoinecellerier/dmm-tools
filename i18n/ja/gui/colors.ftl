@@ -115,6 +115,10 @@ colors-issue-low-contrast =
         [button] ボタンのテキストとボタン背景のコントラストが { $ratio }:1 で、下限の { $floor }:1 未満です
        *[text] テキストと背景のコントラストが { $ratio }:1 で、下限の { $floor }:1 未満です
     }
+# The theme's text on its frame, the surface of the top bar and Settings.
+colors-issue-frame-not-opaque = 枠上のテキストが不透明ではありません
+# As above, on the frame. $ratio and $floor are as above.
+colors-issue-frame-low-contrast = テキストと枠のコントラストが { $ratio }:1 で、下限の { $floor }:1 未満です
 # Another file in the folder gives its theme the same name. $name is the
 # name as the file has it, to put in your language's quotes; $file the
 # other file's name.

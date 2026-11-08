@@ -21,6 +21,11 @@ connect-needs-hardware = このコマンドには実際のハードウェアが�
 # mock_mode is the setting's name in the file. $error is the reason, in
 # English.
 connect-saved-mock-mode = 設定ファイルの mock_mode: { $error }
+# The settings file dmm-gui saves is there but broken, so the run goes on
+# without it. $error is the reason, in English, naming the file, e.g.
+# "cannot parse /home/me/.config/dmm-tools/settings.json: EOF while parsing
+# a string at line 1 column 22".
+connect-settings-unreadable = 設定ファイルを修正または削除するまで、保存された設定は無視されます: { $error }
 
 ## Which meter the run opens: under a failed open's first line, and at the
 ## top of 'info'.

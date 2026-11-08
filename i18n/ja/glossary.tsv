@@ -319,3 +319,16 @@ frame (a 6-byte frame)	6 バイト フレーム	n.	lib-errors	no approved source
 characteristic (Bluetooth LE)	キャラクタリスティック	n.	lib-errors	no approved source found	
 step (capture)	ステップ	n.	capture help	no approved source found	
 issue (GitHub)	Issue	n.	lib-errors error-wrong-meter-*, cli-help list-steps format, README	GitHub Docs ja «Issue では、バグレポート…» (docs.github.com/ja/issues), user ruling 2026-11-02	GitHub's own spelling, capitalised.
+thyristor	サイリスタ	n.	capture-need-scr	no approved source found	Not on MS-SG's exception list (p.36–39) and not in MS-T, so ruling 5 read literally gives «サイリスター». Kept as the electronics spelling, parallel to «トランジスタ». Provisional: the reviewer decides.
+counter for cables	本	counter	several-cables, connection-cables-at-open	no approved source found	«{ $count } 本» (STYLE §5); «個» reads wrong for a cable.
+this session / this run (of the program)	今回の実行	n.	dmm-gui--no-bluetooth, dmm-cli--no-bluetooth, command-line-device-intro, command-line-mock-mode-intro, capture-status-partly-verified-detail, capture-error-instructions-ids	no approved source found	«セッション» is a recorded or imported session only.
+flashlight (on an OW18)	ライト	n.	key-hover-toggle-the-backlight-and-an-ow18	no approved source found for «ライト»; MS-T flashlight => フラッシュライト	Alternative: «フラッシュライト».
+irradiance	日射強度	n.	capture-need-pv-adapter	no approved source found	
+reverse-engineered	リバース エンジニアリング	n.	capture-status-experimental	MS-T reverse engineering => リバース エンジニアリング	«リバース エンジニアリングで解析した».
+swipe	スワイプ	n.	shortcuts-mouse-swipe	MS-T swipe => スワイプ	Two-finger swipe → «2 本指でスワイプ».
+renderer	レンダラー	n.	dmm-gui--renderer	MS-T renderer => レンダラー	
+main display / second display (areas of one LCD)	メイン表示部 / サブ表示部	n.	key-hover-show-vac-or-vdc-on-the, key-hover-swap-the-main-and-second-displays	Sanwa PC7000 JP PDF p.6 “メイン表示部”, “サブ表示部”	The whole display stays «ディスプレイ».
+phase rotation (3-phase)	相回転	n.	key-hover-show-3-phase-rotation-direction	no approved source found (MS-T rotation => 回転 only)	Awaits a reviewer's confirmation.
+peak hold	ピークホールド	n.	table-crest-mode-instantaneous-peak-hold, key-hover-peak-hold-in-ac-v-and	KEW1062 JP PDF p.6 “4.3.18 ピークホールド機能”	As an action: «ピークをホールドする».
+core semantics (capture)	基本項目	n.	capture-core-confirmed, capture-core-not-confirmed	no approved source found	The en-US comment defines it as mode, range and flags. Read as «基本項目の読み取り», not «基本動作».
+automatic sweep (capture)	自動設定	n.	capture-drive-unreliable	no approved source found	The tool setting ranges and flags itself, as capture--no-drive says «自動で設定».

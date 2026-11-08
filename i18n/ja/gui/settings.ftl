@@ -224,3 +224,10 @@ settings-graph-lines-patterned = パターン
     .hover = サブ表示値の線を破線と点線にして、色に頼らずに区別する
 settings-graph-lines-solid = 実線
     .hover = サブ表示値の線を実線にして、色と凡例で区別する
+# The file could not be understood, so a copy of it was kept before it is
+# written over. $path is the copy's full path, e.g.
+# /home/ana/.config/dmm-tools/settings.json.bad.
+settings-load-failed-kept = 設定ファイルを読み取れなかったため、既定の設定を使用しています。元のファイルのコピーは { $path } に保存されています。
+# The file could not be opened at all. $path is its full path, e.g.
+# /home/ana/.config/dmm-tools/settings.json.
+settings-load-failed = 設定ファイル { $path } を読み取れなかったため、既定の設定を使用しています。

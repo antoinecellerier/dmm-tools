@@ -17,6 +17,9 @@ top-bar-imported-file = インポートしたファイル
 
 top-bar-connect = 接続
     .hover = 選択したマルチメーターへの USB 接続を開く ({ $keys })
+# In place of Connect while the meter is being opened: stops the attempt.
+top-bar-cancel = キャンセル
+    .hover = 接続を中止する ({ $keys })
 top-bar-disconnect = 切断
     .hover = マルチメーターとの接続を閉じる ({ $keys })
 # A button; ▶ and ⏸ are part of it.
@@ -36,6 +39,9 @@ top-bar-reconnecting-hover = 自動的に再接続しています。停止する
 top-bar-reconnecting-hover-error =
     自動的に再接続しています。停止するには [切断] をクリックしてください。
     最後のエラー: { $error }
+# After shared.ftl's waiting-for-own-cable. "Disconnect" and "Connect" are the
+# top bar's button.
+top-bar-own-cable-action = 別のケーブルを使用するには、[切断] をクリックしてから [接続] をクリックしてください。
 top-bar-stop-retrying = 切断
     .hover = 再試行をやめて接続を閉じる ({ $keys })
 
@@ -58,6 +64,10 @@ top-bar-status-link =
 # An imported file: $name is its meter, $file its file name.
 top-bar-status-file = { $name } · { $file }
 top-bar-disconnected = 切断済み
+# While the picked meter is being opened.
+top-bar-connecting = 接続中…
+# While Auto-detect asks the connected meter what it is.
+top-bar-detecting = 検出中…
 
 ## The status's hover: how the meter is connected, spelled out.
 ## $link is usb (a USB cable), adapter (a Bluetooth adapter plugged into the

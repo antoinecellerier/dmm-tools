@@ -93,6 +93,26 @@ connection-no-response =
 connection-no-response-auto =
     マルチメーターのデータ転送をオンにするか、[設定] (⚙) で
     機種を選択してください。
+# The meter answered, but with data that could not be read: a corrupt
+# frame, or a mode this tool does not know. The error itself follows.
+connection-bad-data = マルチメーターから読み取れないデータが届きました
+# A toast once connected, when other cables were there to open and the session
+# took the first, with --adapter a command-line option kept as it is. $count is
+# 2 or more.
+connection-cables-at-open = 使用できる USB ケーブルが { $count } 本接続されています。最初に見つかったケーブルを使用しています。別のケーブルを選択するには、--adapter を指定してください。
+# Follows connection-cables-at-open when nothing tells those cables apart.
+connection-cables-no-reconnect = これらのケーブルは区別できません。--adapter でケーブルのパスを指定しない限り、リンクが切断されるとそのまま接続が終了します。
+# A dropped link that was not reconnected. shared.ftl's several-cables
+# follows, then connection-several-cables-action. "Connect" is the top bar's
+# button.
+connection-several-cables = リンクが切断されました
+connection-several-cables-action = このマルチメーターのケーブルだけを接続した状態で、[接続] をクリックしてください。
+# A toast, when that notice ends a running recording. What it holds can still
+# be exported.
+connection-several-cables-recording = リンクが切断され、このマルチメーターの USB ケーブルをほかのケーブルと区別できないため、記録を停止しました。
+# Any other failure to connect or to keep reading. The error itself
+# follows, then connection-click-connect.
+connection-failed = 接続できませんでした
 
 # A meter that stopped answering in the middle of a session. $title is the
 # shared notice title, "No response from meter".

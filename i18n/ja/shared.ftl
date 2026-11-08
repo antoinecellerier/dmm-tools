@@ -105,6 +105,16 @@ no-meter-answered = 応答したマルチメーターはありません
 # The meter picked or found has stopped answering. A notice title in the
 # GUI; dmm-cli starts a sentence with it (cli/connect.ftl).
 no-response = マルチメーターから応答がありません
+# Why a dropped link is not reconnected. $count (2 or more) USB cables the
+# open could take are plugged in, with no serial number of their own to tell
+# them apart. Each binary follows it with what to do.
+several-cables = 使用できる USB ケーブルが { $count } 本接続されていますが、区別できません。再接続すると、別のマルチメーターに接続してしまうおそれがあります。
+# While a dropped link is being reopened: its cable has gone and another is
+# plugged in. Each binary follows it with how to use that other cable.
+waiting-for-own-cable = 別の USB ケーブルが接続されていますが、元のケーブルが接続されるのを待っています。
+# Under a reading the meter shows on its own screen only, its frames carrying
+# none: a CMS or UT217's oscilloscope mode.
+screen-only-reading = オシロスコープの測定値はマルチメーターのディスプレイでご確認ください。
 # The GUI checkbox that lets a connection search over Bluetooth. The CLI
 # reads the same setting, so its help names the checkbox too.
 bluetooth-setting = Bluetooth デバイスを探す
