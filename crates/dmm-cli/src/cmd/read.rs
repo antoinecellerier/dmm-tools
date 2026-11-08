@@ -1728,6 +1728,12 @@ mod tests {
         assert!(written.is_some(), "the run opened its file and closed it");
     }
 
+    /// The rows holding the mock meter's reading. Matches the whole CSV field:
+    /// a bare `5.209` also turns up in a timestamp like `20:48:55.209881500`.
+    fn readings_in(csv: &str) -> usize {
+        csv.matches(",5.209,").count()
+    }
+
     /// A link that drops is let go of, reopened, and read from again: the run
     /// carries on with the new meter's readings and ends as it would have.
     #[test]
@@ -1750,7 +1756,7 @@ mod tests {
         let stop = Arc::new(AtomicBool::new(false));
         let csv = read_through_drops(dmm, 2, stop, Some(reopen)).unwrap();
         assert_eq!(reopens.get(), 1);
-        assert_eq!(csv.matches("5.209").count(), 2, "{csv}");
+        assert_eq!(readings_in(&csv), 2, "{csv}");
     }
 
     /// Ctrl+C while the link is down ends the run cleanly, with the readings
@@ -1767,6 +1773,6 @@ mod tests {
             }
         });
         let csv = read_through_drops(dmm, 2, stop, Some(reopen)).unwrap();
-        assert_eq!(csv.matches("5.209").count(), 1, "{csv}");
+        assert_eq!(readings_in(&csv), 1, "{csv}");
     }
 }
