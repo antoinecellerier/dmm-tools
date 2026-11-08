@@ -280,8 +280,8 @@ and each still wants a capture of our own.
   (§10.8) — decides whether a client may skip it. Needs an OW67B/69B or a
   VC871/891/915/925.
 - The CMS's MaxMin sub-value against the LCD's Max and Min, and what sets MAX
-  or MIN: F1 set either (§9.4) — settles the sub-value's label, "Max" today and
-  the mode's name under MIN. Needs `maxmin` twice, the LCD's three values noted. (#45)
+  or MIN: F1 set either (§9.4) — settles the sub-value's label, "Max" under MAX
+  and "Min" under MIN. Needs `maxmin` twice, the LCD's three values noted. (#45)
 - The CMS's Hz/A sub-value with a current in the jaws: AC A read 0 in every
   frame so far (§9.4) — confirms its scale. Needs `aca_hz` clamped around a
   conductor carrying AC. (#45)

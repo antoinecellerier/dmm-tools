@@ -383,7 +383,8 @@ const PEAK_MODE: &str = "Peak {mode}";
 /// The sub-display (spec §10.2-10.5, §10.7). On the VC871 under REL, MAX or
 /// MIN it shows the main display's function, with its own prefix and
 /// point: the reference under REL and the live reading under MAX/MIN (spec
-/// §9.4). A CMS's under MAX is the running maximum of its live main reading.
+/// §9.4). A CMS's under MAX is the running maximum of its live main reading;
+/// under MIN it held the lowest reading in the one entry seen (#45).
 fn sub_value(
     p: &[u8],
     main_function: u8,
@@ -406,6 +407,9 @@ fn sub_value(
         // The running maximum beside a live main reading (spec §9.4).
         _ if model.cms_readings && function == main_function && status & u32::from(MAX) != 0 => {
             Cow::Borrowed("Max")
+        }
+        _ if model.cms_readings && function == main_function && status & u32::from(MIN) != 0 => {
+            Cow::Borrowed("Min")
         }
         // AC+DC V with its DC or AC part (spec §10.5).
         Some(_) if main_function == code::AC_DC_V && function == function::DC_V => {
@@ -950,8 +954,21 @@ pub(crate) mod tests {
             assert_eq!(aux.label, "Max");
             assert_eq!(aux.display_raw.as_deref(), Some("-39.19"));
         }
+        // Under MIN it stayed at 28.61 V as the reading rose to 28.66 V.
+        let min = [
+            0x22, 0x10, 0xF0, 0x32, 0x0B, 0, 0x22, 0x10, 0xF0, 0x2D, 0x0B, 0, 0x10, 0, 0,
+        ];
+        for model in [&CMS061, &CMS101] {
+            let m = quiet(&min, model);
+            assert_eq!(m.display_raw.as_deref(), Some("28.66"));
+            assert!(m.flags.min);
+            let aux = &m.aux_values[0];
+            assert_eq!(aux.label, "Min");
+            assert_eq!(aux.display_raw.as_deref(), Some("28.61"));
+        }
         // Another meter's sub-display keeps its function's name.
         assert_eq!(quiet(&p, &OW69B).aux_values[0].label, "DC V");
+        assert_eq!(quiet(&min, &OW69B).aux_values[0].label, "DC V");
         // A sub word of another function isn't the main reading's maximum.
         let hz = frame(g24(0, 4, 2, true), 3919, g24(6, 4, 2, false), 100, 0x20);
         assert_eq!(quiet(&hz, &CMS061).aux_values[0].label, "Hz");

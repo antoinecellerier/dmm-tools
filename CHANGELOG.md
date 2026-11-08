@@ -83,7 +83,7 @@
 - **Turning LIVE off in dmm-gui freezes the graph where it was** — it jumped to the session's start, or to an earlier view.
 - **A dmm-gui replay shows no remote buttons or dropdowns** — every click was refused.
 - **The EEVblog 121GW's min/max button stays lit in AVG, with its ×** — it went dark, and leaving meant going to the meter.
-- **CMS and UT217 MaxMin labels its second reading Max** — it carried the mode's name, such as `DC V`.
+- **CMS and UT217 MaxMin labels its second reading Max or Min** — it carried the mode's name, such as `DC V`.
 - **The UT803 shows hFE, and frequency as Hz whatever its alt bit says** — it showed ADP, and RPM.
 - **The UT8803 and UT8802 show hFE with its unit, β**
 - **The UT803 shows low battery, MAX and MIN** — a low battery raised an unrecognised-data warning.

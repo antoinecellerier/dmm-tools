@@ -425,7 +425,7 @@ aux-lpf-v = LPF V
 aux-live = Live
 # Used by: CMS061, CMS101, UT181A
 aux-max = Max
-# Used by: UT181A
+# Used by: CMS061, CMS101, UT181A
 aux-min = Min
 # Used by: 9 meters
 aux-motor = Motor
