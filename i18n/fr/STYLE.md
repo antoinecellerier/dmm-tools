@@ -196,3 +196,16 @@ Fluent can't tell you the gender or number of what a placeable holds. So build s
 | échantillon (colour swatch) | — (the swatches are named, not called swatches) | «échantillon» is taken by sample |
 | CC / CA | DC / AC as printed | consistency with the mode labels (§6) |
 | il faut, on, il y a | vous + verb | MS-SG p.10 |
+
+## 14. How French differs from English
+
+The patterns of English that a native review of this translation corrected most often, as principles for any new text.
+
+1. French does not tolerate English ellipsis: give a fragment the subject, verb, object or head noun it implies, put a verb after « pour » where English stops, and repeat a verb rather than coordinate a noun with a clause.
+2. Take each preposition from the French word that governs it, never from English with, via, from, in or on; often the English preposition has to become a verb phrase.
+3. A pronoun, demonstrative, possessive, participle or relative must attach clearly to a nearby noun; where English "that" or "it" has no noun to point to, name the thing.
+4. State the real logical link between clauses instead of carrying over ", and", "then" or a comma list: mais for a conflict, ou à défaut for a fallback, soit…soit for exclusive causes, and one consequence connector per sentence.
+5. Things, values, keys and buttons cannot act as freely as in English: where the subject could not really do the verb, make the device, the person or the instruction the subject («Utilisez X pour…»).
+6. Choose the verb for what it means with this subject, not the English word's nearest match; English's generic have, name, mean, given and back to usually need a more specific French verb.
+7. Unpack noun chains and stacked modifiers into a verb or relative clause, and split long run-on clauses at a colon or a new sentence.
+8. Put a condition, time or scope before the action it qualifies, or right beside it, rather than trailing it in English order.

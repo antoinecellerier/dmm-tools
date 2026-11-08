@@ -239,3 +239,16 @@ Fluent can't tell you the gender or number of what a placeable holds, and Spanis
 | sobre (envelope) | envolvente | MS-T's is postal |
 | le (direct object, leísmo) | lo | MS-SG-MX PDF p.32 |
 | cantase (-se subjunctive) | cantara | MS-SG-MX PDF p.37 |
+
+## 14. How Spanish differs from English
+
+The patterns of English that a native review of this translation corrected most often, as principles for any new text.
+
+1. A noun that modifies another noun is linked to it with a preposition, usually «de»; English's bare noun-plus-noun, and a bare noun followed by its value, read as notation.
+2. Translate what an English preposition, phrasal verb or spatial image means, not its words; say the actual state or relation, with the verb and preposition Spanish pairs for it, rather than where something "sits", "reaches" or "goes back to".
+3. Spanish does not take English's compression: fill in the noun, object, article or conditional clause English leaves out («Si no se define» for "Unset,"), and report a fault with a verb, not with a bare «sin…» phrase.
+4. Keep each adjective or participle next to the noun it modifies; when one would land at the end of a long noun chain or list, move it forward or recast the phrase so it doesn't dangle.
+5. Make the subject whatever really does the action: a quantity, an accessory, a gerund-like action noun or a property can't "show", "be" or "add" as it can in English; use «con/para…», an infinitive, or an imperative.
+6. Don't stack parallel phrases: break up chains of three or more «de» with another preposition or a clause, and fold two time phrases on one verb into one.
+7. Read the result for a second meaning English doesn't have: an imperative identical to a third-person verb, a pronoun whose nearest antecedent is the wrong noun, a verb-preposition pair or adjective with another sense.
+8. Avoid repeating a word or its root within a clause; use a pronoun, drop it, or vary the wording.

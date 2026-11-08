@@ -242,3 +242,16 @@ When no system font draws Japanese, the GUI shows `settings-language-no-japanese
 | ℃, ℉, μ (U+03BC) | °C, °F, µ (U+00B5) | the app's own unit text; spec check |
 | 2,000 / 万 grouping | 2000 | spec check; consistency with readings |
 | full-width Latin and digits (ＯＬ, ３) | half-width | MS-SG p.18, p.22 |
+
+## 15. How Japanese differs from English
+
+The patterns of English that a native review of this translation corrected most often, as principles for any new text.
+
+1. English prepositions (on, at, in, of, per) name a relation loosely; do not map them to 上で, に, にある or あたり. State the actual relation with a verb or a Japanese frame.
+2. Drop English's small pointing and emphasis words (own, itself, there, then, that, already). Japanese leaves what is clear unsaid; where the word carries meaning, state that meaning directly.
+3. Build detail into the sentence instead of appending it: what English adds in parentheses, after a dash or in a follow-up sentence becomes a modifier before the noun or a linked clause.
+4. Turn noun phrases into verb clauses. Chains joined by の or への and nominalised actions read stiff; a 「～を～する」 clause or a relative clause reads natural.
+5. Check that the subject can do what the predicate says. English lets a thing stand for its owner (a code "sends frames", a value "is partial"); Japanese names the real actor.
+6. Do not link clauses with a colon or end one clipped. Write out the condition or the verb: 「～場合は」, 「～すると」, 「～を指定する」.
+7. Put place and means first and the object right before the verb. "Use X to do Y" becomes 「X で Y する」, naming the real action instead of 使用する; a contrast comes before the point (A ではなく B).
+8. A modifier attaches to the nearest thing it can: reorder or split whenever it could reach the wrong noun, or a purpose like 「～には」 could extend over a later clause.
