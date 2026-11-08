@@ -38,6 +38,7 @@ const GUI: &[Resource] = &[
     dmm_shared::ftl!("fr", "gui/alarm-scale.ftl"),
     dmm_shared::ftl!("fr", "gui/specs-remote.ftl"),
     dmm_shared::ftl!("fr", "gui/desktop.ftl"),
+    dmm_shared::ftl!("fr", "gui/command-line.ftl"),
     dmm_shared::ftl!("pt-BR", "gui/top-bar.ftl"),
     dmm_shared::ftl!("pt-BR", "gui/connection.ftl"),
     dmm_shared::ftl!("pt-BR", "gui/settings.ftl"),
@@ -51,6 +52,7 @@ const GUI: &[Resource] = &[
     dmm_shared::ftl!("pt-BR", "gui/alarm-scale.ftl"),
     dmm_shared::ftl!("pt-BR", "gui/specs-remote.ftl"),
     dmm_shared::ftl!("pt-BR", "gui/desktop.ftl"),
+    dmm_shared::ftl!("pt-BR", "gui/command-line.ftl"),
     dmm_shared::ftl!("zh-CN", "gui/top-bar.ftl"),
     dmm_shared::ftl!("zh-CN", "gui/connection.ftl"),
     dmm_shared::ftl!("zh-CN", "gui/settings.ftl"),
@@ -64,6 +66,7 @@ const GUI: &[Resource] = &[
     dmm_shared::ftl!("zh-CN", "gui/alarm-scale.ftl"),
     dmm_shared::ftl!("zh-CN", "gui/specs-remote.ftl"),
     dmm_shared::ftl!("zh-CN", "gui/desktop.ftl"),
+    dmm_shared::ftl!("zh-CN", "gui/command-line.ftl"),
     dmm_shared::ftl!("es", "gui/top-bar.ftl"),
     dmm_shared::ftl!("es", "gui/connection.ftl"),
     dmm_shared::ftl!("es", "gui/settings.ftl"),
@@ -77,6 +80,7 @@ const GUI: &[Resource] = &[
     dmm_shared::ftl!("es", "gui/alarm-scale.ftl"),
     dmm_shared::ftl!("es", "gui/specs-remote.ftl"),
     dmm_shared::ftl!("es", "gui/desktop.ftl"),
+    dmm_shared::ftl!("es", "gui/command-line.ftl"),
     dmm_shared::ftl!("ja", "gui/top-bar.ftl"),
     dmm_shared::ftl!("ja", "gui/connection.ftl"),
     dmm_shared::ftl!("ja", "gui/settings.ftl"),
@@ -90,12 +94,20 @@ const GUI: &[Resource] = &[
     dmm_shared::ftl!("ja", "gui/alarm-scale.ftl"),
     dmm_shared::ftl!("ja", "gui/specs-remote.ftl"),
     dmm_shared::ftl!("ja", "gui/desktop.ftl"),
+    dmm_shared::ftl!("ja", "gui/command-line.ftl"),
 ];
 
 /// What each option does, as `--help` says it: generated from the doc
 /// comments in `main.rs` by the `gui_help_ftl` test, so the ID scan leaves
 /// it out of its unused check, as it does `lib.ftl`.
-const GUI_HELP: &[Resource] = &[dmm_shared::ftl!("en-US", "gui-help.ftl")];
+const GUI_HELP: &[Resource] = &[
+    dmm_shared::ftl!("en-US", "gui-help.ftl"),
+    dmm_shared::ftl!("fr", "gui-help.ftl"),
+    dmm_shared::ftl!("pt-BR", "gui-help.ftl"),
+    dmm_shared::ftl!("zh-CN", "gui-help.ftl"),
+    dmm_shared::ftl!("es", "gui-help.ftl"),
+    dmm_shared::ftl!("ja", "gui-help.ftl"),
+];
 
 /// Everything the GUI shows: the shared help, the library's text and
 /// errors, its own messages and its `--help`.

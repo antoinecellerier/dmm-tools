@@ -75,6 +75,7 @@ const CLI: &[Resource] = &[
     dmm_shared::ftl!("ja", "cli/debug.ftl"),
     dmm_shared::ftl!("ja", "cli/command.ftl"),
     dmm_shared::ftl!("ja", "cli/settings.ftl"),
+    dmm_shared::ftl!("ja", "cli/capture.ftl"),
     dmm_shared::ftl!("ja", "cli/help.ftl"),
 ];
 
