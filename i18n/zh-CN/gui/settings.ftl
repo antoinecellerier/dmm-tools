@@ -230,3 +230,10 @@ settings-graph-lines-patterned = 虚线
     .hover = 副读数曲线用虚线和点线绘制，无需靠颜色区分
 settings-graph-lines-solid = 实线
     .hover = 连续的线条，靠颜色和图例区分
+# The file could not be understood, so a copy of it was kept before it is
+# written over. $path is the copy's full path, e.g.
+# /home/ana/.config/dmm-tools/settings.json.bad.
+settings-load-failed-kept = 无法读取设置文件，已改用默认设置。已将该文件的副本保存为 { $path }。
+# The file could not be opened at all. $path is its full path, e.g.
+# /home/ana/.config/dmm-tools/settings.json.
+settings-load-failed = 无法读取设置文件 { $path }，已改用默认设置。

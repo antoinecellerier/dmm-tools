@@ -94,6 +94,29 @@ connection-no-response-auto =
     打开万用表的数据传输，
     或在“设置”(⚙) 中选择型号。
 
+# The meter answered, but with data that could not be read: a corrupt
+# frame, or a mode this tool does not know. The error itself follows.
+connection-bad-data = 万用表发送的数据无法读取
+# A toast once connected, when other cables were there to open and the session
+# took the first, with --adapter a command-line option kept as it is. $count is
+# 2 or more.
+connection-cables-at-open =
+    { $count ->
+       *[other] 检测到 { $count } 根可供本次会话打开的 USB 连接线，已打开最先找到的一根。可通过 --adapter 选择其他连接线。
+    }
+# Follows connection-cables-at-open when nothing tells those cables apart.
+connection-cables-no-reconnect = 这些连接线无法相互区分，除非用 --adapter 指定连接线的路径，否则连接断开后本次会话将结束。
+# A dropped link that was not reconnected. shared.ftl's several-cables
+# follows, then connection-several-cables-action. "Connect" is the top bar's
+# button.
+connection-several-cables = 连接已断开
+connection-several-cables-action = 只保留这台万用表的连接线，拔下其他连接线，然后单击“连接”。
+# A toast, when that notice ends a running recording. What it holds can still
+# be exported.
+connection-several-cables-recording = 记录已停止: 连接已断开，且无法将这台万用表的 USB 连接线与其他连接线区分开
+# Any other failure to connect or to keep reading. The error itself
+# follows, then connection-click-connect.
+connection-failed = 连接失败
 # A meter that stopped answering in the middle of a session. $title is the
 # shared notice title, "No response from meter".
 connection-no-response-check = { $title }，请检查设备选择和数据传输

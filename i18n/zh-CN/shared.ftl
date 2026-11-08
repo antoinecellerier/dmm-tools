@@ -106,6 +106,19 @@ no-meter-answered = 没有万用表响应
 # The meter picked or found has stopped answering. A notice title in the
 # GUI; dmm-cli starts a sentence with it (cli/connect.ftl).
 no-response = 万用表没有响应
+# Why a dropped link is not reconnected. $count (2 or more) USB cables the
+# open could take are plugged in, with no serial number of their own to tell
+# them apart. Each binary follows it with what to do.
+several-cables =
+    { $count ->
+       *[other] 检测到 { $count } 根可供本次会话打开的 USB 连接线，它们无法相互区分。重新连接时可能会打开其他万用表的连接线。
+    }
+# While a dropped link is being reopened: its cable has gone and another is
+# plugged in. Each binary follows it with how to use that other cable.
+waiting-for-own-cable = 已插入另一根 USB 连接线，但本次会话正在等待原先打开的连接线。
+# Under a reading the meter shows on its own screen only, its frames carrying
+# none: a CMS or UT217's oscilloscope mode.
+screen-only-reading = 请在万用表显示屏上查看示波器读数
 # The GUI checkbox that lets a connection search over Bluetooth. The CLI
 # reads the same setting, so its help names the checkbox too.
 bluetooth-setting = 查找蓝牙设备

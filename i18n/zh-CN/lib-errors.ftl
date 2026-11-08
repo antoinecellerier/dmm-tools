@@ -93,6 +93,8 @@ error-bluetooth-only-switched-off = 万用表 { $model } 只能通过蓝牙连�
 error-bluetooth-only-not-built = 万用表 { $model } 只能通过蓝牙连接，而此版本不支持蓝牙
 # $model is the meter, e.g. UNI-T UT60BT.
 error-bluetooth-only-usb-adapter = 万用表 { $model } 只能通过蓝牙连接，而 --adapter 指定的是 USB 设备: 请用 --adapter 指定该万用表的蓝牙地址，或去掉 --adapter
+# Opening the meter was stopped part-way, by Disconnect or by quitting.
+error-cancelled = 已取消连接万用表
 
 ## Refused before it was sent: the meter, the link or the dial position
 ## cannot do it. After "unsupported command:". $setting is a setting's
@@ -172,6 +174,8 @@ error-rejected-switch-did-nothing = { $setting } { $target } 没有任何作用�
 # below, or a setting's name and a state.
 error-rejected-by-meter = 万用表拒绝了 { $sent }
 error-rejected-zero-needs-capacitance = ZERO 只能在电容模式下使用
+error-rejected-rel-needs-reading = 显示屏上有数值时才能使用 REL
+error-rejected-rel-is-on = REL 已开启；请先退出 REL
 # $code is a number, $model and $opened are meters (e.g. OWON B41T+), $id a
 # meter's ID as --device takes it. "Auto-detect" is the GUI's Device
 # choice.

@@ -121,6 +121,10 @@ colors-issue-low-contrast =
         [button] 按钮文字的对比度为 { $ratio }:1，低于 { $floor }:1 的下限
        *[text] 背景上的文字对比度为 { $ratio }:1，低于 { $floor }:1 的下限
     }
+# The theme's text on its frame, the surface of the top bar and Settings.
+colors-issue-frame-not-opaque = 框架上的文字颜色不是完全不透明
+# As above, on the frame. $ratio and $floor are as above.
+colors-issue-frame-low-contrast = 框架上的文字对比度为 { $ratio }:1，低于 { $floor }:1 的下限
 # Another file in the folder gives its theme the same name. $name is the
 # name as the file has it, to put in your language's quotes; $file the
 # other file's name.

@@ -207,6 +207,8 @@ mode-scr = SCR
 mode-scope = 示波器
 # Used by: 9 meters
 mode-solar = 太阳能
+# Used by: UT171A/B/C
+mode-square-wave = 方波
 # Used by: BM525s/BM521s, BM788BT/BM787BT, BM829s/BM827s/BM822s/BM821s, BM869s/BM867s
 mode-t1 = T1
 # Used by: BM525s/BM521s, BM788BT/BM787BT, BM829s/BM827s/BM822s/BM821s, BM869s/BM867s
@@ -435,6 +437,8 @@ aux-pf = PF
 aux-peak-min = 峰值最小
 # Used by: Mock UT61E+, UT181A
 aux-period = 周期
+# Used by: UT171A/B/C
+aux-pulse-width = 脉冲宽度
 # Used by: UT181A, VC871
 aux-reference = 参考值
 # Used by: 9 meters
@@ -474,12 +478,62 @@ key-diode-continuity = 二极管/通断
 ## Meter key hovers: how to do on the meter what a remote button does.
 ## Keep the meter's key names as it prints them.
 
+# Used by: VC891, VC915
+key-hover-1-khz-low-pass-filter = 1 kHz 低通滤波
+# Used by: 121GW
+key-hover-capture-1-ms-peaks-in-ac = 在 AC V 模式下捕捉 1 ms 峰值
+# Used by: OW67B, VC871
+key-hover-change-what-the-displays-show = 切换显示屏的内容
+# Used by: VC915, VC925 PV
+key-hover-compare-the-reading-with-the-set = 将读数与设定的上下限比较
+# Used by: CMS061, CMS101
+key-hover-enter-max-min-click-again-to = 进入 MAX/MIN，再次单击退出
 # Used by: 121GW
 key-hover-hold-the-meter-s-rel-key = 长按万用表的 REL 键 (1 kHz 低通滤波)
+# Used by: CMS061, CMS101
+key-hover-measure-inrush-current-click-again-to = 测量浪涌电流，再次单击退出
+# Used by: UT171A/B/C
+key-hover-peak-hold-in-ac-v-and = AC V 和 AC A 模式下的峰值保持: 单击进入或退出
 # Used by: OW18B/OW16B, OW18E
 key-hover-press-the-meter-s-hz-duty = 短按万用表的 Hz/Duty△/ᛒ 键
 # Used by: CM2100B
 key-hover-press-the-meter-s-zero-key = 短按万用表的 ZERO/ᛒ 键
+# Used by: OW18B/OW16B, OW18E
+key-hover-rel-in-ac-and-hz-steps = 执行 REL，在 AC 和 Hz 模式下改为切换 Hz/Duty
+# Used by: OW67B, OW69B, VC871, VC891, VC915, VC925 PV
+key-hover-read-a-4-20-ma-loop = 以百分比读取 4-20 mA 环路电流
+# Used by: ZT-5566SE
+key-hover-record-maximum-and-minimum-readings = 记录最大值和最小值
+# Used by: UT171A/B/C
+key-hover-record-maximum-average-and-minimum-readings-2 = 记录最大值、平均值和最小值: 单击循环切换，单击 × 退出
+# Used by: UT181A
+key-hover-record-maximum-average-and-minimum-readings = 记录最大值、平均值和最小值: 单击 × 退出
+# Used by: VC-880, VC-890, VC650BT
+key-hover-record-maximum-minimum-and-average-readings = 记录最大值、最小值和平均值: 单击循环切换，单击 × 退出
+# Used by: 121GW
+key-hover-record-minimum-maximum-and-average-readings = 记录最小值、最大值和平均值: 单击循环切换，单击 × 退出
+# Used by: UT171A/B/C, UT181A
+key-hover-save-the-reading-to-the-meter = 将读数保存到万用表的存储器
+# Used by: CMS061, CMS101
+key-hover-send-select-switches-v-dc-to = 发送 Select 键，将 V,DC 切换为 V,AC
+# Used by: VC915
+key-hover-show-3-phase-rotation-direction = 显示三相相序
+# Used by: VC915
+key-hover-show-vac-or-vdc-on-the = 在副显示屏上显示 VAC 或 VDC
+# Used by: 121GW
+key-hover-step-through-hold-and-autohold = 在 HOLD 和 AutoHOLD 之间循环切换
+# Used by: VC915
+key-hover-swap-hz-pct-and-voltage = 交换 Hz/% 和电压的显示位置
+# Used by: VC925 PV
+key-hover-swap-the-main-and-second-displays = 交换主显示屏和副显示屏的内容
+# Used by: OW69B
+key-hover-switch-the-low-pass-filter-on = 开启或关闭低通滤波器
+# Used by: UT171A/B/C
+key-hover-take-the-reading-as-the-reference = 将当前读数作为参考值: 单击 × 退出
+# Used by: OW18B/OW16B, OW18E
+key-hover-toggle-the-backlight-and-an-ow18 = 开启/关闭背光和 OW18 的手电筒
+# Used by: VC871, VC891, VC915, VC925 PV
+key-hover-zero-the-reading-to-exit = 将读数清零: 单击 × 退出
 
 ## Model names with words in them: the simulated meters. Keep the part
 ## number as it is.

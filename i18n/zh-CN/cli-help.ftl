@@ -51,6 +51,9 @@ read--output =
 # dmm-cli read --count
 read--count =
     .help = 读数个数 (0 = 不限: 按 Ctrl+C 停止，或到 --replay 文件结束)
+# dmm-cli read --no-reconnect
+read--no-reconnect =
+    .help = 与万用表的连接断开时结束运行，不重新连接
 # dmm-cli read --integrate
 read--integrate =
     .help = 显示累积的时间积分 (电流模式为电荷量，电压为 V·s)

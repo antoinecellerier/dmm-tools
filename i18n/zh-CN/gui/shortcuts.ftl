@@ -100,6 +100,9 @@ shortcuts-graph-cursors = 显示/隐藏光标
 shortcuts-graph-mouse = 图表 (鼠标)
 shortcuts-mouse-drag = 在历史数据中向左/向右平移
     .gesture = 拖动
+# On a laptop touchpad: two fingers moved left or right together.
+shortcuts-mouse-swipe = 在历史数据中向左/向右平移
+    .gesture = 双指滑动
 # The box dragged out sets both the span of time and the range of values
 # shown.
 shortcuts-mouse-box-zoom = 框选缩放 (时间和数值)

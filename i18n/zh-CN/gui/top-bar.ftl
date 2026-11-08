@@ -17,6 +17,9 @@ top-bar-imported-file = 导入的文件
 
 top-bar-connect = 连接
     .hover = 打开到所选万用表的 USB 连接 ({ $keys })
+# In place of Connect while the meter is being opened: stops the attempt.
+top-bar-cancel = 取消
+    .hover = 停止连接 ({ $keys })
 top-bar-disconnect = 断开连接
     .hover = 关闭当前的万用表连接 ({ $keys })
 # A button; ▶ and ⏸ are part of it.
@@ -36,6 +39,9 @@ top-bar-reconnecting-hover = 正在自动重试连接，单击“断开连接”
 top-bar-reconnecting-hover-error =
     正在自动重试连接，单击“断开连接”可停止。
     上次错误: { $error }
+# After shared.ftl's waiting-for-own-cable. "Disconnect" and "Connect" are the
+# top bar's button.
+top-bar-own-cable-action = 要使用另一根连接线，请单击“断开连接”，再单击“连接”。
 top-bar-stop-retrying = 断开连接
     .hover = 停止重试并关闭连接 ({ $keys })
 
@@ -58,6 +64,10 @@ top-bar-status-link =
 # An imported file: $name is its meter, $file its file name.
 top-bar-status-file = { $name } · { $file }
 top-bar-disconnected = 已断开连接
+# While the picked meter is being opened.
+top-bar-connecting = 正在连接…
+# While Auto-detect asks the connected meter what it is.
+top-bar-detecting = 正在检测…
 
 ## The status's hover: how the meter is connected, spelled out.
 ## $link is usb (a USB cable), adapter (a Bluetooth adapter plugged into the

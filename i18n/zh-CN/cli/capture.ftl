@@ -55,6 +55,12 @@ capture-status-experimental-detail = 请尽量多完成一些步骤，并分享�
 ## A report from an earlier run is already in the file: resume it, start
 ## again or stop. Each prompt waits for one key, after a space.
 
+# Yellow and bold, after the status banner.
+capture-other-model = 万用表报告的型号是 { $named }，不是本次运行打开的 { $opened }。
+capture-other-model-detail = 如果继续，将使用 { $opened } 的步骤和遥控按键。
+# $yes and $no are the keys that answer: y and n. Any other key quits.
+capture-other-model-confirm = 仍要按 { $opened } 的步骤捕获吗? { $yes }/{ $no }:
+capture-other-model-rerun = 请使用 --device { $id } 重新运行捕获。
 # $path is the report file. $captured and $skipped count its steps.
 capture-found-existing = 找到已有的捕获: { $path } (已捕获 { $captured } 个，已跳过 { $skipped } 个)
 # $resume, $fresh and $abort are the keys that answer: r, n and q.
@@ -116,6 +122,20 @@ capture-already-captured = { $step } 已捕获，跳过
 # Dim, once the tool has waited a while. $skip and $quit are the keys: s and
 # q.
 capture-press-enter = 万用表就绪后按 Enter ({ $skip }=跳过，{ $quit }=结束)
+# Dim, on a single line the run keeps rewriting while it waits for the meter.
+# $reading is the latest reading (5.5687 V [AUTO]); $frame counts the meter's
+# replies so far.
+capture-progress-watching = 正在监测万用表 · { $reading } · 第 { $frame } 帧
+# Dim, on that same line while a step's readings are taken: $done of $total
+# ("reading 4 of 12"), and $reading the latest one.
+capture-progress-reading = 第 { $done }/{ $total } 个读数 · { $reading }
+# Dim: a step that presses a button on the meter by remote control holds it
+# until the meter shows the state the instruction asks for. $skip and $quit
+# are the keys: s and q.
+capture-wait-start = 按照上述说明设置万用表，就绪后自动发送按键 (Enter=立即发送，{ $skip }=跳过，{ $quit }=结束)
+# Dim: the meter left the state the step starts from just before the key
+# went out, so the step waits for it again.
+capture-wait-moved = 发送按键前，万用表已离开此步骤的起始状态，正在等待其恢复
 # When the terminal can't be read key by key. $skip and $quit are the keys:
 # s and q.
 capture-any-key = 任意键=捕获，{ $skip }=跳过，{ $quit }=结束:
@@ -126,6 +146,11 @@ capture-command-failed = 命令失败: { $error }
 # meter didn't change. $command is the button's name as the tool sends it,
 # e.g. hold; $reading what the meter shows, e.g. 5.5687 V [AUTO].
 capture-did-nothing-shows = { $command } 没有效果；万用表仍显示 { $reading }
+# Yellow: the tool pressed a button on the meter by remote control and the
+# meter changed, but not to what the step waits for. $command is the button's
+# name as the tool sends it, e.g. hold; $reading what the meter shows, e.g.
+# 0.00 VA [HOLD].
+capture-command-missed = 发送 { $command } 后，万用表没有进入此步骤等待的状态，现在显示 { $reading }
 # $command is the button's name as the tool sends it, e.g. hold.
 capture-did-nothing-silent = { $command } 没有效果；万用表没有发送读数
 # Yellow: the meter changed function while the step was reading it, so the
