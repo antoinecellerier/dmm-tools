@@ -25,7 +25,7 @@ backlog](verification-backlog.md).
 | Cable | Chip | VID:PID | Direction | Meters | Confirmed with |
 |---|---|---|---|---|---|
 | UT-D09 | CP2110 | `10C4:EA80` | both ways | UT61+/UT161, UT171, UT8802/UT8803, Voltcraft VC-880/VC650BT/VC-890, older UT181A units | UT61E+ |
-| UT-D09 | CH9329 | `1A86:E429` | both ways | sold for UT181A, UT171, UT243 | UT181A (two units), UT61B+ |
+| UT-D09 | CH9329 | `1A86:E429` | both ways | sold for UT181A, UT171, UT243 | UT181A (two units, [#5](https://github.com/antoinecellerier/dmm-tools/issues/5)), UT61B+ ([#19](https://github.com/antoinecellerier/dmm-tools/issues/19)), UT161E ([#7](https://github.com/antoinecellerier/dmm-tools/issues/7)) |
 | UT-D04 | CH9325 / HE2325U | `1A86:E008` | meter to PC (these meters take no commands) | UT803, UT804, and the UT71A–E per UNI-T's accessory page | UT804 on Linux and Windows ([#16](https://github.com/antoinecellerier/dmm-tools/issues/16)) |
 | BU-86X kit (BC-86X cable) | — | `0820:0001` | both ways | Brymen BM869s, BM867s, BM829s, BM827s, BM822s, BM821s, BM525s, BM521s per Brymen's manuals; Minipa ET-2517A and ET-2615A per Minipa's manual | BM827s (Minipa ET-2517A) and BM525s (Minipa ET-2615A) on Windows ([#35](https://github.com/antoinecellerier/dmm-tools/issues/35), [#36](https://github.com/antoinecellerier/dmm-tools/issues/36)) |
 | UT-D02 | RS232 level converter | — | both ways | serial port, not USB; not supported | — |

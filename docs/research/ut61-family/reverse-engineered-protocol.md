@@ -139,7 +139,16 @@ three frames before auto came back:
 
 The DC reading jumped about tenfold, as on our UT61E+, so the meter did
 change range; our UT61E+ sent 0x31 there on all four of its runs. Whether
-the UT161E's byte follows later, or on auto above 2.2 V, is [UNVERIFIED].
+that unit's byte follows later is [UNVERIFIED].
+
+A second UT161E answers Get Name with `UT161E` over a CH9329, and with 9 V
+on the leads in AC+DC V its range byte followed the decimals [VERIFIED]
+(issue #7, CH9329, @thomschlie, 2026-11-08): 0x30 to 0x31 on auto from 2.2V
+to 22V, 0x31 on the press that only cleared auto, and 0x32 with two decimals
+on the next. The press from manual 2.2V is [UNVERIFIED] on this unit. For
+two frames after each range change the meter set the HV bit and sent
+unsettled digits against the 9.32 V battery: `OL` then DC 9.590 V coming up
+from 2.2V, AC 53.52 V then DC 9.44 V on reaching 220V.
 
 ### 2.3 Secondary-display frame — [VENDOR + VENDOR-DOC + MANUAL]
 

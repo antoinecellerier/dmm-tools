@@ -108,9 +108,9 @@ families are in the [verification backlog](../../verification-backlog.md).
 
 ## The UT161E
 
-- AC+DC V above 2.2V: after RANGE the display took 22V resolution while the
-  range byte stayed 0x30 ([§2.2][s22]) — decides whether it needs handling of
-  its own. Needs a 9 V battery in AC+DC V on auto, then RANGE, ~10 s. (#7)
+- AC+DC V, RANGE from manual 2.2V: the display took 22V resolution while the
+  range byte stayed 0x30 on one unit ([§2.2][s22]) — decides whether it needs
+  handling of its own. Needs AC+DC V, leads open, RANGE twice. (#7)
 
 ## UT60BT and UT202BT
 
