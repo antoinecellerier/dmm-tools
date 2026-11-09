@@ -96,6 +96,21 @@ Ask the user's go-ahead first: for the apps it runs twelve reviewers per languag
 
 After a review of the apps, refresh each language's "How \<Name\> differs from English" section of `STYLE.md`, or add it for a new language: one agent per language with `scripts/principles-brief.md`, filling in `<LANG>`, `<NAME>`, `<REPO>`, and `<FINDINGS>` (a file holding that language's findings from the workflow's result). Drafters read this section; reviewers keep to the rulings and the glossary.
 
+### Two-stage sweep
+
+A cheaper native-feel pass, or a repeat of one, where only what a stronger model confirms is applied:
+
+`Workflow({scriptPath: ".claude/skills/translate/scripts/native-sweep.js", args: {repo: "<absolute repo path>", langs: [{lang: "es", name: "Spanish"}, …], findModel?, confirmModel?, targets?: ["app", "readme"]}})`
+
+- **What it does:** one reader per language and file group finds (Sonnet by default), then confirmers rule on the findings in chunks (Opus by default; a finding is rejected unless it is a real defect). It edits nothing and returns counts. Ask the user's go-ahead first: six readers per language, plus the confirmers.
+- **Before applying,** save the `long_labels` output: it also lists text that was already long, so only what is new in it counts.
+- **Then run `scripts/native-sweep.py`:**
+  - `extract <journal.jsonl> <out-dir> --prior <an earlier review's journal.jsonl>` writes each language's found, confirmed, rejected and dropped findings and prints the yield. `<out-dir>` is `references/l10n/native-review-<date>/`.
+  - `page <out-dir> <lang> <page.html>` makes the page for a language the user reads, who rules on it as above.
+  - `apply <out-dir> <lang>` makes the confirmed edits and names any it can't place.
+
+Check as in [Filling gaps](#filling-gaps), step 4, and commit one language at a time, with a `docs:` commit for README copies.
+
 ## Reviewed
 
 `scripts/l10n-side-by-side.py <lang> <lang>.html` sets a language beside its English on one page, for a reviewer, or for the user when shown new messages, to read through. Once a native speaker has read the language in the app, set `reviewed: true` on its `SHIPPED` entry, and cut the note under its `README.<lang>.md` row down to the line naming the English README as the reference. For a language the user reads, the user's review counts. In the same change, update the CHANGELOG:
@@ -137,6 +152,8 @@ Run these through the Workflow tool; don't read them into context:
 - `scripts/translate-language.js`: one new language, from draft to fix.
 - `scripts/fill-gaps.js`: the missing messages of the shipped languages.
 - `scripts/native-review.js`: accuracy and native-feel review of shipped languages or README copies, then a fixer per language.
+- `scripts/native-sweep.js`: native-feel readers, then confirmers; read-only.
+- `scripts/native-sweep.py`: a sweep's journal to files, a review page and edits.
 
 `scripts/glossary-brief.md` is the glossary agent's brief, and `scripts/principles-brief.md` the brief for a style sheet's differences from English, both with placeholders to fill in.
 
