@@ -74,7 +74,7 @@ read--alarm-low =
     .help = Avisar cuando la lectura baje de VALUE, igual que --alarm-high
 # dmm-cli read --alarm-hysteresis
 read--alarm-hysteresis =
-    .help = Cuánto debe retroceder una lectura hacia dentro del límite antes de que ese mismo límite vuelva a activar la alarma: un valor en la unidad de los límites, o un porcentaje del límite (`1%`) [predeterminado: unas pocas cuentas del último dígito del multímetro]
+    .help = Cuánto debe alejarse una lectura del límite, ya en el lado permitido, antes de que ese mismo límite vuelva a activar la alarma: un valor en la unidad de los límites, o un porcentaje del límite (`1%`) [predeterminado: unas pocas cuentas del último dígito del multímetro]
 # dmm-cli read --alarm-bell
 read--alarm-bell =
     .help = Hacer sonar la campana de la consola en cada alarma

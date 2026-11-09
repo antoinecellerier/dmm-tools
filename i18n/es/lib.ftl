@@ -1077,10 +1077,10 @@ note-above-230degc-use-the-rod-type = Por encima de 230°C: usar la sonda de var
 note-accessory-point-contact-probe-below-230degc = Sonda accesoria de contacto puntual: solo por debajo de 230°C
 # Used by: 7 meters
 # In: 4 tables
-note-accuracy-valid-1-pct-100-pct = Exactitud válida en el 1%–100% del rango
+note-accuracy-valid-1-pct-100-pct = Exactitud válida del 1% al 100% del rango
 # Used by: Mock UT61E+, UT161E, UT61E+
 # In: AC Current; AC Voltage
-note-accuracy-valid-1-pct-100-pct-2 = Exactitud válida en el 1%–100% del rango (1kHz–10kHz: 10%–100%)
+note-accuracy-valid-1-pct-100-pct-2 = Exactitud válida del 1% al 100% del rango (1kHz–10kHz: 10%–100%)
 # Used by: UT161D, UT61D+
 # In: AC Current
 note-accuracy-valid-40hz-1khz-1-pct = Exactitud válida en 40Hz–1kHz, 1%–100% del rango (600.0µA: 5%–100%)
@@ -1314,10 +1314,10 @@ note-reading-for-reference-only = Lectura solo como referencia
 note-record-specified-accuracy-adds-10-digits = Grabación: sumar 10 dígitos a la exactitud especificada para cambios > 100 ms
 # Used by: Mock ZT-5B, ZT-5B
 # In: Auto
-note-red-lead-in-a-ma-picks = Cable rojo en A mA: selecciona la corriente
+note-red-lead-in-a-ma-picks = Con el cable rojo en A mA, el multímetro selecciona la corriente
 # Used by: Mock ZT-5B, ZT-5B
 # In: Auto
-note-red-lead-in-vohm-picks-v = Cable rojo en VΩ: selecciona V por encima de 0.8V; si no, Ω
+note-red-lead-in-vohm-picks-v = Con el cable rojo en VΩ, el multímetro selecciona V por encima de 0.8V; si no, Ω
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
 # In: Audible Continuity Tester
 note-response-time-100us = Tiempo de respuesta < 100µs
@@ -1368,7 +1368,7 @@ note-then-typically-18kohm-100v-125kohm-300v-2 = Después, valores típicos: 18k
 note-tolerance-10v-36v-23v-83v-59v = Tolerancia: 10V~36V, 23V~83V, 59V~165V, 124V~330V, > 250V
 # Used by: UT804
 # In: B. AC Voltage (AC+DC measurement is available)
-note-true-rms-and-accuracy-valid-10 = True RMS y exactitud válidos en el 10%–100% del rango
+note-true-rms-and-accuracy-valid-10 = True RMS y exactitud válidos del 10% al 100% del rango
 # Used by: UT804
 # In: D. AC Current (AC+DC measurement is available)
 note-true-rms-and-accuracy-valid-10-2 = True RMS y exactitud válidos en el 10%–100% del rango; factor de cresta hasta 3.0
@@ -1377,7 +1377,7 @@ note-true-rms-and-accuracy-valid-10-2 = True RMS y exactitud válidos en el 10%�
 note-true-rms-from-10-pct-to = True RMS del 10% al 100% del rango; BM821s: respuesta al valor medio
 # Used by: UT181A
 # In: 4 tables
-note-true-rms-valid-10-pct-100 = True RMS válido en el 10%–100% del rango
+note-true-rms-valid-10-pct-100 = True RMS válido del 10% al 100% del rango
 # Used by: UT803
 # In: B. AC Voltage
 note-true-rms-valid-10-pct-95 = True RMS válido en el 10%–95% del rango
@@ -1401,7 +1401,7 @@ note-type-k-thermocouple-range-accuracy-not = Rango y exactitud del termopar tip
 note-typical-20v-55v-110v-220v-440v = Típico: - 20V, -- 55V, --- 110V, ---- 220V, ----- 440V
 # Used by: UT804
 # In: J. Duty Cycle
-note-valid-10-pct-90-pct-of = Válido en el 10%–90% del rango, solo 5Hz–2kHz
+note-valid-10-pct-90-pct-of = Válido del 10% al 90% del rango, solo de 5Hz a 2kHz
 # Used by: UT803
 # In: K. Transistor
 note-vce-2-2v-bo-10ua = Vce ≈2.2V, bo ≈10µA

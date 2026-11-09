@@ -26,7 +26,7 @@ top-bar-disconnect = Desconectar
 top-bar-resume = ▶ Reanudar
     .hover = Reanudar la adquisición ({ $keys })
 top-bar-pause = ⏸ Pausar
-    .hover = Detener la adquisición: se detienen la grabación y la actualización del gráfico ({ $keys })
+    .hover = Detener la adquisición: se interrumpen la grabación y la actualización del gráfico ({ $keys })
 # Clears the graph and the statistics, not the recording.
 top-bar-clear = Borrar
     .hover = Borrar el historial del gráfico y las estadísticas ({ $keys })

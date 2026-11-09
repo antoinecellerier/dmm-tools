@@ -39,6 +39,6 @@ alarm-breach =
 # back and cross again.
 alarm-breach-already =
     { $side ->
-        [low] La lectura ya está por debajo del límite inferior de { $limit }. Las alarmas empiezan a partir del próximo cruce
-       *[high] La lectura ya está por encima del límite superior de { $limit }. Las alarmas empiezan a partir del próximo cruce
+        [low] La lectura ya está por debajo del límite inferior de { $limit }. Las alarmas se activan a partir del próximo cruce
+       *[high] La lectura ya está por encima del límite superior de { $limit }. Las alarmas se activan a partir del próximo cruce
     }
