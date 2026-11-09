@@ -21,7 +21,7 @@ recording-stop = ■ 停止
 # Shown after Export… once a recording has stopped. Export… is the button
 # beside it, which saves the samples to a file.
 recording-discard = 放弃
-    .hover = 放弃记录；之后“导出…”将保存图表中的样本
+    .hover = 放弃记录，之后“导出…”将保存图表中的样本
 # After the buttons: $count is how many samples the recording holds. While
 # it runs, followed by " | " and how long it has run, e.g. 152 samples | 12s.
 recording-count =
@@ -61,11 +61,11 @@ recording-copied = 已复制 { $digits }
 # Between the graph and the recording panel. Up and Down are the arrow
 # keys.
 recording-resize =
-    .a11y = 调整记录面板大小 (用向上键/向下键调整)
+    .a11y = 调整记录面板大小 (使用向上键/向下键)
 # At the right edge of the reading panel, on a wide window. Left and Right
 # are the arrow keys.
 recording-reading-resize =
-    .a11y = 调整读数面板大小 (用向左键/向右键调整)
+    .a11y = 调整读数面板大小 (使用向左键/向右键)
 
 ## The big meter toggle: a ⊞ or ⊟ button at the right end of the reading's
 ## last row of buttons. Its hover is also what screen readers read.

@@ -82,11 +82,11 @@ setup-usb-linux-replug = 然后重新插拔连接线。在无显示器的机器�
 # Windows shows in your language.
 setup-usb-windows-open = 插好连接线，打开“设备管理器”:
 # UNVERIFIED Windows name
-setup-usb-windows-cp2110 = - '人体学输入设备'下的 'CP2110 USB to UART Bridge': 无需操作。
+setup-usb-windows-cp2110 = - “人体学输入设备”下的 "CP2110 USB to UART Bridge": 无需操作。
 # UNVERIFIED Windows name
-setup-usb-windows-input = - '人体学输入设备'下的 'USB 输入设备': 无需操作。
+setup-usb-windows-input = - “人体学输入设备”下的“USB 输入设备”: 无需操作。
 # The driver's download address follows.
-setup-usb-windows-warning = - '其他设备'下出现黄色警告图标: 请从以下地址安装驱动程序
+setup-usb-windows-warning = - “其他设备”下出现黄色警告图标: 请从以下地址安装驱动程序
 setup-usb-windows-nothing = - 没有任何显示: 换一个 USB 端口试试。
 # macOS. Name the settings as macOS shows them in your language.
 setup-usb-macos-auto = 系统应能自动识别连接线 (无需驱动程序)。
@@ -111,11 +111,11 @@ no-response = 万用表没有响应
 # them apart. Each binary follows it with what to do.
 several-cables =
     { $count ->
-       *[other] 检测到 { $count } 根可供本次会话打开的 USB 连接线，它们无法相互区分。重新连接时可能会打开其他万用表的连接线。
+       *[other] 检测到 { $count } 根可供本次会话使用的 USB 连接线，它们无法相互区分。重新连接时可能会误用其他万用表的连接线。
     }
 # While a dropped link is being reopened: its cable has gone and another is
 # plugged in. Each binary follows it with how to use that other cable.
-waiting-for-own-cable = 已插入另一根 USB 连接线，但本次会话正在等待原先打开的连接线。
+waiting-for-own-cable = 已插入另一根 USB 连接线，但本次会话正在等待原先使用的连接线。
 # Under a reading the meter shows on its own screen only, its frames carrying
 # none: a CMS or UT217's oscilloscope mode.
 screen-only-reading = 请在万用表显示屏上查看示波器读数
@@ -204,14 +204,14 @@ help-possible-values = [可能的值: { $values }]
 help-possible-values-heading = 可能的值:
 # What -h and --help do: on a command with more detail under --help, the two
 # notes say how to see more or less.
-help-flag = 打印帮助
-help-flag-short = 打印帮助 (使用 '--help' 查看更多)
-help-flag-long = 打印帮助 (使用 '-h' 查看摘要)
+help-flag = 显示帮助
+help-flag-short = 显示帮助 (使用 '--help' 查看更多)
+help-flag-long = 显示帮助 (使用 '-h' 查看摘要)
 # What -V and --version do.
-help-version-flag = 打印版本
+help-version-flag = 显示版本
 # The help command, listed among the commands, and its argument.
-help-command = 打印此消息或给定子命令的帮助
-help-command-subcommand = 打印子命令的帮助
+help-command = 显示此消息或指定子命令的帮助
+help-command-subcommand = 显示子命令的帮助
 
 ## Mistakes on dmm-cli's and dmm-gui's command line: an unknown option, a
 ## missing command, a value the program doesn't take. Printed on the
@@ -269,7 +269,7 @@ args-wrong-number-of-values =
        *[other] '{ $arg }' 需要 { $needed } 个值，但提供了 { $given } 个
     }
 # An option the program doesn't have, or one this command doesn't take.
-args-unexpected-argument = 发现意外的参数 '{ $arg }'
+args-unexpected-argument = 无法识别的参数 '{ $arg }'
 # An option given twice that can only be given once.
 args-repeated = 参数 '{ $arg }' 不能重复使用
 # Two options, or an option and a command, that can't go together. $what is

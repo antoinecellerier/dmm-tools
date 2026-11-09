@@ -36,7 +36,7 @@ shortcuts-export = 导出 CSV…
 # Ctrl+I: opens the dialog that picks a file to open.
 shortcuts-import = 导入文件…
 # N: puts a numbered marker on the reading the meter shows now.
-shortcuts-add-marker = 在屏幕上的读数处添加标记
+shortcuts-add-marker = 在当前读数处添加标记
 # Ctrl+N: the same, then puts the caret in the marker's note.
 shortcuts-add-marker-note = 添加标记并填写备注
 # Ctrl+B: steps the big meter (the reading drawn large) through off, full
@@ -57,7 +57,7 @@ shortcuts-minimize = 最小化窗口
 # Ctrl+Plus/Minus: makes everything in the window larger or smaller.
 shortcuts-zoom = 放大/缩小
 # Ctrl+0: returns everything to its normal size.
-shortcuts-zoom-reset = 重置缩放到 100%
+shortcuts-zoom-reset = 将缩放重置为 100%
 # Esc or Ctrl+W: closes this dialog.
 shortcuts-close-help = 关闭此帮助
 # Ctrl+Q or Ctrl+W: closes the app.
@@ -75,11 +75,11 @@ shortcuts-graph-scroll = 滚动视图
 # Home: shows the start of the readings.
 shortcuts-graph-start = 跳到开头
 # End: shows the newest readings and follows them again.
-shortcuts-graph-live = 跳到实时
+shortcuts-graph-live = 跳到实时数据
 # M: shows or hides the line drawn at the mean of the readings.
 shortcuts-graph-mean = 显示/隐藏平均值线
 # X: shows or hides the band between the lowest and highest readings.
-shortcuts-graph-band = 显示/隐藏最小值/最大值带
+shortcuts-graph-band = 显示/隐藏包络线
 # H: shows or hides the histogram beside the graph.
 shortcuts-graph-histogram = 显示/隐藏直方图
 # R: shows or hides the reference lines, and puts the caret in the field
@@ -152,7 +152,7 @@ shortcuts-key-minus = 减号
 
 # Space, Escape, Up/Down, PgUp/PgDn and Home/End are key names: write them
 # the way the key names above do.
-shortcuts-note = 当任一控件获得键盘焦点时，图表快捷键和空格键快捷键会停用，按 Esc 可释放焦点。向上键/向下键、Page Up/Page Down 和 Home/End 可滚动此帮助。
+shortcuts-note = 任一控件获得键盘焦点时，图表和空格键的快捷键会停用，按 Esc 可释放焦点。向上键/向下键、Page Up/Page Down 和 Home/End 可滚动此帮助。
 
 ## Ctrl+T on Wayland, where a window can't put itself above the others.
 

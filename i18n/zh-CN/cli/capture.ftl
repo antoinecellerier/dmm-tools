@@ -33,7 +33,7 @@ capture-enable-transmission = 开启数据传输:
 capture-run-again = 然后再次运行此命令。
 # What the meter sent was kept in a file of its own, as evidence. $bytes is
 # how many bytes the meter sent, $path the file.
-capture-no-response-saved = 收到的字节数: { $bytes }，已保存到 { $path }
+capture-no-response-saved = 收到 { $bytes } 字节，已保存到 { $path }
 # $url is the web address of the meter's issue on GitHub.
 capture-no-response-attach = 如果万用表已开机但仍没有响应，请将该文件附加到 { $url }
 # $error is why the file could not be written.
@@ -47,7 +47,7 @@ capture-no-response-not-saved = 无法保存收到的字节: { $error }
 capture-status = 状态: { $status }
 capture-status-verified = 受支持的型号
 capture-status-partly-verified = 部分验证，连接和主要模式已确认
-capture-status-partly-verified-detail = 其余模式尚未确认，本次运行就是为了确认它们。
+capture-status-partly-verified-detail = 本次运行正是为了确认其余模式。
 # The protocol was worked out from the meter's traffic, not from its maker.
 capture-status-experimental = 实验性，协议通过逆向工程得出，尚未确认
 capture-status-experimental-detail = 请尽量多完成一些步骤，并分享报告。
@@ -62,12 +62,12 @@ capture-other-model-detail = 如果继续，将使用 { $opened } 的步骤和�
 capture-other-model-confirm = 仍要按 { $opened } 的步骤捕获吗? { $yes }/{ $no }:
 capture-other-model-rerun = 请使用 --device { $id } 重新运行捕获。
 # $path is the report file. $captured and $skipped count its steps.
-capture-found-existing = 找到已有的捕获: { $path } (已捕获 { $captured } 个，已跳过 { $skipped } 个)
+capture-found-existing = 找到已有的捕获文件: { $path } (已捕获 { $captured } 个步骤，已跳过 { $skipped } 个)
 # $resume, $fresh and $abort are the keys that answer: r, n and q.
 capture-resume-prompt = { $resume }=继续，{ $fresh }=重新开始，{ $abort }=中止:
 capture-aborted = 已中止。
 # $yes and $no are the keys that answer: y and n.
-capture-overwrite-confirm = 这将覆盖已有的捕获。确定吗? { $yes }/{ $no }:
+capture-overwrite-confirm = 这将覆盖已有的捕获文件。确定吗? { $yes }/{ $no }:
 capture-resuming = 正在继续: 将跳过已捕获的步骤。
 # The file is there but isn't a report this tool can read. $path is the
 # file.
@@ -96,7 +96,7 @@ capture-need-shorted-leads = 短接的表笔
 capture-need-dc-source = 电池或其他直流电源
 capture-need-thermocouple = K 型热电偶
 # For the non-contact voltage detector, which senses a live wire nearby.
-capture-need-live-wire = 附近有一根带电的市电火线
+capture-need-live-wire = 附近的带电市电火线
 # The meter's power-measurement adapter, plugged into a live outlet with a
 # load plugged into it.
 capture-need-power-adapter = 功率测量适配器、通电的插座和负载
@@ -113,7 +113,7 @@ capture-need-pv-adapter = LX-925 辐照度适配器
 # Bold, between heavy lines.
 capture-modes-heading = 测量模式
 # Dim, under the heading. $skip and $quit are the keys: s and q.
-capture-modes-keys = 万用表读数稳定后，每个步骤会自动捕获: Enter=立即捕获，{ $skip }=跳过一步，{ $quit }=跳到最后并保存
+capture-modes-keys = 万用表读数稳定后自动捕获当前步骤: Enter=立即捕获，{ $skip }=跳过一步，{ $quit }=跳到最后并保存
 # Dim, after a step's instruction: the step the rest of the run relies on.
 capture-gate-mark = (前提步骤)
 # A resumed run passes over a step the report already has. $step is the
@@ -135,7 +135,7 @@ capture-progress-reading = 第 { $done }/{ $total } 个读数 · { $reading }
 capture-wait-start = 按照上述说明设置万用表，就绪后自动发送按键 (Enter=立即发送，{ $skip }=跳过，{ $quit }=结束)
 # Dim: the meter left the state the step starts from just before the key
 # went out, so the step waits for it again.
-capture-wait-moved = 发送按键前，万用表已离开此步骤的起始状态，正在等待其恢复
+capture-wait-moved = 发送按键前，万用表已离开此步骤的起始状态，正在等待恢复
 # When the terminal can't be read key by key. $skip and $quit are the keys:
 # s and q.
 capture-any-key = 任意键=捕获，{ $skip }=跳过，{ $quit }=结束:
@@ -145,14 +145,14 @@ capture-command-failed = 命令失败: { $error }
 # Yellow: the tool pressed a button on the meter by remote control and the
 # meter didn't change. $command is the button's name as the tool sends it,
 # e.g. hold; $reading what the meter shows, e.g. 5.5687 V [AUTO].
-capture-did-nothing-shows = { $command } 没有效果；万用表仍显示 { $reading }
+capture-did-nothing-shows = { $command } 没有效果，万用表仍显示 { $reading }
 # Yellow: the tool pressed a button on the meter by remote control and the
 # meter changed, but not to what the step waits for. $command is the button's
 # name as the tool sends it, e.g. hold; $reading what the meter shows, e.g.
 # 0.00 VA [HOLD].
 capture-command-missed = 发送 { $command } 后，万用表没有进入此步骤等待的状态，现在显示 { $reading }
 # $command is the button's name as the tool sends it, e.g. hold.
-capture-did-nothing-silent = { $command } 没有效果；万用表没有发送读数
+capture-did-nothing-silent = { $command } 没有效果，万用表也没有发送读数
 # Yellow: the meter changed function while the step was reading it, so the
 # step starts over. $mode is the function the step is for, $other the one
 # the meter went to, e.g. Ω and Continuity.
@@ -257,7 +257,7 @@ capture-retaking = 正在重新采集…
 # Green.
 capture-core-confirmed = 核心语义已确认，其余步骤将在最后统一复核。
 # Yellow. $steps lists the ids of the steps that failed, e.g. "dcv, ohm".
-capture-core-not-confirmed = 核心语义未确认 ({ $steps })，每个步骤都会要求确认。
+capture-core-not-confirmed = 核心语义未确认 ({ $steps })，每个步骤都需要确认。
 
 ## Once the core semantics are confirmed, the tool sets ranges and flags on
 ## the meter itself by remote control, and prints a dim line for each. Each
@@ -338,29 +338,29 @@ capture-detect-no-reason = 未给出原因
 capture-detect-found = 自动检测找到了 { $found }。
 capture-detect-found-read = 自动检测找到了 { $found }，并读到 { $reading }。
 capture-detect-found-read-other = 自动检测找到了 { $found }，但随后读到 { $reading }。请继续使用 --device { $device }，或在 dmm-gui 中选择 { $meter }。
-capture-detect-found-read-nothing = 自动检测找到了 { $found }，但随后没有读到任何读数。请继续使用 --device { $device }，或在 dmm-gui 中选择 { $meter }。
+capture-detect-found-read-nothing = 自动检测找到了 { $found }，但随后没有收到任何读数。请继续使用 --device { $device }，或在 dmm-gui 中选择 { $meter }。
 capture-detect-picked-other = 自动检测为此万用表选择了 { $found }。请继续使用 --device { $device }，或在 dmm-gui 中选择 { $meter }。
 capture-detect-not-found = 自动检测没有找到此万用表。请继续使用 --device { $device }，或在 dmm-gui 中选择 { $meter }。
 
 ## The end of the run.
 
 # After "Warning:" (common.ftl): the detection check stopped. $error is why.
-capture-detect-failed = 自动检测检查: { $error }
+capture-detect-failed = 未能完成自动检测验证: { $error }
 # Bold and green, between equals signs.
 capture-complete = 捕获完成!
 # $path is the report file, in bold.
 capture-report-saved = 报告已保存到: { $path }
 # The run followed a list of steps a maintainer wrote (a "plan"). $plan is
 # its file; $covered and $total count its steps.
-capture-plan-covered = 计划 { $plan }: 已捕获 { $total } 个步骤中的 { $covered } 个
+capture-plan-covered = 计划 { $plan }: 共 { $total } 个步骤，已捕获 { $covered } 个
 capture-nothing-new = 没有捕获到任何未验证的步骤，因此没有新内容可报告。
 # $covered and $total count the meter's steps that hardware hasn't confirmed
 # yet; $meter is its name, e.g. UNI-T UT61E+.
-capture-covered = 已覆盖 { $meter } 的 { $total } 个未验证步骤中的 { $covered } 个。
+capture-covered = { $meter } 共有 { $total } 个未验证步骤，已覆盖 { $covered } 个。
 # $resume is the key that resumes, r (capture-resume-prompt).
 capture-not-finished = 未完成: 再次运行同一命令，并按 { $resume } 继续。
 # $flag is the option as typed, --steps <ids>.
-capture-steps-hint = { $flag } 可单独运行指定的步骤。
+capture-steps-hint = 使用 { $flag } 可单独运行指定的步骤。
 # $url is the web address of the meter's issue on GitHub.
 capture-attach = 请将报告附加到 { $url }
 
@@ -387,7 +387,7 @@ capture-instructions-keep = 以下内容是万用表按键和屏幕上的原样�
 capture-instructions-run = 然后运行: { $command }
 # In place of writing a file, for a meter with no steps of its own (a
 # simulated one). $meter is its name, e.g. Mock UT61E+.
-capture-instructions-none = { $meter } 没有自己的捕获步骤: 没有需要翻译的内容。
+capture-instructions-none = { $meter } 没有专属的捕获步骤，无需翻译。
 # After writing the file. $count is the number of steps; $path the file.
 capture-instructions-written = 已将 { $count } 条步骤说明写入 { $path }。
 # $command is the command that runs the capture with the translated file.
@@ -409,7 +409,7 @@ capture-instructions-problem-unparsable = 无法读取该文件，请检查其�
 ## The line that closes a failed run, after "Error:" (common.ftl).
 
 capture-error-not-responding = 万用表没有响应
-capture-error-input-gone = 键盘输入已失效；请结束捕获并重新运行
+capture-error-input-gone = 键盘输入已失效，请结束捕获并重新运行
 # --steps named steps this meter doesn't have. $steps lists them, e.g.
 # "dcmv, tmep"; $command is the command line that lists the meter's steps.
 capture-error-unknown-steps =
@@ -418,7 +418,7 @@ capture-error-unknown-steps =
 # The --instructions file can't be read. $path is the file; $problems the
 # problems, one per line (capture-instructions-problem-*).
 capture-error-instructions-unreadable =
-    无法将 { $path } 读取为捕获步骤说明:
+    无法解析捕获步骤说明文件 { $path }:
     { $problems }
 # The --instructions file was exported for another meter. $path is the
 # file; $named the meter id in it, e.g. ut61eplus; $device this run's, e.g.

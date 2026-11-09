@@ -16,7 +16,7 @@ top-bar-imported-file = 导入的文件
 ## Connection buttons.
 
 top-bar-connect = 连接
-    .hover = 打开到所选万用表的 USB 连接 ({ $keys })
+    .hover = 通过 USB 连接所选万用表 ({ $keys })
 # In place of Connect while the meter is being opened: stops the attempt.
 top-bar-cancel = 取消
     .hover = 停止连接 ({ $keys })
@@ -75,7 +75,7 @@ top-bar-detecting = 正在检测…
 
 top-bar-link-live =
     { $link ->
-        [usb] 已通过 USB 连接线连接
+        [usb] 已通过 USB 连接线接入
         [adapter] 已通过蓝牙适配器连接
         [radio] 已通过蓝牙链路连接
        *[none] 仿真万用表，无连接
@@ -122,7 +122,7 @@ top-bar-version-update =
 # The update link; $version is the newer release, e.g. v0.10.0.
 top-bar-update =
     .hover = 在 GitHub 上打开 { $version } 的发布页面
-    .a11y = { $version } 已发布，打开其发布页面
+    .a11y = { $version } 已发布，打开发行版页面
 top-bar-project-link =
     .hover = 在 GitHub 上打开 dmm-tools 项目页面
 # The ? button. $keys and $other are its two keys, ? and F1.

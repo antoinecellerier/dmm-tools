@@ -25,15 +25,15 @@ read-clock-max-no-preseed = 'max' 不接受预置读数: 每一帧本来就会�
 read-clock-max-needs-replay = 'max' 需要 --replay: 只有回放文件才会自行结束
 # A recording names the meter it was made with. $command is the command line
 # that plays one (dmm-cli read --replay FILE).
-read-replay-names-its-device = --replay 的文件中已指明万用表；请去掉 --device ({ $command })
+read-replay-names-its-device = --replay 的文件中已指明万用表，请去掉 --device ({ $command })
 # An exported CSV or JSON file names the meter it was read from.
-read-import-names-its-device = --import 的文件中已指明万用表；请去掉 --device
+read-import-names-its-device = --import 的文件中已指明万用表，请去掉 --device
 # --format replay writes the frames a meter sent. $device is the simulated
 # meter's id, e.g. mock.
-read-replay-format-needs-meter = --format replay 需要真实万用表；--device { $device } 没有可记录的内容
+read-replay-format-needs-meter = --format replay 需要真实万用表，--device { $device } 没有可记录的内容
 # $flag is the option given that would change the readings, e.g. --scale or
 # --integrate.
-read-replay-format-keeps-frames = 回放文件保存的是万用表自己的帧；回放时请传入 { $flag }
+read-replay-format-keeps-frames = 回放文件保存的是万用表的原始帧，请在回放时传入 { $flag }
 read-import-no-frames = CSV 或 JSON 文件不含万用表的帧，无法写成回放文件；需要时请用 --import 读取回放文件
 read-import-no-interval = --interval-ms 按万用表发送的节奏保留读数；文件中的读数已是全部，无法再抽取
 
@@ -51,10 +51,10 @@ read-clock-scale-invalid = 应为数字或 'max'，实际为 '{ $value }'
 read-format-mismatch = 已按 --format { $format } 写入 { $path }
 # A recording played into a file takes as long as the recording did. $flag
 # is the option that skips the wait (--mock-clock-scale max).
-read-paced-replay = 按记录的节奏回放；添加 { $flag } 可不等待直接转换
+read-paced-replay = 按记录的节奏回放，添加 { $flag } 可不等待直接转换
 # --scale, --offset and --unit apply arithmetic to every reading. $transform
 # is that arithmetic, e.g. ×2 - 1 → A.
-read-scaled = 读数已在软件中换算 ({ $transform })
+read-scaled = 读数已由软件换算 ({ $transform })
 # $limits is what the alarm watches for (alarm-limits in lib-alarm.ftl),
 # e.g. "above 5 or below 3, hysteresis 1%".
 read-alarm-on = 报警已启用: { $limits }

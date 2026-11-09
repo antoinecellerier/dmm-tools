@@ -53,8 +53,8 @@ error-not-an-adapter = { $path } (设备存在，但不是受支持的 USB 适�
 # UT61E+.
 error-wrong-cable =
     { $link ->
-        [bluetooth] --adapter 指定的是蓝牙适配器，无法用于万用表 { $model }: 请用 --adapter 指定该万用表自己的连接线，或去掉 --adapter
-       *[cable] --adapter 指定的是 { $cable } 连接线，无法用于万用表 { $model }: 请用 --adapter 指定该万用表自己的连接线，或去掉 --adapter
+        [bluetooth] --adapter 指定的是蓝牙适配器，无法用于万用表 { $model }: 请用 --adapter 指定该万用表所用的连接线，或去掉 --adapter
+       *[cable] --adapter 指定的是 { $cable } 连接线，无法用于万用表 { $model }: 请用 --adapter 指定该万用表所用的连接线，或去掉 --adapter
     }
 error-link-lost = 蓝牙链路中断
 # $reason is one of the "Bluetooth" sentences below.
@@ -72,7 +72,7 @@ error-device-not-identified =
 # too, else not-searched.
 error-no-transport-found =
     { $bluetooth ->
-        [searched] 找不到受支持的 USB 适配器，蓝牙范围内也没有蓝牙设备
+        [searched] 找不到受支持的 USB 适配器，蓝牙范围内也没有设备
        *[not-searched] 找不到受支持的 USB 适配器
     }
 # As error-no-transport-found, naming the cables looked for; $bluetooth as
@@ -80,7 +80,7 @@ error-no-transport-found =
 # BU-86X 0x0820:0x0001".
 error-no-transport-found-looked-for =
     { $bluetooth ->
-        [searched] 找不到受支持的 USB 适配器 (已查找 { $cables })，蓝牙范围内也没有蓝牙设备
+        [searched] 找不到受支持的 USB 适配器 (已查找 { $cables })，蓝牙范围内也没有设备
        *[not-searched] 找不到受支持的 USB 适配器 (已查找 { $cables })
     }
 # A meter with Bluetooth built in, and none was in range. $model is the
@@ -127,7 +127,7 @@ error-unsupported-setting-not-in-mode = 此万用表在 { $mode } 模式下无�
 error-unsupported-setting-not-in-word = 此万用表在 { $mode } ({ $word }) 模式下无法设置 { $setting }
 # $setting is a setting's name, $id a state's number, $mode a mode and
 # $offered the states it offers, separated by commas (on, off, MAX…).
-error-unsupported-no-such-state = { $setting } 没有状态 { $id }；{ $mode } 下可选的状态为 { $offered }
+error-unsupported-no-such-state = { $setting } 没有状态 { $id }，{ $mode } 下可选的状态为 { $offered }
 # $command is a command word, $mode a Peak mode, $word its code.
 error-unsupported-refused-in-peak = { $mode } ({ $word }) 下的 { $command }: 万用表在峰值模式下拒绝该命令
 # "rel" is the command word. $mode is a mode, $word its code.
@@ -155,36 +155,36 @@ error-unsupported-no-wire-format = parse_payload: 仿真设备没有传输格式
 # $button is a button's name, $state what the meter stayed in.
 error-rejected-did-nothing = 在 { $state } 下按 { $button } 键没有任何作用
 # $target is what was asked for, $now what the meter is in.
-error-rejected-never-appeared = 一直没有出现 { $target }；万用表已回到 { $now }
+error-rejected-never-appeared = 一直没有出现 { $target }，万用表已回到 { $now }
 # $presses is how many times $button was pressed; $state is what the meter
 # is in.
-error-rejected-gave-up = 按了 { $presses } 次 { $button } 后放弃；万用表处于 { $state }
+error-rejected-gave-up = 按了 { $presses } 次 { $button } 后放弃，万用表处于 { $state }
 # $mode is a mode.
-error-rejected-mode-changed = 模式已变为 { $mode }；已停止按 RANGE 键
+error-rejected-mode-changed = 模式已变为 { $mode }，已停止按 RANGE 键
 # $reason is another sentence of this group, $mode the mode the meter was
 # in before.
 error-rejected-started-in = { $reason }；起始模式为 { $mode }
 # $range is a range.
-error-rejected-auto-did-nothing = 按 AUTO 键没有任何作用；万用表仍处于 { $range }
+error-rejected-auto-did-nothing = 按 AUTO 键没有任何作用，万用表仍处于 { $range }
 # $button is a button's name, $state a setting's state.
-error-rejected-exit-did-nothing = EXIT { $button } 没有任何作用；万用表仍处于 { $state }
+error-rejected-exit-did-nothing = EXIT { $button } 没有任何作用，万用表仍处于 { $state }
 # $setting is a setting's name, $target and $now its states.
-error-rejected-switch-did-nothing = { $setting } { $target } 没有任何作用；万用表仍处于 { $now }
+error-rejected-switch-did-nothing = { $setting } { $target } 没有任何作用，万用表仍处于 { $now }
 # $sent is what was sent: a command word, or one of the error-sent messages
 # below, or a setting's name and a state.
 error-rejected-by-meter = 万用表拒绝了 { $sent }
 error-rejected-zero-needs-capacitance = ZERO 只能在电容模式下使用
 error-rejected-rel-needs-reading = 显示屏上有数值时才能使用 REL
-error-rejected-rel-is-on = REL 已开启；请先退出 REL
+error-rejected-rel-is-on = REL 已开启，请先退出 REL
 # $code is a number, $model and $opened are meters (e.g. OWON B41T+), $id a
 # meter's ID as --device takes it. "Auto-detect" is the GUI's Device
 # choice.
-error-rejected-other-model = 万用表报告的 OWON 型号代码为 { $code } ({ $model })，不是打开时选择的 { $opened }，因此遥控按键已关闭；请选择“自动检测”或 --device { $id }
+error-rejected-other-model = 万用表报告的 OWON 型号代码为 { $code } ({ $model })，不是连接时选择的 { $opened }，因此遥控按键已关闭；请选择“自动检测”或 --device { $id }
 # $code is a number.
 error-rejected-unknown-model = 万用表报告的 OWON 型号代码为 { $code }，本工具尚无法识别，因此遥控按键已关闭
 # $command is a command word.
 error-rejected-model-unread = 未能读取万用表的型号代码，因此 { $command } 已关闭: 要退出 REL，请在万用表上长按 REL 键
-error-rejected-min-max-locks-range = MIN/MAX 会锁定量程；请先退出 MIN/MAX 再更改量程
+error-rejected-min-max-locks-range = MIN/MAX 会锁定量程，请先退出 MIN/MAX 再更改量程
 # $command is a command word or a setting's name.
 error-rejected-replay = { $command }: 回放时不接受命令
 
@@ -205,33 +205,33 @@ error-sent-range = 量程 { $range }
 # Voltcraft VC871; $frame the length of that model's frame in bytes, 6 or
 # 15; $opened the meter chosen, e.g. OWON B35T+; $id the --device value
 # for $model.
-error-wrong-meter-other-frame = 万用表报告的 OWON 型号代码为 { $code } ({ $model })，不是打开时选择的 { $opened }，该型号发送 OWON 的 { $frame } 字节数据帧；请选择“自动检测”或 --device { $id }
+error-wrong-meter-other-frame = 万用表报告的 OWON 型号代码为 { $code } ({ $model })，不是连接时选择的 { $opened }，该型号发送 OWON 的 { $frame } 字节数据帧；请选择“自动检测”或 --device { $id }
 # An OWON meter sends the other kind of data frame and names no model.
 # $sent and $expected are frame lengths in bytes, 6 or 15; $opened is the
 # meter chosen, e.g. Voltcraft VC871. $remedy is auto-detect, or own-model
 # when the user has to pick the meter's model themselves.
 error-wrong-meter-other-frame-kind =
     { $remedy ->
-        [auto-detect] 万用表发送的是 OWON 的 { $sent } 字节数据帧，而不是打开时选择的 { $opened } 的 { $expected } 字节数据帧；请选择“自动检测”
-       *[own-model] 万用表发送的是 OWON 的 { $sent } 字节数据帧，而不是打开时选择的 { $opened } 的 { $expected } 字节数据帧；请选择该万用表自己的型号
+        [auto-detect] 万用表发送的是 OWON 的 { $sent } 字节数据帧，而不是连接时选择的 { $opened } 的 { $expected } 字节数据帧；请选择“自动检测”
+       *[own-model] 万用表发送的是 OWON 的 { $sent } 字节数据帧，而不是连接时选择的 { $opened } 的 { $expected } 字节数据帧；请选择该万用表的实际型号
     }
 # An OWON model this tool does not read yet. $code is OWON's model number,
 # e.g. 83. "This message" is the whole error, for the issue.
 error-wrong-meter-not-yet = 万用表报告的 OWON 型号代码为 { $code }，本工具尚无法读取；请附上此消息提交议题
 # An OWON model whose readings carry their sign where this tool does not
 # read it yet. $code is OWON's model number, e.g. 55.
-error-wrong-meter-sign-in-function-word = 万用表报告的 OWON 型号代码为 { $code }: 它发送的 OWON 6 字节数据帧把符号放在功能字中，本工具尚无法读取
+error-wrong-meter-sign-in-function-word = 万用表报告的 OWON 型号代码为 { $code }: 该型号发送的 OWON 6 字节数据帧把符号放在功能字中，本工具尚无法读取
 # A Brymen meter of another series answered. $found and $opened are series,
 # e.g. Brymen BM82x and Brymen BM86x; $id is the --device value for $found.
 error-wrong-meter-other-series = 连接线上的万用表是 { $found }，不是 { $opened }；请选择“自动检测”或 --device { $id }
 # An OWON meter chosen by its model sends bytes, but never its 6-byte data
 # frame. B35 and B35T are OWON models.
-error-wrong-meter-no-six-byte-frames = 万用表没有发送 OWON 的 6 字节数据帧；它可能是较旧的 B35 或 B35T，本工具尚无法读取它们的 14 字节数据帧
+error-wrong-meter-no-six-byte-frames = 万用表没有发送 OWON 的 6 字节数据帧；可能是较旧的 B35 或 B35T，本工具尚无法读取这些型号的 14 字节数据帧
 # The same for a meter whose data frame is 15 bytes long.
-error-wrong-meter-no-fifteen-byte-frames = 万用表没有发送 OWON 的 15 字节数据帧；请选择“自动检测”
+error-wrong-meter-no-fifteen-byte-frames = 万用表没有发送 OWON 的 15 字节数据帧，请选择“自动检测”
 # An OWON meter that names no model sends frames of neither length. "This
 # message" is the whole error, for the issue.
-error-wrong-meter-untold-frame-kind = 无法从万用表的型号代码或数据帧判断它发送的是 OWON 的 6 字节还是 15 字节数据帧；请附上此消息提交议题
+error-wrong-meter-untold-frame-kind = 无法从万用表的型号代码或数据帧判断发送的是 OWON 的 6 字节还是 15 字节数据帧，请附上此消息提交议题
 
 ## Bluetooth: what the Bluetooth stack could not do. After "Bluetooth:".
 
@@ -243,8 +243,8 @@ error-bluetooth-powered-off = 此计算机上已关闭
 # (the one the meter's data arrives on).
 error-bluetooth-no-characteristic =
     { $role ->
-        [write] 该蓝牙设备没有可识别的数据写入特征: 它不是受支持的适配器或万用表，或其服务始终未能解析
-       *[notify] 该蓝牙设备没有可识别的数据通知特征: 它不是受支持的适配器或万用表，或其服务始终未能解析
+        [write] 该蓝牙设备没有可识别的数据写入特征: 不是受支持的适配器或万用表，或者服务始终未能解析
+       *[notify] 该蓝牙设备没有可识别的数据通知特征: 不是受支持的适配器或万用表，或者服务始终未能解析
     }
 # A Brymen meter refused the password this tool sends.
 error-bluetooth-password-refused = 万用表拒绝了连接密码 0000: 要重置密码，请{ error-bluetooth-reset-gesture }

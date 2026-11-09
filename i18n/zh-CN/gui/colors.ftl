@@ -22,7 +22,7 @@ colors-theme-dark =
         [customized] 深色 (自定义)
        *[plain] 深色
     }
-    .hover = 整个 GUI 使用深色模式
+    .hover = 整个界面使用深色模式
 # $state as for Dark.
 colors-theme-light =
     { $state ->
@@ -30,14 +30,14 @@ colors-theme-light =
         [customized] 浅色 (自定义)
        *[plain] 浅色
     }
-    .hover = 整个 GUI 使用浅色模式
+    .hover = 整个界面使用浅色模式
 # $state as for Dark, never customized: System has no colours of its own.
 colors-theme-system =
     { $state ->
         [pinned] 系统 (--theme)
        *[plain] 系统
     }
-    .hover = 跟随桌面的浅色/深色设置 (桌面未报告时用深色)
+    .hover = 跟随桌面的浅色/深色设置 (无法获取时使用深色)
 # A named theme's chip when --theme picked it for the session; otherwise
 # the chip is the theme's name alone. $name is the theme's name, e.g.
 # Midnight.
@@ -111,8 +111,8 @@ colors-issue-name-reserved = “{ $name }”已被“主题”行占用
 # button captions on the button.
 colors-issue-not-opaque =
     { $what ->
-        [button] 按钮文字颜色不是完全不透明
-       *[text] 背景上的文字颜色不是完全不透明
+        [button] 按钮文字颜色带有透明度
+       *[text] 背景上的文字颜色带有透明度
     }
 # The colours can't be read on each other. $what is as above; $ratio is
 # their contrast, e.g. 1.8, and $floor the least allowed, e.g. 3.
@@ -122,7 +122,7 @@ colors-issue-low-contrast =
        *[text] 背景上的文字对比度为 { $ratio }:1，低于 { $floor }:1 的下限
     }
 # The theme's text on its frame, the surface of the top bar and Settings.
-colors-issue-frame-not-opaque = 框架上的文字颜色不是完全不透明
+colors-issue-frame-not-opaque = 框架上的文字颜色带有透明度
 # As above, on the frame. $ratio and $floor are as above.
 colors-issue-frame-low-contrast = 框架上的文字对比度为 { $ratio }:1，低于 { $floor }:1 的下限
 # Another file in the folder gives its theme the same name. $name is the
@@ -161,12 +161,12 @@ colors-preset-colorblind =
     }
     .hover = 红色盲和绿色盲用户也能分辨的配色
 # After the chips while there are changes a click would lose.
-colors-preset-clears = 选择预设将清除自定义
+colors-preset-clears = 选择预设将清除自定义颜色
 
 ## The Customize colors section, folded under its header until opened.
 
 colors-customize = 自定义颜色
-    .hover = 在所选预设或主题之上逐个覆盖颜色
+    .hover = 基于所选预设或主题逐个覆盖颜色
 # Beside the header: whose colours the swatches change. $mode is dark or
 # light.
 colors-editing =
@@ -184,7 +184,7 @@ colors-group-status = 状态:
 # The arrow after a colour that others follow, before those it leads.
 # $anchor is the leading colour's name, as its swatch below has it.
 colors-follow-arrow =
-    .hover = 这些颜色跟随“{ $anchor }”变化并保持相对偏移，直到你单独设置其中一个
+    .hover = 这些颜色跟随“{ $anchor }”变化并保持相对偏移，直到单独设置其中一个
 
 ## The swatches, each named beside it, in the rows the section shows them.
 
@@ -196,7 +196,7 @@ colors-swatch-button = 按钮
     .hover = 按钮背景色
 # Lines between and around the panels.
 colors-swatch-border = 边框
-    .hover = 分隔线、面板边缘、框线和绘图轮廓
+    .hover = 分隔线、面板边缘、框线和绘图区轮廓
 # Short for the plot's background.
 colors-swatch-plot-background = 绘图背景
     .hover = 图表绘图区的背景色
@@ -223,18 +223,18 @@ colors-swatch-envelope = 包络线
     .hover = 最小值/最大值包络的填充色
 # The lines of the other values a meter shows at once beside the main one.
 colors-swatch-overlay-1 = 叠加 1
-    .hover = 绘制在主曲线旁的第一个副读数的线条颜色
+    .hover = 第一条副读数曲线的颜色
 colors-swatch-overlay-2 = 叠加 2
-    .hover = 绘制在主曲线旁的第二个副读数的线条颜色
+    .hover = 第二条副读数曲线的颜色
 colors-swatch-overlay-3 = 叠加 3
-    .hover = 绘制在主曲线旁的第三个副读数的线条颜色
+    .hover = 第三条副读数曲线的颜色
 # The frame the overview strip under the graph draws around the part on
 # show.
 colors-swatch-viewport = 视区
     .hover = 缩略图中视区矩形的颜色
 # A stretch with no readings.
 colors-swatch-gap = 间断
-    .hover = 标记记录数据中间断的颜色
+    .hover = 用于标出数据记录间断处的颜色
 # The line at the average of the readings.
 colors-swatch-mean = 平均值
     .hover = 平均值叠加线的颜色
@@ -243,7 +243,7 @@ colors-swatch-ref = 参考
     .hover = 参考线的颜色
 # Where the readings cross a set level.
 colors-swatch-crossing = 穿越
-    .hover = 触发穿越标记的颜色
+    .hover = 触发穿越点的标记颜色
 colors-swatch-cursor = 光标
     .hover = 测量光标的颜色
 # The numbered markers the user drops on the graph.
@@ -307,7 +307,7 @@ colors-save-file-type = 主题
 # $name is the theme's name, from the file name the user typed.
 colors-saved = 已将 { $name } 保存到主题文件夹
 # Saved outside the themes folder. $file is the file name.
-colors-saved-elsewhere = 已保存 { $file }。将它复制到主题文件夹即可作为主题使用
+colors-saved-elsewhere = 已保存 { $file }。复制到主题文件夹后即可作为主题使用
 # The save dialog closed without an answer.
 colors-save-dialog-failed = 未保存: 保存对话框出错
 # A name typed without .json gets it added, and the file of that name

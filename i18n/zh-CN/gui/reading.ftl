@@ -69,7 +69,7 @@ reading-spoken-labelled-at = 第 { $seconds } 秒时 { $label } { $value }
 # Said in place of the digits when the input is past the range (OL).
 reading-spoken-overload = 超量程
 # The non-contact voltage detector's level; $level is a number from 1 up.
-reading-spoken-ncv = NCV 等级 { $level }
+reading-spoken-ncv = NCV { $level } 级
 # A word the meter shows in place of the digits, $word (e.g. ---- or Auto),
 # which says there is no reading.
 reading-spoken-no-reading = 无读数 ({ $word })

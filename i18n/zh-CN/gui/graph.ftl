@@ -80,9 +80,9 @@ graph-show-chip =
     .hover =
         { $state ->
             [full] 最多显示 { $max } 种单位，请先隐藏一种再显示“{ $series }”
-            [narrow] 加宽窗口以显示“{ $series }”轴，或单击隐藏它
+            [narrow] 加宽窗口以显示“{ $series }”轴，或单击隐藏该曲线
             [shown] 隐藏“{ $series }”曲线
-           *[hidden] 在所绘曲线旁显示“{ $series }”曲线
+           *[hidden] 与所绘曲线一同显示“{ $series }”曲线
         }
     .a11y = 显示 { $series } 曲线
 
@@ -218,11 +218,11 @@ graph-histogram-bin-interval =
 # dragged sideways to resize it: its name for a screen reader. Left/Right
 # are the arrow keys.
 graph-histogram-divider-side =
-    .a11y = 调整直方图大小 (按向左键/向右键调整)
+    .a11y = 调整直方图大小 (按向左键/向右键)
 # The divider over the histogram under the minimap, dragged up or down.
 # Up/Down are the arrow keys.
 graph-histogram-divider-below =
-    .a11y = 调整直方图大小 (按向上键/向下键调整)
+    .a11y = 调整直方图大小 (按向上键/向下键)
 
 ## What a screen reader hears of the histogram, one sentence among the
 ## plot's: graph-histogram-a11y, then the phrases after it, each after
@@ -243,12 +243,12 @@ graph-histogram-a11y = { $count } 个可见读数的直方图
 graph-histogram-a11y-sd = 标准差 { $value }
 # The bar holding the most readings: $range is its values (see
 # graph-histogram-range), $count how many it holds.
-graph-histogram-a11y-most = 读数最多的区间为 { $range } ({ $count })
+graph-histogram-a11y-most = 读数最多的区间为 { $range } (共 { $count } 个)
 # How many readings in view were over range (OL). $count is that number.
 graph-histogram-a11y-over-range = { $count } 个读数超量程
 # How many readings in view lie above and below the Y axis' ends, out of
 # the histogram's reach. $above and $below are those numbers.
-graph-histogram-a11y-beyond = 轴上方 { $above } 个，轴下方 { $below } 个
+graph-histogram-a11y-beyond = 高于 Y 轴上限 { $above } 个，低于 Y 轴下限 { $below } 个
 # While both cursors are placed: $count is how many samples lie between
 # them.
 graph-histogram-a11y-interval = 两个光标之间有 { $count } 个读数

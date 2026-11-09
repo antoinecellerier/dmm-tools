@@ -515,7 +515,7 @@ key-hover-record-minimum-maximum-and-average-readings = 记录最小值、最大
 # Used by: UT171A/B/C, UT181A
 key-hover-save-the-reading-to-the-meter = 将读数保存到万用表的存储器
 # Used by: CMS061, CMS101
-key-hover-send-select-switches-v-dc-to = 发送 Select 键，将 V,DC 切换为 V,AC
+key-hover-send-select-switches-v-dc-to = 发送 Select 按键命令，将 V,DC 切换为 V,AC
 # Used by: VC915
 key-hover-show-3-phase-rotation-direction = 显示三相相序
 # Used by: VC915
@@ -595,7 +595,7 @@ activation-bm78xbt =
     2. 将旋钮转到除 Auto V/LoZ 以外的任意功能档
     3. 长按 Δ 键至少 1 秒，直到显示屏上显示 ((D))
     注意: 万用表空闲 15 到 30 分钟后自动关机；按住 SELECT 键的同时开机可禁用自动关机 (显示 dSAPO)。
-    如果找不到万用表，或其连接密码已被更改，请按住 Hz 键，同时在 0.6 s 内将旋钮从 OFF 转到电容档: 万用表显示 "Org"，连接密码和蓝牙名称恢复为出厂设置。
+    如果找不到万用表，或连接密码已更改，请按住 Hz 键，同时在 0.6 s 内将旋钮从 OFF 转到电容档: 万用表显示 "Org"，连接密码和蓝牙名称恢复为出厂设置。
 # Used by: OW69B
 activation-ow69b =
     1. 断开万用表与手机应用的连接
@@ -965,7 +965,7 @@ note-10a-5a-continuous-5a-10a-10s = 10A: ≤5A 可连续使用；>5A–10A 每�
 note-10hz-200khz-pulse-width-2us-depends = 10Hz–200kHz: 脉冲宽度 >2µs，取决于信号频率
 # Used by: UT181A
 # In: (4) AC Current; (5) DC Current; (6) AC Current + DC Current
-note-20a-30s-on-then-10min-off = 20A: 连续 30s，然后停 10min；10A 以上未指定
+note-20a-30s-on-then-10min-off = 20A: 连续测量 30s，之后间隔 10min；10A 以上未指定
 # Used by: Mock UT61E+, UT161E, UT61E+
 # In: Capacitance
 note-220mf-range-measurement-takes-20s = 220mF 量程: 测量耗时 ≈20s
@@ -1016,10 +1016,10 @@ note-60mv-use-rel-to-compensate-bias = 60mV: 使用 REL 补偿偏置电压
 note-6nf-60nf-600nf-subtract-open-circuit = 6nF，60nF，600nF: 减去表笔开路电容
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
 # In: DC AC & AC+DC AC Voltage
-note-9-999v-1khz-20khz-specified-for = 9.999V，1kHz ~ 20kHz: 仅在 1kHz ~ 15kHz 范围内指定
+note-9-999v-1khz-20khz-specified-for = 9.999V，1kHz ~ 20kHz: 指定范围仅为 1kHz ~ 15kHz
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
 # In: AC Voltage
-note-9-999v-3khz-20khz-specified-for = 9.999V，3kHz ~ 20kHz: 仅在 3kHz ~ 15kHz 范围内指定
+note-9-999v-3khz-20khz-specified-for = 9.999V，3kHz ~ 20kHz: 指定范围仅为 3kHz ~ 15kHz
 # Used by: UT804
 # In: L. 4~20 mA loop current
 note-4ma-shows-lo-20ma-shows-hi = <4mA 显示 LO，>20mA 显示 HI
@@ -1115,7 +1115,7 @@ note-beeps-continuously-10ohm-silent-30ohm = ≤10Ω 时连续蜂鸣；>30Ω 时
 note-beeps-continuously-10ohm-silent-50ohm = ≤10Ω 时连续蜂鸣；>50Ω 时无声
 # Used by: UT181A
 # In: (15) Diode Test
-note-brief-beep-on-a-normal-junction = 结正常时短促蜂鸣，短路时连续蜂鸣
+note-brief-beep-on-a-normal-junction = 被测结正常时短促蜂鸣，短路时连续蜂鸣
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
 # In: AC & AC+DC Current; DC Current
 note-burden-voltage-0-02v-a = 负载电压 0.02V/A

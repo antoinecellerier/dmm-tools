@@ -20,7 +20,7 @@ connection-no-frames = 回放文件的这一段没有帧
 # at the end, with nothing after it.
 connection-waiting = 正在等待万用表{ $dots }
 # Under the waiting title, when a meter is picked in Settings.
-connection-waiting-check-selection = 检查“设置”(⚙) 中是否选择了正确的设备，或在其中选择“自动检测”
+connection-waiting-check-selection = 在“设置”(⚙) 中确认所选设备是否正确，或改选“自动检测”
 # Under the waiting title, when Settings is on Auto-detect.
 connection-waiting-switch-on = 打开万用表的数据传输，或在“设置”(⚙) 中选择型号
 
@@ -58,12 +58,12 @@ connection-not-identified =
     { $link ->
         [adapter] 蓝牙适配器已连接，但没有识别到万用表。
         [radio] 蓝牙链路已建立，但没有识别到万用表。
-       *[usb] USB 连接线已连接，但没有识别到万用表。
+       *[usb] USB 连接线已插入，但没有识别到万用表。
     }
 
     打开万用表的数据传输，或在“设置”(⚙) 中选择型号:
 # After that list.
-connection-not-identified-report = 已在传输数据但仍无法识别? 请在“设置”(⚙) 中选择它的型号，并报告此问题。
+connection-not-identified-report = 万用表已在传输数据但仍无法识别? 请在“设置”(⚙) 中选择型号，并报告此问题。
 
 # The meter stopped answering. $link is usb (a USB cable), adapter (a
 # Bluetooth adapter plugged into the meter), radio (the meter's own
@@ -73,7 +73,7 @@ connection-not-identified-report = 已在传输数据但仍无法识别? 请在�
 connection-no-response =
     { $link ->
         [usb]
-            USB 连接线已连接，但万用表
+            USB 连接线已插入，但万用表
             没有响应 (已选择 { $model })。
         [adapter]
             蓝牙适配器已连接，但万用表
@@ -86,7 +86,7 @@ connection-no-response =
             没有响应 (已选择 { $model })。
     }
 
-    如果设备选错了，请在“设置”(⚙) 中更改，或在其中选择“自动检测”。
+    如果设备选错了，请在“设置”(⚙) 中更改，或改选“自动检测”。
     否则，开启数据传输:
     { $steps }
 # The same, on Auto-detect: no meter is picked to name.
@@ -102,7 +102,7 @@ connection-bad-data = 万用表发送的数据无法读取
 # 2 or more.
 connection-cables-at-open =
     { $count ->
-       *[other] 检测到 { $count } 根可供本次会话打开的 USB 连接线，已打开最先找到的一根。可通过 --adapter 选择其他连接线。
+       *[other] 本次会话检测到 { $count } 根可用的 USB 连接线，已使用最先找到的一根。可通过 --adapter 选择其他连接线。
     }
 # Follows connection-cables-at-open when nothing tells those cables apart.
 connection-cables-no-reconnect = 这些连接线无法相互区分，除非用 --adapter 指定连接线的路径，否则连接断开后本次会话将结束。
@@ -119,7 +119,7 @@ connection-several-cables-recording = 记录已停止: 连接已断开，且无�
 connection-failed = 连接失败
 # A meter that stopped answering in the middle of a session. $title is the
 # shared notice title, "No response from meter".
-connection-no-response-check = { $title }，请检查设备选择和数据传输
+connection-no-response-check = { $title }，请检查所选设备和数据传输
 # The reading thread stopped by itself: it crashed, or gave up connecting.
 connection-acquisition-stopped = 采集意外停止，请重新连接以继续
 
@@ -143,14 +143,14 @@ connection-late-copied = 命令已复制
 # for a session that detects every time.
 connection-detected =
     { $saved ->
-        [yes] 已检测到 { $meter }，并保存为你的设备。在“设置”中选择“自动检测”可重新探测。
+        [yes] 已检测到 { $meter }，并保存为当前设备。在“设置”中选择“自动检测”可重新探测。
        *[no] 已检测到 { $meter }
     }
 # The same, when the name the meter gave for itself differs; $meter and
 # $saved as there. $reported is that name, e.g. UT216XD.
 connection-detected-reports =
     { $saved ->
-        [yes] 已检测到 { $meter } (万用表报告的名称为“{ $reported }”)，并保存为你的设备。在“设置”中选择“自动检测”可重新探测。
+        [yes] 已检测到 { $meter } (万用表报告的名称为“{ $reported }”)，并保存为当前设备。在“设置”中选择“自动检测”可重新探测。
        *[no] 已检测到 { $meter } (万用表报告的名称为“{ $reported }”)
     }
 # The meter named another model than the one picked in Settings. $reported
@@ -162,8 +162,8 @@ connection-other-model = 万用表报告的名称为“{ $reported }”，与所
 # Settings now names that model.
 connection-named-after-detection =
     { $saved ->
-        [yes] 万用表报告的名称为“{ $reported }”，已保存为你的设备: 请重新连接，将其作为 { $named } 读取。
-       *[no] 万用表报告的名称为“{ $reported }”: 请重新连接，将其作为 { $named } 读取。
+        [yes] 万用表报告的名称为“{ $reported }”，已保存为当前设备: 请重新连接，以便按 { $named } 读取。
+       *[no] 万用表报告的名称为“{ $reported }”: 请重新连接，以便按 { $named } 读取。
     }
 
 # The recording stopped because Buffer size, in Settings, was lowered below

@@ -61,14 +61,14 @@ settings-device-name = 连接时显示设备名称 (会蜂鸣)
 # Bluetooth devices.
 settings-bluetooth-pinned = { $setting } (--no-bluetooth)
 settings-bluetooth =
-    .hover = 没有 USB 连接线响应时，查找范围内的蓝牙适配器或万用表。下次连接时生效。
+    .hover = 没有 USB 连接线响应时，查找蓝牙范围内的适配器或万用表。下次连接时生效。
 
 ## What is kept of the readings.
 
 settings-sample-interval = 采样间隔:
 # The first Sample interval chip; the others are durations, e.g. 300ms or 2s.
 settings-interval-every-reading = 每个读数
-    .hover = 按万用表自身的节奏保留它产生的每个读数
+    .hover = 按万用表的输出节奏保留每个读数
 # The other Sample interval chips' hover. $unit is second for exactly one
 # second, seconds for a whole number of seconds and ms otherwise; $n is how
 # many seconds or milliseconds. s and ms are unit symbols.
@@ -92,11 +92,11 @@ settings-buffer-size-chip =
         { $pace ->
             [every-reading]
                 { $count ->
-                   *[other] 图表中最多保留 { $samples } 个样本供显示和导出: 占用 { $memory }，按每秒 10 个读数约可容纳 { $span }。同时保留的已停止记录最多可再占用同样多的空间
+                   *[other] 图表中最多保留 { $samples } 个样本供显示和导出: 占用 { $memory }，按每秒 10 个读数约可容纳 { $span }。如果同时保留已停止的记录，最多还会占用同样多的空间
                 }
            *[interval]
                 { $count ->
-                   *[other] 图表中最多保留 { $samples } 个样本供显示和导出: 占用 { $memory }，按当前采样间隔约可容纳 { $span }。同时保留的已停止记录最多可再占用同样多的空间
+                   *[other] 图表中最多保留 { $samples } 个样本供显示和导出: 占用 { $memory }，按当前采样间隔约可容纳 { $span }。如果同时保留已停止的记录，最多还会占用同样多的空间
                 }
         }
 # After the Buffer size chips: what the picked size costs. $memory is the
@@ -199,7 +199,7 @@ settings-check-updates = 检查新版本
 # $version is the release, e.g. v0.10.0.
 settings-update-release = { $version } 已发布 ↗
 # The same for a newer nightly build, which has no version number.
-settings-update-dev = 更新的开发版本 ↗
+settings-update-dev = 有新的开发版本 ↗
 # Its shorter form, when the top bar is short of room.
 settings-update-dev-short = 更新 ↗
 

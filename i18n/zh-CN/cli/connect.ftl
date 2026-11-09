@@ -113,7 +113,7 @@ connect-adapter-select = 使用 { $selector } 选择其中一个。
 
 # $title is "No response from meter" (shared.ftl). $meter is the meter
 # picked, e.g. UNI-T UT61E+.
-connect-no-response = { $title }。请确认它是 { $meter }，并已开启数据传输。
+connect-no-response = { $title }。请确认设备是 { $meter }，并已开启数据传输。
 
 ## The line that closes a failed open, after "Error:" (common.ftl). The
 ## lines above it have already said what to try.

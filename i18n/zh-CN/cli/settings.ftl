@@ -73,22 +73,22 @@ settings-switched =
         [range] 万用表已切换到 { $choice } (手动量程)
         [hold] 万用表 HOLD 已设为{ $choice }
         [rel] 万用表 REL 已设为{ $choice }
-        [minmax] 万用表已进入 { $choice }
-        [minmax-off] 万用表已退出 MIN/MAX
-        [peak] 万用表已进入 { $choice }
+        [minmax] 万用表已进入 { $choice } 状态
+        [minmax-off] 万用表已退出 MIN/MAX 状态
+        [peak] 万用表已进入 { $choice } 状态
         [peak-off] 万用表已退出峰值模式
     }
 # The meter was on it already, so nothing was sent.
 settings-already =
     { $case ->
-       *[mode] 万用表已处于 { $choice }
+       *[mode] 万用表已处于 { $choice } 模式
         [range-auto] 万用表已处于自动量程 ({ $range })
         [range] 万用表已处于 { $choice } (手动量程)
         [hold] 万用表 HOLD 已是{ $choice }
         [rel] 万用表 REL 已是{ $choice }
-        [minmax] 万用表已处于 { $choice }
+        [minmax] 万用表已处于 { $choice } 状态
         [minmax-off] 万用表已不在 MIN/MAX 状态
-        [peak] 万用表已处于 { $choice }
+        [peak] 万用表已处于 { $choice } 状态
         [peak-off] 万用表已不在峰值状态
     }
 

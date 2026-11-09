@@ -30,16 +30,16 @@ dmm-gui--renderer =
     .help = 图形渲染器
 # dmm-gui --adapter
 dmm-gui--adapter =
-    .help = 有多个可用适配器时，选择指定的一个。使用 USB 连接线的序列号或 HID 路径，或蓝牙适配器或万用表的地址，写法同 'dmm-cli list' 的输出
+    .help = 有多个可用适配器时，选择指定的一个。取值为 USB 连接线的序列号或 HID 路径，或者蓝牙适配器、万用表的地址，写法与 'dmm-cli list' 的输出相同
 # dmm-gui --no-bluetooth
 dmm-gui--no-bluetooth =
-    .help = 在本次会话中关闭蓝牙扫描。覆盖“查找蓝牙设备”设置。仍会打开传给 --adapter 的地址
+    .help = 在本次会话中关闭蓝牙扫描。覆盖“查找蓝牙设备”设置。仍会连接 --adapter 指定的地址
 # dmm-gui --replay
 dmm-gui--replay =
-    .help = 回放由 'dmm-cli read --format replay' 或“导出…”→“回放…”写入的文件，而不是连接万用表
+    .help = 不连接万用表，改为回放由 'dmm-cli read --format replay' 或“导出…”→“回放…”写入的文件
 # dmm-gui --import
 dmm-gui--import =
-    .help = 打开导出的 CSV、JSON 或回放文件及其标记，而不是连接万用表
+    .help = 不连接万用表，改为打开导出的 CSV、JSON 或回放文件及其标记
 # dmm-gui --completions
 dmm-gui--completions =
     .help = 打印 shell 补全脚本后退出

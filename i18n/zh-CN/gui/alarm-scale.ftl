@@ -76,15 +76,15 @@ scale-on =
     { $also ->
         [recording] 正在换算读数: { $transform }；记录将继续使用换算后的值
         [alarm] 正在换算读数: { $transform }；报警已关闭，请用新单位重新设置限值
-        [both] 正在换算读数: { $transform }；记录将继续使用换算后的值；报警已关闭，请用新单位重新设置限值
+        [both] 正在换算读数: { $transform }；记录将继续使用换算后的值，报警已关闭，请用新单位重新设置限值
        *[none] 正在换算读数: { $transform }
     }
 # Scaling turned off. $also as in scale-on.
 scale-off-toast =
     { $also ->
         [recording] 换算已关闭；记录将继续使用换算后的值
-        [alarm] 换算已关闭；报警已关闭，请用新单位重新设置限值
-        [both] 换算已关闭；记录将继续使用换算后的值；报警已关闭，请用新单位重新设置限值
+        [alarm] 换算和报警均已关闭，请用新单位重新设置限值
+        [both] 换算已关闭，记录将继续使用换算后的值；报警也已关闭，请用新单位重新设置限值
        *[none] 换算已关闭
     }
 
@@ -101,7 +101,7 @@ alarm-no-limit = 无
 # reading must come before that limit can alarm again. Its placeholder says
 # that blank picks the band automatically.
 alarm-band = 自动
-    .hover = 读数需回到限值内多少，该限值才会再次报警: 填写数值或百分比 (如 1%)，留空则自动设置
+    .hover = 读数回到限值内超过此幅度后，该限值才会再次报警: 填写数值或百分比 (如 1%)，留空则自动设置
 # After the limits, the unit they are in, e.g. V; this is its hover.
 alarm-unit =
     .hover = 限值使用的单位

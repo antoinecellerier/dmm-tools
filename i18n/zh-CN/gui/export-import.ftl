@@ -50,7 +50,7 @@ export-json = JSON…
 # A replay file. dmm-gui --replay is a command line, kept as it is; "as the
 # meter" means as if it were the meter attached.
 export-replay = 回放…
-    .hover = dmm-gui --replay 可将此文件当作万用表回放
+    .hover = 使用 dmm-gui --replay 可像连接万用表一样回放此文件
 # The Replay… entry's hover while it is greyed out, and the error shown if
 # a replay is asked for anyway. The mock is the simulated meter the app
 # offers for trying it out; its samples hold none of the bytes a real meter
@@ -171,7 +171,7 @@ export-nothing-connect = 没有可导出的内容: 请先连接万用表
 export-nothing-yet = 没有可导出的内容: 还没有读数
 # After Export… while an earlier export still waits on its save dialog or
 # is being written.
-export-in-progress = 已有导出正在进行: 请先完成
+export-in-progress = 已有导出任务正在进行: 请先完成
 # The file could not be written. $reason is why, in the words of the
 # system or the file writer, often in English.
 export-failed = 导出失败: { $reason }
