@@ -21,7 +21,7 @@ recording-stop = ■ Parar
 # Shown after Export… once a recording has stopped. Export… is the button
 # beside it, which saves the samples to a file.
 recording-discard = Descartar
-    .hover = Descartar a gravação; “Exportar…” passa a salvar as amostras do gráfico
+    .hover = Descartar a gravação; depois, use “Exportar…” para salvar as amostras do gráfico
 # After the buttons: $count is how many samples the recording holds. While
 # it runs, followed by " | " and how long it has run, e.g. 152 samples | 12s.
 recording-count =

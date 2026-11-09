@@ -299,7 +299,7 @@ capture-review-prompt = Números das leituras que NÃO corresponderam ao display
 
 # Bold, between heavy lines; "Part 4" is the run's last part.
 capture-freeform-heading = Parte 4: capturas adicionais (opcional)
-capture-freeform-intro = Coloque o multímetro em qualquer modo/estado não coberto acima.
+capture-freeform-intro = Coloque o multímetro em qualquer modo ou estado que as etapas acima não tenham coberto.
 # After the capture's id in brackets, e.g. [extra_0]; waits for a line.
 # $quit is the word that ends the pass: q.
 capture-freeform-prompt = Descreva como você configurou o multímetro (ou '{ $quit }' para concluir):

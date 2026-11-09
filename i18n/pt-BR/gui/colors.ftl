@@ -311,7 +311,7 @@ colors-saved = Tema { $name } salvo na sua pasta de temas
 # Saved outside the themes folder. $file is the file name.
 colors-saved-elsewhere = Arquivo { $file } salvo. Copie-o para a sua pasta de temas para usá-lo como tema
 # The save dialog closed without an answer.
-colors-save-dialog-failed = Não salvo: falha na caixa de diálogo de salvar
+colors-save-dialog-failed = Não salvo: falha na caixa de diálogo Salvar
 # A name typed without .json gets it added, and the file of that name
 # already exists. $path is that file, in full.
 colors-save-exists = Não salvo: { $path } já existe; escolha-o na caixa de diálogo para substituí-lo

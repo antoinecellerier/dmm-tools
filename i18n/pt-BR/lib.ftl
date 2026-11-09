@@ -1355,7 +1355,7 @@ note-shorted-leads-residual-3-digits = Pontas de prova em curto: residual ≤3 d
 note-shorted-leads-residual-5-digits = Pontas de prova em curto: residual ≤5 dígitos
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
 # In: Diode Tester
-note-test-current-0-4ma-typical = Corrente de teste 0.4mA típica
+note-test-current-0-4ma-typical = Corrente de teste típica de 0.4mA
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
 # In: AutoCheck™ (ACV)
 note-then-typically-18kohm-100v-125kohm-300v = Depois, tipicamente 18kΩ@100V, 125kΩ@300V, 320kΩ@600V, 460kΩ@1000V
