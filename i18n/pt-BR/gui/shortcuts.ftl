@@ -38,10 +38,10 @@ shortcuts-import = Importar um arquivo…
 # N: puts a numbered marker on the reading the meter shows now.
 shortcuts-add-marker = Adicionar um marcador na leitura exibida
 # Ctrl+N: the same, then puts the caret in the marker's note.
-shortcuts-add-marker-note = Adicionar um marcador e escrever a nota dele
+shortcuts-add-marker-note = Adicionar um marcador e escrever uma nota
 # Ctrl+B: steps the big meter (the reading drawn large) through off, full
 # window and a minimal strip.
-shortcuts-big-meter = Alternar a leitura ampliada (desativada / janela inteira / mínima)
+shortcuts-big-meter = Percorrer os modos da leitura ampliada (desativada / janela inteira / mínima)
 # Ctrl+T: keeps the window above other windows, or stops doing so.
 shortcuts-always-on-top = Ativar / desativar Sempre visível
 # The same row on Wayland, where the window can't do it and the row is
@@ -114,7 +114,7 @@ shortcuts-mouse-zoom = Aplicar zoom ao eixo X em torno do ponteiro
 shortcuts-mouse-scroll = Rolar o painel
     .gesture = Roda de rolagem
 # Follows the newest readings again and fits the value axis to them.
-shortcuts-mouse-reset = Voltar ao acompanhamento ao vivo e ao Y automático
+shortcuts-mouse-reset = Voltar a acompanhar ao vivo, com Y automático
     .gesture = Clicar duas vezes
 # While the cursors are shown (C), a click places cursor A or B on the
 # reading nearest to it.

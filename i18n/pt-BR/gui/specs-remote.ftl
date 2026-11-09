@@ -77,10 +77,10 @@ remote-rel =
     .hover = Mostrar as leituras relativas ao valor atual
 # RANGE: the meter leaves auto-range and steps to its next range.
 remote-range =
-    .hover = Pressionar RANGE (faixa manual, um passo)
+    .hover = Pressionar RANGE (faixa manual, avança para a próxima)
 # AUTO: the meter picks its range itself again.
 remote-auto =
-    .hover = Voltar o multímetro à faixa automática
+    .hover = Fazer o multímetro voltar à faixa automática
 # MAX/MIN: a click steps between the meter's highest and lowest readings; the
 # small × button beside it while it is on leaves the mode.
 remote-min-max-exit =

@@ -30,7 +30,7 @@ read-replay-names-its-device = o arquivo de --replay já indica o multímetro; r
 read-import-names-its-device = o arquivo de --import já indica o multímetro; remova --device
 # --format replay writes the frames a meter sent. $device is the simulated
 # meter's id, e.g. mock.
-read-replay-format-needs-meter = --format replay requer um multímetro real; não há nada para gravar de --device { $device }
+read-replay-format-needs-meter = --format replay requer um multímetro real; --device { $device } não envia nada que possa ser gravado
 # $flag is the option given that would change the readings, e.g. --scale or
 # --integrate.
 read-replay-format-keeps-frames = um arquivo de reprodução contém os próprios quadros do multímetro; use { $flag } ao reproduzi-lo

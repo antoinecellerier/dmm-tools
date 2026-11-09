@@ -68,7 +68,7 @@ settings-bluetooth =
 settings-sample-interval = Intervalo de amostragem:
 # The first Sample interval chip; the others are durations, e.g. 300ms or 2s.
 settings-interval-every-reading = Todas as leituras
-    .hover = Manter cada leitura que o multímetro produz, no ritmo dele
+    .hover = Manter todas as leituras que o multímetro envia, no ritmo dele
 # The other Sample interval chips' hover. $unit is second for exactly one
 # second, seconds for a whole number of seconds and ms otherwise; $n is how
 # many seconds or milliseconds. s and ms are unit symbols.
@@ -92,13 +92,13 @@ settings-buffer-size-chip =
         { $pace ->
             [every-reading]
                 { $count ->
-                    [one] Manter até { $samples } amostra no gráfico e para exportação: { $memory }, cerca de { $span } a 10 leituras por segundo. Se houver também uma gravação parada, ela pode ocupar o mesmo tanto
-                   *[other] Manter até { $samples } amostras no gráfico e para exportação: { $memory }, cerca de { $span } a 10 leituras por segundo. Se houver também uma gravação parada, ela pode ocupar o mesmo tanto
+                    [one] Manter até { $samples } amostra no gráfico e para exportação: { $memory }, cerca de { $span } a 10 leituras por segundo. Se houver também uma gravação parada, ela pode ocupar a mesma quantidade de memória
+                   *[other] Manter até { $samples } amostras no gráfico e para exportação: { $memory }, cerca de { $span } a 10 leituras por segundo. Se houver também uma gravação parada, ela pode ocupar a mesma quantidade de memória
                 }
            *[interval]
                 { $count ->
-                    [one] Manter até { $samples } amostra no gráfico e para exportação: { $memory }, cerca de { $span } no intervalo de amostragem atual. Se houver também uma gravação parada, ela pode ocupar o mesmo tanto
-                   *[other] Manter até { $samples } amostras no gráfico e para exportação: { $memory }, cerca de { $span } no intervalo de amostragem atual. Se houver também uma gravação parada, ela pode ocupar o mesmo tanto
+                    [one] Manter até { $samples } amostra no gráfico e para exportação: { $memory }, cerca de { $span } com o intervalo de amostragem atual. Se houver também uma gravação parada, ela pode ocupar a mesma quantidade de memória
+                   *[other] Manter até { $samples } amostras no gráfico e para exportação: { $memory }, cerca de { $span } com o intervalo de amostragem atual. Se houver também uma gravação parada, ela pode ocupar a mesma quantidade de memória
                 }
         }
 # After the Buffer size chips: what the picked size costs. $memory is the
@@ -196,7 +196,7 @@ settings-always-on-top-wayland = (Não disponível no Wayland: clique com o bot�
 ## The update check, in builds downloaded from GitHub.
 
 settings-check-updates = Verificar novas versões
-    .hover = Uma vez por dia, perguntar ao GitHub se há uma versão mais recente. O GitHub vê seu endereço IP; nada sobre o seu multímetro é enviado.
+    .hover = Uma vez por dia, consultar o GitHub para saber se há uma versão mais recente. O GitHub vê seu endereço IP; nenhuma informação sobre o multímetro é enviada.
 # The link the top bar shows when a newer release is out; ↗ marks a link.
 # $version is the release, e.g. v0.10.0.
 settings-update-release = { $version } disponível ↗
@@ -217,11 +217,11 @@ settings-announce-every-reading =
 settings-announce-chip =
     .hover =
         { $n ->
-            [one] Anunciar a leitura no máximo uma vez por segundo. Uma mudança de modo é anunciada imediatamente.
-           *[other] Anunciar a leitura no máximo uma vez a cada { $n } segundos. Uma mudança de modo é anunciada imediatamente.
+            [one] Anunciar a leitura no máximo uma vez por segundo. Mudanças de modo são anunciadas imediatamente.
+           *[other] Anunciar a leitura no máximo uma vez a cada { $n } segundos. Mudanças de modo são anunciadas imediatamente.
         }
 settings-announce-never = Nunca
-    .hover = Não anunciar as leituras quando elas mudam. Uma perda de conexão continua sendo anunciada.
+    .hover = Não anunciar as leituras quando elas mudam. A perda de conexão continua sendo anunciada.
 # A checkbox at the end of the same row, or under it when the row wraps.
 # Focus is keyboard focus, or where the screen reader's cursor is.
 settings-announce-focused = Somente enquanto a leitura tiver o foco

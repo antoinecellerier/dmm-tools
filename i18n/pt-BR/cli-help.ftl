@@ -27,7 +27,7 @@ dmm-cli--no-bluetooth =
     .help = Desativar a procura por Bluetooth nesta execução: nenhum adaptador ou multímetro é procurado e 'list' mostra apenas cabos. Tem prioridade sobre a configuração 'bluetooth' salva. Um endereço informado em --adapter ainda é aberto
 # dmm-cli --lang
 dmm-cli--lang =
-    .help = Idioma das mensagens e da ajuda, ou `system` para o idioma do sistema. Se omitido, usa `language` do arquivo de configurações (gravado pela linha Idioma do dmm-gui) e, em seguida, o idioma do sistema
+    .help = Idioma das mensagens e da ajuda, ou `system` para o idioma do sistema. Se omitido, usa `language` do arquivo de configurações (definido pela opção Idioma do dmm-gui) e, em seguida, o idioma do sistema
 # dmm-cli list
 list =
     .about = Listar os cabos USB conectados e os adaptadores e multímetros Bluetooth ao alcance
@@ -68,7 +68,7 @@ read--unit =
     .help = Rotular a leitura ajustada com esta unidade em vez da unidade de base do multímetro
 # dmm-cli read --alarm-high
 read--alarm-high =
-    .help = Avisar quando a leitura subir acima de VALUE, em unidades de base (V, A, Ω, …), ou na --unit de uma leitura ajustada
+    .help = Avisar quando a leitura ultrapassar VALUE, em unidades de base (V, A, Ω, …), ou na --unit de uma leitura ajustada
 # dmm-cli read --alarm-low
 read--alarm-low =
     .help = Avisar quando a leitura cair abaixo de VALUE, como em --alarm-high
@@ -89,7 +89,7 @@ read--import =
     .help = Ler, sem esperar, um arquivo exportado (CSV, JSON ou de reprodução) em vez de abrir um multímetro, para convertê-lo ou exibir o resumo
 # dmm-cli command
 command =
-    .about = Enviar ao multímetro um comando que simula o pressionamento de uma tecla. Execute sem argumentos para listar os comandos disponíveis para o dispositivo selecionado
+    .about = Enviar ao multímetro um comando equivalente a pressionar uma tecla. Execute sem argumentos para listar os comandos do dispositivo selecionado
 # dmm-cli command <ACTION>
 command--action =
     .help = Nome do comando (execute sem argumentos para ver os comandos disponíveis)
@@ -131,7 +131,7 @@ completions =
     .about = Gerar o preenchimento automático do shell
 # dmm-cli completions <SHELL>
 completions--shell =
-    .help = Shell para o qual gerar o preenchimento automático
+    .help = Shell de destino do preenchimento automático
 # dmm-cli capture
 capture =
     .about = Captura guiada do protocolo para relatórios de bugs e verificação
@@ -167,4 +167,4 @@ capture--export-instructions =
     .help = Gravar as instruções das etapas em FILE, para traduzir e usar com --instructions, e sair
 # dmm-cli capture --instructions
 capture--instructions =
-    .help = Exibir as instruções das etapas lidas de FILE, traduzidas a partir do arquivo gravado por --export-instructions
+    .help = Exibir em cada etapa as instruções lidas de FILE, traduzidas a partir do arquivo gravado por --export-instructions

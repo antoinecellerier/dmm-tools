@@ -25,7 +25,7 @@ device-aliases =
     Também aceita nomes alternativos: ut61e+, ut61b, ut171a, ut181 etc.
     Coloque entre aspas os nomes com caracteres especiais: --device 'ut61e+'
 # Beside the simulated meters, in device lists.
-device-no-hardware = nenhum hardware necessário
+device-no-hardware = não requer hardware
 
 ## How far a meter's support is verified, beside it in device lists.
 
@@ -38,7 +38,7 @@ stability-experimental = experimental
 # $stability is verified, partly-verified or experimental.
 stability-warning =
     { $stability ->
-        [verified] O suporte ao multímetro { $model } está verificado (verificado em hardware real).
+        [verified] O suporte ao multímetro { $model } foi verificado em hardware real.
         [partly-verified] O suporte ao multímetro { $model } está parcialmente verificado (alguns modos e comandos não foram confirmados em hardware real).
        *[experimental] O suporte ao multímetro { $model } é experimental (não verificado em hardware real).
     }
@@ -49,7 +49,7 @@ stability-warning =
 mock-mode-list = Modos: { $modes }
 # $example is a command line.
 mock-mode-example = Exemplo: { $example }
-mock-clock-mock-only = --mock-clock-scale e --mock-clock-preseed só se aplicam ao multímetro simulado e a uma reprodução. Execute de novo com --device mock ou --replay, ou sem as opções de relógio.
+mock-clock-mock-only = --mock-clock-scale e --mock-clock-preseed só se aplicam ao multímetro simulado e à reprodução. Execute de novo com --device mock ou --replay, ou sem as opções de relógio.
 
 ## A link's short name, where the meter is already named: the GUI's
 ## status line, the setup help's section labels.
@@ -88,7 +88,7 @@ setup-usb-windows-input = - 'Dispositivo de Entrada USB' em Dispositivos de Inte
 setup-usb-windows-warning = - Ícone de aviso amarelo em 'Outros dispositivos': instale o driver disponível em
 setup-usb-windows-nothing = - Nada aparece: tente outra porta USB.
 # macOS. Name the settings as macOS shows them in your language.
-setup-usb-macos-auto = O cabo deve ser reconhecido automaticamente (nenhum driver necessário).
+setup-usb-macos-auto = O cabo deve ser reconhecido automaticamente (não é preciso instalar driver).
 setup-usb-macos-privacy = Se o dispositivo não for encontrado, verifique Ajustes do Sistema > Privacidade e Segurança > Monitoração de Entrada.
 setup-bluetooth-adapter = Se ambos estiverem ligados, desligue e ligue de novo o adaptador.
 setup-bluetooth-macos-privacy = Permita o Bluetooth em Ajustes do Sistema > Privacidade e Segurança > Bluetooth.
@@ -145,7 +145,7 @@ input-not-a-number = “{ $text }” não é um número
 # Infinity or "not a number" (NaN).
 input-not-finite = deve ser um número finito
 # A scale factor of 0 would turn every reading into the offset.
-input-zero-scale = um fator de escala zero apagaria a leitura
+input-zero-scale = um fator de escala igual a zero apagaria a leitura
 # The alarm's low limit and its high limit.
 input-low-not-below-high = o limite inferior deve ser menor que o superior
 # The alarm's hysteresis band: a number in the limits' unit, or a percentage

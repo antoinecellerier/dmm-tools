@@ -42,7 +42,7 @@ recording-history-hint =
     { $count ->
         [0] Nenhuma gravação. Use “Exportar…” para salvar { $count } amostras do gráfico. Clique em “Gravar” para continuar gravando quando o modo mudar.
         [one] Nenhuma gravação. Use “Exportar…” para salvar { $count } amostra do gráfico. Clique em “Gravar” para continuar gravando quando o modo mudar.
-       *[other] Nenhuma gravação. Use “Exportar…” para salvar { $count } amostras do gráfico. Clique em “Gravar” para continuar gravando quando o modo mudar.
+       *[other] Nenhuma gravação. Use “Exportar…” para salvar as { $count } amostras do gráfico. Clique em “Gravar” para continuar gravando quando o modo mudar.
     }
 
 ## Messages that show for a few seconds at the top right.

@@ -18,7 +18,7 @@
 
 # The first button of the row.
 import-button = Importar…
-    .hover = Abrir um arquivo CSV, JSON ou de reprodução exportado ({ $keys })
+    .hover = Abrir um arquivo exportado: CSV, JSON ou de reprodução ({ $keys })
 # The left part of the Export… split button: saves a CSV file at once.
 # $buffer is recording when a recording holds the samples, graph when
 # nothing is recorded and Export… saves the samples the graph holds.
@@ -94,20 +94,20 @@ export-unsaved-record =
             }
         [markers]
             { $markers ->
-                [one] Iniciar uma nova gravação descartará as alterações não salvas de { $markers } marcador. Os marcadores permanecem no gráfico enquanto as leituras deles continuarem nele.
-               *[other] Iniciar uma nova gravação descartará as alterações não salvas de { $markers } marcadores. Os marcadores permanecem no gráfico enquanto as leituras deles continuarem nele.
+                [one] Iniciar uma nova gravação descartará as alterações não salvas de { $markers } marcador. Os marcadores permanecem no gráfico enquanto as leituras marcadas continuarem nele.
+               *[other] Iniciar uma nova gravação descartará as alterações não salvas de { $markers } marcadores. Os marcadores permanecem no gráfico enquanto as leituras marcadas continuarem nele.
             }
        *[both]
             { $samples ->
                 [one]
                     { $markers ->
-                        [one] Iniciar uma nova gravação descartará { $samples } amostra não exportada e as alterações não salvas de { $markers } marcador. Os marcadores permanecem no gráfico enquanto as leituras deles continuarem nele.
-                       *[other] Iniciar uma nova gravação descartará { $samples } amostra não exportada e as alterações não salvas de { $markers } marcadores. Os marcadores permanecem no gráfico enquanto as leituras deles continuarem nele.
+                        [one] Iniciar uma nova gravação descartará { $samples } amostra não exportada e as alterações não salvas de { $markers } marcador. Os marcadores permanecem no gráfico enquanto as leituras marcadas continuarem nele.
+                       *[other] Iniciar uma nova gravação descartará { $samples } amostra não exportada e as alterações não salvas de { $markers } marcadores. Os marcadores permanecem no gráfico enquanto as leituras marcadas continuarem nele.
                     }
                *[other]
                     { $markers ->
-                        [one] Iniciar uma nova gravação descartará { $samples } amostras não exportadas e as alterações não salvas de { $markers } marcador. Os marcadores permanecem no gráfico enquanto as leituras deles continuarem nele.
-                       *[other] Iniciar uma nova gravação descartará { $samples } amostras não exportadas e as alterações não salvas de { $markers } marcadores. Os marcadores permanecem no gráfico enquanto as leituras deles continuarem nele.
+                        [one] Iniciar uma nova gravação descartará { $samples } amostras não exportadas e as alterações não salvas de { $markers } marcador. Os marcadores permanecem no gráfico enquanto as leituras marcadas continuarem nele.
+                       *[other] Iniciar uma nova gravação descartará { $samples } amostras não exportadas e as alterações não salvas de { $markers } marcadores. Os marcadores permanecem no gráfico enquanto as leituras marcadas continuarem nele.
                     }
             }
     }
@@ -133,13 +133,13 @@ export-unsaved-discard =
             { $samples ->
                 [one]
                     { $markers ->
-                        [one] Ao descartar a gravação, { $samples } amostra que já saiu do gráfico e as alterações não salvas de { $markers } marcador nela serão perdidas.
-                       *[other] Ao descartar a gravação, { $samples } amostra que já saiu do gráfico e as alterações não salvas de { $markers } marcadores nela serão perdidas.
+                        [one] Ao descartar a gravação, { $samples } amostra que já saiu do gráfico e as alterações não salvas de { $markers } marcador colocado nela serão perdidas.
+                       *[other] Ao descartar a gravação, { $samples } amostra que já saiu do gráfico e as alterações não salvas de { $markers } marcadores colocados nela serão perdidas.
                     }
                *[other]
                     { $markers ->
-                        [one] Ao descartar a gravação, { $samples } amostras que já saíram do gráfico e as alterações não salvas de { $markers } marcador nelas serão perdidas.
-                       *[other] Ao descartar a gravação, { $samples } amostras que já saíram do gráfico e as alterações não salvas de { $markers } marcadores nelas serão perdidas.
+                        [one] Ao descartar a gravação, { $samples } amostras que já saíram do gráfico e as alterações não salvas de { $markers } marcador colocado nelas serão perdidas.
+                       *[other] Ao descartar a gravação, { $samples } amostras que já saíram do gráfico e as alterações não salvas de { $markers } marcadores colocados nelas serão perdidas.
                     }
             }
     }
@@ -255,7 +255,7 @@ import-empty = { $file } não contém nenhuma leitura
 # words of the file reader or the system, often in English.
 import-failed = Falha ao importar: { $path }: { $reason }
 # Reading the file stopped on an internal error. $path is where it is.
-import-failed-crashed = Falha ao importar: { $path }: a importação falhou
+import-failed-crashed = Falha ao importar: { $path }: erro interno
 # The file dialog of Import… failed.
 import-dialog-failed = Falha ao importar
 # After Export… saved the file. $count is how many samples it holds; $file

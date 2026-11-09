@@ -551,7 +551,7 @@ model-mock-zt-5b = ZT-5B simulado
 activation-bm52x =
     1. Encaixe o cabo BU-86X na porta óptica PC-Comm, na parte traseira do multímetro, e conecte-o ao computador
     2. Ligue o multímetro em uma função de tensão
-    Observação: o multímetro desliga após cerca de 17 minutos de inatividade em um BM869s ou BM867s, e após 30 minutos nos outros; para desativar o desligamento automático, mantenha a tecla SELECT pressionada ao ligar o multímetro.
+    Observação: o multímetro desliga após cerca de 17 minutos de inatividade no BM869s e no BM867s, e após 30 minutos nos demais; para desativar o desligamento automático, mantenha a tecla SELECT pressionada ao ligar o multímetro.
 # Used by: UT8802, UT8803
 activation-ut8802 =
     1. Conecte o cabo USB ao multímetro
@@ -571,7 +571,7 @@ activation-ut181a =
 activation-ut71ab =
     1. Conecte o cabo USB ao multímetro
     2. Ligue o multímetro
-    3. Mantenha a tecla MAX MIN pressionada por 1 s, ou pressione SEND em um UT71A; o display exibe SEND
+    3. Mantenha a tecla MAX MIN pressionada por 1 s, ou pressione SEND no UT71A; o display exibe SEND
     Observação: a tecla EXIT desativa o SEND.
 # Used by: UT803
 activation-ut803 =
@@ -616,8 +616,8 @@ activation-vc915 =
 activation-vc871 =
     1. Desconecte o multímetro de qualquer aplicativo de celular
     2. Ligue o multímetro
-    3. Mantenha a tecla BLE pressionada por cerca de 2 segundos, até o multímetro emitir um bip e o símbolo do Bluetooth aparecer no canto superior esquerdo
-    Observação: o Bluetooth fica desligado sempre que o multímetro é ligado; a cada vez, mantenha a tecla BLE pressionada de novo.
+    3. Mantenha a tecla BLE pressionada por cerca de 2 segundos, até o multímetro emitir um bip e o símbolo do Bluetooth aparecer no canto superior esquerdo
+    Observação: o Bluetooth vem desligado sempre que o multímetro é ligado; para ativá-lo, mantenha a tecla BLE pressionada de novo.
 # Used by: OW18B/OW16B, OW18E
 activation-ow18b =
     1. Desconecte o multímetro de qualquer aplicativo de celular
@@ -640,8 +640,8 @@ activation-cms061 =
 activation-cm2100b =
     1. Desconecte o multímetro de qualquer aplicativo de celular
     2. Ligue o multímetro
-    3. Mantenha a tecla ZERO/ᛒ pressionada por cerca de 2 segundos, até o ícone ᛒ aparecer no canto superior esquerdo do display
-    Observação: o Bluetooth desliga após 5 minutos de inatividade ou quando a tecla ZERO/ᛒ é mantida pressionada de novo. O multímetro desliga após cerca de 15 minutos de inatividade; para desativar o desligamento automático até que o multímetro seja desligado de novo, mantenha a tecla SELECT pressionada ao ligá-lo.
+    3. Mantenha a tecla ZERO/ᛒ pressionada por cerca de 2 segundos, até o ícone ᛒ aparecer no canto superior esquerdo do display
+    Observação: o Bluetooth desliga após 5 minutos de inatividade ou ao manter a tecla ZERO/ᛒ pressionada de novo. O multímetro desliga após cerca de 15 minutos de inatividade; para desativar o desligamento automático até a próxima vez que o multímetro for desligado, mantenha a tecla SELECT pressionada ao ligá-lo.
 # Used by: B33
 activation-b33 =
     1. Desconecte o multímetro de qualquer aplicativo de celular
@@ -683,7 +683,7 @@ activation-ut60bt =
 activation-zt5566se =
     1. Ligue o multímetro
     2. Pressione POWER para ligar o Bluetooth; o símbolo do Bluetooth pisca
-    Observação: o manual documenta o Bluetooth apenas para o alto-falante; as leituras recebidas via Bluetooth não foram verificadas.
+    Observação: o manual só menciona o Bluetooth para o alto-falante; as leituras recebidas via Bluetooth não foram verificadas.
 # Used by: ZT-5BQ
 activation-zt5bq =
     1. Ligue o multímetro
@@ -695,7 +695,7 @@ activation-ut202bt =
     2. Pressione brevemente a tecla Bluetooth; o símbolo do Bluetooth pisca
     Observação: o Bluetooth se desliga sozinho após 5 minutos sem conexão.
 # Used by: Mock UT61E+, Mock ZT-5B
-activation-mock = Nenhuma configuração necessária: este é um dispositivo simulado.
+activation-mock = Não é preciso configurar nada: este é um dispositivo simulado.
 
 ## Specification table names, in the Specifications panel, as the
 ## meter's manual titles them. Keep the manual's numbering: (1), A.
@@ -759,7 +759,7 @@ table-autocheck-ohms = AutoCheck™ (Ohms)
 # Used by: UT803
 table-b-ac-voltage = B. Tensão alternada
 # Used by: UT804
-table-b-ac-voltage-ac-plus-dc = B. Tensão alternada (medição alternada + contínua disponível)
+table-b-ac-voltage-ac-plus-dc = B. Tensão alternada (com medição de tensão alternada + contínua)
 # Used by: UT803, UT804
 table-c-dc-current = C. Corrente contínua
 # Used by: 11 meters
@@ -773,7 +773,7 @@ table-crest-mode-instantaneous-peak-hold = Modo de crista (retenção de pico in
 # Used by: UT803
 table-d-ac-current = D. Corrente alternada
 # Used by: UT804
-table-d-ac-current-ac-plus-dc = D. Corrente alternada (medição alternada + contínua disponível)
+table-d-ac-current-ac-plus-dc = D. Corrente alternada (com medição em alternada + contínua)
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
 table-dc-ac-ac-plus-dc-ac = Tensão contínua, alternada e alternada + contínua
 # Used by: 9 meters
@@ -1028,37 +1028,37 @@ note-4ma-shows-lo-20ma-shows-hi = <4mA: exibe LO; >20mA: exibe HI
 note-5a-max-10s-rest-15-min = >5A: máx. 10s, repouso ≥15 min
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
 # In: Line Level Frequency (~Hz)
-note-ac-10-00a-15-00-3 = AC 10.00A: 15.00 ~ 3.000kHz, sensibilidade 6A (RMS senoidal)
+note-ac-10-00a-15-00-3 = AC 10.00A: 15.00 ~ 3.000kHz, sensibilidade de 6A (RMS senoidal)
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
 # In: Line Level Frequency (~Hz)
-note-ac-6-000a-15-00-3 = AC 6.000A: 15.00 ~ 3.000kHz, sensibilidade 4A (RMS senoidal)
+note-ac-6-000a-15-00-3 = AC 6.000A: 15.00 ~ 3.000kHz, sensibilidade de 4A (RMS senoidal)
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
 # In: Line Level Frequency (~Hz)
-note-ac-60-00ma-15-00-3 = AC 60.00mA: 15.00 ~ 3.000kHz, sensibilidade 40mA (RMS senoidal)
+note-ac-60-00ma-15-00-3 = AC 60.00mA: 15.00 ~ 3.000kHz, sensibilidade de 40mA (RMS senoidal)
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
 # In: Line Level Frequency (~Hz)
-note-ac-60-00mv-15-00-50 = AC 60.00mV: 15.00 ~ 50.00kHz, sensibilidade 40mV (RMS senoidal)
+note-ac-60-00mv-15-00-50 = AC 60.00mV: 15.00 ~ 50.00kHz, sensibilidade de 40mV (RMS senoidal)
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
 # In: Line Level Frequency (~Hz)
-note-ac-600-0ma-15-00-3 = AC 600.0mA: 15.00 ~ 3.000kHz, sensibilidade 60mA (RMS senoidal)
+note-ac-600-0ma-15-00-3 = AC 600.0mA: 15.00 ~ 3.000kHz, sensibilidade de 60mA (RMS senoidal)
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
 # In: Line Level Frequency (~Hz)
-note-ac-600-0mv-15-00-50 = AC 600.0mV: 15.00 ~ 50.00kHz, sensibilidade 60mV (RMS senoidal)
+note-ac-600-0mv-15-00-50 = AC 600.0mV: 15.00 ~ 50.00kHz, sensibilidade de 60mV (RMS senoidal)
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
 # In: Line Level Frequency (~Hz)
-note-ac-600-0ua-15-00-3 = AC 600.0µA: 15.00 ~ 3.000kHz, sensibilidade 200µA (RMS senoidal)
+note-ac-600-0ua-15-00-3 = AC 600.0µA: 15.00 ~ 3.000kHz, sensibilidade de 200µA (RMS senoidal)
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
 # In: Line Level Frequency (~Hz)
-note-ac-6000ua-15-00-3-000khz = AC 6000µA: 15.00 ~ 3.000kHz, sensibilidade 600µA (RMS senoidal)
+note-ac-6000ua-15-00-3-000khz = AC 6000µA: 15.00 ~ 3.000kHz, sensibilidade de 600µA (RMS senoidal)
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
 # In: Line Level Frequency (~Hz)
-note-ac-9-999v-15-00-10 = AC 9.999V: 15.00 ~ 10.00kHz, sensibilidade 2.5V (RMS senoidal)
+note-ac-9-999v-15-00-10 = AC 9.999V: 15.00 ~ 10.00kHz, sensibilidade de 2.5V (RMS senoidal)
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
 # In: Line Level Frequency (~Hz)
-note-ac-99-99v-15-00-10 = AC 99.99V: 15.00 ~ 10.00kHz, sensibilidade 25V (RMS senoidal)
+note-ac-99-99v-15-00-10 = AC 99.99V: 15.00 ~ 10.00kHz, sensibilidade de 25V (RMS senoidal)
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
 # In: Line Level Frequency (~Hz)
-note-ac-999-9v-15-00-10 = AC 999.9V: 15.00 ~ 10.00kHz, sensibilidade 100V (RMS senoidal)
+note-ac-999-9v-15-00-10 = AC 999.9V: 15.00 ~ 10.00kHz, sensibilidade de 100V (RMS senoidal)
 # Used by: UT804
 # In: B. AC Voltage (AC+DC measurement is available); D. AC Current (AC+DC measurement is available)
 note-ac-plus-dc-add-1-pct = AC+DC: acrescente 1%+35 dígitos à precisão
@@ -1115,22 +1115,22 @@ note-beeps-continuously-10ohm-silent-30ohm = Bip contínuo ≤10Ω; silencioso >
 note-beeps-continuously-10ohm-silent-50ohm = Bip contínuo ≤10Ω; silencioso >50Ω
 # Used by: UT181A
 # In: (15) Diode Test
-note-brief-beep-on-a-normal-junction = Bip breve em uma junção normal, contínuo se em curto
+note-brief-beep-on-a-normal-junction = Bip breve em junção normal, contínuo em caso de curto
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
 # In: AC & AC+DC Current; DC Current
-note-burden-voltage-0-02v-a = Queda de tensão 0.02V/A
+note-burden-voltage-0-02v-a = Queda de tensão de 0.02V/A
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
 # In: AC & AC+DC Current; DC Current
-note-burden-voltage-0-08mv-ua = Queda de tensão 0.08mV/µA
+note-burden-voltage-0-08mv-ua = Queda de tensão de 0.08mV/µA
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
 # In: AC & AC+DC Current; DC Current
-note-burden-voltage-2-1mv-ma = Queda de tensão 2.1mV/mA
+note-burden-voltage-2-1mv-ma = Queda de tensão de 2.1mV/mA
 # Used by: 7 meters
 # In: Continuity and Diode
 note-continuity-audio-visual-alarm-50ohm-no = Continuidade: alarme sonoro/visual <50Ω; sem bip ≥70Ω
 # Used by: UT803
 # In: B. AC Voltage
-note-crest-factor-3-0-1000v-1 = Fator de crista 3.0 (1000V: 1.5)
+note-crest-factor-3-0-1000v-1 = Fator de crista de 3.0 (1000V: 1.5)
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
 # In: AC & AC+DC Current; AC Voltage; DC AC & AC+DC AC Voltage
 note-crest-factor-2-1-at-full = Fator de crista < 2:1 em fundo de escala, < 4:1 em meia escala
@@ -1163,7 +1163,7 @@ note-duty-square-waves-only-1vpp-20vpp = Duty: apenas ondas quadradas, 1Vpp–20
 note-for-ac-voltage-shorted-leads-residual = Em tensão alternada, pontas de prova em curto: residual ≤200 dígitos
 # Used by: Mock ZT-5B, ZT-5B
 # In: AC Voltage (V); AC current (A); AC current (mA)
-note-frequency-response-40hz-1khz = Resposta de frequência 40Hz–1kHz
+note-frequency-response-40hz-1khz = Resposta de frequência: 40Hz–1kHz
 # Used by: UT804
 # In: G. Diode Test
 note-good-silicon-junction-0-5v-0 = Junção de silício em bom estado: 0.5V–0.8V
@@ -1190,7 +1190,7 @@ note-hz-input-100khz-200mv-20v-rms = Entrada Hz ≤100kHz: 200mV–20V rms
 note-ib0-1-8ua-vce-2-5v = Ib0 ≈1.8µA, Vce ≈2.5V
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
 # In: AutoCheck™ (ACV); AutoCheck™ (DCV)
-note-impedance-rises-within-a-fraction-of = A impedância sobe em uma fração de segundo acima de 50V (típ.)
+note-impedance-rises-within-a-fraction-of = Acima de 50V, a impedância sobe em uma fração de segundo (típ.)
 # Used by: UT804
 # In: K. Temperature 1-1. Degrees Celsius; K. Temperature 1-2. Fahrenheit
 note-included-k-type-point-contact-probe = Sensor de contato pontual tipo K incluso: apenas abaixo de 230°C
@@ -1382,7 +1382,7 @@ note-true-rms-valid-10-pct-100 = True RMS válido para 10%–100% da faixa
 note-true-rms-valid-10-pct-95 = True RMS válido para 10%–95% da faixa
 # Used by: UT803
 # In: D. AC Current
-note-true-rms-valid-10-pct-95-2 = True RMS válido para 10%–95% da faixa; fator de crista 3.0
+note-true-rms-valid-10-pct-95-2 = True RMS válido para 10%–95% da faixa; fator de crista de 3.0
 # Used by: Mock UT61E+, UT161E, UT61E+
 # In: AC+DC Voltage
 note-true-rms-accuracy-valid-10-pct = True RMS; precisão válida para 10%–100% da faixa

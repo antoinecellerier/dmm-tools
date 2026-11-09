@@ -43,7 +43,7 @@ graph-y-max = Máx. do eixo Y
 # out: "live" is the LIVE chip, "auto-Y" the Y:Auto chip.
 graph-reset-zoom = Redefinir zoom
     .hover = Voltar ao acompanhamento ao vivo e ao Y automático (clique duas vezes no gráfico)
-    .hover-disabled = Já na visualização padrão: ao vivo e Y automático
+    .hover-disabled = Já está na visualização padrão: ao vivo e Y automático
 
 ## The second row, only for meters that send more than one value: Plot:,
 ## the series the graph plots, then Show:, the traces drawn beside it, each
@@ -82,7 +82,7 @@ graph-show-chip =
             [full] No máximo { $max } unidades: oculte uma para mostrar a curva { $series }
             [narrow] Alargue a janela para mostrar o eixo da curva { $series }, ou clique para ocultá-la
             [shown] Ocultar a curva { $series }
-           *[hidden] Desenhar a curva { $series } ao lado da série plotada
+           *[hidden] Desenhar a curva { $series } junto com a série plotada
         }
     .a11y = Mostrar a curva { $series }
 
@@ -107,7 +107,7 @@ graph-envelope-window = Janela Mín./Máx., segundos
 graph-histogram = Histograma
     .hover =
         { $state ->
-            [hidden] Mostre a curva plotada para ver o histograma dela, ou clique para desativá-lo
+            [hidden] Mostre a curva plotada para ver o histograma, ou clique para desativá-lo
            *[shown] Mostrar a distribuição das leituras visíveis ({ $keys })
         }
 # A chip that draws reference lines: horizontal lines at the values typed
@@ -126,7 +126,7 @@ graph-triggers = Gatilhos
 # A chip that lets clicks on the graph place two vertical lines, A and B,
 # and measure between them.
 graph-cursors = Cursores
-    .hover = Clicar no gráfico para colocar dois cursores ({ $keys })
+    .hover = Clique no gráfico para colocar dois cursores ({ $keys })
 # Small text after Cursors until both are placed.
 graph-cursors-hint = clique no gráfico para colocar os cursores
 # After Cursors once both are placed, among figures such as ΔT=12.50 s and
@@ -206,7 +206,7 @@ graph-plot-a11y-state =
     }
 # The last sentence: $value is the meter's last reading as it showed it,
 # with its unit (reading-spoken-amount), e.g. 1.6112 volts.
-graph-plot-a11y-reading = última leitura { $value }.
+graph-plot-a11y-reading = última leitura de { $value }.
 # The last sentence while the meter reads over range (shows OL).
 graph-plot-a11y-over-range = atualmente acima da faixa.
 # The last sentence before any reading.
@@ -241,11 +241,11 @@ graph-histogram-bin-interval =
 # dragged sideways to resize it: its name for a screen reader. Left/Right
 # are the arrow keys.
 graph-histogram-divider-side =
-    .a11y = Redimensionar o histograma (Seta para a esquerda ou Seta para a direita para ajustar)
+    .a11y = Redimensionar o histograma (ajuste com Seta para a esquerda ou Seta para a direita)
 # The divider over the histogram under the minimap, dragged up or down.
 # Up/Down are the arrow keys.
 graph-histogram-divider-below =
-    .a11y = Redimensionar o histograma (Seta para cima ou Seta para baixo para ajustar)
+    .a11y = Redimensionar o histograma (ajuste com Seta para cima ou Seta para baixo)
 
 ## What a screen reader hears of the histogram, one sentence among the
 ## plot's: graph-histogram-a11y, then the phrases after it, each after
@@ -268,7 +268,7 @@ graph-histogram-a11y =
 # After graph-histogram-a11y, and after graph-histogram-a11y-interval: how
 # far the readings spread. $value is a number with its unit
 # (reading-spoken-amount), e.g. 0.002 volts.
-graph-histogram-a11y-sd = desvio padrão { $value }
+graph-histogram-a11y-sd = desvio padrão de { $value }
 # The bar holding the most readings: $range is its values (see
 # graph-histogram-range), $count how many it holds.
 graph-histogram-a11y-most = maior concentração em { $range } ({ $count })
@@ -297,7 +297,7 @@ graph-histogram-a11y-interval =
 # keys.
 graph-minimap =
     .hover = Minimapa: clique ou arraste para deslocar, arraste as bordas dos colchetes para redimensionar a visualização
-    .a11y = Minimapa do gráfico: clique ou arraste para navegar pela linha do tempo (Seta para a esquerda ou Seta para a direita para deslocar), arraste as bordas dos colchetes para redimensionar
+    .a11y = Minimapa do gráfico: clique ou arraste para navegar pela linha do tempo (desloque com Seta para a esquerda ou Seta para a direita), arraste as bordas dos colchetes para redimensionar
 
 ## The menu a right-click on the plot, its axes or a marker's flag opens:
 ## what can be done to the reading nearest the click, under a heading

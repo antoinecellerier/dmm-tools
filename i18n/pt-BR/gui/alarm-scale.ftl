@@ -74,17 +74,17 @@ scale-invalid-offset = Deslocamento inválido: { $reason }
 # were in the old unit; both; or none.
 scale-on =
     { $also ->
-        [recording] Escala aplicada às leituras: { $transform } — a gravação continua com os valores em escala
-        [alarm] Escala aplicada às leituras: { $transform } — alarme desativado; defina os limites novamente na nova unidade
-        [both] Escala aplicada às leituras: { $transform } — a gravação continua com os valores em escala — alarme desativado; defina os limites novamente na nova unidade
+        [recording] Escala aplicada às leituras: { $transform } — a gravação continua com os valores ajustados
+        [alarm] Escala aplicada às leituras: { $transform } — alarme desativado; volte a definir os limites na nova unidade
+        [both] Escala aplicada às leituras: { $transform } — a gravação continua com os valores ajustados — alarme desativado; volte a definir os limites na nova unidade
        *[none] Escala aplicada às leituras: { $transform }
     }
 # Scaling turned off. $also as in scale-on.
 scale-off-toast =
     { $also ->
-        [recording] Escala desativada — a gravação continua com os valores em escala
-        [alarm] Escala desativada — alarme desativado; defina os limites novamente na nova unidade
-        [both] Escala desativada — a gravação continua com os valores em escala — alarme desativado; defina os limites novamente na nova unidade
+        [recording] Escala desativada — a gravação continua com os valores ajustados
+        [alarm] Escala desativada — alarme desativado; volte a definir os limites na nova unidade
+        [both] Escala desativada — a gravação continua com os valores ajustados — alarme desativado; volte a definir os limites na nova unidade
        *[none] Escala desativada
     }
 

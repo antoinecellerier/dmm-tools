@@ -58,7 +58,7 @@ stats-alarm-counts =
         [high] Alarmes: { $high } acima
        *[low] Alarmes: { $low } abaixo
     }
-    .hover = Quantas vezes a leitura ultrapassou cada limite, cada uma marcada no gráfico
+    .hover = Quantas vezes a leitura ultrapassou cada limite; todas ficam marcadas no gráfico
 # A small button that starts the figures over. σ is the standard deviation.
 stats-reset = Redefinir
     .hover = Redefinir Mín. / Máx. / Média / σ / integral e os contadores de alarme

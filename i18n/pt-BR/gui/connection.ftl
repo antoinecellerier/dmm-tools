@@ -32,7 +32,7 @@ connection-click-connect = Clique em “Conectar” depois de resolver o problem
 # The closing line after the Bluetooth steps when nothing answered at the
 # address given with --adapter, a command-line option kept as it is. "It"
 # is the scan command the steps above name.
-connection-restart-with-address = Reinicie com --adapter definido como o endereço que esse comando exibe.
+connection-restart-with-address = Reinicie usando --adapter com o endereço exibido por esse comando.
 
 # A meter that connects over Bluetooth only, and Bluetooth was not looked at.
 connection-bluetooth-not-searched = Busca Bluetooth não realizada
@@ -103,7 +103,7 @@ connection-bad-data = O multímetro enviou dados ilegíveis
 connection-cables-at-open =
     { $count ->
         [one] Há { $count } cabo USB conectado que esta sessão pode abrir, e ele foi aberto. Para escolher outro, use --adapter.
-       *[other] Há { $count } cabos USB conectados que esta sessão pode abrir, e o primeiro encontrado foi aberto. Para escolher outro, use --adapter.
+       *[other] Há { $count } cabos USB conectados disponíveis para esta sessão, e o primeiro encontrado foi aberto. Para escolher outro, use --adapter.
     }
 # Follows connection-cables-at-open when nothing tells those cables apart.
 connection-cables-no-reconnect = Não é possível distinguir esses cabos; por isso, se a conexão cair, esta sessão será encerrada, a menos que você indique o caminho de um cabo com --adapter.
@@ -152,20 +152,20 @@ connection-detected =
 # $saved as there. $reported is that name, e.g. UT216XD.
 connection-detected-reports =
     { $saved ->
-        [yes] Multímetro { $meter } detectado (o multímetro informa “{ $reported }”) e salvo como seu dispositivo. Escolha Detecção automática em Configurações para detectar de novo.
-       *[no] Multímetro { $meter } detectado (o multímetro informa “{ $reported }”)
+        [yes] Multímetro { $meter } detectado (o multímetro se identifica como “{ $reported }”) e salvo como seu dispositivo. Escolha Detecção automática em Configurações para detectar de novo.
+       *[no] Multímetro { $meter } detectado (o multímetro se identifica como “{ $reported }”)
     }
 # The meter named another model than the one picked in Settings. $reported
 # is the name it gave, e.g. UT161E; $picked the model picked, $named the
 # model that name belongs to, e.g. UNI-T UT161E.
-connection-other-model = O multímetro informa “{ $reported }”, não o modelo { $picked } selecionado. Escolha { $named } ou Detecção automática em Configurações.
+connection-other-model = O multímetro se identifica como “{ $reported }”, não como o modelo { $picked } selecionado. Escolha { $named } ou Detecção automática em Configurações.
 # Detection settled on a meter, then the meter named another. $reported is
 # the name it gave, $named the model it belongs to. $saved is yes when
 # Settings now names that model.
 connection-named-after-detection =
     { $saved ->
-        [yes] O multímetro informa “{ $reported }”, modelo salvo como seu dispositivo: reconecte para tratá-lo como { $named }.
-       *[no] O multímetro informa “{ $reported }”: reconecte para tratá-lo como { $named }.
+        [yes] O multímetro se identifica como “{ $reported }”, e esse modelo foi salvo como seu dispositivo: reconecte para tratá-lo como { $named }.
+       *[no] O multímetro se identifica como “{ $reported }”: reconecte para tratá-lo como { $named }.
     }
 
 # The recording stopped because Buffer size, in Settings, was lowered below

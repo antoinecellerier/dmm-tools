@@ -195,13 +195,13 @@ capture-mismatch-range =
     { $want ->
         [auto]
             { $shown ->
-                [none] o multímetro mostra: faixa (nenhuma), a etapa espera faixa automática
+                [none] o multímetro mostra: nenhuma faixa, a etapa espera faixa automática
                 [auto] o multímetro mostra: faixa { $range } (automática), a etapa espera faixa automática
                *[plain] o multímetro mostra: faixa { $range }, a etapa espera faixa automática
             }
        *[manual]
             { $shown ->
-                [none] o multímetro mostra: faixa (nenhuma), a etapa espera faixa manual
+                [none] o multímetro mostra: nenhuma faixa, a etapa espera faixa manual
                 [auto] o multímetro mostra: faixa { $range } (automática), a etapa espera faixa manual
                *[plain] o multímetro mostra: faixa { $range }, a etapa espera faixa manual
             }
@@ -364,7 +364,7 @@ capture-plan-covered =
         [one] Plano { $plan }: { $covered } de { $total } etapa capturada
        *[other] Plano { $plan }: { $covered } de { $total } etapas capturadas
     }
-capture-nothing-new = Nenhuma etapa não verificada foi capturada, então não há nada novo a relatar.
+capture-nothing-new = Não foi capturada nenhuma etapa pendente de verificação, então não há nada novo a relatar.
 # $covered and $total count the meter's steps that hardware hasn't confirmed
 # yet; $meter is its name, e.g. UNI-T UT61E+.
 capture-covered = Foram capturadas { $covered } de { $total } etapas não verificadas do multímetro { $meter }.

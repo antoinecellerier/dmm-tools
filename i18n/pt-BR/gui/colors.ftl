@@ -104,29 +104,29 @@ colors-issue-name-empty = o nome está vazio
 # $max is the most characters a name may have, e.g. 32.
 colors-issue-name-too-long = o nome tem mais de { $max } caracteres
 # Invisible characters, or $ or `.
-colors-issue-name-unusable = o nome tem caracteres que um nome de tema não pode usar
+colors-issue-name-unusable = o nome tem caracteres não permitidos em nomes de tema
 # The theme's name is Dark, Light or System, which the Theme row's own
 # chips go by. $name is the name as the file has it; put it in your
 # language's quotes.
-colors-issue-name-reserved = “{ $name }” é usado pela linha Tema
+colors-issue-name-reserved = “{ $name }” já é usado na linha Tema
 # $what is text or button: the theme's text on its background, or its
 # button captions on the button.
 colors-issue-not-opaque =
     { $what ->
-        [button] o texto do botão sobre o botão não é opaco
+        [button] o texto sobre o botão não é opaco
        *[text] o texto sobre o plano de fundo não é opaco
     }
 # The colours can't be read on each other. $what is as above; $ratio is
 # their contrast, e.g. 1.8, and $floor the least allowed, e.g. 3.
 colors-issue-low-contrast =
     { $what ->
-        [button] o texto do botão sobre o botão tem { $ratio }:1, abaixo do mínimo de { $floor }:1
-       *[text] o texto sobre o plano de fundo tem { $ratio }:1, abaixo do mínimo de { $floor }:1
+        [button] o texto sobre o botão tem contraste de { $ratio }:1, abaixo do mínimo de { $floor }:1
+       *[text] o texto sobre o plano de fundo tem contraste de { $ratio }:1, abaixo do mínimo de { $floor }:1
     }
 # The theme's text on its frame, the surface of the top bar and Settings.
 colors-issue-frame-not-opaque = o texto sobre o quadro não é opaco
 # As above, on the frame. $ratio and $floor are as above.
-colors-issue-frame-low-contrast = o texto sobre o quadro tem { $ratio }:1, abaixo do mínimo de { $floor }:1
+colors-issue-frame-low-contrast = o texto sobre o quadro tem contraste de { $ratio }:1, abaixo do mínimo de { $floor }:1
 # Another file in the folder gives its theme the same name. $name is the
 # name as the file has it, to put in your language's quotes; $file the
 # other file's name.
@@ -161,7 +161,7 @@ colors-preset-colorblind =
         [customized] Daltonismo (personalizado)
        *[plain] Daltonismo
     }
-    .hover = Paleta que continua distinguível para quem tem deficiência protan ou deutan
+    .hover = Paleta com cores distinguíveis para quem tem deficiência protan ou deutan
 # After the chips while there are changes a click would lose.
 colors-preset-clears = Escolher uma predefinição apaga as personalizações
 
@@ -193,7 +193,7 @@ colors-follow-arrow =
 colors-swatch-background = Plano de fundo
     .hover = Cor do plano de fundo dos painéis
 colors-swatch-frame = Quadro
-    .hover = Plano de fundo da barra superior e do painel de leitura (se não definido, o mesmo dos painéis)
+    .hover = Plano de fundo da barra superior e do painel de leitura (se nenhum for definido, o mesmo dos painéis)
 colors-swatch-button = Botão
     .hover = Cor do plano de fundo dos botões
 # Lines between and around the panels.
@@ -206,12 +206,12 @@ colors-swatch-text = Texto
     .hover = Cor do texto principal
 # The meter's value as the reading panel shows it, in large type.
 colors-swatch-reading = Leitura
-    .hover = A leitura e as leituras dos valores secundários (a cor do texto, se não definida)
+    .hover = A leitura e as leituras dos valores secundários (a cor do texto, se nenhuma for definida)
 # Text drawn fainter than the rest.
 colors-swatch-weak-text = Texto secundário
     .hover = Texto secundário: linha do modo, rótulos dos valores secundários, dicas e legendas
 colors-swatch-heading = Título
-    .hover = Títulos dos painéis: Especificações, Estatísticas, Visível (a cor do texto secundário, se não definida)
+    .hover = Títulos dos painéis: Especificações, Estatísticas, Visível (a cor do texto secundário, se nenhuma for definida)
 # The lines that follow the pointer over the graph.
 colors-swatch-crosshair = Retícula
     .hover = Cor da retícula que acompanha o mouse sobre o gráfico
@@ -225,11 +225,11 @@ colors-swatch-envelope = Envelope
     .hover = Cor de preenchimento do envelope Mín./Máx.
 # The lines of the other values a meter shows at once beside the main one.
 colors-swatch-overlay-1 = Sobrep. 1
-    .hover = Cor da linha do primeiro valor secundário desenhado ao lado da série plotada
+    .hover = Cor da linha do primeiro valor secundário desenhado junto com a série plotada
 colors-swatch-overlay-2 = Sobrep. 2
-    .hover = Cor da linha do segundo valor secundário desenhado ao lado da série plotada
+    .hover = Cor da linha do segundo valor secundário desenhado junto com a série plotada
 colors-swatch-overlay-3 = Sobrep. 3
-    .hover = Cor da linha do terceiro valor secundário desenhado ao lado da série plotada
+    .hover = Cor da linha do terceiro valor secundário desenhado junto com a série plotada
 # The frame the overview strip under the graph draws around the part on
 # show.
 colors-swatch-viewport = Área visível
@@ -309,7 +309,7 @@ colors-save-file-type = Tema
 # $name is the theme's name, from the file name the user typed.
 colors-saved = Tema { $name } salvo na sua pasta de temas
 # Saved outside the themes folder. $file is the file name.
-colors-saved-elsewhere = Arquivo { $file } salvo. Copie-o para a sua pasta de temas para usá-lo como tema
+colors-saved-elsewhere = Arquivo { $file } salvo. Copie-o para a sua pasta de temas e use-o como tema
 # The save dialog closed without an answer.
 colors-save-dialog-failed = Não salvo: falha na caixa de diálogo Salvar
 # A name typed without .json gets it added, and the file of that name

@@ -190,7 +190,7 @@ error-rejected-unknown-model = o multímetro informa o código de modelo OWON { 
 error-rejected-model-unread = o código de modelo do multímetro não foi lido, por isso o comando { $command } está desativado: mantenha a tecla REL pressionada no multímetro para sair de REL
 error-rejected-min-max-locks-range = MIN/MAX trava a faixa; saia de MIN/MAX antes de alterá-la
 # $command is a command word or a setting's name.
-error-rejected-replay = { $command }: uma reprodução não aceita comandos
+error-rejected-replay = { $command }: a reprodução não aceita comandos
 
 # What a refused command switched to, as error-rejected-by-meter names it.
 # $mode is a mode.
@@ -209,7 +209,7 @@ error-sent-range = a faixa { $range }
 # Voltcraft VC871; $frame the length of that model's frame in bytes, 6 or
 # 15; $opened the meter chosen, e.g. OWON B35T+; $id the --device value
 # for $model.
-error-wrong-meter-other-frame = o multímetro informa o código de modelo OWON { $code } ({ $model }), que envia o quadro OWON de { $frame } bytes, e não é o multímetro { $opened } escolhido ao abrir a conexão; escolha Detecção automática ou --device { $id }
+error-wrong-meter-other-frame = o multímetro informa o código de modelo OWON { $code } ({ $model }), modelo que envia o quadro OWON de { $frame } bytes, e não é o multímetro { $opened } escolhido ao abrir a conexão; escolha Detecção automática ou --device { $id }
 # An OWON meter sends the other kind of data frame and names no model.
 # $sent and $expected are frame lengths in bytes, 6 or 15; $opened is the
 # meter chosen, e.g. Voltcraft VC871. $remedy is auto-detect, or own-model
@@ -221,13 +221,13 @@ error-wrong-meter-other-frame-kind =
     }
 # An OWON model this tool does not read yet. $code is OWON's model number,
 # e.g. 83. "This message" is the whole error, for the issue.
-error-wrong-meter-not-yet = o multímetro informa o código de modelo OWON { $code }, que o aplicativo ainda não lê; abra uma issue com esta mensagem
+error-wrong-meter-not-yet = o multímetro informa o código de modelo OWON { $code }, de um modelo que o aplicativo ainda não lê; abra uma issue com esta mensagem
 # An OWON model whose readings carry their sign where this tool does not
 # read it yet. $code is OWON's model number, e.g. 55.
-error-wrong-meter-sign-in-function-word = o multímetro informa o código de modelo OWON { $code }: ele envia o quadro OWON de 6 bytes com o sinal na palavra de função, que o aplicativo ainda não lê
+error-wrong-meter-sign-in-function-word = o multímetro informa o código de modelo OWON { $code }: envia o quadro OWON de 6 bytes com o sinal na palavra de função, que o aplicativo ainda não lê
 # A Brymen meter of another series answered. $found and $opened are series,
 # e.g. Brymen BM82x and Brymen BM86x; $id is the --device value for $found.
-error-wrong-meter-other-series = o multímetro no cabo é da série { $found }, e não da série { $opened }; escolha Detecção automática ou --device { $id }
+error-wrong-meter-other-series = o multímetro conectado ao cabo é da série { $found }, e não da série { $opened }; escolha Detecção automática ou --device { $id }
 # An OWON meter chosen by its model sends bytes, but never its 6-byte data
 # frame. B35 and B35T are OWON models.
 error-wrong-meter-no-six-byte-frames = o multímetro não envia quadros OWON de 6 bytes; pode ser um B35 ou B35T mais antigo, cujos quadros de 14 bytes o aplicativo ainda não lê
@@ -235,7 +235,7 @@ error-wrong-meter-no-six-byte-frames = o multímetro não envia quadros OWON de 
 error-wrong-meter-no-fifteen-byte-frames = o multímetro não envia quadros OWON de 15 bytes; escolha Detecção automática
 # An OWON meter that names no model sends frames of neither length. "This
 # message" is the whole error, for the issue.
-error-wrong-meter-untold-frame-kind = nem o código de modelo do multímetro nem os seus quadros mostram se ele envia quadros OWON de 6 ou de 15 bytes; abra uma issue com esta mensagem
+error-wrong-meter-untold-frame-kind = nem o código de modelo do multímetro nem os quadros recebidos mostram se são quadros OWON de 6 ou de 15 bytes; abra uma issue com esta mensagem
 
 ## Bluetooth: what the Bluetooth stack could not do. After "Bluetooth:".
 
@@ -247,8 +247,8 @@ error-bluetooth-powered-off = desligado neste computador
 # (the one the meter's data arrives on).
 error-bluetooth-no-characteristic =
     { $role ->
-        [write] o dispositivo Bluetooth não tem nenhuma característica de escrita de dados reconhecida: não é um adaptador ou multímetro compatível, ou os seus serviços nunca foram resolvidos
-       *[notify] o dispositivo Bluetooth não tem nenhuma característica de notificação de dados reconhecida: não é um adaptador ou multímetro compatível, ou os seus serviços nunca foram resolvidos
+        [write] o dispositivo Bluetooth não tem nenhuma característica reconhecida para escrita de dados: não é um adaptador ou multímetro compatível, ou os serviços nunca foram resolvidos
+       *[notify] o dispositivo Bluetooth não tem nenhuma característica reconhecida para notificação de dados: não é um adaptador ou multímetro compatível, ou os serviços nunca foram resolvidos
     }
 # A Brymen meter refused the password this tool sends.
 error-bluetooth-password-refused = o multímetro recusou a senha de conexão 0000; para redefini-la, { error-bluetooth-reset-gesture }
@@ -256,7 +256,7 @@ error-bluetooth-password-refused = o multímetro recusou a senha de conexão 000
 # settings. The meter's activation steps in lib.ftl (activation-bm78xbt)
 # end with the same sentence: word them alike. "Org" is what the display
 # shows.
-error-bluetooth-reset-gesture = mantenha a tecla Hz pressionada enquanto gira a chave seletora de OFF para capacitância em menos de 0.6 s: o multímetro exibe “Org”, e a senha de conexão e o nome Bluetooth dele voltam às configurações de fábrica
+error-bluetooth-reset-gesture = mantenha a tecla Hz pressionada enquanto gira a chave seletora de OFF para capacitância em menos de 0.6 s: o multímetro exibe “Org”, e a senha de conexão e o nome Bluetooth voltam às configurações de fábrica
 # A Brymen meter refused the login with error $code, a number.
 error-bluetooth-login-refused =
     { $code ->

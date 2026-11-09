@@ -50,12 +50,12 @@ settings-tip-right-column = Dica: digite o valor da coluna da direita para mudar
 settings-nothing-to-switch =
     { $setting ->
         [mode] No modo { $mode }, o multímetro { $meter } não tem outros modos selecionáveis: use a chave seletora.
-        [range] O multímetro { $meter } não tem faixas para alternar no modo { $mode }: use a chave seletora.
+        [range] O multímetro { $meter } não tem faixas selecionáveis no modo { $mode }: use a chave seletora.
         [hold] O multímetro { $meter } não permite alternar HOLD no modo { $mode }.
         [rel] O multímetro { $meter } não permite alternar REL no modo { $mode }.
         [minmax] O multímetro { $meter } não permite alternar MIN/MAX no modo { $mode }.
         [peak] O multímetro { $meter } não permite alternar a função de pico no modo { $mode }.
-       *[all] O multímetro { $meter } não tem configurações para alternar no modo { $mode }: use a chave seletora.
+       *[all] O multímetro { $meter } não tem configurações ajustáveis no modo { $mode }: use a chave seletora.
     }
 
 ## In green on the standard output, once 'set' sees the meter on the choice.
