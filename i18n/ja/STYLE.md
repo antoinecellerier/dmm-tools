@@ -247,11 +247,11 @@ When no system font draws Japanese, the GUI shows `settings-language-no-japanese
 
 The patterns of English that a native review of this translation corrected most often, as principles for any new text.
 
-1. English prepositions (on, at, in, of, per) name a relation loosely; do not map them to 上で, に, にある or あたり. State the actual relation with a verb or a Japanese frame.
-2. Drop English's small pointing and emphasis words (own, itself, there, then, that, already). Japanese leaves what is clear unsaid; where the word carries meaning, state that meaning directly.
-3. Build detail into the sentence instead of appending it: what English adds in parentheses, after a dash or in a follow-up sentence becomes a modifier before the noun or a linked clause.
-4. Turn noun phrases into verb clauses. Chains joined by の or への and nominalised actions read stiff; a 「～を～する」 clause or a relative clause reads natural.
-5. Check that the subject can do what the predicate says. English lets a thing stand for its owner (a code "sends frames", a value "is partial"); Japanese names the real actor.
-6. Do not link clauses with a colon or end one clipped. Write out the condition or the verb: 「～場合は」, 「～すると」, 「～を指定する」.
-7. Put place and means first and the object right before the verb. "Use X to do Y" becomes 「X で Y する」, naming the real action instead of 使用する; a contrast comes before the point (A ではなく B).
-8. A modifier attaches to the nearest thing it can: reorder or split whenever it could reach the wrong noun, or a purpose like 「～には」 could extend over a later clause.
+1. A colon, semicolon or dash joining two statements has no Japanese counterpart: end the first with «。», or use «～ため、» when the second follows from it. A colon stays only after a label or before an inserted reason.
+2. Build in what English appends: a parenthesis or trailing phrase becomes a modifier before its noun or a linked clause, or at least stands right beside the word it explains.
+3. Outside buttons and labels (ruling 1), write clauses rather than noun stacks: a chain of «の» or «用の», or a bare fragment before a full sentence, reads stiff until a verb carries it.
+4. Translate the relation, not the word: the literal equivalent of an English verb, preposition or quantifier (open a connection, on, changes to, one or more of) rarely fits; say what Japanese says of that object.
+5. Say an idea once per clause. A noun and verb of one root ("Auto-detection found") collapse to one verb, and a parenthesis that restates the sentence goes.
+6. Give each verb a subject that can do it. English lets things act (a meter reports, a step waits, a lead picks); use the passive for what happens by itself, or a verb that fits the thing.
+7. Name what "this" or "that" points back to across a sentence rather than leaving a verb without its object, but drop an owner the context already makes obvious.
+8. A modifier attaches to the nearest thing it can: reorder or split when it could reach the wrong noun, and name the option when a bare negative condition could reach the wrong one.

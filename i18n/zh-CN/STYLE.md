@@ -228,11 +228,11 @@ Characters this sheet asks for beyond Latin: Han characters of GB 2312, the full
 
 The patterns of English that a native review of this translation corrected most often, as principles for any new text.
 
-1. Choose each verb for what actually happens in Chinese, not by mapping the English verb (give, get, try, answer, offer, arrive, have); a word-for-word verb is often grammatical but wrong for its object.
-2. Put qualifiers and conditions before what they qualify: state the condition first and the result after, with no tags trailing the value and no "over X" or "for X" tacked on at the end.
-3. Drop possessives and pronouns English needs but Chinese does not (它, 其, 你的, 自己的); where a reference is required, repeat the noun, or restructure so the clause needs none.
-4. Make the real actor the subject, usually the user or the system: inanimate things do not act, so name the action done to them, and turn English passives into active sentences with no 被.
-5. Name the head noun English leaves implied: a bare name, number or measure word needs the noun or verb it belongs to (mode, range, reading, press), especially in text read aloud.
-6. Avoid the same character or word echoing within one phrase; pick another verb or cut one occurrence, as in 连接线连接 becoming 连接线插入.
-7. Keep to a neutral written register, neither spoken (的那个, 又是…了, 自己的) nor telegraphic: clipped fragments that work as English labels become complete short clauses.
-8. Rebuild English linking instead of carrying it over: put 请 at the head of the request rather than mid-sentence, repeat the marker in each parallel clause, and join related clauses with commas rather than English semicolon chains.
+1. Drop the pronouns and possessives English requires (它, 其, 你的, 自己的, 在其中, 将其): leave the reference implied, and repeat the noun where it would otherwise be unclear.
+2. Join a fact and its consequence or request with a comma, not the semicolon English uses; keep `；` for separating larger parts that already contain commas.
+3. Choose each verb and preposition for what happens in Chinese, not by mapping the English word: a literal rendering of "open", "print", "read as" or "on top of" can be grammatical and still wrong for its object.
+4. Let no word or character repeat within a phrase: cut the repeat when the context carries it, or use another word.
+5. Name the head noun English leaves implied: a bare number, placeable or adjective needs the noun it belongs to (mode, state, file, steps), and a bare verb its object, especially in text read aloud.
+6. Break up long modifiers before a noun: give them their own clause or cut what the context supplies, and turn "X of Y" into the total first, then the part.
+7. Make the user, the app or the action the subject: options, steps, limits and commands do not act, so say what is done with them.
+8. Put a condition or alternative ahead of the action rather than trailing it («不…，改为…», not «…，而不是…»), and fold tail tags such as "in milliseconds" into the clause.

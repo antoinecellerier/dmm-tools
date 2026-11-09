@@ -200,11 +200,11 @@ Fluent can't tell you the gender or number of what a placeable holds, and Portug
 
 The patterns of English that a native review of this translation corrected most often, as principles for any new text.
 
-1. Pronouns, possessives and pointing words are mostly English habit. Leave out a subject the verb already carries and a possessive the context makes obvious; for "that", "then" and "there", repeat the full name or drop the word.
-2. Don't map an English verb or preposition to its dictionary twin. Say what it means here, using the verb the Portuguese noun normally takes.
-3. Portuguese doesn't clip the way English labels do. Where English says "for X", "omit for all" or "if unset", supply the verb, subject or noun that the sentence needs.
-4. Keep together what belongs together: a verb with its complement, a noun with its adjective. Move anything that would otherwise split them or trail at the end of the sentence.
-5. Things don't act the way they do in English. A button, option or value shouldn't "save", "show" or "use"; address the reader ("use X to save…") or make the device the subject.
-6. Tie a noun to its value with a preposition (usually «de») rather than juxtaposing them, and name what a bare value or symbol refers to, such as the range or the terminal.
-7. Don't repeat a connector in a row («de… de», «para… para», «em… em», «após… depois de»). Recast one of them, or split the events into separate clauses.
-8. Prefer a plain verb clause to a passive or a chain of nouns, and rebuild relative clauses in Portuguese order instead of following the English syntax.
+1. Tie a value to its noun with a preposition, usually «de», instead of juxtaposing them, and name what a bare number or ratio measures.
+2. Don't map an English verb or preposition to its dictionary twin. Say what it means here, and check that the Portuguese word doesn't read as something else, such as an agent or a place.
+3. Don't clip the way English does ("no X needed", "if unset", "one step"). Write the verb, subject or noun the sentence needs, and prefer a plain verb clause to a passive or a chain of nouns.
+4. Don't repeat a connector or a word at close range («para… para», «ao… ao», «cada… cada»). Recast one of them or split the sentence.
+5. Keep a verb with its object and an adjective with its noun. A trailing phrase, participle or «que» clause attaches to the nearest noun, so move it or repeat the noun it belongs to.
+6. Where English uses "a" for a thing in general or for a named model ("a change of mode", "on a UT71A"), use the definite article, a plural or no article.
+7. Leave out a subject pronoun the verb already carries and a possessive, «dele» or «dela» included, that the context makes obvious.
+8. Things don't act the way they do in English. A button, row or name shouldn't "save", "write" or "use"; address the reader ("use X to save…") or make the device or the action the subject.

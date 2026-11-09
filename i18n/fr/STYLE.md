@@ -201,11 +201,11 @@ Fluent can't tell you the gender or number of what a placeable holds. So build s
 
 The patterns of English that a native review of this translation corrected most often, as principles for any new text.
 
-1. French does not tolerate English ellipsis: give a fragment the subject, verb, object or head noun it implies, put a verb after « pour » where English stops, and repeat a verb rather than coordinate a noun with a clause.
-2. Take each preposition from the French word that governs it, never from English with, via, from, in or on; often the English preposition has to become a verb phrase.
-3. A pronoun, demonstrative, possessive, participle or relative must attach clearly to a nearby noun; where English "that" or "it" has no noun to point to, name the thing.
-4. State the real logical link between clauses instead of carrying over ", and", "then" or a comma list: mais for a conflict, ou à défaut for a fallback, soit…soit for exclusive causes, and one consequence connector per sentence.
-5. Things, values, keys and buttons cannot act as freely as in English: where the subject could not really do the verb, make the device, the person or the instruction the subject («Utilisez X pour…»).
-6. Choose the verb for what it means with this subject, not the English word's nearest match; English's generic have, name, mean, given and back to usually need a more specific French verb.
-7. Unpack noun chains and stacked modifiers into a verb or relative clause, and split long run-on clauses at a colon or a new sentence.
-8. Put a condition, time or scope before the action it qualifies, or right beside it, rather than trailing it in English order.
+1. Supply what English leaves implied: a verb takes its object or complement even where the English stops after it, a fragment takes its verb, and a bare noun takes the word that says what it refers to.
+2. Make sure the subject can really do what the verb says and the object can really undergo it; English lets cables select and rows write, but French needs the person, the device or the actual thing acted on.
+3. Pick the verb French pairs with that noun, not the nearest match for the English word: generic English verbs and idioms (give, be the name of, fill with, read as, its own) need a more specific French wording.
+4. Translate a preposition by what it means in that sentence, not word for word (over, via, beside); a "from X" hanging off a noun needs a participle before it.
+5. Repeat the small words before each coordinated item (à, de, en, pour, où), which English factors out, but not a content word: replace a second occurrence with a pronoun or drop it.
+6. A pronoun, relative or participle must attach to the nearest noun that fits; where it could attach to the wrong noun or to none, name the thing or rephrase.
+7. Spell out the link between clauses that English leaves to a comma or a dash (contrast, equivalence, consequence, fallback), and keep to one colon per sentence.
+8. Do not stack nouns or set a value straight after a noun as English does: link them with a preposition or a colon, and add the head noun that makes a chain readable.

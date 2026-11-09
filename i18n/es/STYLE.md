@@ -244,11 +244,11 @@ Fluent can't tell you the gender or number of what a placeable holds, and Spanis
 
 The patterns of English that a native review of this translation corrected most often, as principles for any new text.
 
-1. A noun that modifies another noun is linked to it with a preposition, usually «de»; English's bare noun-plus-noun, and a bare noun followed by its value, read as notation.
-2. Translate what an English preposition, phrasal verb or spatial image means, not its words; say the actual state or relation, with the verb and preposition Spanish pairs for it, rather than where something "sits", "reaches" or "goes back to".
-3. Spanish does not take English's compression: fill in the noun, object, article or conditional clause English leaves out («Si no se define» for "Unset,"), and report a fault with a verb, not with a bare «sin…» phrase.
-4. Keep each adjective or participle next to the noun it modifies; when one would land at the end of a long noun chain or list, move it forward or recast the phrase so it doesn't dangle.
-5. Make the subject whatever really does the action: a quantity, an accessory, a gerund-like action noun or a property can't "show", "be" or "add" as it can in English; use «con/para…», an infinitive, or an imperative.
-6. Don't stack parallel phrases: break up chains of three or more «de» with another preposition or a clause, and fold two time phrases on one verb into one.
-7. Read the result for a second meaning English doesn't have: an imperative identical to a third-person verb, a pronoun whose nearest antecedent is the wrong noun, a verb-preposition pair or adjective with another sense.
-8. Avoid repeating a word or its root within a clause; use a pronoun, drop it, or vary the wording.
+1. Translate what an English verb or preposition means, not its words: give each noun the verb Spanish pairs with it and each verb its own preposition, and replace spatial images ("reach", "come back", "covered above") with the actual change or state.
+2. Reread for a meaning English doesn't have: an imperative identical to a third-person verb, a «lo» with no antecedent or the wrong nearest noun, a phrase with another everyday sense. Name the noun or recast.
+3. Say a word or its root once per clause, and avoid echoing it in the next: use a pronoun or a relative clause, or drop it.
+4. Supply what English compresses away: the object, the noun, the agent or the condition linking two phrases. A fault or state takes a conjugated verb, not a bare «sin…» or «más de…».
+5. Keep an adjective, participle or complement beside the word it modifies; when a number, list or noun chain would come between, recast with a verb or a parenthesis so it can't attach to the nearest noun.
+6. Make the subject something that can do the action: a button, label, table row or command can't save, need, write or press. Address the user or use an impersonal «se».
+7. Link a noun that modifies another, or a noun and its value, with a preposition, usually «de»; where English stacks nouns or uses an adjective for a relation, say the relation, without chaining several «de» or «en» phrases.
+8. A range that continues a sentence is written in words, «del 10% al 100%», «de 5Hz a 2kHz»; the dash stays in bare notation.
