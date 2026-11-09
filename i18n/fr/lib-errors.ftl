@@ -120,7 +120,7 @@ error-unsupported-range-not-listed = la plage { $id } ne fait pas partie des { $
 # $count is how many ranges $mode, a mode, has.
 error-unsupported-auto-range-not-listed = la plage automatique ne fait pas partie des { $count } plages que propose le mode { $mode }
 # $mode is a mode, $word its code.
-error-unsupported-fixed-range = plage en mode { $mode } ({ $word }) : mode à plage fixe
+error-unsupported-fixed-range = le mode { $mode } ({ $word }) est un mode à plage fixe
 # $setting is a setting's name, $mode a mode.
 error-unsupported-setting-not-in-mode = le réglage { $setting } ne peut pas être modifié en mode { $mode } sur ce multimètre
 # $setting is a setting's name, $mode a mode, $word its code.
@@ -183,9 +183,9 @@ error-rejected-rel-is-on = REL est déjà activé : quittez d’abord le mode R
 # $code is a number, $model and $opened are meters (e.g. OWON B41T+), $id a
 # meter's ID as --device takes it. "Auto-detect" is the GUI's Device
 # choice.
-error-rejected-other-model = le multimètre indique le code de modèle OWON { $code } ({ $model }) : ce n’est pas le multimètre { $opened } choisi à l’ouverture, et les touches à distance sont donc désactivées : choisissez Détection automatique ou --device { $id }
+error-rejected-other-model = le multimètre indique le code de modèle OWON { $code } ({ $model }) : ce n’est pas le multimètre { $opened } choisi à l’ouverture, et les touches à distance sont donc désactivées ; choisissez Détection automatique ou --device { $id }
 # $code is a number.
-error-rejected-unknown-model = le multimètre indique le code de modèle OWON { $code }, que cet outil ne connaît pas encore, donc les touches à distance sont désactivées
+error-rejected-unknown-model = le multimètre indique le code de modèle OWON { $code }, que cet outil ne connaît pas encore : les touches à distance sont donc désactivées
 # $command is a command word.
 error-rejected-model-unread = le code de modèle du multimètre n’a pas été lu, donc la commande { $command } est désactivée : maintenez la touche REL enfoncée sur le multimètre pour quitter REL
 error-rejected-min-max-locks-range = MIN/MAX verrouille la plage : quittez MIN/MAX avant de la changer
@@ -209,7 +209,7 @@ error-sent-range = la plage { $range }
 # Voltcraft VC871; $frame the length of that model's frame in bytes, 6 or
 # 15; $opened the meter chosen, e.g. OWON B35T+; $id the --device value
 # for $model.
-error-wrong-meter-other-frame = le multimètre indique le code de modèle OWON { $code } ({ $model }), un modèle qui envoie des trames OWON de { $frame } octets : ce n’est donc pas le multimètre { $opened } choisi à l’ouverture : choisissez Détection automatique ou --device { $id }
+error-wrong-meter-other-frame = le multimètre indique le code de modèle OWON { $code } ({ $model }), un modèle qui envoie des trames OWON de { $frame } octets : ce n’est donc pas le multimètre { $opened } choisi à l’ouverture ; choisissez Détection automatique ou --device { $id }
 # An OWON meter sends the other kind of data frame and names no model.
 # $sent and $expected are frame lengths in bytes, 6 or 15; $opened is the
 # meter chosen, e.g. Voltcraft VC871. $remedy is auto-detect, or own-model
@@ -224,10 +224,10 @@ error-wrong-meter-other-frame-kind =
 error-wrong-meter-not-yet = le multimètre indique le code de modèle OWON { $code }, que cet outil ne lit pas encore : ouvrez un ticket (issue) en y copiant ce message
 # An OWON model whose readings carry their sign where this tool does not
 # read it yet. $code is OWON's model number, e.g. 55.
-error-wrong-meter-sign-in-function-word = le multimètre indique le code de modèle OWON { $code } : il envoie la trame OWON de 6 octets avec le signe dans le mot de fonction, que cet outil ne lit pas encore
+error-wrong-meter-sign-in-function-word = le multimètre indique le code de modèle OWON { $code } : il envoie la trame OWON de 6 octets avec le signe dans le mot de fonction, un format que cet outil ne lit pas encore
 # A Brymen meter of another series answered. $found and $opened are series,
 # e.g. Brymen BM82x and Brymen BM86x; $id is the --device value for $found.
-error-wrong-meter-other-series = le multimètre branché sur le câble est un multimètre { $found }, et non un multimètre { $opened } : choisissez Détection automatique ou --device { $id }
+error-wrong-meter-other-series = le câble est branché sur un multimètre { $found }, et non sur un multimètre { $opened } : choisissez Détection automatique ou --device { $id }
 # An OWON meter chosen by its model sends bytes, but never its 6-byte data
 # frame. B35 and B35T are OWON models.
 error-wrong-meter-no-six-byte-frames = le multimètre n’envoie aucune trame OWON de 6 octets : il s’agit peut-être d’un ancien B35 ou B35T, dont cet outil ne lit pas encore les trames de 14 octets

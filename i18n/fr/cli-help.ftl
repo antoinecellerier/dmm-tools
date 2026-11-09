@@ -27,7 +27,7 @@ dmm-cli--no-bluetooth =
     .help = Désactiver la recherche Bluetooth pour cette exécution : aucun adaptateur ni multimètre n’est recherché et 'list' n’affiche que les câbles. Remplace le paramètre 'bluetooth' enregistré. Une adresse donnée à --adapter est tout de même ouverte
 # dmm-cli --lang
 dmm-cli--lang =
-    .help = Langue des messages et de l’aide, ou `system` pour celle du système. Sans cette option, `language` dans le fichier de paramètres (écrit par la ligne Langue de dmm-gui) s’applique, ou à défaut la langue du système
+    .help = Langue des messages et de l’aide, ou `system` pour celle du système. Sans cette option, `language` dans le fichier de paramètres (défini par la ligne Langue de dmm-gui) s’applique, ou à défaut la langue du système
 # dmm-cli list
 list =
     .about = Lister les câbles USB connectés, ainsi que les adaptateurs et multimètres Bluetooth à portée
@@ -44,7 +44,7 @@ read--interval-ms =
 # .value-… says what that value does, in --help's list of values.
 read--format =
     .help = Format de sortie [par défaut : text, ou celui qu’indique l’extension du fichier -o]
-    .value-replay = Les propres trames du multimètre, que --replay peut relire
+    .value-replay = Les trames envoyées par le multimètre, que --replay peut relire
 # dmm-cli read --output
 read--output =
     .help = Fichier de sortie (stdout si non précisé). Si l’option est donnée sans nom, le fichier est nommé d’après le multimètre, son mode et le début de l’exécution
@@ -86,16 +86,16 @@ read--replay =
     .help = Relire un fichier écrit par --format replay au lieu d’ouvrir un multimètre, jusqu’à la fin du fichier
 # dmm-cli read --import
 read--import =
-    .help = Lire un fichier exporté (CSV, JSON ou relecture) au lieu d’ouvrir un multimètre, sans attendre : pour le convertir ou afficher son résumé
+    .help = Lire un fichier exporté (CSV, JSON ou relecture) au lieu d’ouvrir un multimètre, sans attendre, afin de le convertir ou d’afficher son résumé
 # dmm-cli command
 command =
-    .about = Envoyer au multimètre une commande qui équivaut à appuyer sur une touche. Lancez sans argument pour lister les commandes disponibles pour l’appareil sélectionné
+    .about = Envoyer au multimètre une commande qui équivaut à appuyer sur une touche. Lancez la commande sans argument pour lister les commandes disponibles pour l’appareil sélectionné
 # dmm-cli command <ACTION>
 command--action =
     .help = Nom de la commande (lancez sans argument pour voir les commandes disponibles)
 # dmm-cli get
 get =
-    .about = Lister les choix que proposent les réglages du multimètre depuis sa position actuelle. Lancez sans argument pour voir tous les réglages qui offrent un choix
+    .about = Lister les choix que proposent les réglages du multimètre depuis sa position actuelle. Lancez la commande sans argument pour voir tous les réglages qui offrent un choix
 # dmm-cli get <SETTING>
 get--setting =
     .help = Réglage à lister (omettez-le pour les lister tous)
@@ -107,7 +107,7 @@ get--mock-mode =
     .help = Fixer l’appareil simulé sur un mode précis (seulement avec --device mock). Sans cette option, le mode simulé du fichier de paramètres s’applique, ou à défaut l’appareil simulé parcourt tous les modes
 # dmm-cli set
 set =
-    .about = Changer un réglage du multimètre sans y toucher. Lancez sans choix pour lister ce que ce réglage permet d’atteindre depuis la position actuelle
+    .about = Changer un réglage du multimètre sans toucher à l’appareil. Lancez la commande sans choix pour lister ce que ce réglage permet d’atteindre depuis la position actuelle
 # dmm-cli set <SETTING>
 set--setting =
     .help = Réglage à changer

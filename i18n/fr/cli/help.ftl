@@ -17,7 +17,7 @@ help-mock-mode-intro = Fixer l’appareil simulé sur un mode de mesure précis 
 
 ## After the options of dmm-cli -h.
 
-help-see-long-help = Lancez avec --help pour la liste complète des appareils pris en charge et le chemin du fichier de paramètres partagé.
+help-see-long-help = Lancez la commande avec --help pour obtenir la liste complète des appareils pris en charge et le chemin du fichier de paramètres partagé.
 # $setting is NO_COLOR=1.
 help-no-color = Définissez { $setting } pour désactiver les couleurs.
 

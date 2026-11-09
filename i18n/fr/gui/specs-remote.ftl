@@ -77,7 +77,7 @@ remote-rel =
     .hover = Afficher les mesures par rapport à la valeur actuelle
 # RANGE: the meter leaves auto-range and steps to its next range.
 remote-range =
-    .hover = Appuyer sur RANGE (plage manuelle, un cran)
+    .hover = Appuyer sur RANGE (plage manuelle, plage suivante à chaque appui)
 # AUTO: the meter picks its range itself again.
 remote-auto =
     .hover = Remettre le multimètre en plage automatique

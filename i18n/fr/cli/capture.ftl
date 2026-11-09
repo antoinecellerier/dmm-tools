@@ -58,7 +58,7 @@ capture-status-experimental-detail = Effectuez autant d’étapes que possible e
 ## meter names; $id is the --device id that opens the named one.
 
 # Yellow and bold, after the status banner.
-capture-other-model = Le multimètre s’identifie comme le modèle { $named }, alors que cette exécution a ouvert le modèle { $opened }.
+capture-other-model = Le multimètre s’identifie comme le modèle { $named }, alors que cette exécution l’a ouvert en tant que modèle { $opened }.
 capture-other-model-detail = Les étapes et les touches à distance utilisées seraient celles du modèle { $opened }.
 # $yes and $no are the keys that answer: y and n. Any other key quits.
 capture-other-model-confirm = Capturer quand même en tant que modèle { $opened } ? { $yes }/{ $no } :
@@ -270,12 +270,12 @@ capture-core-not-confirmed = Lecture du mode, de la plage et des indicateurs non
 ## starts with an arrow.
 
 # $mode is the function, e.g. Continuity.
-capture-drive-switching = passage en mode { $mode } (envoyé par l’outil)
+capture-drive-switching = passage en mode { $mode } (commande envoyée par l’outil)
 # $mode is the function, e.g. Continuity; $error why the meter refused.
 capture-drive-switch-failed = impossible de passer en mode { $mode } ({ $error }) : faites-le à la main
 # $setting is the setting's name, rel (relative mode): the meter refuses it
 # while it shows OL, its over-range sign.
-capture-drive-rel-skipped-ol = réglage { $setting } ignoré : la mesure affiche OL
+capture-drive-rel-skipped-ol = réglage { $setting } ignoré : le multimètre affiche OL
 # $setting is the setting's name, rel (relative mode).
 capture-drive-rel-skipped-blank = réglage { $setting } ignoré : aucune mesure
 # In place of a reading, after the setting and value tried, e.g.
@@ -358,7 +358,7 @@ capture-complete = Capture terminée !
 capture-report-saved = Rapport enregistré : { $path }
 # The run followed a list of steps a maintainer wrote (a "plan"). $plan is
 # its file; $covered and $total count its steps.
-capture-plan-covered = Plan { $plan } : { $covered } des { $total } étapes capturées
+capture-plan-covered = Étapes capturées du plan { $plan } : { $covered } sur { $total }
 capture-nothing-new = Aucune étape non vérifiée n’a été capturée : rien de nouveau à signaler.
 # $covered and $total count the meter's steps that hardware hasn't confirmed
 # yet; $meter is its name, e.g. UNI-T UT61E+.
@@ -428,7 +428,7 @@ capture-error-unknown-steps =
 # The --instructions file can't be read. $path is the file; $problems the
 # problems, one per line (capture-instructions-problem-*).
 capture-error-instructions-unreadable =
-    impossible de lire { $path } comme instructions de capture :
+    impossible de lire les instructions de capture de { $path } :
     { $problems }
 # The --instructions file was exported for another meter. $path is the
 # file; $named the meter id in it, e.g. ut61eplus; $device this run's, e.g.

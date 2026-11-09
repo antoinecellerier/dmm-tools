@@ -16,7 +16,7 @@ shortcuts-title = Clavier et souris
 # The × button at the right end of the title row, which closes the dialog:
 # its name for a screen reader.
 shortcuts-close =
-    .a11y = Fermer les raccourcis clavier
+    .a11y = Fermer l’aide des raccourcis clavier
 
 ## The General table: the app's own shortcuts, shown in the left column of
 ## the dialog when it is wide.
@@ -122,7 +122,7 @@ shortcuts-mouse-cursor = Placer le curseur A / B sur le point le plus proche
     .gesture = Clic (curseurs activés)
 # Opens a menu to add a marker, copy the reading, place the cursors, set
 # reference lines or set an alarm.
-shortcuts-mouse-menu = Marquer, copier, curseurs, lignes de référence, alarme
+shortcuts-mouse-menu = Marqueur, copie, curseurs, lignes de référence, alarme
     .gesture = Clic droit
 # The minimap is the strip under the graph showing all the readings:
 # dragging in it moves the view, dragging its edges resizes it.

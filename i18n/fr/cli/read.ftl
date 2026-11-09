@@ -25,17 +25,17 @@ read-clock-max-no-preseed = 'max' n’accepte pas de préremplissage : chaque t
 read-clock-max-needs-replay = 'max' demande --replay : seul un enregistrement se termine de lui-même
 # A recording names the meter it was made with. $command is the command line
 # that plays one (dmm-cli read --replay FILE).
-read-replay-names-its-device = le fichier donné à --replay indique son propre multimètre : retirez --device ({ $command })
+read-replay-names-its-device = le fichier donné à --replay indique déjà de quel multimètre il provient : retirez --device ({ $command })
 # An exported CSV or JSON file names the meter it was read from.
-read-import-names-its-device = le fichier donné à --import indique son propre multimètre : retirez --device
+read-import-names-its-device = le fichier donné à --import indique déjà de quel multimètre il provient : retirez --device
 # --format replay writes the frames a meter sent. $device is the simulated
 # meter's id, e.g. mock.
 read-replay-format-needs-meter = --format replay demande un vrai multimètre : rien à enregistrer depuis --device { $device }
 # $flag is the option given that would change the readings, e.g. --scale or
 # --integrate.
-read-replay-format-keeps-frames = un fichier de relecture contient les propres trames du multimètre : indiquez { $flag } en le relisant
+read-replay-format-keeps-frames = un fichier de relecture contient les trames envoyées par le multimètre : indiquez { $flag } en le relisant
 read-import-no-frames = un fichier CSV ou JSON ne contient aucune trame de multimètre à écrire dans un fichier de relecture : pour cela, donnez un fichier de relecture à --import
-read-import-no-interval = --interval-ms trie les mesures au fur et à mesure qu’un multimètre les envoie : un fichier contient déjà toutes ses mesures
+read-import-no-interval = --interval-ms filtre les mesures au fur et à mesure qu’un multimètre les envoie : un fichier contient déjà toutes ses mesures
 
 ## Why --mock-clock-scale's value was refused, at the end of a line from the
 ## command-line parser, which stays English: "error: invalid value 'abc' for
@@ -153,8 +153,8 @@ read-integral-timed = Intégrale : { $value } ({ $seconds }s)
 # (s). The rule's other figures, 5 intervals and 2 s, are fixed.
 read-skipped-intervals =
     { $count ->
-        [one] { $count } intervalle ignoré (aucune mesure pendant plus de { $max } s, 5 intervalles d’échantillonnage et au moins 2 s : l’intégrale est partielle)
-       *[other] { $count } intervalles ignorés (aucune mesure pendant plus de { $max } s, 5 intervalles d’échantillonnage et au moins 2 s : l’intégrale est partielle)
+        [one] { $count } intervalle ignoré (aucune mesure pendant plus de { $max } s, soit 5 intervalles d’échantillonnage et au moins 2 s : l’intégrale est partielle)
+       *[other] { $count } intervalles ignorés (aucune mesure pendant plus de { $max } s, soit 5 intervalles d’échantillonnage et au moins 2 s : l’intégrale est partielle)
     }
 # Under the summary: how many times the readings crossed each limit.
 # $limits is both, high or low: the limits the alarm had. $above and $below

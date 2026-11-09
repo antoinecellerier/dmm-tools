@@ -32,7 +32,7 @@ connection-click-connect = Cliquez sur « Connecter » après avoir résolu le
 # The closing line after the Bluetooth steps when nothing answered at the
 # address given with --adapter, a command-line option kept as it is. "It"
 # is the scan command the steps above name.
-connection-restart-with-address = Relancez avec --adapter réglé sur l’adresse que cette commande affiche.
+connection-restart-with-address = Relancez avec --adapter suivi de l’adresse affichée par cette commande.
 
 # A meter that connects over Bluetooth only, and Bluetooth was not looked at.
 connection-bluetooth-not-searched = Recherche Bluetooth non effectuée
@@ -163,8 +163,8 @@ connection-other-model = Le multimètre indique « { $reported } », et non le
 # Settings now names that model.
 connection-named-after-detection =
     { $saved ->
-        [yes] Le multimètre indique « { $reported } » et ce modèle est enregistré comme votre appareil : reconnectez-le pour le lire en tant que { $named }.
-       *[no] Le multimètre indique « { $reported } » : reconnectez-le pour le lire en tant que { $named }.
+        [yes] Le multimètre indique « { $reported } » et ce modèle est enregistré comme votre appareil : reconnectez-le pour l’utiliser en tant que { $named }.
+       *[no] Le multimètre indique « { $reported } » : reconnectez-le pour l’utiliser en tant que { $named }.
     }
 
 # The recording stopped because Buffer size, in Settings, was lowered below

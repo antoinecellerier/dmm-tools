@@ -75,9 +75,9 @@ top-bar-detecting = Détection…
 
 top-bar-link-live =
     { $link ->
-        [usb] Connecté par le câble USB
+        [usb] Connecté par câble USB
         [adapter] Connecté par l’adaptateur Bluetooth
-        [radio] Connecté par la liaison Bluetooth
+        [radio] Connecté en Bluetooth
        *[none] Multimètre simulé, sans liaison
     }
 # A recording being played back: how it was recorded.

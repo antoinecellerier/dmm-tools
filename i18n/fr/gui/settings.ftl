@@ -55,7 +55,7 @@ settings-auto-connect = Se connecter au démarrage
     .hover = Ouvrir automatiquement la connexion USB au lancement de l’application
 # Asking the meter its name makes it beep.
 settings-device-name = Afficher le nom de l’appareil à la connexion (bip sonore)
-    .hover = Demander son nom au multimètre après la connexion : le multimètre émet un bip sonore
+    .hover = Demander son nom au multimètre après la connexion : il émet alors un bip sonore
 # The Bluetooth checkbox while --no-bluetooth switched the search off for
 # this session. $setting is the checkbox's own label, e.g. Look for
 # Bluetooth devices.

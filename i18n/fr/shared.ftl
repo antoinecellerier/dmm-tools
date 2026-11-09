@@ -38,7 +38,7 @@ stability-experimental = expérimental
 # $stability is verified, partly-verified or experimental.
 stability-warning =
     { $stability ->
-        [verified] La prise en charge du multimètre { $model } est vérifiée (vérifiée sur du matériel réel).
+        [verified] La prise en charge du multimètre { $model } est vérifiée sur du matériel réel.
         [partly-verified] La prise en charge du multimètre { $model } est partiellement vérifiée (certains modes et commandes ne sont pas confirmés sur du matériel réel).
        *[experimental] La prise en charge du multimètre { $model } est expérimentale (non vérifiée sur du matériel réel).
     }
@@ -89,7 +89,7 @@ setup-usb-windows-warning = - Icône d’avertissement jaune sous 'Autres périp
 setup-usb-windows-nothing = - Rien n’apparaît : essayez un autre port USB.
 # macOS. Name the settings as macOS shows them in your language.
 setup-usb-macos-auto = Le câble devrait être reconnu automatiquement (aucun pilote nécessaire).
-setup-usb-macos-privacy = Si l’appareil est introuvable, vérifiez Réglages Système > Confidentialité et sécurité > Surveillance de l’entrée.
+setup-usb-macos-privacy = Si l’appareil est introuvable, vérifiez l’autorisation dans Réglages Système > Confidentialité et sécurité > Surveillance de l’entrée.
 setup-bluetooth-adapter = Si les deux sont activés, éteignez puis rallumez l’adaptateur.
 setup-bluetooth-macos-privacy = Autorisez le Bluetooth dans Réglages Système > Confidentialité et sécurité > Bluetooth.
 # The device catalog's address follows.
@@ -235,7 +235,7 @@ args-error = erreur :
 # An option that takes no value after "=" was given without one.
 args-equals-needed = un signe égal est nécessaire pour donner une valeur à '{ $arg }'
 # An option was given without its value.
-args-value-required = '{ $arg }' attend une valeur, mais aucune n’a été donnée
+args-value-required = '{ $arg }' attend une valeur, mais aucune n’a été fournie
 # A value the option doesn't take. A list of the ones it takes may follow
 # on the next line (args-possible-values).
 args-invalid-value = valeur '{ $value }' non valide pour '{ $arg }'
@@ -247,10 +247,10 @@ args-possible-values = [valeurs possibles : { $values }]
 # A command the program doesn't have, e.g. 'lst'.
 args-unrecognized-subcommand = commande '{ $command }' inconnue
 # Options that must be given, listed one per line under this.
-args-missing-required = les arguments obligatoires suivants n’ont pas été donnés :
+args-missing-required = les arguments obligatoires suivants n’ont pas été fournis :
 # The program was run without a command. $command is the program, e.g.
 # dmm-cli. The commands follow on the next line (args-subcommands).
-args-missing-subcommand = '{ $command }' attend une commande, mais aucune n’a été donnée
+args-missing-subcommand = '{ $command }' attend une commande, mais aucune n’a été fournie
 # The commands, on a line of their own under the error. $values is the list,
 # separated by commas.
 args-subcommands = [commandes : { $values }]
@@ -260,20 +260,20 @@ args-unexpected-value = valeur '{ $value }' inattendue pour '{ $arg }' : aucune
 # $given, for choosing the verb's form ([0] and [one]: one value or none).
 args-too-few-values =
     { $count ->
-        [one] '{ $arg }' attend { $needed } valeurs, mais seulement { $given } a été donnée
-       *[other] '{ $arg }' attend { $needed } valeurs, mais seulement { $given } ont été données
+        [one] '{ $arg }' attend { $needed } valeurs, mais seulement { $given } a été fournie
+       *[other] '{ $arg }' attend { $needed } valeurs, mais seulement { $given } ont été fournies
     }
 # The wrong number of values after an option. $needed and $given are
 # numbers; $count is $given, for choosing the verb's form.
 args-wrong-number-of-values =
     { $count ->
-        [one] '{ $arg }' attend { $needed } valeurs, mais { $given } a été donnée
-       *[other] '{ $arg }' attend { $needed } valeurs, mais { $given } ont été données
+        [one] '{ $arg }' attend { $needed } valeurs, mais { $given } a été fournie
+       *[other] '{ $arg }' attend { $needed } valeurs, mais { $given } ont été fournies
     }
 # An option the program doesn't have, or one this command doesn't take.
 args-unexpected-argument = argument '{ $arg }' inattendu
 # An option given twice that can only be given once.
-args-repeated = l’argument '{ $arg }' ne peut être donné qu’une fois
+args-repeated = l’argument '{ $arg }' ne peut être utilisé qu’une fois
 # Two options, or an option and a command, that can't go together. $what is
 # argument or subcommand; $name and $other are what the user typed.
 args-conflict-with =
@@ -293,8 +293,8 @@ args-conflict-with-list =
 # subcommand; $name is what the user typed.
 args-conflict-with-others =
     { $what ->
-        [subcommand] la commande '{ $name }' ne peut pas être utilisée avec un ou plusieurs des autres arguments donnés
-       *[argument] l’argument '{ $name }' ne peut pas être utilisé avec un ou plusieurs des autres arguments donnés
+        [subcommand] la commande '{ $name }' ne peut pas être utilisée avec un ou plusieurs des autres arguments indiqués
+       *[argument] l’argument '{ $name }' ne peut pas être utilisé avec un ou plusieurs des autres arguments indiqués
     }
 
 ## Hints after the error.

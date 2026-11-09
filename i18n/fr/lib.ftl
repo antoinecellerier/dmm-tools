@@ -509,13 +509,13 @@ key-hover-read-a-4-20-ma-loop = Afficher le courant de boucle 4-20 mA en pource
 # Used by: ZT-5566SE
 key-hover-record-maximum-and-minimum-readings = Enregistrer les valeurs maximale et minimale
 # Used by: UT171A/B/C
-key-hover-record-maximum-average-and-minimum-readings-2 = Enregistrer les valeurs maximale, moyenne et minimale : cliquez pour passer à la suivante, × pour quitter
+key-hover-record-maximum-average-and-minimum-readings-2 = Enregistrer les valeurs maximale, moyenne et minimale : cliquez pour passer à la suivante ou sur × pour quitter
 # Used by: UT181A
-key-hover-record-maximum-average-and-minimum-readings = Enregistrer les valeurs maximale, moyenne et minimale : × pour quitter
+key-hover-record-maximum-average-and-minimum-readings = Enregistrer les valeurs maximale, moyenne et minimale : cliquez sur × pour quitter
 # Used by: VC-880, VC-890, VC650BT
-key-hover-record-maximum-minimum-and-average-readings = Enregistrer les valeurs maximale, minimale et moyenne : cliquez pour passer à la suivante, × pour quitter
+key-hover-record-maximum-minimum-and-average-readings = Enregistrer les valeurs maximale, minimale et moyenne : cliquez pour passer à la suivante ou sur × pour quitter
 # Used by: 121GW
-key-hover-record-minimum-maximum-and-average-readings = Enregistrer les valeurs minimale, maximale et moyenne : cliquez pour passer à la suivante, × pour quitter
+key-hover-record-minimum-maximum-and-average-readings = Enregistrer les valeurs minimale, maximale et moyenne : cliquez pour passer à la suivante ou sur × pour quitter
 # Used by: UT171A/B/C, UT181A
 key-hover-save-the-reading-to-the-meter = Enregistrer la mesure dans la mémoire du multimètre
 # Used by: CMS061, CMS101
@@ -533,11 +533,11 @@ key-hover-swap-the-main-and-second-displays = Intervertir les écrans principal 
 # Used by: OW69B
 key-hover-switch-the-low-pass-filter-on = Activer ou désactiver le filtre passe-bas
 # Used by: UT171A/B/C
-key-hover-take-the-reading-as-the-reference = Prendre la mesure actuelle comme référence : × pour quitter
+key-hover-take-the-reading-as-the-reference = Prendre la mesure actuelle comme référence : cliquez sur × pour quitter
 # Used by: OW18B/OW16B, OW18E
 key-hover-toggle-the-backlight-and-an-ow18 = Allumer ou éteindre le rétroéclairage et, sur un OW18, la lampe torche
 # Used by: VC871, VC891, VC915, VC925 PV
-key-hover-zero-the-reading-to-exit = Remettre la mesure à zéro : × pour quitter
+key-hover-zero-the-reading-to-exit = Remettre la mesure à zéro : cliquez sur × pour quitter
 
 ## Model names with words in them: the simulated meters. Keep the part
 ## number as it is.
@@ -598,8 +598,8 @@ activation-bm78xbt =
     1. Déconnectez le multimètre de toute application mobile
     2. Tournez le commutateur rotatif sur n’importe quelle fonction sauf Auto V/LoZ
     3. Maintenez la touche Δ enfoncée pendant au moins une seconde, jusqu’à ce que ((D)) s’affiche à l’écran
-    Remarque : le multimètre s’éteint après 15 à 30 minutes d’inactivité. Maintenez la touche SELECT enfoncée en allumant le multimètre pour désactiver l’arrêt automatique (dSAPO s’affiche).
-    Si le multimètre est introuvable ou si son mot de passe de connexion a été modifié, maintenez la touche Hz enfoncée en tournant le commutateur de OFF à la position capacité en moins de 0.6 s : le multimètre affiche « Org », et son mot de passe de connexion et son nom Bluetooth reviennent aux réglages d’usine.
+    Remarque : le multimètre s’éteint après 15 à 30 minutes d’inactivité. Maintenez la touche SELECT enfoncée en allumant le multimètre pour désactiver l’arrêt automatique (dSAPO s’affiche).
+    Si le multimètre est introuvable ou si son mot de passe de connexion a été modifié, maintenez la touche Hz enfoncée en tournant le commutateur de la position OFF à la position capacité en moins de 0.6 s : le multimètre affiche « Org », et son mot de passe de connexion et son nom Bluetooth reprennent leurs réglages d’usine.
 # Used by: OW69B
 activation-ow69b =
     1. Déconnectez le multimètre de toute application mobile
@@ -673,7 +673,7 @@ activation-ut161b =
 activation-121gw =
     1. Tournez le commutateur rotatif sur n’importe quelle fonction
     2. Maintenez la touche 1ms PEAK enfoncée jusqu’à ce que BT s’affiche à l’écran
-    Remarque : le multimètre s’éteint après 30 minutes. Réglez APO.oF dans SETUP pour désactiver l’arrêt automatique.
+    Remarque : le multimètre s’éteint après 30 minutes. Sélectionnez APO.oF dans SETUP pour désactiver l’arrêt automatique.
 # Used by: ZT-300AB
 activation-zt300ab =
     1. Allumez le multimètre
@@ -763,7 +763,7 @@ table-autocheck-ohms = AutoCheck™ (Ohms)
 # Used by: UT803
 table-b-ac-voltage = B. Tension alternative
 # Used by: UT804
-table-b-ac-voltage-ac-plus-dc = B. Tension alternative (mesure alternative + continue disponible)
+table-b-ac-voltage-ac-plus-dc = B. Tension alternative (mesure en alternatif + continu disponible)
 # Used by: UT803, UT804
 table-c-dc-current = C. Courant continu
 # Used by: 11 meters
@@ -777,7 +777,7 @@ table-crest-mode-instantaneous-peak-hold = Mode crête (maintien de la crête in
 # Used by: UT803
 table-d-ac-current = D. Courant alternatif
 # Used by: UT804
-table-d-ac-current-ac-plus-dc = D. Courant alternatif (mesure alternative + continue disponible)
+table-d-ac-current-ac-plus-dc = D. Courant alternatif (mesure en alternatif + continu disponible)
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
 table-dc-ac-ac-plus-dc-ac = Tension continue, alternative et alternative + continue
 # Used by: 9 meters
@@ -821,9 +821,9 @@ table-k-transistor = K. Transistor
 # Used by: UT804
 table-l-4-20-ma-loop-current = L. Courant de boucle 4~20 mA
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
-table-line-level-frequency-hz = Fréquence de niveau secteur (~Hz)
+table-line-level-frequency-hz = Fréquence des signaux de niveau secteur (~Hz)
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
-table-logic-level-frequency-hz-duty-cycle = Fréquence de niveau logique (⎍Hz) et rapport cyclique (D%)
+table-logic-level-frequency-hz-duty-cycle = Fréquence des signaux de niveau logique (⎍Hz) et rapport cyclique (D%)
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
 table-non-contact-ef-detection = Détection EF sans contact
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
@@ -947,10 +947,10 @@ input-fuse-500ma-125v = Fusible 500mA 125V
 input-fuse-600ma-1000v = Fusible 600mA 1000V
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
 # In: AutoCheck™ (ACV)
-input-initially-approx-3-0kohm-150pf-nominal = Au départ environ 3.0kΩ, 150pF nominal
+input-initially-approx-3-0kohm-150pf-nominal = Initialement environ 3.0kΩ, 150pF nominal
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
 # In: AutoCheck™ (DCV)
-input-initially-approx-3-0kohm-165pf-nominal = Au départ environ 3.0kΩ, 165pF nominal
+input-initially-approx-3-0kohm-165pf-nominal = Initialement environ 3.0kΩ, 165pF nominal
 
 ## Specification notes, under a table in the Specifications panel, from
 ## the meter's manual. Keep the exact sense, comparisons and qualifiers such as
@@ -1101,7 +1101,7 @@ note-accuracy-valid-40hz-500hz-1-pct-2 = Précision valable sur 40Hz–500Hz, 1%
 note-accuracy-with-film-capacitor-or-better = Précision donnée avec un condensateur à film ou de meilleure qualité
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
 # In: Audible Continuity Tester
-note-audible-threshold-between-20ohm-and-300ohm = Seuil sonore : entre 20Ω et 300Ω
+note-audible-threshold-between-20ohm-and-300ohm = Seuil du bip sonore : entre 20Ω et 300Ω
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
 # In: DC AC & AC+DC AC Voltage
 note-bm821s-specified-from-10-pct-to = BM821s : spécifié de 10% à 100% de la plage
@@ -1146,7 +1146,7 @@ note-crest-factor-up-to-3-0 = Facteur de crête jusqu’à 3.0 (1000V : 1.5)
 note-crest-specified-accuracy-adds-250-digits = Crête : précision spécifiée + 250 points pour les variations > 1.0 ms
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
 # In: Non-Contact EF-Detection
-note-detects-50-60hz-antenna-at-the = Détecte 50/60Hz ; antenne à l’extrémité supérieure du multimètre
+note-detects-50-60hz-antenna-at-the = Détecte les champs à 50/60Hz ; antenne à l’extrémité supérieure du multimètre
 # Used by: 7 meters
 # In: Continuity and Diode
 note-diode-one-beep-0-12v-2v = Diode : un bip 0.12V–2V (normal), bip long <0.12V (court-circuit)

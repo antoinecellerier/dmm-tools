@@ -38,7 +38,7 @@ settings-auto-in = (plage automatique : { $range })
 settings-tip-by-name = Conseil : changez un réglage par son nom, par exemple { $command }
 # Under one setting's listing, whose right column holds what to type for
 # each choice.
-settings-tip-right-column = Conseil : tapez la valeur de la colonne de droite pour y passer, par exemple { $command }
+settings-tip-right-column = Conseil : tapez la valeur de la colonne de droite pour la sélectionner, par exemple { $command }
 
 ## After "Note:" (common.ftl): the meter has nothing to switch to from where
 ## it is, and the command stops. Only the dial changes which modes and ranges
@@ -105,19 +105,19 @@ settings-unknown = choix inconnu pour { $setting } : { $input }
 # when the input is past its end.
 settings-refused =
     { $setting ->
-        [range] le multimètre a refusé { $choice } ({ $reason }) : vérifiez la position du commutateur et assurez-vous que l’entrée reste dans la plage
+        [range] le multimètre a refusé { $choice } ({ $reason }) : vérifiez la position du commutateur et assurez-vous que le signal d’entrée reste dans la plage
        *[other] le multimètre a refusé { $choice } ({ $reason }) : vérifiez la position du commutateur
     }
 # The meter took the command, but its readings never showed the choice.
 settings-not-switched =
     { $setting ->
-        [range] Le multimètre n’a pas changé : vérifiez la position du commutateur et assurez-vous que l’entrée reste dans la plage
-       *[other] Le multimètre n’a pas changé : vérifiez la position du commutateur
+        [range] Le multimètre n’a pas changé de plage : vérifiez la position du commutateur et assurez-vous que le signal d’entrée reste dans la plage
+       *[other] Le multimètre n’a pas changé de réglage : vérifiez la position du commutateur
     }
 # As settings-not-switched, naming $live, the choice the meter is still on,
 # e.g. off.
 settings-not-switched-still =
     { $setting ->
-        [range] Le multimètre n’a pas changé (toujours { $live }) : vérifiez la position du commutateur et assurez-vous que l’entrée reste dans la plage
-       *[other] Le multimètre n’a pas changé (toujours { $live }) : vérifiez la position du commutateur
+        [range] Le multimètre n’a pas changé de plage (toujours { $live }) : vérifiez la position du commutateur et assurez-vous que le signal d’entrée reste dans la plage
+       *[other] Le multimètre n’a pas changé de réglage (toujours { $live }) : vérifiez la position du commutateur
     }

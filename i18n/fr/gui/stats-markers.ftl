@@ -105,7 +105,7 @@ markers-note-hidden =
 # Over the list when a recording is too long to list in full; Export…
 # saves every sample to a file. $time is the time of the first sample
 # listed, e.g. 14:02:37.
-markers-log-cut = Exportez pour voir les échantillons antérieurs à { $time }.
+markers-log-cut = Exportez l’enregistrement pour voir les échantillons antérieurs à { $time }.
 # When Ctrl+N cannot show the note it opened because the panel is too short
 # for a single row; $number is the marker's number.
 markers-log-too-short = Agrandissez le panneau Enregistrement pour écrire la note du marqueur { $number }.

@@ -122,4 +122,4 @@ connect-error-not-found = appareil introuvable
 connect-error-not-identified = appareil non identifié
 connect-error-adapter-not-found = adaptateur introuvable
 # $device is the meter id given with --device, e.g. auto.
-connect-error-not-simulated = --device { $device } n’est pas simulé
+connect-error-not-simulated = --device { $device } ne désigne pas un appareil simulé

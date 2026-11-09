@@ -58,16 +58,16 @@ colors-theme-builtin =
 colors-theme-file =
     .hover =
         { $mode ->
-            [light] Thème clair, depuis { $path }. Supprimez le fichier pour le retirer.
-           *[dark] Thème sombre, depuis { $path }. Supprimez le fichier pour le retirer.
+            [light] Thème clair chargé depuis { $path }. Supprimez le fichier pour le retirer.
+           *[dark] Thème sombre chargé depuis { $path }. Supprimez le fichier pour le retirer.
         }
 # The same when the themes folder can't be found, with $mode as there.
 # $file is the theme's file name.
 colors-theme-file-unplaced =
     .hover =
         { $mode ->
-            [light] Thème clair, depuis { $file }
-           *[dark] Thème sombre, depuis { $file }
+            [light] Thème clair chargé depuis { $file }
+           *[dark] Thème sombre chargé depuis { $file }
         }
 
 ## After the Theme row's chips: the theme files in the themes folder that
@@ -104,7 +104,7 @@ colors-issue-name-empty = le nom est vide
 # $max is the most characters a name may have, e.g. 32.
 colors-issue-name-too-long = le nom dépasse { $max } caractères
 # Invisible characters, or $ or `.
-colors-issue-name-unusable = le nom contient des caractères interdits dans un nom de thème
+colors-issue-name-unusable = le nom contient des caractères interdits
 # The theme's name is Dark, Light or System, which the Theme row's own
 # chips go by. $name is the name as the file has it; put it in your
 # language's quotes.
@@ -113,7 +113,7 @@ colors-issue-name-reserved = « { $name } » est réservé à la ligne Thème
 # button captions on the button.
 colors-issue-not-opaque =
     { $what ->
-        [button] le texte du bouton n’est pas opaque sur le bouton
+        [button] le texte n’est pas opaque sur le bouton
        *[text] le texte n’est pas opaque sur l’arrière-plan
     }
 # The colours can't be read on each other. $what is as above; $ratio is
@@ -130,7 +130,7 @@ colors-issue-frame-low-contrast = le contraste du texte sur le cadre est de { $r
 # Another file in the folder gives its theme the same name. $name is the
 # name as the file has it, to put in your language's quotes; $file the
 # other file's name.
-colors-issue-name-taken = « { $name } » est déjà le nom de { $file }
+colors-issue-name-taken = « { $name } » est déjà utilisé par { $file }
 colors-issue-file-name-unprintable = le nom du fichier contient des caractères non imprimables
 # The folder holds too many theme files. $max is how many are read, e.g.
 # 100.
@@ -193,7 +193,7 @@ colors-follow-arrow =
 colors-swatch-background = Arrière-plan
     .hover = Couleur d’arrière-plan des panneaux
 colors-swatch-frame = Cadre
-    .hover = Arrière-plan de la barre du haut et du panneau de mesure (celui des panneaux s’il n’est pas défini)
+    .hover = Arrière-plan de la barre du haut et du panneau de mesure (à défaut, celui des panneaux)
 colors-swatch-button = Bouton
     .hover = Couleur d’arrière-plan des boutons
 # Lines between and around the panels.
@@ -206,12 +206,12 @@ colors-swatch-text = Texte
     .hover = Couleur du texte principal
 # The meter's value as the reading panel shows it, in large type.
 colors-swatch-reading = Mesure
-    .hover = La mesure et les valeurs secondaires (la couleur du texte si elle n’est pas définie)
+    .hover = La mesure et les valeurs secondaires (à défaut, la couleur du texte)
 # Text drawn fainter than the rest.
 colors-swatch-weak-text = Texte secondaire
     .hover = Texte secondaire : ligne du mode, libellés des valeurs secondaires, indications et légendes
 colors-swatch-heading = Titre
-    .hover = Titres des panneaux : Spécifications, Statistiques, Visible (la couleur du texte secondaire si elle n’est pas définie)
+    .hover = Titres des panneaux : Spécifications, Statistiques, Visible (à défaut, la couleur du texte secondaire)
 # The lines that follow the pointer over the graph.
 colors-swatch-crosshair = Réticule
     .hover = Couleur du réticule de survol sur le graphique
@@ -225,11 +225,11 @@ colors-swatch-envelope = Enveloppe
     .hover = Couleur de remplissage de l’enveloppe Min/Max
 # The lines of the other values a meter shows at once beside the main one.
 colors-swatch-overlay-1 = Superp. 1
-    .hover = Couleur de la courbe de la première valeur secondaire tracée à côté de la série
+    .hover = Couleur de la courbe de la première valeur secondaire, affichée en plus de la série tracée
 colors-swatch-overlay-2 = Superp. 2
-    .hover = Couleur de la courbe de la deuxième valeur secondaire tracée à côté de la série
+    .hover = Couleur de la courbe de la deuxième valeur secondaire, affichée en plus de la série tracée
 colors-swatch-overlay-3 = Superp. 3
-    .hover = Couleur de la courbe de la troisième valeur secondaire tracée à côté de la série
+    .hover = Couleur de la courbe de la troisième valeur secondaire, affichée en plus de la série tracée
 # The frame the overview strip under the graph draws around the part on
 # show.
 colors-swatch-viewport = Fenêtre
@@ -283,7 +283,7 @@ colors-low-contrast = { $ratio }:1 sur { $ground }
 # $floor how far apart they need to be, as whole numbers. ΔE is the
 # measure of colour difference.
 colors-too-close = proche de { $other }
-    .hover = Seulement { $distance } d’écart (ΔE), alors que les couleurs du graphique doivent en avoir { $floor } pour se distinguer
+    .hover = Écart de seulement { $distance } (ΔE), alors qu’un écart de { $floor } est nécessaire pour distinguer les couleurs du graphique
 
 ## The editor a swatch opens: a colour picker, then the colour as text.
 
@@ -299,7 +299,7 @@ colors-reset = Réinitialiser les couleurs
 colors-reset-named =
     .hover = Annuler vos modifications des couleurs de { $name }
 colors-save = Enregistrer comme thème…
-    .hover = Enregistrer ces couleurs dans un fichier de thème. Enregistré dans votre dossier de thèmes, il rejoint la ligne Thème
+    .hover = Enregistrer ces couleurs dans un fichier de thème. Enregistré dans votre dossier de thèmes, il apparaît sur la ligne Thème
 # The file type in the save dialog's list of types.
 colors-save-file-type = Thème
 
@@ -317,7 +317,7 @@ colors-save-dialog-failed = Non enregistré : échec de la boîte de dialogue d
 colors-save-exists = Non enregistré : { $path } existe déjà. Choisissez-le dans la boîte de dialogue pour le remplacer
 # Another file in the themes folder gives its theme the same name. $name is
 # the name; $file the other file's name.
-colors-save-name-taken = Non enregistré : { $name } est déjà le nom de { $file } dans votre dossier de thèmes. Choisissez un autre nom de fichier
+colors-save-name-taken = Non enregistré : { $name } est déjà utilisé par { $file } dans votre dossier de thèmes. Choisissez un autre nom de fichier
 # The theme would be a file the folder can't use. $reason is one of the
 # reasons above, starting lower case.
 colors-save-invalid = Non enregistré : { $reason }

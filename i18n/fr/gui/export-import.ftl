@@ -240,13 +240,13 @@ import-done-partial =
     { $count ->
         [one]
             { $left ->
-                [one] La première mesure de { $file } a été importée ; { $left } mesure au-delà de la taille du tampon définie dans Paramètres a été ignorée
-               *[other] La première mesure de { $file } a été importée ; { $left } mesures au-delà de la taille du tampon définie dans Paramètres ont été ignorées
+                [one] La première mesure de { $file } a été importée ; { $left } mesure a été ignorée, car la taille du tampon définie dans Paramètres est atteinte
+               *[other] La première mesure de { $file } a été importée ; { $left } mesures ont été ignorées, car la taille du tampon définie dans Paramètres est atteinte
             }
        *[other]
             { $left ->
-                [one] Les { $count } premières mesures de { $file } ont été importées ; { $left } mesure au-delà de la taille du tampon définie dans Paramètres a été ignorée
-               *[other] Les { $count } premières mesures de { $file } ont été importées ; { $left } mesures au-delà de la taille du tampon définie dans Paramètres ont été ignorées
+                [one] Les { $count } premières mesures de { $file } ont été importées ; { $left } mesure a été ignorée, car la taille du tampon définie dans Paramètres est atteinte
+               *[other] Les { $count } premières mesures de { $file } ont été importées ; { $left } mesures ont été ignorées, car la taille du tampon définie dans Paramètres est atteinte
             }
     }
 # The file was read but has no readings in it. $file is its name.
@@ -255,7 +255,7 @@ import-empty = { $file } ne contient aucune mesure
 # words of the file reader or the system, often in English.
 import-failed = Échec de l’importation : { $path } : { $reason }
 # Reading the file stopped on an internal error. $path is where it is.
-import-failed-crashed = Échec de l’importation : { $path } : l’importation a échoué
+import-failed-crashed = Échec de l’importation : { $path } : erreur interne
 # The file dialog of Import… failed.
 import-dialog-failed = Échec de l’importation
 # After Export… saved the file. $count is how many samples it holds; $file

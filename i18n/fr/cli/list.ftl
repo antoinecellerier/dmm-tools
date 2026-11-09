@@ -6,7 +6,7 @@
 ## While listing.
 
 # Dim, before the radio scan, which takes a few seconds.
-list-scanning = Recherche via Bluetooth…
+list-scanning = Recherche Bluetooth…
 # A Bluetooth adapter the system has paired that the scan didn't hear, dim,
 # after the line's number in brackets. $device is the device as listed, e.g.
 # "AA:BB:CC:DD:EE:FF [Bluetooth] — UT-D07B"; keep it first.

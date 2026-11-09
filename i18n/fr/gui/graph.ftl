@@ -19,7 +19,7 @@
 # shows; they have no text of their own. $window is the chip's own label,
 # e.g. 30s; $keys the two keys that step through them, e.g. [ / ].
 graph-window =
-    .hover = Afficher les derniers échantillons sur { $window } ({ $keys } pour changer)
+    .hover = Afficher les derniers échantillons sur { $window } ({ $keys } pour changer de durée)
 # A chip, lit while the graph follows the newest samples; dragging the graph
 # turns it off. Keep it short; it is set in small capitals.
 graph-live = DIRECT
@@ -82,7 +82,7 @@ graph-show-chip =
             [full] { $max } unités au maximum : masquez-en une pour afficher la courbe { $series }
             [narrow] Élargissez la fenêtre pour afficher l’axe de la courbe { $series }, ou cliquez pour la masquer
             [shown] Masquer la courbe { $series }
-           *[hidden] Afficher la courbe { $series } à côté de la série tracée
+           *[hidden] Afficher la courbe { $series } en plus de la série tracée
         }
     .a11y = Afficher la courbe { $series }
 
@@ -98,7 +98,7 @@ graph-envelope = Min/Max
 # The small field after Min/Max, about 30 pixels wide: how many seconds the
 # band's window spans. The text shows greyed inside the field while it is
 # empty; "s" after the field is the symbol for seconds.
-graph-envelope-window = Fenêtre Min/Max, secondes
+graph-envelope-window = Fenêtre Min/Max en secondes
     .hover = Taille de la fenêtre (en secondes) servant au calcul de l’enveloppe Min/Max
 # A chip that shows a histogram, bars of how many readings fell at each
 # value, beside or under the graph. $state is hidden while the plotted
@@ -205,7 +205,7 @@ graph-plot-a11y-state =
     }
 # The last sentence: $value is the meter's last reading as it showed it,
 # with its unit (reading-spoken-amount), e.g. 1.6112 volts.
-graph-plot-a11y-reading = dernière mesure { $value }.
+graph-plot-a11y-reading = dernière mesure : { $value }.
 # The last sentence while the meter reads over range (shows OL).
 graph-plot-a11y-over-range = actuellement hors plage.
 # The last sentence before any reading.
@@ -264,7 +264,7 @@ graph-histogram-a11y =
 # After graph-histogram-a11y, and after graph-histogram-a11y-interval: how
 # far the readings spread. $value is a number with its unit
 # (reading-spoken-amount), e.g. 0.002 volts.
-graph-histogram-a11y-sd = écart-type { $value }
+graph-histogram-a11y-sd = écart-type de { $value }
 # The bar holding the most readings: $range is its values (see
 # graph-histogram-range), $count how many it holds.
 graph-histogram-a11y-most = valeurs les plus fréquentes de { $range } ({ $count })
@@ -292,7 +292,7 @@ graph-histogram-a11y-interval =
 # keys.
 graph-minimap =
     .hover = Minimap : cliquez ou faites glisser pour faire défiler, faites glisser les bords des crochets pour redimensionner la vue
-    .a11y = Minimap du graphique : cliquez ou faites glisser pour parcourir la chronologie (Gauche/Droite pour faire défiler), faites glisser les bords des crochets pour redimensionner
+    .a11y = Minimap du graphique : cliquez ou faites glisser pour parcourir la chronologie (Gauche/Droite pour faire défiler), faites glisser les bords des crochets pour redimensionner la fenêtre d’affichage
 
 ## The menu a right-click on the plot, its axes or a marker's flag opens:
 ## what can be done to the reading nearest the click, under a heading
@@ -362,7 +362,7 @@ graph-menu-add-ref = Ajouter une ligne de référence
     .a11y = Ajouter une ligne de référence à { $height }
 # Removes the reference line under the pointer, at $height, a number with
 # its unit.
-graph-menu-remove-ref = Retirer la ligne de référence { $height }
+graph-menu-remove-ref = Retirer la ligne de référence à { $height }
 # Sets one of the alarm's two limits at the height clicked: $side is high
 # for the upper limit, low for the lower. The alarm, set up beside the
 # reading, warns when a reading goes past a limit. $height as above.
