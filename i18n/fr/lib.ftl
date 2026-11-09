@@ -1317,10 +1317,10 @@ note-reading-for-reference-only = Mesure à titre de référence uniquement
 note-record-specified-accuracy-adds-10-digits = Enregistrement : précision spécifiée + 10 points pour les variations > 100 ms
 # Used by: Mock ZT-5B, ZT-5B
 # In: Auto
-note-red-lead-in-a-ma-picks = Cordon rouge sur la borne A mA : sélectionne le courant
+note-red-lead-in-a-ma-picks = Cordon rouge sur la borne A mA : sélection du courant
 # Used by: Mock ZT-5B, ZT-5B
 # In: Auto
-note-red-lead-in-vohm-picks-v = Cordon rouge sur la borne VΩ : sélectionne V au-dessus de 0.8V, sinon Ω
+note-red-lead-in-vohm-picks-v = Cordon rouge sur la borne VΩ : sélection de V au-dessus de 0.8V, sinon de Ω
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
 # In: Audible Continuity Tester
 note-response-time-100us = Temps de réponse < 100µs

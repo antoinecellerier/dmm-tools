@@ -127,7 +127,7 @@ connection-acquisition-stopped = L’acquisition s’est arrêtée de façon ina
 # The last line of a notice for a meter whose support isn't fully verified;
 # a link. $warning is the sentence saying how far it is verified.
 connection-feedback = { $warning } Envoyer des commentaires.
-    .hover = Ouvre le suivi des tickets GitHub pour envoyer vos commentaires
+    .hover = Ouvrir le suivi des tickets GitHub pour envoyer vos commentaires
 
 ## The notice under the reading when the Bluetooth link delivers readings
 ## two at a time, which can end with a command that fixes it.

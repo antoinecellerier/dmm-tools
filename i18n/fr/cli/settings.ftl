@@ -49,7 +49,7 @@ settings-tip-right-column = Conseil : tapez la valeur de la colonne de droite p
 # hold, rel, minmax or peak, or all for every setting.
 settings-nothing-to-switch =
     { $setting ->
-        [mode] Le multimètre { $meter } n’a aucun mode commutable à distance en mode { $mode } : utilisez le commutateur rotatif.
+        [mode] Le multimètre { $meter } n’a aucun mode commutable à distance depuis le mode { $mode } : utilisez le commutateur rotatif.
         [range] Le multimètre { $meter } n’a aucune plage commutable à distance en mode { $mode } : utilisez le commutateur rotatif.
         [hold] Le multimètre { $meter } n’a pas de fonction HOLD commutable à distance en mode { $mode }.
         [rel] Le multimètre { $meter } n’a pas de fonction REL commutable à distance en mode { $mode }.

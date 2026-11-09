@@ -161,7 +161,7 @@ colors-preset-colorblind =
         [customized] Daltonien (personnalisé)
        *[plain] Daltonien
     }
-    .hover = Palette qui reste distinguable en vision protan ou deutan
+    .hover = Palette dont les couleurs restent distinctes en vision protan ou deutan
 # After the chips while there are changes a click would lose.
 colors-preset-clears = Choisir un préréglage efface vos personnalisations
 
@@ -216,7 +216,7 @@ colors-swatch-heading = Titre
 colors-swatch-crosshair = Réticule
     .hover = Couleur du réticule de survol sur le graphique
 colors-swatch-accent = Accentuation
-    .hover = Badges de mode, liens, et fond des bascules, puces et textes sélectionnés
+    .hover = Badges de mode, liens et fond des bascules, puces et textes sélectionnés
 # The graph's main line, the readings over time.
 colors-swatch-data-line = Courbe
     .hover = Couleur de la courbe des mesures sur le graphique
