@@ -205,7 +205,7 @@ graph-plot-a11y-state =
     }
 # The last sentence: $value is the meter's last reading as it showed it,
 # with its unit (reading-spoken-amount), e.g. 1.6112 volts.
-graph-plot-a11y-reading = última lectura { $value }.
+graph-plot-a11y-reading = última lectura de { $value }.
 # The last sentence while the meter reads over range (shows OL).
 graph-plot-a11y-over-range = actualmente fuera de rango.
 # The last sentence before any reading.
@@ -264,7 +264,7 @@ graph-histogram-a11y =
 # After graph-histogram-a11y, and after graph-histogram-a11y-interval: how
 # far the readings spread. $value is a number with its unit
 # (reading-spoken-amount), e.g. 0.002 volts.
-graph-histogram-a11y-sd = desviación estándar { $value }
+graph-histogram-a11y-sd = desviación estándar de { $value }
 # The bar holding the most readings: $range is its values (see
 # graph-histogram-range), $count how many it holds.
 graph-histogram-a11y-most = la mayoría en el intervalo de { $range } ({ $count })

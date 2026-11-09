@@ -33,7 +33,7 @@ dmm-gui--adapter =
     .help = Seleccionar un adaptador concreto cuando hay más de uno disponible. Indica el número de serie o la ruta HID de un cable USB, o la dirección de un adaptador o multímetro Bluetooth, tal como los muestra 'dmm-cli list'
 # dmm-gui --no-bluetooth
 dmm-gui--no-bluetooth =
-    .help = Desactivar la búsqueda Bluetooth en esta sesión. Anula el ajuste “Buscar dispositivos Bluetooth”. Una dirección indicada en --adapter se abre igualmente
+    .help = Desactivar la búsqueda por Bluetooth en esta sesión. Anula el ajuste “Buscar dispositivos Bluetooth”. Una dirección indicada con --adapter se abre igualmente
 # dmm-gui --replay
 dmm-gui--replay =
     .help = Reproducir un archivo escrito por 'dmm-cli read --format replay' o por Exportar → Reproducción, en lugar de conectarse a un multímetro

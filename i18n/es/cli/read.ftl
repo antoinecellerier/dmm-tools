@@ -48,7 +48,7 @@ read-clock-scale-invalid = se esperaba un número o 'max', se recibió '{ $value
 
 # --format named one format and the -o file's name another; the format wins.
 # $format is the format given, e.g. csv; $path is the file.
-read-format-mismatch = --format { $format } escrito en { $path }
+read-format-mismatch = se escribe en { $path } con --format { $format }
 # A recording played into a file takes as long as the recording did. $flag
 # is the option that skips the wait (--mock-clock-scale max).
 read-paced-replay = reproducción al ritmo de la grabación: usa { $flag } para convertir sin esperar
@@ -153,8 +153,8 @@ read-integral-timed = Integral: { $value } ({ $seconds }s)
 # (s). The rule's other figures, 5 intervals and 2 s, are fixed.
 read-skipped-intervals =
     { $count ->
-        [one] { $count } intervalo omitido (ninguna lectura durante más de { $max } s, 5 intervalos de muestreo y al menos 2 s: la integral es parcial)
-       *[other] { $count } intervalos omitidos (ninguna lectura durante más de { $max } s, 5 intervalos de muestreo y al menos 2 s: la integral es parcial)
+        [one] { $count } intervalo omitido (ninguna lectura durante más de { $max } s, es decir, 5 intervalos de muestreo y al menos 2 s: la integral es parcial)
+       *[other] { $count } intervalos omitidos (ninguna lectura durante más de { $max } s, es decir, 5 intervalos de muestreo y al menos 2 s: la integral es parcial)
     }
 # Under the summary: how many times the readings crossed each limit.
 # $limits is both, high or low: the limits the alarm had. $above and $below

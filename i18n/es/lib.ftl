@@ -500,7 +500,7 @@ key-hover-press-the-meter-s-hz-duty = Presionar brevemente el botón Hz/Duty△/
 # Used by: CM2100B
 key-hover-press-the-meter-s-zero-key = Presionar brevemente el botón ZERO/ᛒ del multímetro
 # Used by: OW18B/OW16B, OW18E
-key-hover-rel-in-ac-and-hz-steps = REL; en AC y en Hz, recorre Hz/Duty
+key-hover-rel-in-ac-and-hz-steps = REL; en AC y en Hz, alterna entre Hz y Duty
 # Used by: OW67B, OW69B, VC871, VC891, VC915, VC925 PV
 key-hover-read-a-4-20-ma-loop = Leer un lazo de 4-20 mA como porcentaje
 # Used by: ZT-5566SE
@@ -522,7 +522,7 @@ key-hover-show-3-phase-rotation-direction = Mostrar el sentido de rotación de l
 # Used by: VC915
 key-hover-show-vac-or-vdc-on-the = Mostrar VAC o VDC en la pantalla secundaria
 # Used by: 121GW
-key-hover-step-through-hold-and-autohold = Recorrer HOLD y AutoHOLD
+key-hover-step-through-hold-and-autohold = Alternar entre HOLD y AutoHOLD
 # Used by: VC915
 key-hover-swap-hz-pct-and-voltage = Intercambiar Hz/% y tensión
 # Used by: VC925 PV
@@ -818,9 +818,9 @@ table-k-transistor = K. Transistor
 # Used by: UT804
 table-l-4-20-ma-loop-current = L. Corriente de lazo de 4~20 mA
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
-table-line-level-frequency-hz = Frecuencia de nivel de red (~Hz)
+table-line-level-frequency-hz = Frecuencia en señales de nivel de red (~Hz)
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
-table-logic-level-frequency-hz-duty-cycle = Frecuencia de nivel lógico (⎍Hz) y ciclo de trabajo (D%)
+table-logic-level-frequency-hz-duty-cycle = Frecuencia en señales de nivel lógico (⎍Hz) y ciclo de trabajo (D%)
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
 table-non-contact-ef-detection = Detección de campo eléctrico (EF) sin contacto
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
@@ -960,7 +960,7 @@ input-initially-approx-3-0kohm-165pf-nominal = Inicialmente aprox. 3.0kΩ, 165pF
 note-10a-continuous-10a-to-20a-30s = 10A continuo; >10A a 20A: 30s máx., 5 min de enfriamiento
 # Used by: UT804
 # In: C. DC Current; D. AC Current (AC+DC measurement is available)
-note-10a-5a-continuous-5a-10a-10s = 10A: ≤5A continuo; >5A–10A ≤10s cada vez, separados por >15min
+note-10a-5a-continuous-5a-10a-10s = 10A: ≤5A continuo; >5A–10A ≤10s cada vez, con pausas de >15min
 # Used by: UT181A
 # In: (13) Pulse Width
 note-10hz-200khz-pulse-width-2us-depends = 10Hz–200kHz: ancho de pulso >2µs, depende de la frecuencia de la señal
@@ -1074,7 +1074,7 @@ note-above-230degc-use-the-rod-contact = Por encima de 230°C: usar la sonda de 
 note-above-230degc-use-the-rod-type = Por encima de 230°C: usar la sonda de varilla
 # Used by: UT181A
 # In: (10) Temperature
-note-accessory-point-contact-probe-below-230degc = Sonda accesoria de contacto puntual: solo por debajo de 230°C
+note-accessory-point-contact-probe-below-230degc = Sonda de contacto puntual (accesorio): solo por debajo de 230°C
 # Used by: 7 meters
 # In: 4 tables
 note-accuracy-valid-1-pct-100-pct = Exactitud válida del 1% al 100% del rango
@@ -1098,7 +1098,7 @@ note-accuracy-valid-40hz-500hz-1-pct-2 = Exactitud válida en 40Hz–500Hz, 1%�
 note-accuracy-with-film-capacitor-or-better = Exactitud con un condensador de película o de mejor calidad
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
 # In: Audible Continuity Tester
-note-audible-threshold-between-20ohm-and-300ohm = Umbral audible: entre 20Ω y 300Ω
+note-audible-threshold-between-20ohm-and-300ohm = Umbral del pitido: entre 20Ω y 300Ω
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
 # In: DC AC & AC+DC AC Voltage
 note-bm821s-specified-from-10-pct-to = BM821s: especificado del 10% al 100% del rango
@@ -1395,7 +1395,7 @@ note-true-rms-crest-factor-2-0 = True RMS; factor de cresta ≤2.0 a 10000, ≤1
 note-true-rms-crest-factor-3-0 = True RMS; factor de cresta ≤3.0 a 3000, ≤1.5 a 6000 cuentas
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
 # In: Temperature
-note-type-k-thermocouple-range-accuracy-not = Rango y exactitud del termopar tipo K no incluidos
+note-type-k-thermocouple-range-accuracy-not = No se incluyen el rango ni la exactitud del termopar tipo K
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
 # In: Non-Contact EF-Detection
 note-typical-20v-55v-110v-220v-440v = Típico: - 20V, -- 55V, --- 110V, ---- 220V, ----- 440V
@@ -1416,4 +1416,4 @@ note-working-current-1ma = Corriente de trabajo ≈1mA
 note-ua-ranges-min-30ua = Rangos de µA: mín. 30µA
 # Used by: UT803
 # In: C. DC Current; D. AC Current
-note-5a-range-continuous-5a-range-10s = Rango ≤5A: continuo; rango >5A: ≤10s cada vez, separados por ≥15min
+note-5a-range-continuous-5a-range-10s = Rango ≤5A: continuo; rango >5A: ≤10s cada vez, con pausas de ≥15min

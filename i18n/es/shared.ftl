@@ -38,7 +38,7 @@ stability-experimental = experimental
 # $stability is verified, partly-verified or experimental.
 stability-warning =
     { $stability ->
-        [verified] La compatibilidad con el multímetro { $model } está verificada (verificada en hardware real).
+        [verified] La compatibilidad con el multímetro { $model } está verificada en hardware real.
         [partly-verified] La compatibilidad con el multímetro { $model } está parcialmente verificada (algunos modos y comandos aún no están confirmados en hardware real).
        *[experimental] La compatibilidad con el multímetro { $model } es experimental (no verificada en hardware real).
     }
@@ -49,7 +49,7 @@ stability-warning =
 mock-mode-list = Modos: { $modes }
 # $example is a command line.
 mock-mode-example = Ejemplo: { $example }
-mock-clock-mock-only = --mock-clock-scale y --mock-clock-preseed solo se aplican al dispositivo simulado y a una reproducción. Vuelve a ejecutar con --device mock o --replay, o sin las opciones de reloj.
+mock-clock-mock-only = --mock-clock-scale y --mock-clock-preseed solo se aplican al dispositivo simulado y a una reproducción. Vuelve a ejecutar el comando con --device mock o --replay, o sin las opciones de reloj.
 
 ## A link's short name, where the meter is already named: the GUI's
 ## status line, the setup help's section labels.
@@ -104,7 +104,7 @@ setup-bluetooth-scan = Ejecuta 'dmm-cli list' para buscar adaptadores y multíme
 no-meter-answered = Ningún multímetro respondió
 # The meter picked or found has stopped answering. A notice title in the
 # GUI; dmm-cli starts a sentence with it (cli/connect.ftl).
-no-response = Sin respuesta del multímetro
+no-response = El multímetro no responde
 # Why a dropped link is not reconnected. $count (2 or more) USB cables the
 # open could take are plugged in, with no serial number of their own to tell
 # them apart. Each binary follows it with what to do.
@@ -154,7 +154,7 @@ input-band-not-a-number = “{ $text }” no es un número ni un porcentaje como
 # A hysteresis band below zero.
 input-band-negative = debe ser mayor o igual que cero
 # A percentage band with a limit of 0, of which every percentage is 0.
-input-percent-of-zero = un porcentaje de un límite de 0 siempre es 0; indica un valor en su lugar
+input-percent-of-zero = con un límite de 0, cualquier porcentaje da 0; indica un valor en su lugar
 
 ## Why an exported file or a recording did not read: in dmm-gui's toast
 ## after "Import failed:" and the file, in dmm-cli after "Error:" and the

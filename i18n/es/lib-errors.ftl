@@ -53,8 +53,8 @@ error-not-an-adapter = { $path } (el dispositivo existe, pero no es un adaptador
 # UT61E+.
 error-wrong-cable =
     { $link ->
-        [bluetooth] --adapter indica un adaptador Bluetooth, que no sirve para el multímetro { $model }: indica con --adapter el cable propio del multímetro u omite --adapter
-       *[cable] --adapter indica un cable { $cable }, que no sirve para el multímetro { $model }: indica con --adapter el cable propio del multímetro u omite --adapter
+        [bluetooth] --adapter indica un adaptador Bluetooth, que no sirve para el multímetro { $model }: elige con --adapter el cable propio del multímetro u omite --adapter
+       *[cable] --adapter indica un cable { $cable }, que no sirve para el multímetro { $model }: elige con --adapter el cable propio del multímetro u omite --adapter
     }
 error-link-lost = Enlace Bluetooth perdido
 # $reason is one of the "Bluetooth" sentences below.
@@ -88,11 +88,11 @@ error-no-transport-found-looked-for =
 error-bluetooth-only-not-in-range = no se encuentra ningún multímetro { $model } al alcance del Bluetooth
 # A meter with Bluetooth built in, and Bluetooth was not searched. $model
 # is the meter, e.g. UNI-T UT60BT. Each app adds how to switch it on.
-error-bluetooth-only-switched-off = el multímetro { $model } solo se conecta por Bluetooth y el Bluetooth está desactivado
+error-bluetooth-only-switched-off = el multímetro { $model } solo se conecta por Bluetooth, que está desactivado
 # $model is the meter, e.g. UNI-T UT60BT.
-error-bluetooth-only-not-built = el multímetro { $model } solo se conecta por Bluetooth y esta compilación no admite Bluetooth
+error-bluetooth-only-not-built = el multímetro { $model } solo se conecta por Bluetooth y esta compilación no lo admite
 # $model is the meter, e.g. UNI-T UT60BT.
-error-bluetooth-only-usb-adapter = el multímetro { $model } solo se conecta por Bluetooth y --adapter indica un dispositivo USB: indica la dirección Bluetooth del multímetro u omite --adapter
+error-bluetooth-only-usb-adapter = el multímetro { $model } solo se conecta por Bluetooth y --adapter indica un dispositivo USB: usa la dirección Bluetooth del multímetro u omite --adapter
 # Opening the meter was stopped part-way, by Disconnect or by quitting.
 error-cancelled = intento de conexión cancelado
 
@@ -108,9 +108,9 @@ error-unsupported-several-positions = el multímetro indica el modo { $mode } en
 # $mode is a mode.
 error-unsupported-no-position = el modo { $mode } no está en ninguna posición conocida del selector
 # $target and $from are modes.
-error-unsupported-mode-unreachable = no se puede llegar al modo { $target } desde el modo { $from }: gira primero el selector
+error-unsupported-mode-unreachable = no se puede cambiar del modo { $from } al modo { $target }: gira primero el selector
 # $target and $from_word are mode codes, $from is the mode $from_word is.
-error-unsupported-word-unreachable = no se puede llegar al modo { $target } desde el modo { $from } ({ $from_word }): gira primero el selector
+error-unsupported-word-unreachable = no se puede cambiar del modo { $from } ({ $from_word }) al modo { $target }: gira primero el selector
 # $mode is a mode.
 error-unsupported-no-ranges = el modo { $mode } no tiene ningún rango que elegir en este multímetro
 # $id is a range's number, $count how many ranges $mode, a mode, has.
@@ -122,9 +122,9 @@ error-unsupported-auto-range-not-listed = el rango automático no es uno de los 
 # $mode is a mode, $word its code.
 error-unsupported-fixed-range = rango en modo { $mode } ({ $word }): modo de rango fijo
 # $setting is a setting's name, $mode a mode.
-error-unsupported-setting-not-in-mode = el ajuste { $setting } no se puede cambiar en modo { $mode } en este multímetro
+error-unsupported-setting-not-in-mode = en este multímetro, el ajuste { $setting } no se puede cambiar en modo { $mode }
 # $setting is a setting's name, $mode a mode, $word its code.
-error-unsupported-setting-not-in-word = el ajuste { $setting } no se puede cambiar en modo { $mode } ({ $word }) en este multímetro
+error-unsupported-setting-not-in-word = en este multímetro, el ajuste { $setting } no se puede cambiar en modo { $mode } ({ $word })
 # $setting is a setting's name, $id a state's number, $mode a mode and
 # $offered the states it offers, separated by commas (on, off, MAX…).
 error-unsupported-no-such-state = el ajuste { $setting } no tiene el estado { $id }; el modo { $mode } ofrece { $offered }
@@ -247,8 +247,8 @@ error-bluetooth-powered-off = desactivado en este equipo
 # (the one the meter's data arrives on).
 error-bluetooth-no-characteristic =
     { $role ->
-        [write] el dispositivo Bluetooth no tiene ninguna característica de escritura de datos conocida: no es un adaptador ni un multímetro compatible, o sus servicios nunca se resolvieron
-       *[notify] el dispositivo Bluetooth no tiene ninguna característica de notificación de datos conocida: no es un adaptador ni un multímetro compatible, o sus servicios nunca se resolvieron
+        [write] el dispositivo Bluetooth no tiene ninguna característica de escritura de datos conocida: no es un adaptador ni un multímetro compatible, o sus servicios no llegaron a resolverse
+       *[notify] el dispositivo Bluetooth no tiene ninguna característica de notificación de datos conocida: no es un adaptador ni un multímetro compatible, o sus servicios no llegaron a resolverse
     }
 # A Brymen meter refused the password this tool sends.
 error-bluetooth-password-refused = el multímetro rechazó la contraseña de conexión 0000: para restablecerla, { error-bluetooth-reset-gesture }
@@ -278,6 +278,6 @@ late-readings-title = Algunas lecturas Bluetooth llegan con retraso
 # none.
 late-readings-advice =
     { $fix ->
-        [command] En este adaptador, a veces una lectura llega agrupada con la siguiente. No se pierde ninguna. Para tener marcas de tiempo exactas hasta que se desconecte el multímetro, ejecuta:
-       *[none] En este adaptador, a veces una lectura llega agrupada con la siguiente. No se pierde ninguna.
+        [command] Con este adaptador, a veces una lectura llega agrupada con la siguiente. No se pierde ninguna. Para tener marcas de tiempo exactas hasta que se desconecte el multímetro, ejecuta:
+       *[none] Con este adaptador, a veces una lectura llega agrupada con la siguiente. No se pierde ninguna.
     }

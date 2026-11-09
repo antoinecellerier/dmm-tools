@@ -55,7 +55,7 @@ settings-auto-connect = Conectar al iniciar
     .hover = Abrir la conexión USB automáticamente al iniciar la aplicación
 # Asking the meter its name makes it beep.
 settings-device-name = Mostrar el nombre del dispositivo al conectar (pitido)
-    .hover = Pedir su nombre al multímetro después de conectar: el multímetro emite un pitido
+    .hover = Pedirle el nombre al multímetro después de conectar: emite un pitido
 # The Bluetooth checkbox while --no-bluetooth switched the search off for
 # this session. $setting is the checkbox's own label, e.g. Look for
 # Bluetooth devices.
@@ -176,11 +176,11 @@ settings-zoom = Zoom:
 # A Zoom chip's hover. $level is its scale in percent, e.g. 150; $step the
 # keys that step the zoom.
 settings-zoom-chip =
-    .hover = Escalar la interfaz al { $level } % ({ $step } para cambiarlo por pasos)
+    .hover = Escalar la interfaz al { $level } % ({ $step } para cambiar el zoom por pasos)
 # The 100% chip's hover. $reset is the keys that go back to 100%, $step
 # those that step the zoom.
 settings-zoom-reset-chip =
-    .hover = Escalar la interfaz al 100 % ({ $reset }, o { $step } para cambiarlo por pasos)
+    .hover = Escalar la interfaz al 100 % ({ $reset }, o { $step } para cambiar el zoom por pasos)
 # Window decorations are the title bar and border.
 settings-hide-decorations = Ocultar el marco de la ventana
     .hover = Ventana sin marco: usa { $keys } para volver a mostrarlo
@@ -188,7 +188,7 @@ settings-hide-decorations = Ocultar el marco de la ventana
 # settings-always-on-top-wayland the note beside it. Keep both the same as
 # shortcuts-always-on-top-toast, which Ctrl+T shows there.
 settings-always-on-top = Siempre visible
-    .hover = Mantener la ventana encima de las demás ventanas del escritorio ({ $keys })
+    .hover = Mantener la ventana encima de las demás del escritorio ({ $keys })
     .wayland = No disponible en Wayland. Haz clic con el botón derecho en la barra de título para mantener la ventana encima de las demás
 # The note after the greyed checkbox on Wayland, in small grey text.
 settings-always-on-top-wayland = (No disponible en Wayland. Haz clic con el botón derecho en la barra de título para mantener la ventana encima de las demás)

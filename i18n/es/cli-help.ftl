@@ -24,10 +24,10 @@ dmm-cli--adapter =
     .help = Seleccionar un adaptador concreto cuando hay más de uno disponible. Indica el número de serie o la ruta HID de un cable USB, o la dirección de un adaptador o multímetro Bluetooth, tal como los muestra 'dmm-cli list'
 # dmm-cli --no-bluetooth
 dmm-cli--no-bluetooth =
-    .help = Desactivar la búsqueda Bluetooth en esta ejecución: no se buscan adaptadores ni multímetros y 'list' solo muestra cables. Anula el ajuste 'bluetooth' guardado. Una dirección indicada en --adapter se abre igualmente
+    .help = Desactivar la búsqueda por Bluetooth en esta ejecución: no se buscan adaptadores ni multímetros y 'list' solo muestra cables. Anula el ajuste 'bluetooth' guardado. Una dirección indicada con --adapter se abre igualmente
 # dmm-cli --lang
 dmm-cli--lang =
-    .help = Idioma de los mensajes y de la ayuda, o `system` para el del sistema. Si se omite, se usa `language` del archivo de configuración (escrito por la fila Idioma de dmm-gui) y, si no, el idioma del sistema
+    .help = Idioma de los mensajes y de la ayuda, o `system` para el del sistema. Si se omite, se usa `language` del archivo de configuración (se define en la fila Idioma de dmm-gui) y, si no, el idioma del sistema
 # dmm-cli list
 list =
     .about = Mostrar los cables USB conectados y los adaptadores y multímetros Bluetooth al alcance
@@ -47,7 +47,7 @@ read--format =
     .value-replay = Las tramas del propio multímetro, para que --replay las reproduzca
 # dmm-cli read --output
 read--output =
-    .help = Archivo de salida (stdout si no se especifica). Si se indica sin nombre, el nombre del archivo se forma con el multímetro, su modo y la hora de inicio de la ejecución
+    .help = Archivo de salida (stdout si no se especifica). Si se indica sin nombre, se le da uno a partir del multímetro, su modo y la hora de inicio de la ejecución
 # dmm-cli read --count
 read--count =
     .help = Número de lecturas (0 = ilimitado: hasta Ctrl+C o el final de un archivo de --replay)
@@ -71,7 +71,7 @@ read--alarm-high =
     .help = Avisar cuando la lectura supere VALUE, en unidades base (V, A, Ω, …), o en la unidad de --unit de una lectura escalada
 # dmm-cli read --alarm-low
 read--alarm-low =
-    .help = Avisar cuando la lectura baje de VALUE, igual que --alarm-high
+    .help = Avisar cuando la lectura baje de VALUE, en las mismas unidades que --alarm-high
 # dmm-cli read --alarm-hysteresis
 read--alarm-hysteresis =
     .help = Cuánto debe alejarse una lectura del límite, ya en el lado permitido, antes de que ese mismo límite vuelva a activar la alarma: un valor en la unidad de los límites, o un porcentaje del límite (`1%`) [predeterminado: unas pocas cuentas del último dígito del multímetro]
@@ -89,13 +89,13 @@ read--import =
     .help = Leer un archivo exportado (CSV, JSON o de reproducción) en lugar de abrir un multímetro, sin esperar, para convertirlo o mostrar su resumen
 # dmm-cli command
 command =
-    .about = Enviar al multímetro un comando que presiona un botón. Ejecútalo sin argumentos para ver los comandos disponibles del dispositivo seleccionado
+    .about = Enviar al multímetro un comando equivalente a presionar un botón. Sin argumentos, muestra los comandos disponibles del dispositivo seleccionado
 # dmm-cli command <ACTION>
 command--action =
-    .help = Nombre del comando (ejecútalo sin argumentos para ver los comandos disponibles)
+    .help = Nombre del comando (omítelo para ver los comandos disponibles)
 # dmm-cli get
 get =
-    .about = Mostrar a qué valores se pueden cambiar los ajustes del multímetro desde su estado actual. Ejecútalo sin argumento para ver todos los ajustes que ofrecen opciones
+    .about = Mostrar a qué valores se pueden cambiar los ajustes del multímetro desde su estado actual. Si se omite el argumento, muestra todos los ajustes que ofrecen opciones
 # dmm-cli get <SETTING>
 get--setting =
     .help = Ajuste que mostrar (omítelo para verlos todos)
@@ -107,13 +107,13 @@ get--mock-mode =
     .help = Fijar el dispositivo simulado en un modo concreto (solo con --device mock). Sin esta opción, se aplica el modo simulado del archivo de configuración y, si no, el simulador recorre todos los modos
 # dmm-cli set
 set =
-    .about = Cambiar un ajuste del multímetro sin tocarlo. Ejecútalo sin valor para ver a qué valores se puede cambiar ese ajuste desde el estado actual
+    .about = Cambiar un ajuste del multímetro sin tocarlo. Si se omite el valor, muestra a cuáles se puede cambiar ese ajuste desde el estado actual
 # dmm-cli set <SETTING>
 set--setting =
     .help = Ajuste que cambiar
 # dmm-cli set <CHOICE>
 set--choice =
-    .help = Etiqueta del valor, o un fragmento que la identifique sin ambigüedad, tal como aparece en la lista (ejecútalo sin valor para ver la lista)
+    .help = Etiqueta del valor, o un fragmento que la identifique sin ambigüedad, tal como aparece en la lista (omite el valor para verla)
 # dmm-cli set --mock-mode
 set--mock-mode =
     .help = Fijar el dispositivo simulado en un modo concreto (solo con --device mock). Sin esta opción, se aplica el modo simulado del archivo de configuración y, si no, el simulador recorre todos los modos

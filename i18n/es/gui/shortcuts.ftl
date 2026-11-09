@@ -108,7 +108,7 @@ shortcuts-mouse-swipe = Desplazar el historial a la izquierda / derecha
 shortcuts-mouse-box-zoom = Hacer zoom en el rectángulo delimitador (tiempo y valor)
     .gesture = Mayús + arrastrar
 # X axis: the time axis. Zooms around the mouse pointer.
-shortcuts-mouse-zoom = Hacer zoom en el eje X centrado en el puntero
+shortcuts-mouse-zoom = Hacer zoom en el eje X alrededor del puntero
     .gesture = Ctrl + rueda del mouse
 # The wheel alone scrolls the window's panels, not the graph.
 shortcuts-mouse-scroll = Desplazar el panel

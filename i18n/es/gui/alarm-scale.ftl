@@ -101,7 +101,7 @@ alarm-no-limit = sin
 # reading must come before that limit can alarm again. Its placeholder says
 # that blank picks the band automatically.
 alarm-band = auto
-    .hover = Cuánto debe volver la lectura antes de que un límite active de nuevo la alarma: un valor o un porcentaje, como 1 %. En blanco: automático
+    .hover = Cuánto debe alejarse la lectura del límite antes de que este vuelva a activar la alarma: un valor o un porcentaje, como 1 %. Si se deja en blanco, es automático
 # After the limits, the unit they are in, e.g. V; this is its hover.
 alarm-unit =
     .hover = La unidad de los límites

@@ -44,10 +44,10 @@ stats-integral-untimed = ∫:{ $value } { $unit }
 # numbers.
 stats-gaps =
     { $count ->
-        [one] ⚠ { $count } interrupción >{ $limit }s omitida
-       *[other] ⚠ { $count } interrupciones >{ $limit }s omitidas
+        [one] ⚠ { $count } interrupción omitida (>{ $limit }s)
+       *[other] ⚠ { $count } interrupciones omitidas (>{ $limit }s)
     }
-    .hover = Los tramos sin lecturas de más de { $limit } s (5 intervalos de muestreo, como mínimo 2 s) no se integran. La integral es parcial.
+    .hover = Los tramos de más de { $limit } s sin lecturas (5 intervalos de muestreo, como mínimo 2 s) no se integran. La integral es parcial.
 # While the Alarm row under the reading has limits set: how many times the
 # reading went past each. $limits is both while there is a high and a low
 # limit, high or low while there is only that one; $high and $low are the
@@ -58,7 +58,7 @@ stats-alarm-counts =
         [high] Alarmas: { $high } por encima
        *[low] Alarmas: { $low } por debajo
     }
-    .hover = Veces que la lectura cruzó cada límite, cada una marcada en el gráfico
+    .hover = Veces que la lectura cruzó cada límite, todas marcadas en el gráfico
 # A small button that starts the figures over. σ is the standard deviation.
 stats-reset = Restablecer
     .hover = Restablecer Mín. / Máx. / Media / σ / integral y los contadores de alarmas

@@ -18,7 +18,7 @@
 
 # The first button of the row.
 import-button = Importar…
-    .hover = Abrir un archivo CSV, JSON o de reproducción exportado ({ $keys })
+    .hover = Abrir un archivo exportado en formato CSV, JSON o de reproducción ({ $keys })
 # The left part of the Export… split button: saves a CSV file at once.
 # $buffer is recording when a recording holds the samples, graph when
 # nothing is recorded and Export… saves the samples the graph holds.
@@ -64,8 +64,8 @@ export-no-wire-format = El multímetro simulado no tiene formato de transmisión
 # measurements-UT61E+-DC-V-2026-09-15_14-30-05.csv. Export… is the button.
 import-hint =
     { $count ->
-        [one] Se importó { $count } lectura de { $file }. “Exportar” la guarda con los marcadores y la vista.
-       *[other] Se importaron { $count } lecturas de { $file }. “Exportar” las guarda con los marcadores y la vista.
+        [one] Se importó { $count } lectura de { $file }. Usa “Exportar” para guardarla con los marcadores y la vista.
+       *[other] Se importaron { $count } lecturas de { $file }. Usa “Exportar” para guardarlas con los marcadores y la vista.
     }
 
 ## The prompt shown over the window before something would discard samples
@@ -89,25 +89,25 @@ export-unsaved-record =
     { $lost ->
         [samples]
             { $samples ->
-                [one] Iniciar una nueva grabación descartará { $samples } muestra sin exportar.
-               *[other] Iniciar una nueva grabación descartará { $samples } muestras sin exportar.
+                [one] Si inicias una nueva grabación, descartarás { $samples } muestra sin exportar.
+               *[other] Si inicias una nueva grabación, descartarás { $samples } muestras sin exportar.
             }
         [markers]
             { $markers ->
-                [one] Iniciar una nueva grabación descartará los cambios no guardados de { $markers } marcador. Los marcadores permanecen en el gráfico mientras este contenga sus lecturas.
-               *[other] Iniciar una nueva grabación descartará los cambios no guardados de { $markers } marcadores. Los marcadores permanecen en el gráfico mientras este contenga sus lecturas.
+                [one] Si inicias una nueva grabación, descartarás los cambios no guardados de { $markers } marcador. Los marcadores permanecen en el gráfico mientras este contenga sus lecturas.
+               *[other] Si inicias una nueva grabación, descartarás los cambios no guardados de { $markers } marcadores. Los marcadores permanecen en el gráfico mientras este contenga sus lecturas.
             }
        *[both]
             { $samples ->
                 [one]
                     { $markers ->
-                        [one] Iniciar una nueva grabación descartará { $samples } muestra sin exportar y los cambios no guardados de { $markers } marcador. Los marcadores permanecen en el gráfico mientras este contenga sus lecturas.
-                       *[other] Iniciar una nueva grabación descartará { $samples } muestra sin exportar y los cambios no guardados de { $markers } marcadores. Los marcadores permanecen en el gráfico mientras este contenga sus lecturas.
+                        [one] Si inicias una nueva grabación, descartarás { $samples } muestra sin exportar y los cambios no guardados de { $markers } marcador. Los marcadores permanecen en el gráfico mientras este contenga sus lecturas.
+                       *[other] Si inicias una nueva grabación, descartarás { $samples } muestra sin exportar y los cambios no guardados de { $markers } marcadores. Los marcadores permanecen en el gráfico mientras este contenga sus lecturas.
                     }
                *[other]
                     { $markers ->
-                        [one] Iniciar una nueva grabación descartará { $samples } muestras sin exportar y los cambios no guardados de { $markers } marcador. Los marcadores permanecen en el gráfico mientras este contenga sus lecturas.
-                       *[other] Iniciar una nueva grabación descartará { $samples } muestras sin exportar y los cambios no guardados de { $markers } marcadores. Los marcadores permanecen en el gráfico mientras este contenga sus lecturas.
+                        [one] Si inicias una nueva grabación, descartarás { $samples } muestras sin exportar y los cambios no guardados de { $markers } marcador. Los marcadores permanecen en el gráfico mientras este contenga sus lecturas.
+                       *[other] Si inicias una nueva grabación, descartarás { $samples } muestras sin exportar y los cambios no guardados de { $markers } marcadores. Los marcadores permanecen en el gráfico mientras este contenga sus lecturas.
                     }
             }
     }
@@ -133,8 +133,8 @@ export-unsaved-discard =
             { $samples ->
                 [one]
                     { $markers ->
-                        [one] Si descartas la grabación, se perderán { $samples } muestra que ya salió del gráfico y los cambios no guardados de { $markers } marcador en ella.
-                       *[other] Si descartas la grabación, se perderán { $samples } muestra que ya salió del gráfico y los cambios no guardados de { $markers } marcadores en ella.
+                        [one] Si descartas la grabación, se perderá { $samples } muestra que ya salió del gráfico y los cambios no guardados de { $markers } marcador en ella.
+                       *[other] Si descartas la grabación, se perderá { $samples } muestra que ya salió del gráfico y los cambios no guardados de { $markers } marcadores en ella.
                     }
                *[other]
                     { $markers ->
@@ -151,25 +151,25 @@ export-unsaved-import =
     { $lost ->
         [samples]
             { $samples ->
-                [one] La importación reemplaza esta sesión y descartará { $samples } muestra sin exportar.
-               *[other] La importación reemplaza esta sesión y descartará { $samples } muestras sin exportar.
+                [one] Si importas el archivo, reemplazarás esta sesión y descartarás { $samples } muestra sin exportar.
+               *[other] Si importas el archivo, reemplazarás esta sesión y descartarás { $samples } muestras sin exportar.
             }
         [markers]
             { $markers ->
-                [one] La importación reemplaza esta sesión y descartará los cambios no guardados de { $markers } marcador.
-               *[other] La importación reemplaza esta sesión y descartará los cambios no guardados de { $markers } marcadores.
+                [one] Si importas el archivo, reemplazarás esta sesión y descartarás los cambios no guardados de { $markers } marcador.
+               *[other] Si importas el archivo, reemplazarás esta sesión y descartarás los cambios no guardados de { $markers } marcadores.
             }
        *[both]
             { $samples ->
                 [one]
                     { $markers ->
-                        [one] La importación reemplaza esta sesión y descartará { $samples } muestra sin exportar y los cambios no guardados de { $markers } marcador.
-                       *[other] La importación reemplaza esta sesión y descartará { $samples } muestra sin exportar y los cambios no guardados de { $markers } marcadores.
+                        [one] Si importas el archivo, reemplazarás esta sesión y descartarás { $samples } muestra sin exportar y los cambios no guardados de { $markers } marcador.
+                       *[other] Si importas el archivo, reemplazarás esta sesión y descartarás { $samples } muestra sin exportar y los cambios no guardados de { $markers } marcadores.
                     }
                *[other]
                     { $markers ->
-                        [one] La importación reemplaza esta sesión y descartará { $samples } muestras sin exportar y los cambios no guardados de { $markers } marcador.
-                       *[other] La importación reemplaza esta sesión y descartará { $samples } muestras sin exportar y los cambios no guardados de { $markers } marcadores.
+                        [one] Si importas el archivo, reemplazarás esta sesión y descartarás { $samples } muestras sin exportar y los cambios no guardados de { $markers } marcador.
+                       *[other] Si importas el archivo, reemplazarás esta sesión y descartarás { $samples } muestras sin exportar y los cambios no guardados de { $markers } marcadores.
                     }
             }
     }
@@ -181,25 +181,25 @@ export-unsaved-connect =
     { $lost ->
         [samples]
             { $samples ->
-                [one] Conectar cierra la sesión importada y descartará { $samples } muestra sin exportar.
-               *[other] Conectar cierra la sesión importada y descartará { $samples } muestras sin exportar.
+                [one] Si conectas el multímetro, cerrarás la sesión importada y descartarás { $samples } muestra sin exportar.
+               *[other] Si conectas el multímetro, cerrarás la sesión importada y descartarás { $samples } muestras sin exportar.
             }
         [markers]
             { $markers ->
-                [one] Conectar cierra la sesión importada y descartará los cambios no guardados de { $markers } marcador.
-               *[other] Conectar cierra la sesión importada y descartará los cambios no guardados de { $markers } marcadores.
+                [one] Si conectas el multímetro, cerrarás la sesión importada y descartarás los cambios no guardados de { $markers } marcador.
+               *[other] Si conectas el multímetro, cerrarás la sesión importada y descartarás los cambios no guardados de { $markers } marcadores.
             }
        *[both]
             { $samples ->
                 [one]
                     { $markers ->
-                        [one] Conectar cierra la sesión importada y descartará { $samples } muestra sin exportar y los cambios no guardados de { $markers } marcador.
-                       *[other] Conectar cierra la sesión importada y descartará { $samples } muestra sin exportar y los cambios no guardados de { $markers } marcadores.
+                        [one] Si conectas el multímetro, cerrarás la sesión importada y descartarás { $samples } muestra sin exportar y los cambios no guardados de { $markers } marcador.
+                       *[other] Si conectas el multímetro, cerrarás la sesión importada y descartarás { $samples } muestra sin exportar y los cambios no guardados de { $markers } marcadores.
                     }
                *[other]
                     { $markers ->
-                        [one] Conectar cierra la sesión importada y descartará { $samples } muestras sin exportar y los cambios no guardados de { $markers } marcador.
-                       *[other] Conectar cierra la sesión importada y descartará { $samples } muestras sin exportar y los cambios no guardados de { $markers } marcadores.
+                        [one] Si conectas el multímetro, cerrarás la sesión importada y descartarás { $samples } muestras sin exportar y los cambios no guardados de { $markers } marcador.
+                       *[other] Si conectas el multímetro, cerrarás la sesión importada y descartarás { $samples } muestras sin exportar y los cambios no guardados de { $markers } marcadores.
                     }
             }
     }

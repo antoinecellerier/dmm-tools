@@ -102,8 +102,8 @@ connection-bad-data = El multímetro envió datos ilegibles
 # 2 or more.
 connection-cables-at-open =
     { $count ->
-        [one] Hay { $count } cable USB conectado que esta sesión podría abrir. Se abrió ese. Indica --adapter para elegir otro.
-       *[other] Hay { $count } cables USB conectados que esta sesión podría abrir. Abrió el primero que encontró. Indica --adapter para elegir otro.
+        [one] Hay { $count } cable USB conectado que esta sesión podría abrir. Se abrió ese. Usa --adapter para elegir otro.
+       *[other] Hay { $count } cables USB conectados que esta sesión podría abrir. Abrió el primero que encontró. Usa --adapter para elegir otro.
     }
 # Follows connection-cables-at-open when nothing tells those cables apart.
 connection-cables-no-reconnect = Estos cables no se pueden distinguir entre sí: si se pierde el enlace, la sesión terminará, a menos que indiques la ruta de un cable con --adapter.
@@ -173,8 +173,8 @@ connection-named-after-detection =
 # written short, e.g. 1.2K. Export… is a button.
 connection-buffer-shrunk =
     { $count ->
-        [one] Grabación detenida: se conserva { $kept } muestra y “Exportar” la guarda
-       *[other] Grabación detenida: se conservan { $kept } muestras y “Exportar” las guarda
+        [one] Grabación detenida: se conserva { $kept } muestra. Usa “Exportar” para guardarla
+       *[other] Grabación detenida: se conservan { $kept } muestras. Usa “Exportar” para guardarlas
     }
 # The recording filled the buffer. $count is its size in samples, $kept the
 # same number written short, e.g. 500K.

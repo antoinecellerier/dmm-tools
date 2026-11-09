@@ -47,7 +47,7 @@ help-env-no-color = Establecer en 1 para desactivar la salida en color.
 # language applies instead.
 help-env-language =
     Idioma de los mensajes y de la ayuda en Linux, en el orden en que lo lee gettext:
-    LANGUAGE, después LC_ALL, LC_MESSAGES, LANG. Los escritorios Debian y Ubuntu
+    LANGUAGE, después LC_ALL, LC_MESSAGES, LANG. Los escritorios de Debian y Ubuntu
     definen LANGUAGE, que tiene prioridad sobre LANG.
 # Beside LC_ALL; each line of the message is a line of the help. C and
 # POSIX are the locale names that mean English, on every system.

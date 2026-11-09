@@ -99,12 +99,12 @@ colors-skipped-too-many =
 
 colors-issue-not-a-file = no es un archivo
 # $size is the largest file read, in KiB (kibibytes), e.g. 64.
-colors-issue-too-big = más de { $size } KiB
+colors-issue-too-big = supera los { $size } KiB
 colors-issue-name-empty = el nombre está vacío
 # $max is the most characters a name may have, e.g. 32.
 colors-issue-name-too-long = el nombre supera los { $max } caracteres
 # Invisible characters, or $ or `.
-colors-issue-name-unusable = el nombre contiene caracteres no válidos en un nombre de tema
+colors-issue-name-unusable = el nombre contiene caracteres no válidos para un tema
 # The theme's name is Dark, Light or System, which the Theme row's own
 # chips go by. $name is the name as the file has it; put it in your
 # language's quotes.
@@ -113,14 +113,14 @@ colors-issue-name-reserved = “{ $name }” está reservado para la fila Tema
 # button captions on the button.
 colors-issue-not-opaque =
     { $what ->
-        [button] el texto del botón no es opaco sobre el botón
+        [button] el texto no es opaco sobre el botón
        *[text] el texto no es opaco sobre el fondo
     }
 # The colours can't be read on each other. $what is as above; $ratio is
 # their contrast, e.g. 1.8, and $floor the least allowed, e.g. 3.
 colors-issue-low-contrast =
     { $what ->
-        [button] el contraste del texto del botón sobre el botón es de { $ratio }:1, por debajo del mínimo de { $floor }:1
+        [button] el contraste del texto sobre el botón es de { $ratio }:1, por debajo del mínimo de { $floor }:1
        *[text] el contraste del texto sobre el fondo es de { $ratio }:1, por debajo del mínimo de { $floor }:1
     }
 # The theme's text on its frame, the surface of the top bar and Settings.
@@ -289,12 +289,12 @@ colors-too-close = parecido a { $other }
 
 # The colour written as # and six hexadecimal digits.
 colors-hex = Hex
-    .hover = Copiar este color o pegar uno como #RRGGBB
+    .hover = Copiar este color o pegar uno en formato #RRGGBB
 
 ## Under the swatches, once a colour was changed.
 
 colors-reset = Restablecer colores
-    .hover = Descartar tus cambios en los colores de este modo
+    .hover = Descartar tus cambios en los colores del modo actual
 # The same while a named theme is on. $name is the theme's name.
 colors-reset-named =
     .hover = Descartar tus cambios en los colores del tema { $name }

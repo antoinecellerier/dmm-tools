@@ -136,7 +136,7 @@ capture-progress-reading = lectura { $done } de { $total } · { $reading }
 capture-wait-start = Prepara el multímetro como se indica arriba: el comando se enviará en cuanto el multímetro esté listo (Intro=enviar ahora, { $skip }=omitir, { $quit }=terminar)
 # Dim: the meter left the state the step starts from just before the key
 # went out, so the step waits for it again.
-capture-wait-moved = El multímetro cambió de estado antes de que se enviara el comando: esperando a que vuelva a ese estado
+capture-wait-moved = El multímetro cambió de estado antes de que se enviara el comando: esperando a que vuelva al anterior
 # When the terminal can't be read key by key. $skip and $quit are the keys:
 # s and q.
 capture-any-key = cualquier tecla=capturar, { $skip }=omitir, { $quit }=terminar:
@@ -164,7 +164,7 @@ capture-we-read = Se leyó: { $reading }
 # why.
 capture-frame-error = error: { $error }
 # Yellow: the step read nothing from the meter.
-capture-no-response = Sin respuesta del multímetro.
+capture-no-response = El multímetro no respondió.
 # Yellow, before capture-few-samples on the same line.
 capture-few-samples-label = advertencia:
 # The step got fewer readings than it asks for. $got and $wanted count them.
@@ -190,13 +190,13 @@ capture-mismatch-range =
     { $want ->
         [auto]
             { $shown ->
-                [none] el multímetro muestra: rango (ninguno), se espera automático
+                [none] el multímetro no muestra ningún rango, se espera automático
                 [auto] el multímetro muestra: rango { $range } (automático), se espera automático
                *[plain] el multímetro muestra: rango { $range }, se espera automático
             }
        *[manual]
             { $shown ->
-                [none] el multímetro muestra: rango (ninguno), se espera manual
+                [none] el multímetro no muestra ningún rango, se espera manual
                 [auto] el multímetro muestra: rango { $range } (automático), se espera manual
                *[plain] el multímetro muestra: rango { $range }, se espera manual
             }
@@ -294,7 +294,7 @@ capture-review-prompt = Números de las lecturas que NO coincidieron con la pant
 
 # Bold, between heavy lines; "Part 4" is the run's last part.
 capture-freeform-heading = Parte 4: capturas adicionales (opcional)
-capture-freeform-intro = Pon el multímetro en cualquier modo o estado que no se haya cubierto arriba.
+capture-freeform-intro = Pon el multímetro en cualquier modo o estado que no se haya probado en los pasos anteriores.
 # After the capture's id in brackets, e.g. [extra_0]; waits for a line.
 # $quit is the word that ends the pass: q.
 capture-freeform-prompt = Describe cómo configuraste el multímetro (o '{ $quit }' para terminar):
@@ -357,9 +357,9 @@ capture-plan-covered = Plan { $plan }: { $covered } de { $total } pasos capturad
 capture-nothing-new = No se capturó ningún paso sin verificar, así que no hay nada nuevo que informar.
 # $covered and $total count the meter's steps that hardware hasn't confirmed
 # yet; $meter is its name, e.g. UNI-T UT61E+.
-capture-covered = Se cubrieron { $covered } de los { $total } pasos sin verificar del multímetro { $meter }.
+capture-covered = Se completaron { $covered } de los { $total } pasos sin verificar del multímetro { $meter }.
 # $resume is the key that resumes, r (capture-resume-prompt).
-capture-not-finished = Sin terminar: ejecuta el mismo comando otra vez y responde { $resume } para reanudar.
+capture-not-finished = La captura quedó sin terminar: ejecuta el mismo comando otra vez y responde { $resume } para reanudar.
 # $flag is the option as typed, --steps <ids>.
 capture-steps-hint = { $flag } ejecuta solo los pasos indicados.
 # $url is the web address of the meter's issue on GitHub.
@@ -377,7 +377,7 @@ capture-instructions-header =
     Instrucciones de los pasos de captura del multímetro { $meter }, para traducir.
     Sustituye el texto después de cada "=" por tu traducción, en la misma línea.
     Deja como están el identificador de paso antes del "=", la línea "-device"
-    y las líneas que empiezan por "#". Un paso que borres se muestra en inglés.
+    y las líneas que empiezan por "#". Los pasos que borres se mostrarán en inglés.
 # A line of the header, when the steps quote words from the meter: its
 # key labels and what its screen shows. $marks lists them, e.g. "AC, HOLD,
 # MIN/MAX, SELECT". A translation, by a person or a machine, must leave them
@@ -400,7 +400,7 @@ capture-instructions-next = Tradúcelas y después ejecuta: { $command }
 # Yellow, before the first step: steps whose English changed after the
 # file was exported, so they show a translation of an older wording.
 # $path is the file; $steps lists the step ids, e.g. "dcv, hold".
-capture-instructions-changed = Estos pasos cambiaron después de exportar el archivo { $path } y muestran tu traducción de su texto anterior: { $steps }. Exporta un archivo nuevo para ver el nuevo texto en inglés.
+capture-instructions-changed = Estos pasos cambiaron después de exportar el archivo { $path } y muestran tu traducción de su texto anterior: { $steps }. Exporta un archivo nuevo para ver el texto actual en inglés.
 # One problem in the file, on a line of its own under
 # capture-error-instructions-unreadable. $line is a line number.
 capture-instructions-problem-syntax = línea { $line }: no es un identificador de paso, un "=" y su texto
