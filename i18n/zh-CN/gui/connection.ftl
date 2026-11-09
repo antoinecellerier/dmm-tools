@@ -32,7 +32,7 @@ connection-click-connect = 解决问题后，单击“连接”。
 # The closing line after the Bluetooth steps when nothing answered at the
 # address given with --adapter, a command-line option kept as it is. "It"
 # is the scan command the steps above name.
-connection-restart-with-address = 将 --adapter 设为它输出的地址，然后重新启动。
+connection-restart-with-address = 将 --adapter 设为该命令输出的地址，然后重新启动。
 
 # A meter that connects over Bluetooth only, and Bluetooth was not looked at.
 connection-bluetooth-not-searched = 未查找蓝牙设备

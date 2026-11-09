@@ -74,7 +74,7 @@ read--alarm-low =
     .help = 读数降到 VALUE 以下时报警，写法同 --alarm-high
 # dmm-cli read --alarm-hysteresis
 read--alarm-hysteresis =
-    .help = 读数须回到限值以内多少，同一限值才会再次报警: 以限值的单位给出的数值，或限值的百分比 (`1%`) [默认值: 万用表末位的几个字]
+    .help = 读数须从限值回退多少，才会再次触发同一限值的报警: 以限值的单位给出的数值，或限值的百分比 (`1%`) [默认值: 万用表末位的几个字]
 # dmm-cli read --alarm-bell
 read--alarm-bell =
     .help = 每次报警时让终端响铃
@@ -155,7 +155,7 @@ capture--no-drive =
     .help = 每个模式步骤之后，不让工具自行设置量程和标志
 # dmm-cli capture --settle
 capture--settle =
-    .help = 在对任何步骤采样之前等待 MS，适用于稳定较慢的读数
+    .help = 在对任何步骤采样之前等待 MS，适用于读数稳定较慢的情况
 # dmm-cli capture --list-steps
 capture--list-steps =
     .help = 列出所有可用的步骤 ID 并退出

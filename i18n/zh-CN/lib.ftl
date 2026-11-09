@@ -1166,7 +1166,7 @@ note-for-ac-voltage-shorted-leads-residual = 交流电压，表笔短路: 剩余
 note-frequency-response-40hz-1khz = 频率响应 40Hz–1kHz
 # Used by: UT804
 # In: G. Diode Test
-note-good-silicon-junction-0-5v-0 = 良好的硅结: 0.5V–0.8V
+note-good-silicon-junction-0-5v-0 = 正常硅结: 0.5V–0.8V
 # Used by: Mock ZT-5B, ZT-5B
 # In: Auto
 note-hold-sel-ncv-for-ncv = 长按 SEL/NCV 键进入 NCV

@@ -102,7 +102,7 @@ colors-issue-name-empty = 名称为空
 # $max is the most characters a name may have, e.g. 32.
 colors-issue-name-too-long = 名称超过 { $max } 个字符
 # Invisible characters, or $ or `.
-colors-issue-name-unusable = 名称含有主题名称不能使用的字符
+colors-issue-name-unusable = 名称含有不允许使用的字符
 # The theme's name is Dark, Light or System, which the Theme row's own
 # chips go by. $name is the name as the file has it; put it in your
 # language's quotes.
@@ -214,7 +214,7 @@ colors-swatch-heading = 标题
 colors-swatch-crosshair = 十字线
     .hover = 图表上悬停十字线的颜色
 colors-swatch-accent = 主题色
-    .hover = 模式徽标、链接，以及选中的开关、标签和文字的填充色
+    .hover = 模式徽标、链接，以及选中的开关、标签和文字的底色
 # The graph's main line, the readings over time.
 colors-swatch-data-line = 数据线
     .hover = 图表上数据线的颜色

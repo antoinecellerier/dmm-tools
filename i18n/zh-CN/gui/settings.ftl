@@ -194,7 +194,7 @@ settings-always-on-top-wayland = (无法在 Wayland 上使用: 右键单击标�
 ## The update check, in builds downloaded from GitHub.
 
 settings-check-updates = 检查新版本
-    .hover = 每天向 GitHub 查询一次是否有新版本。GitHub 会看到你的 IP 地址，不会发送任何有关万用表的信息。
+    .hover = 每天向 GitHub 查询一次是否有新版本。GitHub 会看到你的 IP 地址，但不会收到任何有关万用表的信息。
 # The link the top bar shows when a newer release is out; ↗ marks a link.
 # $version is the release, e.g. v0.10.0.
 settings-update-release = { $version } 已发布 ↗

@@ -117,7 +117,7 @@ top-bar-version =
 top-bar-version-update =
     .hover =
         显示新增功能: 此版本的发行说明
-        { $version } 已发布，加宽窗口可看到其链接
+        { $version } 已发布，加宽窗口可看到更新链接
     .a11y = 显示发行说明。{ $version } 已发布
 # The update link; $version is the newer release, e.g. v0.10.0.
 top-bar-update =

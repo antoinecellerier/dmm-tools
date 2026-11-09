@@ -171,7 +171,7 @@ export-nothing-connect = 没有可导出的内容: 请先连接万用表
 export-nothing-yet = 没有可导出的内容: 还没有读数
 # After Export… while an earlier export still waits on its save dialog or
 # is being written.
-export-in-progress = 已有导出正在进行: 请先等它完成
+export-in-progress = 已有导出正在进行: 请先完成
 # The file could not be written. $reason is why, in the words of the
 # system or the file writer, often in English.
 export-failed = 导出失败: { $reason }

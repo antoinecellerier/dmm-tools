@@ -43,7 +43,7 @@ graph-y-max = Y 轴最大值
 # out: "live" is the LIVE chip, "auto-Y" the Y:Auto chip.
 graph-reset-zoom = 重置缩放
     .hover = 恢复实时跟随和自动 Y 轴 (双击图表)
-    .hover-disabled = 已是默认的实时 + 自动 Y 轴视图
+    .hover-disabled = 当前已是默认视图 (实时 + 自动 Y 轴)
 
 ## The second row, only for meters that send more than one value: Plot:,
 ## the series the graph plots, then Show:, the traces drawn beside it, each
