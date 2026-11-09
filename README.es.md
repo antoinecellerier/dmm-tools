@@ -109,7 +109,7 @@ $ dmm-cli read --interval-ms 2500 --count 5
 | Voltcraft VC915/VC925 PV | — | 🧪 Experimental (integrado) | [#49](https://github.com/antoinecellerier/dmm-tools/issues/49) |
 | Voltcraft VC920/VC940/VC960 | 🧪 Experimental | — | [#23](https://github.com/antoinecellerier/dmm-tools/issues/23) |
 
-✅ = modos y comandos confirmados en hardware real, salvo unas pocas comprobaciones puntuales. 🟡 = conexión y modos principales confirmados, quedan modos o comandos enteros por verificar. 🧪 = obtenido por ingeniería inversa del software del fabricante, aún sin probar en hardware real por ese enlace. — = no compatible por ese enlace.
+✅ = modos y comandos confirmados en hardware real, salvo unas pocas comprobaciones puntuales. 🟡 = conexión y modos principales confirmados, quedan modos o comandos enteros por verificar. 🧪 = obtenido por ingeniería inversa del software del fabricante, aún sin probar en hardware real por esa conexión. — = no compatible por esa conexión.
 
 El “adaptador” Bluetooth es el accesorio UT-D07A/B de UNI-T; “integrado” no necesita adaptador. Comenta en la incidencia de tu multímetro qué funciona y qué no.
 

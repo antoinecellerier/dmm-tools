@@ -9,7 +9,7 @@
 
 *Esta página foi traduzida automaticamente; a referência é o [README em inglês](README.md). Uma revisão por falante nativo é bem-vinda: [como ajudar](CONTRIBUTING.md#translations) (em inglês).*
 
-Aplicativo de desktop e ferramenta de linha de comando, ambos de código aberto, para ler, gravar, plotar e controlar remotamente multímetros digitais (DMMs) e alicates amperímetros da UNI-T, ZOTEK (ZOYI, ANENG, BSIDE), OWON, Brymen (Minipa), EEVblog e Voltcraft, via USB e Bluetooth, no Linux, Windows, macOS e Raspberry Pi.
+Aplicativo de desktop e ferramenta de linha de comando, ambos de código aberto, para ler, gravar, plotar e controlar remotamente multímetros digitais (DMMs) e alicates amperímetros das marcas UNI-T, ZOTEK (ZOYI, ANENG, BSIDE), OWON, Brymen (Minipa), EEVblog e Voltcraft, via USB e Bluetooth, no Linux, Windows, macOS e Raspberry Pi.
 
 Funciona com UNI-T UT61E+, UT181A, UT161, UT71, UT60BT e UT804, ANENG AN9002 (ZOTEK ZT-300AB), Brymen BM869s, EEVblog 121GW, OWON OW18E e B41T+, Voltcraft VC-890 e [outros](#dispositivos-compatíveis).
 
