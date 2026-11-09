@@ -243,8 +243,8 @@ error-bluetooth-powered-off = このコンピューターでオフになって�
 # (the one the meter's data arrives on).
 error-bluetooth-no-characteristic =
     { $role ->
-        [write] Bluetooth デバイスに認識できるデータ書き込み用のキャラクタリスティックがありません: 対応しているアダプターやマルチメーターではないか、サービスの検出が完了しませんでした
-       *[notify] Bluetooth デバイスに認識できるデータ通知用のキャラクタリスティックがありません: 対応しているアダプターやマルチメーターではないか、サービスの検出が完了しませんでした
+        [write] Bluetooth デバイスにデータ書き込み用のキャラクタリスティックが見つかりません: 対応しているアダプターやマルチメーターではないか、サービスの検出が完了しませんでした
+       *[notify] Bluetooth デバイスにデータ通知用のキャラクタリスティックが見つかりません: 対応しているアダプターやマルチメーターではないか、サービスの検出が完了しませんでした
     }
 # A Brymen meter refused the password this tool sends.
 error-bluetooth-password-refused = マルチメーターが接続パスワード 0000 を拒否しました: リセットするには、{ error-bluetooth-reset-gesture }

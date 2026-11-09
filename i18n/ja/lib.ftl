@@ -594,7 +594,7 @@ activation-bm78xbt =
     1. スマートフォン アプリとマルチメーターの接続をすべて切断します。
     2. ファンクションスイッチを Auto V/LoZ 以外の任意の測定機能に合わせます。
     3. ディスプレイに ((D)) が表示されるまで、Δ を 1 秒以上押し続けます。
-    注意: 15 から 30 分操作しないと、マルチメーターの電源が切れます。無効にするには、SELECT を押しながら電源を入れます (dSAPO が表示されます)。
+    注意: 15 から 30 分操作しないと、マルチメーターの電源が切れます。無効にするには、SELECT を押しながら電源を入れます (「dSAPO」と表示されます)。
     マルチメーターが見つからない場合や接続パスワードが変更された場合は、Hz ボタンを押しながら、ファンクションスイッチを 0.6 s 以内に OFF から静電容量の位置まで回します。マルチメーターに「Org」と表示され、接続パスワードと Bluetooth 名が工場出荷時の設定に戻ります。
 # Used by: OW69B
 activation-ow69b =
@@ -1313,10 +1313,10 @@ note-reading-for-reference-only = 測定値は参考値
 note-record-specified-accuracy-adds-10-digits = 記録: > 100 ms の変化では規定の確度に 10 カウントを加算
 # Used by: Mock ZT-5B, ZT-5B
 # In: Auto
-note-red-lead-in-a-ma-picks = 赤のテストリードを A mA 端子に接続すると電流を選択
+note-red-lead-in-a-ma-picks = 赤のテストリードを A mA 端子に接続すると電流が選択される
 # Used by: Mock ZT-5B, ZT-5B
 # In: Auto
-note-red-lead-in-vohm-picks-v = 赤のテストリードを VΩ 端子に接続すると、0.8V 超で V、それ以外は Ω を選択
+note-red-lead-in-vohm-picks-v = 赤のテストリードを VΩ 端子に接続すると、0.8V 超で V、それ以外は Ω が選択される
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
 # In: Audible Continuity Tester
 note-response-time-100us = 応答時間 < 100µs

@@ -122,9 +122,9 @@ settings-specs-accuracy = 確度
     .hover = 仕様に確度を表示する
 # Input Z is the input impedance.
 settings-specs-input-z = 入力インピーダンス
-    .hover = 仕様パネルを全体表示したときに入力インピーダンスを表示する
+    .hover = 仕様パネルを展開したときに入力インピーダンスを表示する
 settings-specs-notes = 注記
-    .hover = 仕様パネルを全体表示したときに取扱説明書の注記を表示する
+    .hover = 仕様パネルを展開したときに取扱説明書の注記を表示する
 
 ## The window.
 

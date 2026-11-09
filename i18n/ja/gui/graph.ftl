@@ -107,7 +107,7 @@ graph-envelope-window = 最小/最大の時間幅 (秒)
 graph-histogram = ヒストグラム
     .hover =
         { $state ->
-            [hidden] ヒストグラムを表示するには、プロット中のトレースを表示してください。または、クリックしてオフにしてください。
+            [hidden] ヒストグラムを表示するには、プロット中のトレースを表示してください。クリックしてオフにすることもできます。
            *[shown] 表示中の測定値の分布を表示する ({ $keys })
         }
 # A chip that draws reference lines: horizontal lines at the values typed

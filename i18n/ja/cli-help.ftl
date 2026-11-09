@@ -24,7 +24,7 @@ dmm-cli--adapter =
     .help = 複数のアダプターに接続できるとき、特定のアダプターを選択する。'dmm-cli list' が表示する USB ケーブルのシリアル番号か HID パス、または Bluetooth アダプターかマルチメーターのアドレスを指定する
 # dmm-cli --no-bluetooth
 dmm-cli--no-bluetooth =
-    .help = 今回の実行に限り Bluetooth スキャンをオフにする: アダプターやマルチメーターを一切スキャンせず、'list' はケーブルのみを表示する。保存された 'bluetooth' 設定より優先される。--adapter に指定したアドレスはそのまま開かれる
+    .help = 今回の実行に限り Bluetooth スキャンをオフにする。アダプターやマルチメーターを一切スキャンせず、'list' はケーブルのみを表示する。保存された 'bluetooth' 設定より優先される。--adapter に指定したアドレスはそのまま開かれる
 # dmm-cli --lang
 dmm-cli--lang =
     .help = メッセージとヘルプの言語。システムの言語を使うには `system` を指定する。省略すると設定ファイルの `language` (dmm-gui の [言語] 行で書き込まれる)、次にシステムの言語を使用する
@@ -50,7 +50,7 @@ read--output =
     .help = 出力ファイル (指定しない場合は標準出力)。名前なしで指定すると、マルチメーター、モード、実行開始時刻からファイル名を付ける
 # dmm-cli read --count
 read--count =
-    .help = 測定値の件数 (0 = 無制限: Ctrl+C、または --replay ファイルの終わりで停止)
+    .help = 測定値の件数 (0 = 無制限。Ctrl+C か --replay ファイルの終わりで停止する)
 # dmm-cli read --no-reconnect
 read--no-reconnect =
     .help = マルチメーターとのリンクが切断されたら、再接続せずに実行を終了する
@@ -74,7 +74,7 @@ read--alarm-low =
     .help = 測定値が VALUE を下回ったときに警告する (--alarm-high と同様)
 # dmm-cli read --alarm-hysteresis
 read--alarm-hysteresis =
-    .help = 同じ制限値で再びアラームが鳴るまでに、測定値が内側へ戻る必要のある幅: 制限値の単位の値、または制限値に対する割合 (`1%`) [既定値: マルチメーターの最終桁の数カウント]
+    .help = 同じ制限値で再びアラームが鳴るまでに、測定値が内側へ戻る必要のある幅。制限値の単位の値、または制限値に対する割合 (`1%`) で指定する [既定値: マルチメーターの最終桁の数カウント]
 # dmm-cli read --alarm-bell
 read--alarm-bell =
     .help = アラームのたびに端末のベルを鳴らす
@@ -86,7 +86,7 @@ read--replay =
     .help = マルチメーターを開く代わりに、--format replay で書き出したファイルを再生する。ファイルの終わりで終了する
 # dmm-cli read --import
 read--import =
-    .help = マルチメーターを開く代わりに、エクスポートした CSV, JSON またはリプレイ ファイルを待たずに読み込む: 変換や概要の表示に使う
+    .help = マルチメーターを開く代わりに、エクスポートした CSV, JSON またはリプレイ ファイルを待たずに読み込む。変換や概要の表示に使う
 # dmm-cli command
 command =
     .about = マルチメーターにボタン操作のコマンドを送信する。引数なしで実行すると、選択したデバイスで使用できるコマンドを一覧表示する
@@ -149,7 +149,7 @@ capture--plan =
     .help = デバイス既定のステップ一覧の代わりに、メンテナーのプラン ファイルにあるステップを実行する
 # dmm-cli capture --sniff
 capture--sniff =
-    .help = パーサーの結果を一切信用しない: 生のバイトの変化でステップを検出し、1 つずつ確認する
+    .help = パーサーの結果を一切信用せず、生のバイトの変化でステップを検出して 1 つずつ確認する
 # dmm-cli capture --no-drive
 capture--no-drive =
     .help = 各モード ステップの後に、ツールがレンジやフラグを自動で設定しないようにする

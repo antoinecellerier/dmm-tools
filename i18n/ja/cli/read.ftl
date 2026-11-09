@@ -21,8 +21,8 @@ read-alarm-hysteresis-needs-limit = --alarm-hysteresis には --alarm-high ま�
 # speed a simulated run up: 'max' plays a recording as fast as it decodes, a
 # preseed starts a run with readings already behind it. After
 # read-flag-refused's options.
-read-clock-max-no-preseed = 'max' ではプリシードを指定できません: もともとすべてのフレームが待ち時間なしで再生されます
-read-clock-max-needs-replay = 'max' には --replay が必要です: 自然に終了するのはリプレイだけです
+read-clock-max-no-preseed = 'max' ではすべてのフレームが待ち時間なしで再生されるため、プリシードを指定できません
+read-clock-max-needs-replay = 'max' には --replay が必要です。自然に終了するのはリプレイだけです
 # A recording names the meter it was made with. $command is the command line
 # that plays one (dmm-cli read --replay FILE).
 read-replay-names-its-device = --replay のファイルには記録元のマルチメーターが記載されています。--device を外してください ({ $command })。

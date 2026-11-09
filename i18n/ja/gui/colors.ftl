@@ -122,7 +122,7 @@ colors-issue-frame-low-contrast = テキストと枠のコントラストが { $
 # Another file in the folder gives its theme the same name. $name is the
 # name as the file has it, to put in your language's quotes; $file the
 # other file's name.
-colors-issue-name-taken = 「{ $name }」はすでに { $file } の名前です
+colors-issue-name-taken = 「{ $name }」は、すでに { $file } で使われている名前です
 colors-issue-file-name-unprintable = ファイル名に表示できない文字が含まれています
 # The folder holds too many theme files. $max is how many are read, e.g.
 # 100.
@@ -309,7 +309,7 @@ colors-save-dialog-failed = 保存されませんでした: 保存ダイアロ�
 colors-save-exists = 保存されませんでした: { $path } はすでに存在します。置き換えるにはダイアログでそのファイルを選択してください。
 # Another file in the themes folder gives its theme the same name. $name is
 # the name; $file the other file's name.
-colors-save-name-taken = 保存されませんでした: { $name } はすでにテーマ フォルダー内の { $file } の名前です。別のファイル名を選択してください。
+colors-save-name-taken = 保存されませんでした: { $name } は、すでにテーマ フォルダー内の { $file } で使われている名前です。別のファイル名を選択してください。
 # The theme would be a file the folder can't use. $reason is one of the
 # reasons above, starting lower case.
 colors-save-invalid = 保存されませんでした: { $reason }
