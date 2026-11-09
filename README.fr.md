@@ -9,13 +9,13 @@
 
 *Cette page est une traduction du [README en anglais](README.md), qui fait foi.*
 
-Application de bureau et outil en ligne de commande open source pour lire, enregistrer et tracer les mesures des multimètres numériques (DMM) et des pinces multimètres des marques UNI-T, ZOTEK (ZOYI, ANENG, BSIDE), OWON, Brymen (Minipa), EEVblog et Voltcraft, et les commander à distance, en USB et en Bluetooth, sous Linux, Windows et macOS, et sur Raspberry Pi.
+Application de bureau et outil en ligne de commande open source pour lire, enregistrer et tracer les mesures des multimètres numériques (DMM) et des pinces multimètres des marques UNI-T, ZOTEK (ZOYI, ANENG, BSIDE), OWON, Brymen (Minipa), EEVblog et Voltcraft, et pour commander ces appareils à distance, en USB et en Bluetooth, sous Linux, Windows et macOS, et sur Raspberry Pi.
 
 Fonctionne avec les multimètres UNI-T UT61E+, UT181A, UT161, UT71, UT60BT et UT804, ANENG AN9002 (ZOTEK ZT-300AB), Brymen BM869s, EEVblog 121GW, OWON OW18E et B41T+, Voltcraft VC-890 et [d’autres](#appareils-pris-en-charge).
 
 **Sommaire :** [Fonctionnalités](#fonctionnalités) · [Appareils pris en charge](#appareils-pris-en-charge) · [Démarrage rapide](#démarrage-rapide) · [Documentation](#documentation) · [Commentaires](#commentaires) · [Licence](#licence)
 
-![dmm-gui pendant une mesure de courant continu en mA : la mesure en direct, les spécifications et les statistiques à côté du graphique, où la minimap fait ressortir la séquence de démarrage d’un capteur, deux curseurs en lisent la durée et la charge, et des marqueurs en nomment les étapes](assets/gui-wide-layout.fr.webp)
+![dmm-gui pendant une mesure de courant continu en mA : la mesure en direct, les spécifications et les statistiques à côté du graphique, où la minimap fait ressortir la séquence de démarrage d’un capteur, où deux curseurs en mesurent la durée et la charge et où des marqueurs en signalent les étapes](assets/gui-wide-layout.fr.webp)
 
 ## Fonctionnalités
 
@@ -23,11 +23,11 @@ L’application de bureau et l’outil en ligne de commande :
 
 - Identifient le multimètre connecté
 - Commandent le multimètre à distance : changent son mode et sa plage, appuient sur ses touches
-- Enregistrent les mesures en CSV, en JSON ou dans un fichier de relecture, et les rouvrent
+- Enregistrent les mesures en CSV, en JSON ou dans un fichier de relecture, et rouvrent ces fichiers
 - Calculent des statistiques : min, max, moyenne, écart-type et intégrale temporelle
 - Déclenchent une alarme quand une mesure franchit une limite
 - Appliquent aux mesures, par logiciel, une mise à l’échelle, un décalage et une nouvelle étiquette d’unité
-- Affichent leur interface en anglais, chinois simplifié, espagnol, français, japonais ou portugais du Brésil, selon la langue du système
+- Affichent leur interface en anglais, en chinois simplifié, en espagnol, en français, en japonais ou en portugais du Brésil, selon la langue du système
 
 ### Application de bureau (`dmm-gui`)
 
@@ -36,7 +36,7 @@ De plus, l’application de bureau :
 - Affiche la mesure en direct avec la résolution et la précision de la plage, tirées du manuel
 - Trace les mesures en direct, avec des curseurs, des lignes de référence, une enveloppe min/max et un histogramme
 - Enregistre de longues sessions, avec des marqueurs et des notes sur n’importe quelle mesure
-- Remplit la fenêtre avec la mesure en mode grand affichage
+- Affiche la mesure sur toute la fenêtre en mode grand affichage
 
 [Aide de l’interface graphique](docs/gui-reference.md) (en anglais) : le guide complet de l’application de bureau.
 
@@ -45,7 +45,7 @@ De plus, l’application de bureau :
 De plus, l’outil en ligne de commande :
 
 - Transmet en continu les mesures en texte, CSV ou JSON vers le terminal, un fichier ou un autre programme
-- Liste et modifie par leur nom le mode, la plage et les indicateurs du multimètre, pour les scripts
+- Permet aux scripts de lister et de modifier par leur nom le mode, la plage et les indicateurs du multimètre
 - Lance une capture guidée pour signaler un bug ou vérifier un nouveau multimètre
 
 <!-- snippet via=dcma-boot-refresh.replay
@@ -109,7 +109,7 @@ $ dmm-cli read --interval-ms 2500 --count 5
 | Voltcraft VC915/VC925 PV | — | 🧪 Expérimental (intégré) | [#49](https://github.com/antoinecellerier/dmm-tools/issues/49) |
 | Voltcraft VC920/VC940/VC960 | 🧪 Expérimental | — | [#23](https://github.com/antoinecellerier/dmm-tools/issues/23) |
 
-✅ = modes et commandes confirmés sur du matériel réel, à quelques vérifications ponctuelles près. 🟡 = connexion et modes principaux confirmés, certains modes ou commandes restent entièrement à vérifier. 🧪 = obtenu par rétro-ingénierie du logiciel du fabricant, pas encore testé sur du matériel réel avec cette liaison. — = non pris en charge sur cette liaison.
+✅ = modes et commandes confirmés sur du matériel réel, à quelques vérifications ponctuelles près. 🟡 = connexion et modes principaux confirmés, mais certains modes ou commandes restent entièrement à vérifier. 🧪 = prise en charge issue de la rétro-ingénierie du logiciel du fabricant, mais pas encore testée sur du matériel réel avec cette liaison. — = non pris en charge sur cette liaison.
 
 En Bluetooth, « adaptateur » désigne le module complémentaire UT-D07A/B d’UNI-T. « Intégré » : aucun adaptateur n’est nécessaire. Indiquez dans le ticket de votre multimètre ce qui fonctionne et ce qui ne fonctionne pas.
 
@@ -123,7 +123,7 @@ La page [Appareils pris en charge](docs/supported-devices.md) (en anglais) déta
      ```sh
      sudo cp udev/70-dmm-tools.rules /etc/udev/rules.d/ && sudo udevadm control --reload-rules
      ```
-   - Windows : le câble CP2110 peut demander le [pilote Silicon Labs](https://www.silabs.com/developers/usb-to-uart-bridge-vcp-drivers). Les autres câbles fonctionnent sans pilote.
+   - Windows : le câble CP2110 peut nécessiter le [pilote Silicon Labs](https://www.silabs.com/developers/usb-to-uart-bridge-vcp-drivers). Les autres câbles fonctionnent sans pilote.
    - macOS : rien à installer.
 3. Activez la transmission des données du multimètre et lancez :
    ```sh
