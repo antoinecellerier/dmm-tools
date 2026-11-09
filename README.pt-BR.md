@@ -22,11 +22,11 @@ Funciona com UNI-T UT61E+, UT181A, UT161, UT71, UT60BT e UT804, ANENG AN9002 (ZO
 Tanto o aplicativo de desktop quanto a ferramenta de linha de comando:
 
 - Detectam qual multímetro está conectado
-- Controlam o multímetro remotamente: mudam o modo e a faixa, pressionam as teclas do multímetro
+- Controlam o multímetro remotamente: mudam o modo e a faixa e pressionam as teclas
 - Salvam as leituras em CSV, JSON ou arquivo de reprodução e as abrem de novo
 - Calculam estatísticas: mínimo, máximo, média, desvio padrão e a integral ao longo do tempo
 - Disparam um alarme quando uma leitura ultrapassa um limite
-- Aplicam às leituras, por software, escala, deslocamento e um novo rótulo de unidade
+- Aplicam escala, deslocamento e um novo rótulo de unidade às leituras, por software
 - Mostram o texto em inglês, chinês simplificado, espanhol, francês, japonês ou português do Brasil, seguindo o idioma do sistema
 
 ### Aplicativo de desktop (`dmm-gui`)
@@ -44,7 +44,7 @@ O aplicativo de desktop também:
 
 A ferramenta de linha de comando também:
 
-- Transmite as leituras como texto, CSV ou JSON para o terminal, um arquivo ou outro programa
+- Transmite as leituras em texto, CSV ou JSON para o terminal, um arquivo ou outro programa
 - Lista e altera o modo, a faixa e os indicadores do multímetro por nome, para uso em scripts
 - Executa uma captura guiada para relatar um bug ou verificar um novo multímetro
 
@@ -109,9 +109,9 @@ $ dmm-cli read --interval-ms 2500 --count 5
 | Voltcraft VC915/VC925 PV | — | 🧪 Experimental (integrado) | [#49](https://github.com/antoinecellerier/dmm-tools/issues/49) |
 | Voltcraft VC920/VC940/VC960 | 🧪 Experimental | — | [#23](https://github.com/antoinecellerier/dmm-tools/issues/23) |
 
-✅ = modos e comandos confirmados em hardware real, faltando apenas algumas verificações pontuais. 🟡 = conexão e modos principais confirmados; modos inteiros ou comandos ainda a verificar. 🧪 = obtido por engenharia reversa do software do fabricante, ainda não testado em hardware real nessa conexão. — = sem suporte nessa conexão.
+✅ = modos e comandos confirmados em hardware real, faltando apenas algumas verificações pontuais. 🟡 = conexão e modos principais confirmados; modos inteiros ou comandos ainda a verificar. 🧪 = suporte criado por engenharia reversa do software do fabricante, ainda não testado em hardware real nessa conexão. — = sem suporte nessa conexão.
 
-No Bluetooth, “adaptador” é o acessório UT-D07A/B da UNI-T; “integrado” dispensa adaptador. Conte o que funciona e o que não funciona na issue do seu multímetro.
+No Bluetooth, “adaptador” é o acessório UT-D07A/B da UNI-T; “integrado” dispensa adaptador. Na issue do seu multímetro, conte o que funciona e o que não funciona.
 
 Veja em [dispositivos compatíveis](docs/supported-devices.md) (em inglês) os cabos, os adaptadores Bluetooth, o que ativar e o que já foi confirmado em cada modelo. Seu multímetro não está na lista? [Abra uma issue](https://github.com/antoinecellerier/dmm-tools/issues/new) com o modelo e a forma de conexão.
 
@@ -119,7 +119,7 @@ Veja em [dispositivos compatíveis](docs/supported-devices.md) (em inglês) os c
 
 1. Baixe a [versão mais recente](https://github.com/antoinecellerier/dmm-tools/releases/latest) para a sua plataforma e extraia o arquivo. Na primeira execução, o [Windows](docs/setup.md#windows-protected-your-pc) e o [macOS](docs/setup.md#macos-wont-open-dmm-cli-or-dmm-gui) mostram um aviso de segurança (instruções em inglês).
 2. Dê à ferramenta acesso ao cabo ou ligue o Bluetooth:
-   - Linux: instale a regra udev e reconecte o cabo.
+   - Linux: instale a regra do udev e reconecte o cabo.
      ```sh
      sudo cp udev/70-dmm-tools.rules /etc/udev/rules.d/ && sudo udevadm control --reload-rules
      ```
@@ -143,11 +143,11 @@ Para usuários:
 - [Dispositivos compatíveis](docs/supported-devices.md) (em inglês)
 - [Histórico de alterações](CHANGELOG.md) (em inglês)
 
-Para contribuidores: [CONTRIBUTING.md](CONTRIBUTING.md) para relatórios de bugs, capturas de protocolo e alterações de código; o [guia de desenvolvimento](docs/development.md), a [arquitetura](docs/architecture.md), os [detalhes do protocolo](docs/protocol.md), o [design de UX](docs/ux-design.md) e [como adicionar um dispositivo](docs/adding-devices.md) (todos em inglês).
+Para contribuidores: [CONTRIBUTING.md](CONTRIBUTING.md), sobre relatórios de bugs, capturas de protocolo e alterações de código; o [guia de desenvolvimento](docs/development.md), a [arquitetura](docs/architecture.md), os [detalhes do protocolo](docs/protocol.md), o [design de UX](docs/ux-design.md) e [como adicionar um dispositivo](docs/adding-devices.md) (todos em inglês).
 
 ## Sugestões
 
-Bugs, ideias, dúvidas ou algo no aplicativo ou na documentação que tenha causado confusão: [abra uma issue](https://github.com/antoinecellerier/dmm-tools/issues/new). Para contar sua experiência com um multímetro da [tabela de dispositivos](#dispositivos-compatíveis), use a issue da linha correspondente. [O que incluir em um relatório de bug](CONTRIBUTING.md#bug-reports) (em inglês).
+Para relatar bugs, sugerir ideias, tirar dúvidas ou apontar algo confuso no aplicativo ou na documentação, [abra uma issue](https://github.com/antoinecellerier/dmm-tools/issues/new). Para contar sua experiência com um multímetro da [tabela de dispositivos](#dispositivos-compatíveis), use a issue da linha correspondente. [O que incluir em um relatório de bug](CONTRIBUTING.md#bug-reports) (em inglês).
 
 ## Licença
 
@@ -155,7 +155,7 @@ GPL-3.0-or-later. Veja [LICENSE](LICENSE) para mais detalhes.
 
 ## Agradecimentos
 
-Agradecemos aos projetos da comunidade cujo trabalho serviu de base ou de verificação para o nosso:
+Agradecemos aos projetos da comunidade cujo trabalho serviu de base para o nosso ou ajudou a verificá-lo:
 
 - [ljakob/unit_ut61eplus](https://github.com/ljakob/unit_ut61eplus) e [mwuertinger/ut61ep](https://github.com/mwuertinger/ut61ep) — protocolo do UT61E+, em Python e Go
 - [gulux/Uni-T-CP2110](https://github.com/gulux/Uni-T-CP2110) — capturas e analisador do UT171

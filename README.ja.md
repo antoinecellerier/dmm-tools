@@ -15,7 +15,7 @@ UNI-T UT61E+、UT181A、UT161、UT71、UT60BT、UT804、ANENG AN9002 (ZOTEK ZT-3
 
 **目次:** [機能](#機能) · [対応機種](#対応機種) · [クイック スタート](#クイック-スタート) · [ドキュメント](#ドキュメント) · [フィードバック](#フィードバック) · [ライセンス](#ライセンス)
 
-![直流 mA のセッションを表示した dmm-gui: グラフの横に現在の測定値、仕様、統計が並び、ミニマップがセンサーの起動シーケンスを示し、2 本のカーソルがその所要時間と電荷を読み取り、マーカーが各段階に名前を付けています](assets/gui-wide-layout.ja.webp)
+![直流 mA のセッションを表示した dmm-gui: グラフの横に現在の測定値、仕様、統計が並び、ミニマップでセンサーの起動シーケンスを確認し、2 本のカーソルでその所要時間と電荷を読み取り、マーカーで各段階に名前を付けています](assets/gui-wide-layout.ja.webp)
 
 ## 機能
 
@@ -38,14 +38,14 @@ UNI-T UT61E+、UT181A、UT161、UT71、UT60BT、UT804、ANENG AN9002 (ZOTEK ZT-3
 - 長時間のセッションの記録と、任意の測定値へのマーカーとメモの追加
 - 測定値をウィンドウいっぱいに表示する大型表示モード
 
-[GUI ヘルプ](docs/gui-reference.md) (英語): デスクトップ アプリの詳しいガイド。
+[GUI ヘルプ](docs/gui-reference.md) (英語) では、デスクトップ アプリの使い方を詳しく説明しています。
 
 ### コマンド ライン ツール (`dmm-cli`)
 
 コマンド ライン ツールには、さらに次の機能があります:
 
-- テキスト、CSV、JSON での測定値のストリーミング (出力先: 端末、ファイル、ほかのプログラム)
-- マルチメーターのモード、レンジ、フラグの名前による一覧表示と設定 (スクリプト向け)
+- 端末、ファイル、ほかのプログラムへの測定値のストリーミング (テキスト、CSV、JSON 形式)
+- スクリプトからマルチメーターのモード、レンジ、フラグを名前で一覧表示・設定する機能
 - バグ報告や新しい機種の検証のためのガイド付きキャプチャ
 
 <!-- snippet via=dcma-boot-refresh.replay
@@ -63,7 +63,7 @@ $ dmm-cli read --interval-ms 2500 --count 5
 ```
 <!-- /snippet -->
 
-[CLI ヘルプ](docs/cli-reference.md) (英語): コマンド ライン ツールの詳しいガイド。
+[CLI ヘルプ](docs/cli-reference.md) (英語) では、コマンド ライン ツールの使い方を詳しく説明しています。
 
 ## 対応機種
 
@@ -123,7 +123,7 @@ Bluetooth の「アダプター」は UNI-T のオプション品 UT-D07A/B で�
      ```sh
      sudo cp udev/70-dmm-tools.rules /etc/udev/rules.d/ && sudo udevadm control --reload-rules
      ```
-   - Windows: CP2110 ケーブルには [Silicon Labs のドライバー](https://www.silabs.com/developers/usb-to-uart-bridge-vcp-drivers)が必要な場合があります。ほかのケーブルには何も必要ありません。
+   - Windows: CP2110 ケーブルには [Silicon Labs のドライバー](https://www.silabs.com/developers/usb-to-uart-bridge-vcp-drivers)が必要な場合があります。ほかのケーブルはそのまま使えます。
    - macOS: インストールするものはありません。
 3. マルチメーターのデータ転送をオンにして、次を実行します:
    ```sh
@@ -147,7 +147,7 @@ Bluetooth の「アダプター」は UNI-T のオプション品 UT-D07A/B で�
 
 ## フィードバック
 
-バグ、アイデア、質問、またはアプリやドキュメントでわかりにくかった点は、[Issue を作成](https://github.com/antoinecellerier/dmm-tools/issues/new)してお知らせください。[機種の表](#対応機種)にあるマルチメーターの動作状況は、その行の Issue に書き込んでください。[バグ報告に含める内容](CONTRIBUTING.md#bug-reports) (英語) もご覧ください。
+バグ、アイデア、質問、アプリやドキュメントでわかりにくかった点などは、[Issue を作成](https://github.com/antoinecellerier/dmm-tools/issues/new)してお知らせください。[機種の表](#対応機種)にあるマルチメーターの動作状況は、その行の Issue に書き込んでください。[バグ報告に含める内容](CONTRIBUTING.md#bug-reports) (英語) もご覧ください。
 
 ## ライセンス
 

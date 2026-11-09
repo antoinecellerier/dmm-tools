@@ -9,7 +9,7 @@
 
 *Esta página es una traducción automática; la versión de referencia es el [README en inglés](README.md). Se agradece la revisión de hablantes nativos: [cómo colaborar](CONTRIBUTING.md#translations) (en inglés).*
 
-Aplicación de escritorio y herramienta de línea de comandos de código abierto para leer, registrar, representar gráficamente y controlar a distancia multímetros digitales (DMM) y pinzas amperimétricas de UNI-T, ZOTEK (ZOYI, ANENG, BSIDE), OWON, Brymen (Minipa), EEVblog y Voltcraft, por USB y Bluetooth, en Linux, Windows, macOS y Raspberry Pi.
+Aplicación de escritorio y herramienta de línea de comandos, ambas de código abierto, para leer, registrar, representar gráficamente y controlar a distancia multímetros digitales (DMM) y pinzas amperimétricas de UNI-T, ZOTEK (ZOYI, ANENG, BSIDE), OWON, Brymen (Minipa), EEVblog y Voltcraft, por USB y Bluetooth, en Linux, Windows, macOS y Raspberry Pi.
 
 Funciona con los UNI-T UT61E+, UT181A, UT161, UT71, UT60BT y UT804, ANENG AN9002 (ZOTEK ZT-300AB), Brymen BM869s, EEVblog 121GW, OWON OW18E y B41T+, Voltcraft VC-890 y [más](#dispositivos-compatibles).
 
@@ -22,8 +22,8 @@ Funciona con los UNI-T UT61E+, UT181A, UT161, UT71, UT60BT y UT804, ANENG AN9002
 Tanto la aplicación de escritorio como la herramienta de línea de comandos:
 
 - Detectan qué multímetro está conectado
-- Controlan el multímetro a distancia: cambian el modo y el rango, presionan sus botones
-- Guardan las lecturas en CSV, JSON o un archivo de reproducción y las vuelven a abrir
+- Controlan el multímetro a distancia: cambian de modo y de rango y presionan sus botones
+- Guardan las lecturas en un archivo CSV, JSON o de reproducción y vuelven a abrirlo
 - Calculan estadísticas: mínimo, máximo, media, desviación estándar e integral respecto al tiempo
 - Activan una alarma cuando una lectura traspasa un límite
 - Aplican por software una escala, un desplazamiento y una unidad propia a las lecturas
@@ -34,7 +34,7 @@ Tanto la aplicación de escritorio como la herramienta de línea de comandos:
 La aplicación de escritorio además:
 
 - Muestra la lectura en vivo con la resolución y la exactitud del rango según el manual
-- Traza las lecturas en un gráfico en vivo, con cursores, líneas de referencia, una envolvente mín./máx. y un histograma
+- Traza las lecturas en un gráfico en vivo, con cursores, líneas de referencia, una envolvente de mínimos y máximos y un histograma
 - Graba sesiones largas, con marcadores y notas en cualquier lectura
 - Muestra la lectura ocupando toda la ventana en el modo de lectura grande
 
@@ -44,8 +44,8 @@ La aplicación de escritorio además:
 
 La herramienta de línea de comandos además:
 
-- Transmite las lecturas como texto, CSV o JSON a la consola, a un archivo o a otro programa
-- Muestra y cambia por nombre el modo, el rango y los indicadores del multímetro, para usar desde scripts
+- Envía las lecturas en texto, CSV o JSON a la consola, a un archivo o a otro programa
+- Muestra y cambia por su nombre el modo, el rango y los indicadores del multímetro, para controlarlo desde scripts
 - Ejecuta una captura guiada para informar de un error o verificar un multímetro nuevo
 
 <!-- snippet via=dcma-boot-refresh.replay
@@ -109,15 +109,15 @@ $ dmm-cli read --interval-ms 2500 --count 5
 | Voltcraft VC915/VC925 PV | — | 🧪 Experimental (integrado) | [#49](https://github.com/antoinecellerier/dmm-tools/issues/49) |
 | Voltcraft VC920/VC940/VC960 | 🧪 Experimental | — | [#23](https://github.com/antoinecellerier/dmm-tools/issues/23) |
 
-✅ = modos y comandos confirmados en hardware real, salvo unas pocas comprobaciones puntuales. 🟡 = conexión y modos principales confirmados, quedan modos o comandos enteros por verificar. 🧪 = obtenido por ingeniería inversa del software del fabricante, aún sin probar en hardware real por esa conexión. — = no compatible por esa conexión.
+✅ = modos y comandos confirmados en hardware real, salvo unas pocas comprobaciones puntuales. 🟡 = conexión y modos principales confirmados; quedan modos o comandos enteros por verificar. 🧪 = obtenido por ingeniería inversa del software del fabricante, aún sin probar en hardware real con esa conexión. — = no compatible con esa conexión.
 
-El “adaptador” Bluetooth es el accesorio UT-D07A/B de UNI-T; “integrado” no necesita adaptador. Comenta en la incidencia de tu multímetro qué funciona y qué no.
+El “adaptador” Bluetooth es el accesorio UT-D07A/B de UNI-T; “integrado” significa que no hace falta adaptador. Comenta en la incidencia de tu multímetro qué funciona y qué no.
 
-En [dispositivos compatibles](docs/supported-devices.md) (en inglés) se detallan los cables, los adaptadores Bluetooth, qué hay que activar y qué se confirmó en cada modelo. ¿Tu multímetro no aparece? [Abre una incidencia](https://github.com/antoinecellerier/dmm-tools/issues/new) con su modelo y cómo se conecta.
+En [dispositivos compatibles](docs/supported-devices.md) (en inglés) se detallan los cables, los adaptadores Bluetooth, qué hay que activar y qué se confirmó en cada modelo. ¿Tu multímetro no aparece? [Abre una incidencia](https://github.com/antoinecellerier/dmm-tools/issues/new) e indica el modelo y cómo se conecta.
 
 ## Inicio rápido
 
-1. Descarga la [última versión](https://github.com/antoinecellerier/dmm-tools/releases/latest) para tu plataforma y descomprime el archivo. La primera vez que lo abras, [Windows](docs/setup.md#windows-protected-your-pc) y [macOS](docs/setup.md#macos-wont-open-dmm-cli-or-dmm-gui) (en inglés) muestran una advertencia de seguridad.
+1. Descarga la [última versión](https://github.com/antoinecellerier/dmm-tools/releases/latest) para tu plataforma y descomprime el archivo. La primera vez que abras el programa, [Windows](docs/setup.md#windows-protected-your-pc) y [macOS](docs/setup.md#macos-wont-open-dmm-cli-or-dmm-gui) (en inglés) mostrarán una advertencia de seguridad.
 2. Da a la herramienta acceso al cable o activa el Bluetooth:
    - Linux: instala la regla udev y vuelve a conectar el cable.
      ```sh
@@ -131,7 +131,7 @@ En [dispositivos compatibles](docs/supported-devices.md) (en inglés) se detalla
    dmm-gui                 # abrir la aplicación de escritorio
    ```
 
-[Instalación y solución de problemas](docs/setup.md) (en inglés) trata los controladores, los detalles de udev, los equipos sin pantalla, la compilación desde el código fuente y las compilaciones de desarrollo.
+En [Instalación y solución de problemas](docs/setup.md) (en inglés) se tratan los controladores, los detalles de udev, los equipos sin pantalla, la compilación desde el código fuente y las compilaciones de desarrollo.
 
 ## Documentación
 
@@ -143,7 +143,7 @@ Para usuarios:
 - [Dispositivos compatibles](docs/supported-devices.md) (en inglés)
 - [Registro de cambios](CHANGELOG.md) (en inglés)
 
-Para colaboradores: [CONTRIBUTING.md](CONTRIBUTING.md) para informes de errores, capturas de protocolo y cambios de código; la [guía de desarrollo](docs/development.md), la [arquitectura](docs/architecture.md), los [detalles del protocolo](docs/protocol.md), el [diseño de la experiencia de usuario](docs/ux-design.md) y [cómo agregar un dispositivo](docs/adding-devices.md) (todo en inglés).
+Para colaboradores: [CONTRIBUTING.md](CONTRIBUTING.md), sobre informes de errores, capturas de protocolo y cambios de código; la [guía de desarrollo](docs/development.md), la [arquitectura](docs/architecture.md), los [detalles del protocolo](docs/protocol.md), el [diseño de la experiencia de usuario](docs/ux-design.md) y [cómo agregar un dispositivo](docs/adding-devices.md) (todo en inglés).
 
 ## Comentarios
 

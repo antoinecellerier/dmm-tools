@@ -9,20 +9,20 @@
 
 *本页为机器翻译，内容以[英文 README](README.md) 为准。欢迎母语人士[帮助审校](CONTRIBUTING.md#translations)（英文）。*
 
-一套开源的桌面应用和命令行工具，通过 USB 或蓝牙连接数字万用表（DMM）和钳形表，读取并记录读数、绘制图表、遥控仪表。支持 UNI-T、ZOTEK（ZOYI、ANENG、BSIDE）、OWON、Brymen（Minipa）、EEVblog 和 Voltcraft，可在 Linux、Windows、macOS 和 Raspberry Pi 上运行。
+一套开源的桌面应用和命令行工具，通过 USB 或蓝牙连接数字万用表（DMM）和钳形表，采集并记录读数、绘制图表、遥控仪表。支持 UNI-T、ZOTEK（ZOYI、ANENG、BSIDE）、OWON、Brymen（Minipa）、EEVblog 和 Voltcraft，可在 Linux、Windows、macOS 和 Raspberry Pi 上运行。
 
 适用于 UNI-T UT61E+、UT181A、UT161、UT71、UT60BT 和 UT804，ANENG AN9002（ZOTEK ZT-300AB），Brymen BM869s，EEVblog 121GW，OWON OW18E 和 B41T+，Voltcraft VC-890，以及[更多型号](#支持的设备)。
 
 **目录：** [功能](#功能) · [支持的设备](#支持的设备) · [快速入门](#快速入门) · [文档](#文档) · [反馈](#反馈) · [许可证](#许可证)
 
-![dmm-gui 正在进行直流 mA 测量：实时读数、技术指标和统计显示在图表旁；缩略图中可看出某个传感器的启动过程，两个光标读出其持续时间和电荷量，标记注明了各个阶段](assets/gui-wide-layout.zh-CN.webp)
+![dmm-gui 正在进行直流 mA 测量：实时读数、技术指标和统计显示在图表旁；从缩略图中可以看出某个传感器的启动过程，用两个光标读取持续时间和电荷量，用标记注明各个阶段](assets/gui-wide-layout.zh-CN.webp)
 
 ## 功能
 
 桌面应用和命令行工具都能：
 
 - 检测所连接的万用表
-- 遥控万用表：切换模式和量程，操作万用表按键
+- 遥控万用表：切换模式和量程，操作按键
 - 将读数保存为 CSV、JSON 或回放文件，并可再次打开
 - 统计最小值、最大值、平均值、标准差和时间积分
 - 在读数超出限值时报警
@@ -46,7 +46,7 @@
 
 - 将读数以文本、CSV 或 JSON 格式持续输出到终端、文件或其他程序
 - 按名称列出和设置万用表的模式、量程和标志，便于脚本使用
-- 运行引导式捕获，用于报告错误或验证新的万用表
+- 运行引导式捕获，用于报告错误或验证新型号
 
 <!-- snippet via=dcma-boot-refresh.replay
 dmm-cli read --interval-ms 2500 --count 5
@@ -109,11 +109,11 @@ $ dmm-cli read --interval-ms 2500 --count 5
 | Voltcraft VC915/VC925 PV | — | 🧪 实验性（内置） | [#49](https://github.com/antoinecellerier/dmm-tools/issues/49) |
 | Voltcraft VC920/VC940/VC960 | 🧪 实验性 | — | [#23](https://github.com/antoinecellerier/dmm-tools/issues/23) |
 
-✅ = 各模式和命令已在真实硬件上确认，仅剩少数局部检查。🟡 = 连接和主要模式已确认，仍有部分模式或命令尚未验证。🧪 = 基于对厂商软件的逆向分析实现，尚未通过该连接方式在真实硬件上测试。— = 不支持该连接方式。
+✅ = 各模式和命令已在真实硬件上确认，仅剩个别细节有待检查。🟡 = 连接和主要模式已确认，仍有部分模式或命令尚未验证。🧪 = 基于对厂商软件的逆向分析实现，尚未通过该连接方式在真实硬件上测试。— = 不支持该连接方式。
 
 蓝牙“适配器”指 UNI-T 的 UT-D07A/B 附加模块；“内置”则无需适配器。哪些功能可用、哪些不可用，请在对应型号的议题中反馈。
 
-有关连接线、蓝牙适配器、需要开启的功能以及各型号的验证情况，请参阅[支持的设备](docs/supported-devices.md)（英文）。你的万用表不在列表中？请[提交议题](https://github.com/antoinecellerier/dmm-tools/issues/new)，写明型号和连接方式。
+有关连接线、蓝牙适配器、需要开启的功能以及各型号的验证情况，请参阅[支持的设备](docs/supported-devices.md)（英文）。万用表不在列表中？请[提交议题](https://github.com/antoinecellerier/dmm-tools/issues/new)，写明型号和连接方式。
 
 ## 快速入门
 
@@ -131,7 +131,7 @@ $ dmm-cli read --interval-ms 2500 --count 5
    dmm-gui                 # 启动图形界面
    ```
 
-[安装与故障排除](docs/setup.md)（英文）介绍驱动程序、udev 详情、无图形界面的计算机、从源码构建和开发版本。
+[安装与故障排除](docs/setup.md)（英文）涵盖驱动程序、udev 详情、在无图形界面的计算机上运行、从源码构建和开发版本。
 
 ## 文档
 
@@ -143,11 +143,11 @@ $ dmm-cli read --interval-ms 2500 --count 5
 - [支持的设备](docs/supported-devices.md)（英文）
 - [更新日志](CHANGELOG.md)（英文）
 
-面向贡献者：[CONTRIBUTING.md](CONTRIBUTING.md) 介绍错误报告、协议捕获和代码修改；另见[开发指南](docs/development.md)、[架构](docs/architecture.md)、[协议详情](docs/protocol.md)、[UX 设计](docs/ux-design.md)和[添加设备](docs/adding-devices.md)（均为英文）。
+面向贡献者：[CONTRIBUTING.md](CONTRIBUTING.md) 说明如何报告错误、捕获协议数据和修改代码；另见[开发指南](docs/development.md)、[架构](docs/architecture.md)、[协议详情](docs/protocol.md)、[UX 设计](docs/ux-design.md)和[添加设备](docs/adding-devices.md)（均为英文）。
 
 ## 反馈
 
-错误、想法、疑问，或应用和文档中让你困惑的地方：请[提交议题](https://github.com/antoinecellerier/dmm-tools/issues/new)。使用[设备表](#支持的设备)中的万用表时，请在该型号所在行的议题中反馈使用情况。[错误报告应包含哪些内容](CONTRIBUTING.md#bug-reports)（英文）。
+遇到错误，有想法或疑问，或者应用和文档中有令人困惑的地方，请[提交议题](https://github.com/antoinecellerier/dmm-tools/issues/new)。如果万用表列在[设备表](#支持的设备)中，请在该型号对应的议题下反馈使用情况。[错误报告应包含哪些内容](CONTRIBUTING.md#bug-reports)（英文）。
 
 ## 许可证
 
@@ -155,7 +155,7 @@ GPL-3.0-or-later。详见 [LICENSE](LICENSE)。
 
 ## 致谢
 
-感谢以下社区项目为本项目提供参考和交叉验证：
+感谢以下社区项目提供参考和交叉验证：
 
 - [ljakob/unit_ut61eplus](https://github.com/ljakob/unit_ut61eplus) 和 [mwuertinger/ut61ep](https://github.com/mwuertinger/ut61ep)：UT61E+ 协议，分别用 Python 和 Go 实现
 - [gulux/Uni-T-CP2110](https://github.com/gulux/Uni-T-CP2110)：UT171 捕获数据和解析器
