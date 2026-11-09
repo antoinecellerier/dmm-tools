@@ -98,11 +98,11 @@ After a review of the apps, refresh each language's "How \<Name\> differs from E
 
 ### Two-stage sweep
 
-A cheaper native-feel pass, or a repeat of one, where only what a stronger model confirms is applied:
+A native-feel pass where confirmers rule on each finding and only what they keep is applied:
 
 `Workflow({scriptPath: ".claude/skills/translate/scripts/native-sweep.js", args: {repo: "<absolute repo path>", langs: [{lang: "es", name: "Spanish"}, …], findModel?, confirmModel?, targets?: ["app", "readme"]}})`
 
-- **What it does:** one reader per language and file group finds (Sonnet by default), then confirmers rule on the findings in chunks (Opus by default; a finding is rejected unless it is a real defect). It edits nothing and returns counts. Ask the user's go-ahead first: six readers per language, plus the confirmers.
+- **What it does:** one reader per language and file group finds, then confirmers rule on the findings in chunks (a finding is rejected unless it is a real defect). Both are Opus by default: on the same text and prompt, Sonnet readers found about a seventh as much. It edits nothing and returns counts. Ask the user's go-ahead first: six readers per language, plus the confirmers.
 - **Before applying,** save the `long_labels` output: it also lists text that was already long, so only what is new in it counts.
 - **Then run `scripts/native-sweep.py`:**
   - `extract <journal.jsonl> <out-dir> --prior <an earlier review's journal.jsonl>` writes each language's found, confirmed, rejected and dropped findings and prints the yield. `<out-dir>` is `references/l10n/native-review-<date>/`.

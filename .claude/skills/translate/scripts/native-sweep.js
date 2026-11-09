@@ -11,7 +11,7 @@ export const meta = {
 // See the translate skill, "Native review". The script returns counts only: the
 // findings and verdicts stay in the run's journal.jsonl, for native-sweep.py.
 const REPO = args.repo
-const FIND_MODEL = args.findModel || 'sonnet'
+const FIND_MODEL = args.findModel || 'opus'
 const CONFIRM_MODEL = args.confirmModel || 'opus'
 const TARGETS = new Set(args.targets || ['app', 'readme'])
 const CHUNK = 50
