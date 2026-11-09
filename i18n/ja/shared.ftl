@@ -38,9 +38,9 @@ stability-experimental = 試験的
 # $stability is verified, partly-verified or experimental.
 stability-warning =
     { $stability ->
-        [verified] マルチメーター { $model } への対応は検証済みです (実機で検証済み)。
-        [partly-verified] マルチメーター { $model } への対応は一部検証済みです (一部のモードとコマンドは実機で確認されていません)。
-       *[experimental] マルチメーター { $model } への対応は試験的です (実機で検証されていません)。
+        [verified] マルチメーター { $model } への対応は実機で検証済みです。
+        [partly-verified] マルチメーター { $model } への対応は一部検証済みで、実機で確認されていないモードやコマンドがあります。
+       *[experimental] マルチメーター { $model } への対応は試験的なもので、実機では検証されていません。
     }
 
 ## The --mock-mode flag's long help, after the binary's own first line.
@@ -81,9 +81,9 @@ setup-usb-linux-replug = その後、ケーブルを接続し直してくださ�
 # Windows. The quoted names are what Device Manager shows; use the names
 # Windows shows in your language.
 setup-usb-windows-open = ケーブルを接続した状態でデバイス マネージャーを開いてください:
-setup-usb-windows-cp2110 = - [ヒューマン インターフェイス デバイス] の下の 'CP2110 USB to UART Bridge': 操作は必要ありません。
+setup-usb-windows-cp2110 = - [ヒューマン インターフェイス デバイス] の下に 'CP2110 USB to UART Bridge' が表示されている場合は、操作は必要ありません。
 # UNVERIFIED Windows name
-setup-usb-windows-input = - [ヒューマン インターフェイス デバイス] の下の 'USB 入力デバイス': 操作は必要ありません。
+setup-usb-windows-input = - [ヒューマン インターフェイス デバイス] の下に 'USB 入力デバイス' が表示されている場合は、操作は必要ありません。
 # The driver's download address follows.
 setup-usb-windows-warning = - [ほかのデバイス] の下に黄色の警告アイコンが表示されている場合は、次の場所からドライバーをインストールしてください:
 setup-usb-windows-nothing = - 何も表示されない場合は、別の USB ポートをお試しください。
@@ -257,7 +257,7 @@ args-unexpected-value = '{ $arg }' に予期しない値 '{ $value }' があり�
 args-too-few-values = '{ $arg }' には { $needed } 個の値が必要ですが、{ $given } 個しか指定されていません
 # The wrong number of values after an option. $needed and $given are
 # numbers; $count is $given, for choosing the verb's form.
-args-wrong-number-of-values = '{ $arg }' には { $needed } 個の値が必要ですが、{ $given } 個が指定されました
+args-wrong-number-of-values = '{ $arg }' には { $needed } 個の値が必要ですが、{ $given } 個指定されています
 # An option the program doesn't have, or one this command doesn't take.
 args-unexpected-argument = 予期しない引数 '{ $arg }' があります
 # An option given twice that can only be given once.
@@ -281,8 +281,8 @@ args-conflict-with-list =
 # subcommand; $name is what the user typed.
 args-conflict-with-others =
     { $what ->
-        [subcommand] サブコマンド '{ $name }' は、指定されたほかの引数の 1 つ以上と同時に使用できません
-       *[argument] 引数 '{ $name }' は、指定されたほかの引数の 1 つ以上と同時に使用できません
+        [subcommand] サブコマンド '{ $name }' は、指定されたほかの引数のいずれかと同時に使用できません
+       *[argument] 引数 '{ $name }' は、指定されたほかの引数のいずれかと同時に使用できません
     }
 
 ## Hints after the error.

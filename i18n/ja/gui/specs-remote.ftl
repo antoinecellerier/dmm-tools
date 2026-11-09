@@ -77,7 +77,7 @@ remote-rel =
     .hover = 現在の値を基準とした相対値を表示する
 # RANGE: the meter leaves auto-range and steps to its next range.
 remote-range =
-    .hover = RANGE を押す (マニュアルレンジ、1 段階)
+    .hover = RANGE を押してマニュアルレンジで 1 段階切り替える
 # AUTO: the meter picks its range itself again.
 remote-auto =
     .hover = マルチメーターをオートレンジに戻す

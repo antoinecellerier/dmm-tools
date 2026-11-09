@@ -43,7 +43,7 @@ stats-integral-untimed = ∫:{ $value } { $unit }
 # for seconds. ⚠ is part of it. The hover explains it: 5 and 2 are fixed
 # numbers.
 stats-gaps = ⚠ >{ $limit }s の欠落 { $count } 件をスキップ
-    .hover = 測定値のない区間が { $limit } s を超えると、その区間は積分されません (サンプリング間隔の 5 倍、かつ 2 s 以上)。そのため、積分値には一部の区間が含まれていません。
+    .hover = 測定値のない区間が { $limit } s (サンプリング間隔の 5 倍、かつ 2 s 以上) を超えると、その区間は積分されません。そのため、積分値には一部の区間が含まれていません。
 # While the Alarm row under the reading has limits set: how many times the
 # reading went past each. $limits is both while there is a high and a low
 # limit, high or low while there is only that one; $high and $low are the
@@ -54,7 +54,7 @@ stats-alarm-counts =
         [high] アラーム: 上限 { $high } 回
        *[low] アラーム: 下限 { $low } 回
     }
-    .hover = 測定値が各制限値を超えた回数 (各回をグラフ上にマーク)
+    .hover = 測定値が各制限値を超えた回数 (超えた箇所はグラフにマーク)
 # A small button that starts the figures over. σ is the standard deviation.
 stats-reset = リセット
     .hover = 最小値/最大値/平均値/σ/積分値とアラームのカウンターをリセットする
@@ -104,7 +104,7 @@ markers-note-hidden =
 markers-log-cut = { $time } より前のサンプルを見るには、エクスポートしてください。
 # When Ctrl+N cannot show the note it opened because the panel is too short
 # for a single row; $number is the marker's number.
-markers-log-too-short = マーカー { $number } のメモを書くには、[記録] パネルを高くしてください。
+markers-log-too-short = マーカー { $number } のメモを書くには、[記録] パネルを縦に広げてください。
 # After a marker's reading, in small text, when the graph no longer holds
 # that reading.
 markers-off-graph = グラフ外

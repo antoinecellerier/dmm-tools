@@ -53,8 +53,8 @@ error-not-an-adapter = { $path } (デバイスは存在しますが、対応し�
 # UT61E+.
 error-wrong-cable =
     { $link ->
-        [bluetooth] --adapter で指定された Bluetooth アダプターでは { $model } と通信できません: --adapter でマルチメーター専用のケーブルを指定するか、--adapter を省略してください
-       *[cable] --adapter で指定された { $cable } ケーブルでは { $model } と通信できません: --adapter でマルチメーター専用のケーブルを指定するか、--adapter を省略してください
+        [bluetooth] --adapter で指定された Bluetooth アダプターでは { $model } と通信できないため、--adapter でマルチメーター専用のケーブルを指定するか、--adapter を省略してください
+       *[cable] --adapter で指定された { $cable } ケーブルでは { $model } と通信できないため、--adapter でマルチメーター専用のケーブルを指定するか、--adapter を省略してください
     }
 error-link-lost = Bluetooth リンクが切断されました
 # $reason is one of the "Bluetooth" sentences below.
@@ -92,7 +92,7 @@ error-bluetooth-only-switched-off = マルチメーター { $model } は Bluetoo
 # $model is the meter, e.g. UNI-T UT60BT.
 error-bluetooth-only-not-built = マルチメーター { $model } は Bluetooth でのみ接続できますが、このビルドは Bluetooth に対応していません
 # $model is the meter, e.g. UNI-T UT60BT.
-error-bluetooth-only-usb-adapter = マルチメーター { $model } は Bluetooth でのみ接続できますが、--adapter で USB デバイスが指定されています: マルチメーターの Bluetooth アドレスを指定するか、--adapter を省略してください
+error-bluetooth-only-usb-adapter = マルチメーター { $model } は Bluetooth でのみ接続できるため、--adapter には USB デバイスではなくマルチメーターの Bluetooth アドレスを指定するか、--adapter を省略してください
 # Opening the meter was stopped part-way, by Disconnect or by quitting.
 error-cancelled = 接続を中止しました
 
@@ -104,13 +104,13 @@ error-cancelled = 接続を中止しました
 # $setting is a setting's name.
 error-unsupported-setting = このマルチメーターでは { $setting } を設定できません
 # $mode is a mode.
-error-unsupported-several-positions = { $mode } はファンクションスイッチの複数の位置で報告されます: 先に別のモードで測定値を読み取ってください
+error-unsupported-several-positions = { $mode } はファンクションスイッチの複数の位置で報告されるため、先に別のモードで測定値を読み取ってください
 # $mode is a mode.
 error-unsupported-no-position = { $mode } に対応するファンクションスイッチの位置は不明です
 # $target and $from are modes.
-error-unsupported-mode-unreachable = { $from } からモード { $target } に切り替えることはできません: 先にファンクションスイッチを回してください
+error-unsupported-mode-unreachable = { $from } からモード { $target } には切り替えられないため、先にファンクションスイッチを回してください
 # $target and $from_word are mode codes, $from is the mode $from_word is.
-error-unsupported-word-unreachable = { $from } ({ $from_word }) からモード { $target } に切り替えることはできません: 先にファンクションスイッチを回してください
+error-unsupported-word-unreachable = { $from } ({ $from_word }) からモード { $target } には切り替えられないため、先にファンクションスイッチを回してください
 # $mode is a mode.
 error-unsupported-no-ranges = このマルチメーターの { $mode } には選択できるレンジがありません
 # $id is a range's number, $count how many ranges $mode, a mode, has.
@@ -120,7 +120,7 @@ error-unsupported-range-not-listed = レンジ { $id } は、{ $mode } の { $co
 # $count is how many ranges $mode, a mode, has.
 error-unsupported-auto-range-not-listed = オートレンジは、{ $mode } の { $count } 個のレンジに含まれていません
 # $mode is a mode, $word its code.
-error-unsupported-fixed-range = { $mode } ({ $word }) のレンジ: レンジ固定のモード
+error-unsupported-fixed-range = { $mode } ({ $word }) はレンジ固定のモードのため、レンジを変更できません
 # $setting is a setting's name, $mode a mode.
 error-unsupported-setting-not-in-mode = このマルチメーターの { $mode } では { $setting } を設定できません
 # $setting is a setting's name, $mode a mode, $word its code.
@@ -129,7 +129,7 @@ error-unsupported-setting-not-in-word = このマルチメーターの { $mode }
 # $offered the states it offers, separated by commas (on, off, MAX…).
 error-unsupported-no-such-state = { $setting } に状態 { $id } はありません ({ $mode } で使用できる状態: { $offered })
 # $command is a command word, $mode a Peak mode, $word its code.
-error-unsupported-refused-in-peak = { $mode } ({ $word }) での { $command }: ピーク モードではマルチメーターが受け付けません
+error-unsupported-refused-in-peak = { $mode } ({ $word }) はピーク モードのため、マルチメーターは { $command } を受け付けません
 # "rel" is the command word. $mode is a mode, $word its code.
 error-unsupported-no-rel = { $mode } ({ $word }) での rel
 # $model is the meter's part number, e.g. VC-880; $button a button's name.
@@ -179,12 +179,12 @@ error-rejected-rel-is-on = REL はすでにオンになっているため、先�
 # $code is a number, $model and $opened are meters (e.g. OWON B41T+), $id a
 # meter's ID as --device takes it. "Auto-detect" is the GUI's Device
 # choice.
-error-rejected-other-model = マルチメーターが報告した OWON のモデル コードは { $code } ({ $model }) で、接続時に指定した { $opened } と異なるため、リモート キーは無効です: [自動検出] または --device { $id } を選択してください
+error-rejected-other-model = マルチメーターが報告した OWON のモデル コードは { $code } ({ $model }) で、接続時に指定した { $opened } と異なるため、リモート キーは無効です。[自動検出] または --device { $id } を選択してください
 # $code is a number.
 error-rejected-unknown-model = マルチメーターが報告した OWON のモデル コード { $code } はこのツールではまだ認識できないため、リモート キーは無効です
 # $command is a command word.
-error-rejected-model-unread = マルチメーターのモデル コードを読み取れなかったため、{ $command } は無効です: REL を解除するには、マルチメーターの REL を長押ししてください
-error-rejected-min-max-locks-range = MIN/MAX ではレンジが固定されます: レンジを変更する前に MIN/MAX を解除してください
+error-rejected-model-unread = マルチメーターのモデル コードを読み取れなかったため、{ $command } は無効です。REL を解除するには、マルチメーターの REL を長押ししてください
+error-rejected-min-max-locks-range = MIN/MAX ではレンジが固定されるため、レンジを変更する前に MIN/MAX を解除してください
 # $command is a command word or a setting's name.
 error-rejected-replay = { $command }: リプレイではコマンドを使用できません
 
@@ -205,33 +205,33 @@ error-sent-range = レンジ { $range }
 # Voltcraft VC871; $frame the length of that model's frame in bytes, 6 or
 # 15; $opened the meter chosen, e.g. OWON B35T+; $id the --device value
 # for $model.
-error-wrong-meter-other-frame = マルチメーターが報告した OWON のモデル コードは { $code } ({ $model }) で、接続時に指定した { $opened } ではなく、OWON の { $frame } バイト フレームを送信するモデルです: [自動検出] または --device { $id } を選択してください
+error-wrong-meter-other-frame = マルチメーターが報告した OWON のモデル コードは { $code } ({ $model }) で、接続時に指定した { $opened } ではなく、OWON の { $frame } バイト フレームを送信する機種です。[自動検出] または --device { $id } を選択してください
 # An OWON meter sends the other kind of data frame and names no model.
 # $sent and $expected are frame lengths in bytes, 6 or 15; $opened is the
 # meter chosen, e.g. Voltcraft VC871. $remedy is auto-detect, or own-model
 # when the user has to pick the meter's model themselves.
 error-wrong-meter-other-frame-kind =
     { $remedy ->
-        [auto-detect] マルチメーターが送信しているのは OWON の { $sent } バイト フレームで、接続時に指定した { $opened } の { $expected } バイト フレームではありません: [自動検出] を選択してください
-       *[own-model] マルチメーターが送信しているのは OWON の { $sent } バイト フレームで、接続時に指定した { $opened } の { $expected } バイト フレームではありません: マルチメーターの実際の機種を選択してください
+        [auto-detect] マルチメーターが送信しているのは OWON の { $sent } バイト フレームで、接続時に指定した { $opened } の { $expected } バイト フレームではないため、[自動検出] を選択してください
+       *[own-model] マルチメーターが送信しているのは OWON の { $sent } バイト フレームで、接続時に指定した { $opened } の { $expected } バイト フレームではないため、マルチメーターの実際の機種を選択してください
     }
 # An OWON model this tool does not read yet. $code is OWON's model number,
 # e.g. 83. "This message" is the whole error, for the issue.
-error-wrong-meter-not-yet = マルチメーターが報告した OWON のモデル コードは { $code } で、この機種はこのツールではまだ読み取れません: このメッセージを添えて Issue を作成してください
+error-wrong-meter-not-yet = マルチメーターが報告した OWON のモデル コードは { $code } で、この機種はこのツールではまだ読み取れないため、このメッセージを添えて Issue を作成してください
 # An OWON model whose readings carry their sign where this tool does not
 # read it yet. $code is OWON's model number, e.g. 55.
 error-wrong-meter-sign-in-function-word = マルチメーターが報告した OWON のモデル コードは { $code } で、この機種はファンクション ワードに符号を含む OWON の 6 バイト フレームを送信しますが、このツールではまだ読み取れません
 # A Brymen meter of another series answered. $found and $opened are series,
 # e.g. Brymen BM82x and Brymen BM86x; $id is the --device value for $found.
-error-wrong-meter-other-series = ケーブルに接続されているマルチメーターは { $found } で、{ $opened } ではありません: [自動検出] または --device { $id } を選択してください
+error-wrong-meter-other-series = ケーブルに接続されているマルチメーターは { $opened } ではなく { $found } のため、[自動検出] または --device { $id } を選択してください
 # An OWON meter chosen by its model sends bytes, but never its 6-byte data
 # frame. B35 and B35T are OWON models.
-error-wrong-meter-no-six-byte-frames = マルチメーターが OWON の 6 バイト フレームを送信しません: 古い B35 または B35T で、このツールではまだ読み取れない 14 バイト フレームを送信している可能性があります
+error-wrong-meter-no-six-byte-frames = マルチメーターが OWON の 6 バイト フレームを送信しません。古い B35 または B35T で、このツールではまだ読み取れない 14 バイト フレームを送信している可能性があります
 # The same for a meter whose data frame is 15 bytes long.
-error-wrong-meter-no-fifteen-byte-frames = マルチメーターが OWON の 15 バイト フレームを送信しません: [自動検出] を選択してください
+error-wrong-meter-no-fifteen-byte-frames = マルチメーターが OWON の 15 バイト フレームを送信しないため、[自動検出] を選択してください
 # An OWON meter that names no model sends frames of neither length. "This
 # message" is the whole error, for the issue.
-error-wrong-meter-untold-frame-kind = マルチメーターのモデル コードからもフレームからも、OWON の 6 バイト フレームと 15 バイト フレームのどちらを送信するのか判別できません: このメッセージを添えて Issue を作成してください
+error-wrong-meter-untold-frame-kind = マルチメーターのモデル コードからもフレームからも、OWON の 6 バイト フレームと 15 バイト フレームのどちらを送信するのか判別できないため、このメッセージを添えて Issue を作成してください
 
 ## Bluetooth: what the Bluetooth stack could not do. After "Bluetooth:".
 
@@ -243,11 +243,11 @@ error-bluetooth-powered-off = このコンピューターでオフになって�
 # (the one the meter's data arrives on).
 error-bluetooth-no-characteristic =
     { $role ->
-        [write] Bluetooth デバイスにデータ書き込み用のキャラクタリスティックが見つかりません: 対応しているアダプターやマルチメーターではないか、サービスの検出が完了しませんでした
-       *[notify] Bluetooth デバイスにデータ通知用のキャラクタリスティックが見つかりません: 対応しているアダプターやマルチメーターではないか、サービスの検出が完了しませんでした
+        [write] Bluetooth デバイスにデータ書き込み用のキャラクタリスティックが見つかりません。対応しているアダプターやマルチメーターではないか、サービスの検出が完了していない可能性があります
+       *[notify] Bluetooth デバイスにデータ通知用のキャラクタリスティックが見つかりません。対応しているアダプターやマルチメーターではないか、サービスの検出が完了していない可能性があります
     }
 # A Brymen meter refused the password this tool sends.
-error-bluetooth-password-refused = マルチメーターが接続パスワード 0000 を拒否しました: リセットするには、{ error-bluetooth-reset-gesture }
+error-bluetooth-password-refused = マルチメーターが接続パスワード 0000 を拒否しました。リセットするには、{ error-bluetooth-reset-gesture }
 # How a Brymen BM788BT/BM787BT's password and name go back to the factory
 # settings. The meter's activation steps in lib.ftl (activation-bm78xbt)
 # end with the same sentence: word them alike. "Org" is what the display

@@ -107,7 +107,7 @@ read-own-cable-action = 別のケーブルを使用するには、Ctrl+C を押�
 # After "Error:" (common.ftl), ending a --format replay run: a reading came
 # with no frame from the meter behind it, which a replay can't hold. $mode is
 # the reading's mode name (lib.ftl), e.g. DC V.
-read-replay-no-frame = { $mode } の測定値には、記録するマルチメーターのフレームがありません
+read-replay-no-frame = { $mode } の測定値には元になるマルチメーターのフレームがないため、記録できません
 
 ## The summary when the run ends, under a blank line.
 
@@ -139,7 +139,7 @@ read-integral-timed = 積分: { $value } ({ $seconds }s)
 # After "Note:", under the integral: gaps in the readings the integral leaves
 # out. $count is how many; $max the longest interval it bridges, in seconds
 # (s). The rule's other figures, 5 intervals and 2 s, are fixed.
-read-skipped-intervals = { $count } 件の区間をスキップしました (測定値のない時間が { $max } s を超えた区間: サンプリング間隔の 5 倍、かつ 2 s 以上。積分値には欠落した区間があります)
+read-skipped-intervals = { $count } 件の区間をスキップしました。測定値のない時間が、サンプリング間隔の 5 倍 (最短 2 s) にあたる { $max } s を超えたため、積分値には欠落があります。
 # Under the summary: how many times the readings crossed each limit.
 # $limits is both, high or low: the limits the alarm had. $above and $below
 # are the counts; $high and $low the limits with their unit, e.g. 5 V.

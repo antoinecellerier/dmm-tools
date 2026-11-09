@@ -73,14 +73,14 @@ connection-not-identified-report = すでにデータを転送しているのに
 connection-no-response =
     { $link ->
         [usb]
-            USB ケーブルは接続されていますが、マルチメーターが
-            応答しません ({ $model } を選択中)。
+            USB ケーブルは接続されていますが、選択中の { $model } が
+            応答しません。
         [adapter]
-            Bluetooth アダプターは接続されていますが、マルチメーターが
-            応答しません ({ $model } を選択中)。
+            Bluetooth アダプターは接続されていますが、選択中の { $model } が
+            応答しません。
         [radio]
-            Bluetooth リンクは確立されていますが、マルチメーターが
-            応答しません ({ $model } を選択中)。
+            Bluetooth リンクは確立されていますが、選択中の { $model } が
+            応答しません。
        *[none]
             リンクは確立されていますが、マルチメーターが
             応答しません ({ $model } を選択中)。
@@ -116,7 +116,7 @@ connection-failed = 接続できませんでした
 
 # A meter that stopped answering in the middle of a session. $title is the
 # shared notice title, "No response from meter".
-connection-no-response-check = { $title }: デバイスの選択とデータ転送をご確認ください。
+connection-no-response-check = { $title }。デバイスの選択とデータ転送をご確認ください。
 # The reading thread stopped by itself: it crashed, or gave up connecting.
 connection-acquisition-stopped = データ取得が予期せず停止しました。再開するには再接続してください。
 
@@ -147,8 +147,8 @@ connection-detected =
 # $saved as there. $reported is that name, e.g. UT216XD.
 connection-detected-reports =
     { $saved ->
-        [yes] { $meter } を検出し (マルチメーターの報告は「{ $reported }」)、使用するデバイスとして保存しました。もう一度検出するには、[設定] で [自動検出] を選択してください。
-       *[no] { $meter } を検出しました (マルチメーターの報告は「{ $reported }」)。
+        [yes] 「{ $reported }」と報告するマルチメーターを { $meter } として検出し、使用するデバイスとして保存しました。もう一度検出するには、[設定] で [自動検出] を選択してください。
+       *[no] 「{ $reported }」と報告するマルチメーターを { $meter } として検出しました。
     }
 # The meter named another model than the one picked in Settings. $reported
 # is the name it gave, e.g. UT161E; $picked the model picked, $named the

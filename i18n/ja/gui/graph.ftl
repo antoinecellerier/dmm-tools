@@ -82,7 +82,7 @@ graph-show-chip =
             [full] 表示できる単位は最大 { $max } 個です。{ $series } を表示するには、いずれかを非表示にしてください。
             [narrow] ウィンドウを広げて { $series } の軸を表示するか、クリックしてトレースを非表示にしてください。
             [shown] { $series } のトレースを非表示にする
-           *[hidden] プロット中の系列と並べて { $series } のトレースを描画する
+           *[hidden] プロット中の系列に重ねて { $series } のトレースを描画する
         }
     .a11y = { $series } のトレースを表示
 
@@ -108,7 +108,7 @@ graph-histogram = ヒストグラム
     .hover =
         { $state ->
             [hidden] ヒストグラムを表示するには、プロット中のトレースを表示してください。クリックしてオフにすることもできます。
-           *[shown] 表示中の測定値の分布を表示する ({ $keys })
+           *[shown] 表示中の測定値の分布を示す ({ $keys })
         }
 # A chip that draws reference lines: horizontal lines at the values typed
 # in the field after it. Short for reference.
@@ -259,8 +259,8 @@ graph-histogram-a11y-interval = カーソル間の測定値 { $count } 件
 # The hover, and its name for a screen reader. Left/Right are the arrow
 # keys.
 graph-minimap =
-    .hover = ミニマップ: クリックまたはドラッグでスクロール、ビューポートの端をドラッグで表示範囲のサイズを変更
-    .a11y = グラフのミニマップ: クリックまたはドラッグでタイムラインを移動 (左右方向キーでスクロール)、ビューポートの端をドラッグでサイズを変更
+    .hover = ミニマップ: クリックまたはドラッグでスクロール、ビューポートの端をドラッグして表示範囲の幅を変更
+    .a11y = グラフのミニマップ: クリックまたはドラッグでタイムラインを移動 (左右方向キーでスクロール)、ビューポートの端をドラッグしてサイズを変更
 
 ## The menu a right-click on the plot, its axes or a marker's flag opens:
 ## what can be done to the reading nearest the click, under a heading

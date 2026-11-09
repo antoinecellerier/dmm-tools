@@ -52,7 +52,7 @@ settings-mock-mode = シミュレーション モード:
 ## How a connection is made: checkboxes on one row.
 
 settings-auto-connect = 起動時に自動接続する
-    .hover = アプリの起動時に USB 接続を自動的に開く
+    .hover = アプリの起動時に USB で自動的に接続する
 # Asking the meter its name makes it beep.
 settings-device-name = 接続時にデバイス名を表示する (ビープ音あり)
     .hover = 接続後にマルチメーターの名前を問い合わせる (ビープ音が 1 回鳴る)
@@ -75,9 +75,9 @@ settings-interval-every-reading = すべての測定値
 settings-interval-chip =
     .hover =
         { $unit ->
-            [second] 1 秒に最大 1 件の測定値を保持する (各刻みに最も近い測定値)
-            [seconds] { $n } s ごとに最大 1 件の測定値を保持する (各刻みに最も近い測定値)
-           *[ms] { $n } ms ごとに最大 1 件の測定値を保持する (各刻みに最も近い測定値)
+            [second] 1 秒ごとに、その時点に最も近い測定値を最大 1 件保持する
+            [seconds] { $n } s ごとに、その時点に最も近い測定値を最大 1 件保持する
+           *[ms] { $n } ms ごとに、その時点に最も近い測定値を最大 1 件保持する
         }
 
 settings-buffer-size = バッファー サイズ:

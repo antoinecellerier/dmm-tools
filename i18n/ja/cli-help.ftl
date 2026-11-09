@@ -15,7 +15,7 @@
 
 # dmm-cli
 dmm-cli =
-    .about = USB および Bluetooth デジタル マルチメーター用の CLI ツール
+    .about = USB または Bluetooth で接続するデジタル マルチメーター用の CLI ツール
 # dmm-cli --device
 dmm-cli--device =
     .help = 接続するデバイス [auto, ut61eplus, ut8803, ut171, ut181a, mock, ...]。省略すると ~/.config/dmm-tools/settings.json (dmm-gui が書き込む) の `device_family`、次に USB ケーブル経由でマルチメーターを検出する `auto` を使用する
@@ -74,7 +74,7 @@ read--alarm-low =
     .help = 測定値が VALUE を下回ったときに警告する (--alarm-high と同様)
 # dmm-cli read --alarm-hysteresis
 read--alarm-hysteresis =
-    .help = 同じ制限値で再びアラームが鳴るまでに、測定値が内側へ戻る必要のある幅。制限値の単位の値、または制限値に対する割合 (`1%`) で指定する [既定値: マルチメーターの最終桁の数カウント]
+    .help = 同じ制限値で再びアラームが鳴るまでに、測定値が内側へ戻る必要のある幅。制限値と同じ単位の値、または制限値に対する割合 (`1%`) で指定する [既定値: マルチメーターの最終桁の数カウント]
 # dmm-cli read --alarm-bell
 read--alarm-bell =
     .help = アラームのたびに端末のベルを鳴らす
@@ -119,7 +119,7 @@ set--mock-mode =
     .help = シミュレーション デバイスを特定のモードに固定する (--device mock のときのみ)。指定しない場合は設定ファイルのシミュレーション モードが適用され、それもなければすべてのモードを順に切り替える
 # dmm-cli debug
 debug =
-    .about = プロトコル デバッグ用の生の 16 進ダンプ モード
+    .about = プロトコルのデバッグ用に、生の 16 進ダンプを表示する
 # dmm-cli debug --count
 debug--count =
     .help = 送信する要求の数 (0 = 無制限)
@@ -134,7 +134,7 @@ completions--shell =
     .help = 補完を生成するシェル
 # dmm-cli capture
 capture =
-    .about = バグ報告と検証のためのガイド付きプロトコル キャプチャ
+    .about = バグ報告と検証のために、ガイドに沿ってプロトコルをキャプチャする
 # dmm-cli capture --output
 capture--output =
     .help = 出力ファイル (既定値: capture-<device>.yaml)。自動で付くファイル名より優先される

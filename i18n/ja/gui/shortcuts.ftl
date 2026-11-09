@@ -16,7 +16,7 @@ shortcuts-title = キーボードとマウス
 # The × button at the right end of the title row, which closes the dialog:
 # its name for a screen reader.
 shortcuts-close =
-    .a11y = キーボード ショートカットを閉じる
+    .a11y = キーボード ショートカットの一覧を閉じる
 
 ## The General table: the app's own shortcuts, shown in the left column of
 ## the dialog when it is wide.

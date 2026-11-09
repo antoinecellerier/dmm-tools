@@ -106,7 +106,7 @@ colors-issue-name-reserved = 「{ $name }」は [テーマ] の行で使われ�
 colors-issue-not-opaque =
     { $what ->
         [button] ボタンのテキストが不透明ではありません
-       *[text] 背景上のテキストが不透明ではありません
+       *[text] 背景に表示するテキストの色が不透明ではありません
     }
 # The colours can't be read on each other. $what is as above; $ratio is
 # their contrast, e.g. 1.8, and $floor the least allowed, e.g. 3.
@@ -116,7 +116,7 @@ colors-issue-low-contrast =
        *[text] テキストと背景のコントラストが { $ratio }:1 で、下限の { $floor }:1 未満です
     }
 # The theme's text on its frame, the surface of the top bar and Settings.
-colors-issue-frame-not-opaque = 枠上のテキストが不透明ではありません
+colors-issue-frame-not-opaque = 枠に表示するテキストの色が不透明ではありません
 # As above, on the frame. $ratio and $floor are as above.
 colors-issue-frame-low-contrast = テキストと枠のコントラストが { $ratio }:1 で、下限の { $floor }:1 未満です
 # Another file in the folder gives its theme the same name. $name is the
@@ -145,7 +145,7 @@ colors-preset-high-contrast =
         [customized] ハイ コントラスト (カスタマイズ済み)
        *[plain] ハイ コントラスト
     }
-    .hover = 明るい照明やプロジェクター向けの最大コントラストのパレット
+    .hover = 明るい場所やプロジェクターでも見やすい、コントラストを最大にしたパレット
 # $state as for Default. Protan and deutan are the red-green colour-vision
 # deficiencies.
 colors-preset-colorblind =
@@ -286,10 +286,10 @@ colors-hex = Hex
 ## Under the swatches, once a colour was changed.
 
 colors-reset = 色のリセット
-    .hover = このモードの色への変更を破棄する
+    .hover = このモードの色の変更を破棄する
 # The same while a named theme is on. $name is the theme's name.
 colors-reset-named =
-    .hover = { $name } の色への変更を破棄する
+    .hover = { $name } の色の変更を破棄する
 colors-save = テーマとして保存…
     .hover = これらの色をテーマ ファイルとして保存します。テーマ フォルダーに保存したファイルは [テーマ] の行に表示されます。
 # The file type in the save dialog's list of types.
@@ -309,7 +309,7 @@ colors-save-dialog-failed = 保存されませんでした: 保存ダイアロ�
 colors-save-exists = 保存されませんでした: { $path } はすでに存在します。置き換えるにはダイアログでそのファイルを選択してください。
 # Another file in the themes folder gives its theme the same name. $name is
 # the name; $file the other file's name.
-colors-save-name-taken = 保存されませんでした: { $name } は、すでにテーマ フォルダー内の { $file } で使われている名前です。別のファイル名を選択してください。
+colors-save-name-taken = 保存されませんでした: { $name } は、すでにテーマ フォルダー内の { $file } で使われている名前です。別のファイル名を指定してください。
 # The theme would be a file the folder can't use. $reason is one of the
 # reasons above, starting lower case.
 colors-save-invalid = 保存されませんでした: { $reason }

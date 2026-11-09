@@ -58,7 +58,7 @@ capture-status-experimental-detail = できるだけ多くのステップを完�
 ## meter names; $id is the --device id that opens the named one.
 
 # Yellow and bold, after the status banner.
-capture-other-model = マルチメーターは、今回接続した { $opened } ではなく { $named } であると報告しています。
+capture-other-model = マルチメーターが返した機種名は、今回接続した { $opened } ではなく { $named } です。
 capture-other-model-detail = このまま続けると、ステップとリモート キーは { $opened } のものになります。
 # $yes and $no are the keys that answer: y and n. Any other key quits.
 capture-other-model-confirm = このまま { $opened } としてキャプチャしますか? { $yes }/{ $no }:
@@ -156,7 +156,7 @@ capture-did-nothing-shows = { $command } を押しても変化せず、マルチ
 # meter changed, but not to what the step waits for. $command is the button's
 # name as the tool sends it, e.g. hold; $reading what the meter shows, e.g.
 # 0.00 VA [HOLD].
-capture-command-missed = { $command } を押しても、このステップが待っている状態になりませんでした。現在の表示は { $reading } です
+capture-command-missed = { $command } を押しても、このステップで必要な状態になりませんでした。現在の表示は { $reading } です
 # $command is the button's name as the tool sends it, e.g. hold.
 capture-did-nothing-silent = { $command } を押しましたが、マルチメーターから測定値が届きませんでした
 # Yellow: the meter changed function while the step was reading it, so the
@@ -341,12 +341,12 @@ capture-detect-read-keys = 測定値が安定すると自動で取得します�
 # capture-detect-no-reason.
 capture-detect-not-reopened = リンクをもう一度確立できなかったため、自動検出を確認できませんでした: { $reason }
 capture-detect-no-reason = 理由は示されていません
-capture-detect-found = 自動検出で { $found } を検出しました。
-capture-detect-found-read = 自動検出で { $found } を検出し、{ $reading } を読み取りました。
-capture-detect-found-read-other = 自動検出で { $found } を検出しましたが、その後の読み取り結果は { $reading } でした。引き続き --device { $device } を使用するか、dmm-gui で { $meter } を選択してください。
-capture-detect-found-read-nothing = 自動検出で { $found } を検出しましたが、その後は何も読み取れませんでした。引き続き --device { $device } を使用するか、dmm-gui で { $meter } を選択してください。
+capture-detect-found = { $found } を自動検出しました。
+capture-detect-found-read = { $found } を自動検出し、{ $reading } を読み取りました。
+capture-detect-found-read-other = { $found } を自動検出しましたが、その後の読み取り結果は { $reading } でした。引き続き --device { $device } を使用するか、dmm-gui で { $meter } を選択してください。
+capture-detect-found-read-nothing = { $found } を自動検出しましたが、その後は何も読み取れませんでした。引き続き --device { $device } を使用するか、dmm-gui で { $meter } を選択してください。
 capture-detect-picked-other = 自動検出はこのマルチメーターを { $found } と判定しました。引き続き --device { $device } を使用するか、dmm-gui で { $meter } を選択してください。
-capture-detect-not-found = 自動検出ではこのマルチメーターを検出できませんでした。引き続き --device { $device } を使用するか、dmm-gui で { $meter } を選択してください。
+capture-detect-not-found = このマルチメーターを自動検出できませんでした。引き続き --device { $device } を使用するか、dmm-gui で { $meter } を選択してください。
 
 ## The end of the run.
 
@@ -433,4 +433,4 @@ capture-error-instructions-device = { $path } は { $device } ではなく { $na
 # The --instructions file names steps this run doesn't have, most likely a
 # step id that was translated. $path is the file; $ids the ids not found,
 # e.g. "vcc, retencao"; $known the ids the run has, e.g. "dcv, acv, hold".
-capture-error-instructions-ids = { $path } に今回の実行にないステップが指定されています: { $ids }。ステップ ID はエクスポートされたときのまま変更しないでください。有効なステップ ID: { $known }
+capture-error-instructions-ids = { $path } に、今回の実行に含まれないステップが指定されています: { $ids }。ステップ ID はエクスポートされたときのまま変更しないでください。有効なステップ ID: { $known }

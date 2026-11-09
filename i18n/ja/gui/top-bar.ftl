@@ -16,12 +16,12 @@ top-bar-imported-file = インポートしたファイル
 ## Connection buttons.
 
 top-bar-connect = 接続
-    .hover = 選択したマルチメーターへの USB 接続を開く ({ $keys })
+    .hover = 選択したマルチメーターに USB で接続する ({ $keys })
 # In place of Connect while the meter is being opened: stops the attempt.
 top-bar-cancel = キャンセル
     .hover = 接続を中止する ({ $keys })
 top-bar-disconnect = 切断
-    .hover = マルチメーターとの接続を閉じる ({ $keys })
+    .hover = マルチメーターとの接続を切断する ({ $keys })
 # A button; ▶ and ⏸ are part of it.
 top-bar-resume = ▶ 再開
     .hover = データ取得を再開する ({ $keys })
@@ -43,7 +43,7 @@ top-bar-reconnecting-hover-error =
 # top bar's button.
 top-bar-own-cable-action = 別のケーブルを使用するには、[切断] をクリックしてから [接続] をクリックしてください。
 top-bar-stop-retrying = 切断
-    .hover = 再試行をやめて接続を閉じる ({ $keys })
+    .hover = 再試行をやめて切断する ({ $keys })
 
 ## The status beside the coloured dot. $name is the meter's name, e.g.
 ## UT61E+. $link is how it is connected (USB cable, Bluetooth). $paused is
@@ -86,7 +86,7 @@ top-bar-link-recorded =
         [usb] USB ケーブルで記録
         [adapter] Bluetooth アダプターで記録
         [radio] Bluetooth リンクで記録
-       *[none] 名前のないリンクで記録
+       *[none] 種類不明のリンクで記録
     }
 # $path is the file's full path.
 top-bar-replaying = { $path } をリプレイ中

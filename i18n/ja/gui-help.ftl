@@ -15,7 +15,7 @@
 
 # dmm-gui
 dmm-gui =
-    .about = USB および Bluetooth デジタル マルチメーター用の GUI アプリケーション
+    .about = USB または Bluetooth で接続するデジタル マルチメーター用の GUI アプリケーション
 # dmm-gui --device
 dmm-gui--device =
     .help = 接続するデバイス [auto, ut61eplus, ut8803, ut171, ut181a, mock, ...]
@@ -33,13 +33,13 @@ dmm-gui--adapter =
     .help = 複数のアダプターに接続できるとき、特定のアダプターを選択する。'dmm-cli list' が表示する USB ケーブルのシリアル番号か HID パス、または Bluetooth アダプターかマルチメーターのアドレスを指定する
 # dmm-gui --no-bluetooth
 dmm-gui--no-bluetooth =
-    .help = 今回の実行に限り Bluetooth スキャンをオフにする。[Bluetooth デバイスを探す] 設定より優先される。--adapter に指定したアドレスはそのまま開かれる
+    .help = 今回の実行に限り Bluetooth スキャンをオフにする。[Bluetooth デバイスを探す] 設定より優先される。--adapter に指定したアドレスには通常どおり接続する
 # dmm-gui --replay
 dmm-gui--replay =
     .help = マルチメーターに接続する代わりに、'dmm-cli read --format replay' または [エクスポート…] → [リプレイ…] で書き出したファイルを再生する
 # dmm-gui --import
 dmm-gui--import =
-    .help = マルチメーターに接続する代わりに、エクスポートした CSV, JSON またはリプレイ ファイルをマーカーも含めて開く
+    .help = マルチメーターに接続する代わりに、エクスポートした CSV、JSON またはリプレイ ファイルをマーカーも含めて開く
 # dmm-gui --completions
 dmm-gui--completions =
     .help = シェル補完スクリプトを表示して終了する
