@@ -117,12 +117,13 @@ run and files it in the report's `detection` section; `--steps` selects it as `d
   live, and a probe that switched the function or stopped the stream shows. Beeps go unseen.
 - **Never fails the run.** What went wrong is the finding.
 
-A meter that never answers the check before the first step still leaves a report, the case
-bring-up hits most: `no_response: true`, the error the check ended on in `no_response_error`, no
-steps, and the bytes received in `init_frames`. It goes to a file of its own beside the report,
-so it never replaces a report in progress or an earlier failure. Only a timeout gets the steps
-to enable transmission; an answer the parser refuses, or a link that fails, ends the run on its
-own error, which may name the `--device` to choose.
+A meter that never answers the check before the first step, or answers what the parser refuses,
+still leaves a report, the case bring-up hits most: `no_response: true`, the error the check ended
+on in `no_response_error`, no steps, and the bytes received in `init_frames`. It goes to a file of
+its own beside the report, so it never replaces a report in progress or an earlier failure. Only a
+timeout gets the steps to enable transmission; a refused answer ends the run on its own error,
+which may name the `--device` to choose. A link that fails, or a setting to change, ends it with no
+report: the wire holds nothing about the meter.
 
 A run without a terminal still leaves a report, whose frames stay useful, but nobody was there to
 confirm its readings or restart the meter (#7, #35, #36). It warns at both ends and sets

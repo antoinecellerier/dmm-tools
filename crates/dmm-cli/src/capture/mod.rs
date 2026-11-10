@@ -84,14 +84,22 @@ pub(crate) fn cmd_capture(
     let (device_name, supported) = match verify_meter(&mut dmm, device) {
         Ok(verified) => verified,
         Err(e) => {
-            save_no_response(
-                l,
-                &mut dmm,
-                &recorder,
-                device,
-                output_override.as_deref(),
-                &e,
-            );
+            // The wire is the evidence for a meter that stayed silent or
+            // sent what the parser refuses. A lost link or a setting to
+            // change has its own closing line and nothing worth attaching.
+            if matches!(
+                e.kind(),
+                dmm_lib::error::ErrorKind::Timeout | dmm_lib::error::ErrorKind::Protocol
+            ) {
+                save_no_response(
+                    l,
+                    &mut dmm,
+                    &recorder,
+                    device,
+                    output_override.as_deref(),
+                    &e,
+                );
+            }
             return Err(session::closing_error(e));
         }
     };
@@ -460,11 +468,16 @@ mod tests {
     /// A capture run on a UT804 whose cable delivers `wire`, writing to
     /// `output`: the run's error, which must come at the meter check.
     fn capture_on_ut804(wire: Vec<Vec<u8>>, output: &std::path::Path) -> String {
+        capture_on_ut804_over(MockTransport::new(wire), output)
+    }
+
+    /// The same over `cable`.
+    fn capture_on_ut804_over(cable: MockTransport, output: &std::path::Path) -> String {
         let device = dmm_lib::protocol::registry::find_device("ut804").unwrap();
         // The mock's silence comes at once rather than after a USB poll, so
         // the framing's empty-read guard ends the wait, not its 2 s deadline.
         let (transport, recorder) =
-            crate::capture::recording::RecordingTransport::new(Box::new(MockTransport::new(wire)));
+            crate::capture::recording::RecordingTransport::new(Box::new(cable));
         let dmm = dmm_lib::Dmm::new(
             Box::new(transport) as Box<dyn Transport>,
             (device.new_protocol)(),
@@ -549,6 +562,25 @@ mod tests {
             super::report::from_yaml(&std::fs::read_to_string(&saved).unwrap()).unwrap();
         assert!(report.no_response);
         assert_eq!(report.no_response_error.as_deref(), Some(error.as_str()));
+
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// A cable pulled at the meter check ends the run on the lost link, and
+    /// leaves no no-response report asking to be attached: the meter never
+    /// had the chance to answer.
+    #[test]
+    fn a_link_lost_at_the_meter_check_saves_no_report() {
+        let dir = std::env::temp_dir().join(format!("dmm-lost-at-check-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let output = dir.join("capture.yaml");
+
+        let cable =
+            MockTransport::new(Vec::new()).fail_after(0, dmm_lib::error::Error::cable_pulled);
+        let error = capture_on_ut804_over(cable, &output);
+        assert_eq!(error, dmm_lib::error::Error::cable_pulled().to_string());
+        assert!(!dir.join("capture-no-response.yaml").exists());
+        assert!(!output.exists());
 
         std::fs::remove_dir_all(&dir).unwrap();
     }
