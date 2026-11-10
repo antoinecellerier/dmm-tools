@@ -942,7 +942,6 @@ impl Ut80xProtocol {
             rx_buf: Vec::with_capacity(128),
             model,
             profile: DeviceProfile {
-                family_name: "UT803/UT804",
                 id: model.report_id(),
                 stability,
                 supported_commands: COMMANDS,

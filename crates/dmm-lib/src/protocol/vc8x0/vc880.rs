@@ -295,7 +295,6 @@ impl Vc8x0Model for Vc880Model {
 
     fn profile() -> DeviceProfile {
         DeviceProfile {
-            family_name: "VC880",
             id: "vc880",
             stability: Stability::Experimental,
             supported_commands: COMMANDS,

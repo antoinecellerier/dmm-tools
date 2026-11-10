@@ -631,7 +631,6 @@ mod tests {
     }
 
     const TIMED_METER: crate::protocol::DeviceProfile = crate::protocol::DeviceProfile {
-        family_name: "test",
         id: "timed-meter",
         stability: crate::protocol::Stability::Verified,
         supported_commands: &[],

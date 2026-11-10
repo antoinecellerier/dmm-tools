@@ -353,7 +353,6 @@ pub enum Delivery {
 /// alive — every field is already a `'static` reference or a small value.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct DeviceProfile {
-    pub family_name: &'static str,
     /// The registry id of the entry this protocol was built for: what the
     /// binaries look its name up by, and how a meter's own name is told from
     /// the model it was opened as.
@@ -486,78 +485,73 @@ impl DeviceProfile {
     }
 }
 
-/// Device family selector for opening a connection.
+/// The protocol a registry entry speaks. Each hardware family has one
+/// fingerprint: detection tells families apart, and each entry picks its
+/// model within one.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DeviceFamily {
-    /// UT61E+, UT61B+, UT61D+, UT161B, UT161D, UT161E
+    /// UNI-T's UT61+/UT161 protocol, the AB CD frames with a name query.
     Ut61EPlus,
-    /// UT8802 / UT8802N bench multimeter
+    /// The UT8802's `0xAC` frames.
     Ut8802,
-    /// UT8803 / UT8803E bench multimeter
+    /// The UT8803's AB CD frames.
     Ut8803,
-    /// UT803 / UT804 bench multimeter, and the UT71 and Voltcraft
-    /// VC920/VC940/VC960 handhelds that send the UT804's packets
+    /// The UT803/UT804 packets; the UT71 and Voltcraft VC920 series send
+    /// the UT804's.
     Ut80x,
-    /// UT171A / UT171B / UT171C
+    /// The UT171's frames.
     Ut171,
-    /// UT181A
+    /// The UT181A's frames.
     Ut181a,
-    /// Voltcraft VC-880 / VC650BT
+    /// The VC-880's frames, which the VC650BT sends too.
     Vc880,
-    /// Voltcraft VC-890
+    /// The VC-890's frames.
     Vc890,
-    /// ZOTEK Bluetooth meters (ZOYI, ZOTEK, BSIDE, ANENG), one entry per
-    /// packet layout
+    /// ZOTEK's Bluetooth packets, one entry per packet layout.
     Zotek,
-    /// EEVblog 121GW
+    /// The EEVblog 121GW's packets.
     Eevblog121gw,
-    /// Brymen BM788BT / BM787BT
+    /// The Brymen BM78xBT's Bluetooth packets.
     Bm78xbt,
-    /// Brymen BM869s / BM867s, on the BU-86X cable
+    /// The Brymen BM86x series on the BU-86X cable.
     Bm86x,
-    /// Brymen BM829s / BM827s / BM822s / BM821s, on the BU-86X cable
+    /// The Brymen BM82x series on the BU-86X cable.
     Bm82x,
-    /// Brymen BM525s / BM521s, on the BU-86X cable
+    /// The Brymen BM52x series on the BU-86X cable.
     Bm52x,
-    /// OWON's Bluetooth meters, on the 6-byte frame (B33, B35T+, B41T+,
-    /// OW16B, OW18B, OW18E, CM2100B) or the 15-byte one (CMS101, CMS061,
-    /// OW65B, OW67B, OW69B, Voltcraft VC871, VC891, VC915, VC925 PV), one
-    /// entry per model code
+    /// OWON's Bluetooth frames, 6-byte or 15-byte, one entry per model code.
     Owon,
-    /// Simulated device for testing and demos
+    /// Simulated device for testing and demos.
     Mock,
 }
 
-impl std::fmt::Display for DeviceFamily {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl DeviceFamily {
+    /// The family's name, as logs and the README's device table give it.
+    pub(crate) fn name(self) -> &'static str {
         match self {
-            DeviceFamily::Ut61EPlus => write!(f, "ut61eplus"),
-            DeviceFamily::Ut8802 => write!(f, "ut8802"),
-            DeviceFamily::Ut8803 => write!(f, "ut8803"),
-            DeviceFamily::Ut80x => write!(f, "ut80x"),
-            DeviceFamily::Ut171 => write!(f, "ut171"),
-            DeviceFamily::Ut181a => write!(f, "ut181a"),
-            DeviceFamily::Vc880 => write!(f, "vc880"),
-            DeviceFamily::Vc890 => write!(f, "vc890"),
-            DeviceFamily::Zotek => write!(f, "ZOTEK"),
-            DeviceFamily::Eevblog121gw => write!(f, "EEVblog 121GW"),
-            DeviceFamily::Bm78xbt => write!(f, "Brymen BM78xBT"),
-            DeviceFamily::Bm86x => write!(f, "Brymen BM86x"),
-            DeviceFamily::Bm82x => write!(f, "Brymen BM82x"),
-            DeviceFamily::Bm52x => write!(f, "Brymen BM52x"),
-            DeviceFamily::Owon => write!(f, "OWON"),
-            DeviceFamily::Mock => write!(f, "mock"),
+            DeviceFamily::Ut61EPlus => "UT61+/UT161",
+            DeviceFamily::Ut8802 => "UT8802",
+            DeviceFamily::Ut8803 => "UT8803",
+            DeviceFamily::Ut80x => "UT803/UT804",
+            DeviceFamily::Ut171 => "UT171",
+            DeviceFamily::Ut181a => "UT181A",
+            DeviceFamily::Vc880 => "VC880",
+            DeviceFamily::Vc890 => "VC890",
+            DeviceFamily::Zotek => "ZOTEK",
+            DeviceFamily::Eevblog121gw => "121GW",
+            DeviceFamily::Bm78xbt => "BM78xBT",
+            DeviceFamily::Bm86x => "BM86x",
+            DeviceFamily::Bm82x => "BM82x",
+            DeviceFamily::Bm52x => "BM52x",
+            DeviceFamily::Owon => "OWON",
+            DeviceFamily::Mock => "mock",
         }
     }
 }
 
-impl std::str::FromStr for DeviceFamily {
-    type Err = String;
-
-    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
-        registry::resolve_device(s)
-            .map(|d| d.family)
-            .ok_or_else(|| format!("unknown device family: {s}"))
+impl std::fmt::Display for DeviceFamily {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.name())
     }
 }
 

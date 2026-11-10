@@ -82,7 +82,6 @@ impl Bm78xbtProtocol {
             // One whole notification and the next's start (spec §4).
             rx_buf: Vec::with_capacity(512),
             profile: DeviceProfile {
-                family_name: "BM78xBT",
                 id: ID,
                 stability: Stability::Experimental,
                 // r4 has no key or function command (spec §7.1).

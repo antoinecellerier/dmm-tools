@@ -149,7 +149,6 @@ impl Eevblog121gwProtocol {
         Self {
             rx_buf: Vec::with_capacity(64),
             profile: DeviceProfile {
-                family_name: "121GW",
                 id: ID,
                 stability: Stability::Experimental,
                 supported_commands: &COMMANDS,

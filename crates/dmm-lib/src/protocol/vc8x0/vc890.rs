@@ -329,7 +329,6 @@ impl Vc8x0Model for Vc890Model {
 
     fn profile() -> DeviceProfile {
         DeviceProfile {
-            family_name: "VC890",
             id: "vc890",
             stability: Stability::Experimental,
             supported_commands: COMMANDS,

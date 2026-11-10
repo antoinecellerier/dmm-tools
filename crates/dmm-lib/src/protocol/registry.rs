@@ -840,15 +840,6 @@ mod tests {
         }
     }
 
-    #[test]
-    fn factory_functions_produce_valid_protocols() {
-        for device in DEVICES {
-            let protocol = (device.new_protocol)();
-            let profile = protocol.profile();
-            assert!(!profile.family_name.is_empty(), "device {}", device.id);
-        }
-    }
-
     /// Several models share a device table. Each registry entry's protocol
     /// must still carry its own id, or a UT161E introduces itself as a UT61E+
     /// and the user never learns which meter the readings were decoded as.

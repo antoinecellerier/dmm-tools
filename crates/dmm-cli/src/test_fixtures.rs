@@ -25,7 +25,6 @@ pub(crate) fn fake_mode_id(index: usize) -> u16 {
 }
 
 static FAKE_PROFILE: dmm_lib::protocol::DeviceProfile = dmm_lib::protocol::DeviceProfile {
-    family_name: "Fake",
     id: "fake-meter",
     stability: dmm_lib::protocol::Stability::Experimental,
     supported_commands: &[],

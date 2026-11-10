@@ -179,7 +179,6 @@ impl OwonProtocol {
             rx_buf: Vec::with_capacity(64),
             model,
             profile: DeviceProfile {
-                family_name: "OWON",
                 id: model.entry.id,
                 stability: stability(model),
                 supported_commands: model.commands,
@@ -1156,7 +1155,6 @@ mod tests {
             );
             let proto = (entry.new_protocol)();
             let profile = proto.profile();
-            assert_eq!(profile.family_name, "OWON");
             assert_eq!(profile.id, entry.id);
             let stability = if m.code == 61 {
                 Stability::Verified

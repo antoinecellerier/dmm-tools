@@ -162,7 +162,6 @@ impl Ut8803Protocol {
         Self {
             rx_buf: Vec::with_capacity(128),
             profile: DeviceProfile {
-                family_name: "UT8803",
                 id: "ut8803",
                 stability: Stability::Experimental,
                 supported_commands: UT8803_COMMANDS,

@@ -79,7 +79,6 @@ impl ZotekProtocol {
             rx_buf: Vec::with_capacity(64),
             layout,
             profile: DeviceProfile {
-                family_name: "ZOTEK",
                 id: layout.entry.id,
                 stability: Stability::Experimental,
                 supported_commands: keys::commands(layout),

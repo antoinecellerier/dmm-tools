@@ -158,7 +158,6 @@ impl Ut61PlusProtocol {
             streaming: false,
             secondary: None,
             profile: DeviceProfile {
-                family_name: "UT61+/UT161",
                 id: entry.id,
                 stability,
                 supported_commands,

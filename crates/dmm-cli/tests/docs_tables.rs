@@ -76,26 +76,23 @@ fn marked_block(relative: &str) -> (PathBuf, String, std::ops::Range<usize>) {
     (path, text, start..end)
 }
 
-/// Each hardware protocol family as `(family_name, model display names)`, in
+/// Each hardware protocol family as `(its name, model display names)`, in
 /// registry order.
-fn hardware_families() -> Vec<(&'static str, Vec<&'static str>)> {
-    let mut families: Vec<(DeviceFamily, &'static str, Vec<&'static str>)> = Vec::new();
+fn hardware_families() -> Vec<(String, Vec<&'static str>)> {
+    let mut families: Vec<(DeviceFamily, Vec<&'static str>)> = Vec::new();
     for device in registry::DEVICES {
         // The README answers "will my meter work"; the mock is not a meter.
         if !device.requires_hardware {
             continue;
         }
-        match families.iter_mut().find(|(f, _, _)| *f == device.family) {
-            Some((_, _, models)) => models.push(device.display_name()),
-            None => {
-                let family_name = (device.new_protocol)().profile().family_name;
-                families.push((device.family, family_name, vec![device.display_name()]));
-            }
+        match families.iter_mut().find(|(f, _)| *f == device.family) {
+            Some((_, models)) => models.push(device.display_name()),
+            None => families.push((device.family, vec![device.display_name()])),
         }
     }
     families
         .into_iter()
-        .map(|(_, name, models)| (name, models))
+        .map(|(family, models)| (family.to_string(), models))
         .collect()
 }
 
@@ -134,7 +131,7 @@ fn cli_reference_device_table_matches_the_registry() {
 ///
 /// The rule is per protocol family, not per device, because those abbreviations
 /// mean a model need not appear under its own display name: a family counts as
-/// listed when the block names it (its `family_name`) or any one of its models,
+/// listed when the block names it (`DeviceFamily`'s `Display`) or any one of its models,
 /// including one model of an entry that lists several ("Brymen BM829s/BM827s").
 /// Every verification issue must be linked, so a new experimental family cannot
 /// ship without a row pointing readers at where to help.
@@ -144,7 +141,7 @@ fn readme_device_table_names_every_family_and_issue() {
     let block = &text[block];
     for (family_name, models) in hardware_families() {
         assert!(
-            block.contains(family_name)
+            block.contains(&family_name)
                 || models
                     .iter()
                     .flat_map(|m| listed_models(m))

@@ -112,11 +112,7 @@ impl<T: Transport> Dmm<T> {
         }
         dmm.protocol.init(&dmm.transport)?;
         let profile = dmm.protocol.profile();
-        info!(
-            "connected to {} ({})",
-            profile.display_name(),
-            profile.family_name
-        );
+        info!("connected to {}", profile.display_name());
         Ok(dmm)
     }
 
@@ -570,7 +566,6 @@ mod tests {
     struct ByteMeter(protocol::Delivery);
 
     const BYTE_METER: protocol::DeviceProfile = protocol::DeviceProfile {
-        family_name: "test",
         id: "byte-meter",
         stability: protocol::Stability::Verified,
         supported_commands: &[],

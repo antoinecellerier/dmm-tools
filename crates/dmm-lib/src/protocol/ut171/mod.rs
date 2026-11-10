@@ -83,7 +83,6 @@ impl Ut171Protocol {
             rx_buf: Vec::with_capacity(128),
             last: None,
             profile: DeviceProfile {
-                family_name: "UT171",
                 id: "ut171",
                 stability: Stability::Experimental,
                 supported_commands: command::UT171_COMMANDS,

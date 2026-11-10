@@ -592,7 +592,6 @@ impl MockZt5b {
     pub(crate) fn new(clock: Clock) -> Self {
         let driver = ZotekProtocol::new_zt5b();
         let profile = DeviceProfile {
-            family_name: "mock",
             id: MOCK_ID,
             // As the UT61E+ mock: a simulation needs no hardware run, and
             // the GUI shows no stability badge for it.

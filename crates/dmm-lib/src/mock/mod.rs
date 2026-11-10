@@ -197,7 +197,6 @@ impl MockProtocol {
             state: MeterState::default(),
             dial: cycle::DialState::default(),
             profile: DeviceProfile {
-                family_name: "mock",
                 id: "mock",
                 // Verified so the GUI doesn't show the stability badge —
                 // mock behavior is deterministic and needs no hardware validation.
@@ -1058,7 +1057,6 @@ mod tests {
     fn test_profile() {
         let dmm = open_mock().unwrap();
         let profile = dmm.profile();
-        assert_eq!(profile.family_name, "mock");
         assert_eq!(profile.id, "mock");
         assert_eq!(profile.stability, Stability::Verified);
         assert!(profile.supported_commands.contains(&"hold"));

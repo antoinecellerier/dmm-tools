@@ -461,7 +461,7 @@ fn family_fallback(
     bridge: &str,
 ) -> (&'static SelectableDevice, String) {
     let unnamed = format!(
-        "detect: a {} frame arrived on {bridge} but the meter never named its model",
+        "detect: a frame in the {} format arrived on {bridge} but the meter never named its model",
         found.family
     );
     match advertised.filter(|d| d.family == found.family) {
@@ -910,7 +910,7 @@ mod tests {
         assert_eq!(device.id, "ut61eplus");
         assert_eq!(
             why,
-            "detect: a ut61eplus frame arrived on CP2110 but the meter never named its model; \
+            "detect: a frame in the UT61+/UT161 format arrived on CP2110 but the meter never named its model; \
              falling back to the UNI-T UT61E+ tables"
         );
         let ut60bt = registry::find_device("ut60bt");
@@ -918,7 +918,7 @@ mod tests {
         assert_eq!(device.id, "ut60bt");
         assert_eq!(
             why,
-            "detect: a ut61eplus frame arrived on Bluetooth but the meter never named its model; \
+            "detect: a frame in the UT61+/UT161 format arrived on Bluetooth but the meter never named its model; \
              falling back to the UNI-T UT60BT tables, the model its Bluetooth name advertises"
         );
     }

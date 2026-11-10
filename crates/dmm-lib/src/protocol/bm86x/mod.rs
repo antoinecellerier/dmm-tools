@@ -103,14 +103,6 @@ impl Series {
         }
     }
 
-    const fn family_name(self) -> &'static str {
-        match self {
-            Series::Bm86x => "BM86x",
-            Series::Bm82x => "BM82x",
-            Series::Bm52x => "BM52x",
-        }
-    }
-
     /// EF detection: "E.F." and dashes on the main display, on the BM827s
     /// and BM829s (spec §7.3, §11.1).
     const fn detects_fields(self) -> bool {
@@ -147,7 +139,6 @@ impl Bm86xProtocol {
         Self {
             series,
             profile: DeviceProfile {
-                family_name: series.family_name(),
                 id: series.id(),
                 stability: series.stability(),
                 // The meter takes no keys over the cable (spec §1.2, §11.4).
@@ -331,7 +322,6 @@ mod tests {
             assert_eq!(m.mode, "AC V", "{series:?}");
             assert_eq!(m.display_raw.as_deref(), Some("380.1"), "{series:?}");
             assert_eq!(cable.written.borrow().as_slice(), [request.to_vec()]);
-            assert_eq!(proto.profile().family_name, series.family_name());
         }
     }
 
