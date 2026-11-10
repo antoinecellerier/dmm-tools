@@ -1048,6 +1048,32 @@ timestamp,mode,value,unit,range,flags,marker,note
         let _ = std::fs::remove_file(path);
     }
 
+    /// The file's marker numbers go with the file: a meter's session after
+    /// it numbers its markers from 1 again.
+    #[test]
+    fn a_live_session_after_an_import_numbers_its_markers_from_one() {
+        let mut app = test_app();
+        app.settings.shared.device_family = "mock".to_string();
+        let path = file("numbers.csv", CSV);
+        import(&mut app, path.clone());
+        app.connect(&crate::app::styled_context());
+        app.disconnect_and_wait();
+        app.deliver(crate::app::connection::DmmMessage::Connected(
+            crate::app::connection::ConnectedMeter::test_fixture(Some("mock")),
+        ));
+        let mut m = Measurement::test_fixture(
+            MeasuredValue::Normal(1.0),
+            "V",
+            dmm_lib::flags::StatusFlags::default(),
+        );
+        m.timestamp = app.clock.now();
+        app.deliver(crate::app::connection::DmmMessage::Measurement(m));
+        app.add_marker(false);
+        let numbers: Vec<u32> = app.markers.iter().map(|m| m.number).collect();
+        assert_eq!(numbers, [1]);
+        let _ = std::fs::remove_file(path);
+    }
+
     /// Connect after an import asks first once markers were added to the
     /// imported session, and goes straight ahead when nothing changed.
     #[test]

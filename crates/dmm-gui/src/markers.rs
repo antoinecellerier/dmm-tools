@@ -137,9 +137,10 @@ impl Markers {
         self.reserved = highest;
     }
 
-    /// Drop every marker: a new session starts from none.
+    /// Drop every marker: a new session starts from none, numbered from 1,
+    /// with no file's numbers held back.
     pub(crate) fn clear(&mut self) {
-        self.list.clear();
+        *self = Self::default();
     }
 
     /// Keep the markers whose reading `held` says is still somewhere.
@@ -195,6 +196,17 @@ mod tests {
         assert_eq!(add(&mut m, t), Err(1), "the same reading again");
         assert_eq!(add(&mut m, t + Duration::from_millis(300)), Ok(2));
         assert_eq!(m.iter().count(), 2);
+    }
+
+    /// A cleared session holds no file's numbers back: its first marker is 1.
+    #[test]
+    fn a_cleared_session_numbers_from_one() {
+        let mut m = Markers::default();
+        m.reserve(5);
+        let t = Instant::now();
+        assert_eq!(add(&mut m, t), Ok(6), "past the file's markers");
+        m.clear();
+        assert_eq!(add(&mut m, t + Duration::from_secs(1)), Ok(1));
     }
 
     #[test]
