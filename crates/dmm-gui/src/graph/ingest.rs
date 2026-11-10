@@ -309,7 +309,9 @@ impl Graph {
     /// Re-express the plotted trace in `unit`, the prefix `ratio` takes its
     /// unit to: the meter auto-ranged a decade (Ω→kΩ). Everything drawn
     /// against the plotted axis follows — the fixed Y range and the typed
-    /// reference lines — so the view keeps framing the same readings.
+    /// reference lines — so the view keeps framing the same readings. A kept
+    /// trace's step is [`Graph::follow_unit`]'s; what either has to reach,
+    /// `a_decade_step_reaches_every_value_bearing_field` lists.
     fn rescale(&mut self, ratio: PrefixRatio, unit: &str) {
         for p in &mut self.history {
             p.value = ratio.apply(p.value);
@@ -354,7 +356,7 @@ impl Graph {
     /// Bring the kept trace `label` to `unit` if that is no longer its unit:
     /// re-expressed when `unit` is another prefix of it (a frequency
     /// auto-ranging Hz→kHz), with its right axis's fixed range, else
-    /// restarted alone. A point without a value (`valued` false) re-expresses
+    /// restarted alone. The plotted trace's step is [`Graph::rescale`]'s. A point without a value (`valued` false) re-expresses
     /// nothing: an over-range sub-value in another decade leaves its trace in
     /// the prefix its readings are in.
     fn follow_unit(&mut self, label: &str, unit: &str, valued: bool) {

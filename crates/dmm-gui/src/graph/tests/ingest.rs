@@ -894,3 +894,121 @@ fn gap_detection() {
     g.push(2.0, Instant::now(), "DC V", "V", None);
     assert!(g.visible_gaps().is_empty());
 }
+
+/// Every value a decade step must re-express, found by naming each of the
+/// graph's fields: a field added later fails to compile here until it is
+/// placed among them, and a value-bearing one checked. The structs a field
+/// holds are reached through the values checked, not field by field.
+#[test]
+fn a_decade_step_reaches_every_value_bearing_field() {
+    let mut g = Graph::new();
+    let t0 = Instant::now();
+    let push = |g: &mut Graph, s: u64, v: f64, unit: &'static str, overlays| {
+        g.push_sample(PlotSample {
+            value: Some(v),
+            timestamp: t0 + Duration::from_secs(s),
+            mode: "DC V",
+            unit,
+            display_raw: None,
+            series: None,
+            main_label: None,
+            levels: false,
+            overlays,
+        });
+    };
+    let left = ("Min", "mV", Some(940.0));
+    let before = [left, ("Hz", "Hz", Some(999.0))];
+    let after = [left, ("Hz", "kHz", Some(1.001))];
+    push(&mut g, 0, 950.0, "mV", &before);
+    g.y_axis.fixed = true;
+    g.y_axis.user_set = true;
+    g.y_axis.min.set(900.0);
+    g.y_axis.max.set(1000.0);
+    g.ref_lines.set(&[920.0]);
+    g.y_axis.pins.insert("Hz".into(), (900.0, 1100.0));
+    let epoch = g.history_epoch;
+    push(&mut g, 1, 1.01, "V", &after);
+
+    let Graph {
+        // Re-expressed by the step, each checked below.
+        history,
+        overlays,
+        y_axis,
+        ref_lines,
+        current_unit,
+        // Built on the old values: cleared, or keyed on the epoch or on
+        // the unit and values they show.
+        history_epoch,
+        minimap_level,
+        a11y_label: _,
+        a11y_label_sig: _,
+        cursor_figures: _,
+        visible_figures: _,
+        histogram: _,
+        menu: _,
+        // Rebuilt from the values above every frame.
+        axis_maps: _,
+        plot_transform: _,
+        // Times, counts, pixels and words: no plotted unit.
+        plot_rect: _,
+        histogram_place: _,
+        axis_room: _,
+        max_points: _,
+        pushed_total: _,
+        origin: _,
+        breaks: _,
+        silences: _,
+        last_heard: _,
+        gap_threshold_secs: _,
+        silence_threshold_secs: _,
+        main_missing_frames: _,
+        current_mode: _,
+        current_series: _,
+        main_label: _,
+        levels: _,
+        last_display_raw: _,
+        series_options: _,
+        selected_series: _,
+        hidden_overlays: _,
+        main_hidden: _,
+        solid_lines: _,
+        time_window_secs: _,
+        live: _,
+        view_center: _,
+        frozen_width: _,
+        cursors: _,
+        show_mean: _,
+        show_envelope: _,
+        envelope_window: _,
+        show_ref_line: _,
+        show_crossings: _,
+        focus_ref_field: _,
+        show_histogram: _,
+        histogram_sizes: _,
+        dash_phases: _,
+        // A gesture in screen space, or a request the app takes in the
+        // frame it is made.
+        minimap_drag: _,
+        swipe: _,
+        box_zoom: _,
+        menu_focus_pending: _,
+        menu_action: _,
+        trace_choice: _,
+        clicked_marker: _,
+        histogram_resized: _,
+    } = &g;
+    assert_eq!(current_unit, "V");
+    let values: Vec<f64> = history.iter().map(|p| p.value).collect();
+    assert_eq!(values, [0.95, 1.01]);
+    assert_eq!((y_axis.min.value(), y_axis.max.value()), (0.9, 1.0));
+    assert_eq!(ref_lines.values(), [0.92]);
+    let kept = |label: &str| overlays.iter().find(|o| o.label == label).expect(label);
+    assert_eq!(kept("Hz").unit, "kHz");
+    assert_eq!(kept("Hz").points.front().and_then(|p| p.value), Some(0.999));
+    assert_eq!(kept("Min").unit, "mV", "left in the old prefix");
+    assert_eq!(y_axis.pins.get("kHz"), Some(&(0.9, 1.1)));
+    assert_eq!(y_axis.pins.get("Hz"), None, "no trace left in Hz");
+    assert_eq!(y_axis.pins.get("mV"), Some(&(900.0, 1000.0)));
+    assert!(*history_epoch > epoch, "figures cached on the old values");
+    assert!(minimap_level.is_none());
+}
