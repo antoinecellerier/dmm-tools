@@ -312,7 +312,9 @@ impl<'a> Help<'a> {
     /// carry none.
     pub fn not_found_title(self, links: &LinksSearched<'_>) -> String {
         match *links {
-            LinksSearched::Usb => tr!(self.0, "not-found-usb").into_owned(),
+            LinksSearched::Usb | LinksSearched::UsbBluetoothOff { .. } => {
+                tr!(self.0, "not-found-usb").into_owned()
+            }
             LinksSearched::UsbAndBluetooth => {
                 tr!(self.0, "not-found-usb-or-bluetooth").into_owned()
             }
@@ -330,6 +332,14 @@ impl<'a> Help<'a> {
     pub fn sections(self, links: &LinksSearched<'_>) -> Vec<SetupSection> {
         match *links {
             LinksSearched::Usb => vec![self.usb_section()],
+            LinksSearched::UsbBluetoothOff { hint } => vec![
+                self.usb_section(),
+                SetupSection {
+                    link: self.short_name(Link::Bluetooth).into_owned(),
+                    check: tr!(self.0, "setup-bluetooth-off-check").into_owned(),
+                    steps: vec![hint.to_string()],
+                },
+            ],
             LinksSearched::UsbAndBluetooth => vec![
                 self.usb_section(),
                 self.bluetooth_section(vec![
@@ -720,6 +730,9 @@ pub enum LinksSearched<'a> {
     UsbAndBluetooth,
     /// One Bluetooth adapter, named by address or peripheral id.
     BluetoothAt(&'a str),
+    /// The USB cables alone, because searching the radio was switched off
+    /// for a meter it could have found: the app's way to switch it on.
+    UsbBluetoothOff { hint: &'a str },
     /// The radio alone, for a meter with Bluetooth built in: its name as
     /// the help shows it, and the registry's steps that switch its radio
     /// on, in English: [`Help::sections`] looks them up.
@@ -738,6 +751,17 @@ impl LinksSearched<'_> {
             Self::Usb
         }
     }
+}
+
+/// Whether a failed open skipped the radio only because searching it was
+/// switched off (`searching` false): no `--adapter` named a device, and the
+/// meter `picked`, or any under Auto-detect, could have answered there.
+pub fn bluetooth_switched_off(
+    searching: bool,
+    adapter: Option<&str>,
+    picked: Option<&SelectableDevice>,
+) -> bool {
+    !searching && adapter.is_none() && dmm_lib::searches_bluetooth(picked)
 }
 
 /// What the bus held when an `--adapter` selector matched nothing.
@@ -1333,6 +1357,36 @@ mod tests {
             english().gui_bluetooth_off_hint(),
             "Tick \"Look for Bluetooth devices\" in Settings (\u{2699})."
         );
+    }
+
+    /// The radio skipped only for its switch: a meter it could have found,
+    /// no adapter named, searching off. The help then adds a Bluetooth
+    /// section whose step is the app's own way to switch it on.
+    #[test]
+    fn a_switched_off_search_says_so_under_the_cable_help() {
+        let entry = |id| registry::find_device(id).expect("registry entry");
+        let ut61eplus = Some(entry("ut61eplus"));
+        assert_eq!(
+            bluetooth_switched_off(false, None, ut61eplus),
+            dmm_lib::BLUETOOTH_SUPPORTED
+        );
+        assert_eq!(
+            bluetooth_switched_off(false, None, None),
+            dmm_lib::BLUETOOTH_SUPPORTED
+        );
+        assert!(!bluetooth_switched_off(true, None, ut61eplus));
+        assert!(!bluetooth_switched_off(false, Some("00C5B27A"), ut61eplus));
+        assert!(!bluetooth_switched_off(false, None, Some(entry("bm86x"))));
+
+        let links = LinksSearched::UsbBluetoothOff {
+            hint: "Leave out --no-bluetooth.",
+        };
+        assert_eq!(english().not_found_title(&links), "No USB cable found");
+        let sections = english().sections(&links);
+        let labels: Vec<&str> = sections.iter().map(|s| s.link.as_str()).collect();
+        assert_eq!(labels, ["USB cable", "Bluetooth"]);
+        assert_eq!(sections[1].check, "not searched.");
+        assert_eq!(sections[1].steps, ["Leave out --no-bluetooth."]);
     }
 
     /// The short form drops the word the status line no longer needs; the

@@ -5,10 +5,12 @@
 ### GUI
 
 - **Failure notices name the meter picked in Settings and point to Auto-detect** — "No USB cable found" after a meter swap sent you to drivers.
+- **"No USB cable found" says when Bluetooth wasn't searched** — and how to switch the search on.
 
 ### CLI
 
 - **dmm-cli says which meter is picked when its data won't read**
+- **"No USB cable found" says when Bluetooth wasn't searched** — and how to switch the search on.
 
 ### Bug fixes
 

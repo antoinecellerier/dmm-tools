@@ -340,6 +340,17 @@ pub const BLUETOOTH: &str = "Bluetooth";
 /// offer Bluetooth steps.
 pub const BLUETOOTH_SUPPORTED: bool = cfg!(feature = "bluetooth");
 
+/// Whether an open of `device` with no adapter named would look over
+/// Bluetooth once no cable answered, if searching the radio is on: a meter
+/// behind a Bluetooth adapter, and every meter when none is named. For the
+/// help a failed open gets when the search was switched off. False in a
+/// build without Bluetooth, and for a meter with the radio built in, which
+/// opens over Bluetooth alone and fails on its own terms.
+pub fn searches_bluetooth(device: Option<&SelectableDevice>) -> bool {
+    BLUETOOTH_SUPPORTED
+        && device.is_none_or(|d| !d.bluetooth_only() && d.links.contains(&BLUETOOTH))
+}
+
 /// What a caller asks of the open path besides which meter to open.
 ///
 /// The two travel together everywhere an open happens, so they are one value
@@ -620,6 +631,44 @@ mod tests {
 
     fn byte(dmm: &mut Dmm<MockTransport>) -> Result<u8> {
         dmm.request_measurement().map(|m| m.raw_payload[0])
+    }
+
+    /// The radio is searched for a meter behind an adapter and for one not
+    /// named, never for a cable-only meter or one with the radio built in,
+    /// which opens over Bluetooth alone.
+    #[test]
+    fn bluetooth_is_searched_for_adapter_meters_and_auto() {
+        let entry = |id| registry::find_device(id).expect("registry entry");
+        assert_eq!(searches_bluetooth(None), BLUETOOTH_SUPPORTED);
+        assert_eq!(
+            searches_bluetooth(Some(entry("ut61eplus"))),
+            BLUETOOTH_SUPPORTED
+        );
+        assert!(!searches_bluetooth(Some(entry("bm86x"))));
+        assert!(!searches_bluetooth(Some(entry("ut60bt"))));
+    }
+
+    /// The help's answer is the open's own: for every hardware entry that
+    /// opens by its links, the radio gets a turn exactly when
+    /// `searches_bluetooth` says, with searching on and no adapter named.
+    #[test]
+    fn searches_bluetooth_agrees_with_the_open() {
+        let opts = OpenOptions::new();
+        for device in registry::DEVICES
+            .iter()
+            .filter(|d| d.requires_hardware && !d.bluetooth_only())
+        {
+            assert_eq!(
+                searches_bluetooth(Some(device)),
+                crate::transport::open::bluetooth_is_next(device.links, opts),
+                "{}",
+                device.id
+            );
+        }
+        assert_eq!(
+            searches_bluetooth(None),
+            crate::transport::open::bluetooth_is_next(&[], opts)
+        );
     }
 
     #[test]

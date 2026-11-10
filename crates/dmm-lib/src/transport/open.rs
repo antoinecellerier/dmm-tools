@@ -237,7 +237,7 @@ pub(crate) fn open_links(
 /// and a meter answering on a radio instead is not what they meant. A build
 /// without the feature has no radio to search, and neither has a caller that
 /// switched probing off.
-fn bluetooth_is_next(preferred: &[&'static str], opts: OpenOptions<'_>) -> bool {
+pub(crate) fn bluetooth_is_next(preferred: &[&'static str], opts: OpenOptions<'_>) -> bool {
     cfg!(feature = "bluetooth")
         && opts.bluetooth
         && opts.adapter.is_none()

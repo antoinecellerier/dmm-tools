@@ -108,6 +108,7 @@ fn main() {
     };
 
     let bluetooth = bluetooth_probing(cli.no_bluetooth, settings.as_ref());
+    open::note_no_bluetooth_flag(cli.no_bluetooth);
     let opts = dmm_lib::OpenOptions {
         adapter: cli.adapter.as_deref(),
         bluetooth,
@@ -173,7 +174,7 @@ fn main() {
     };
 
     if let Err(e) = result {
-        report_failure(l, &e, selection, cli.adapter.as_deref(), cli.no_bluetooth);
+        report_failure(l, &e, selection, cli.adapter.as_deref());
     }
 }
 
@@ -246,7 +247,6 @@ fn report_failure(
     e: &l10n::Failure,
     selection: Selection,
     adapter: Option<&str>,
-    no_bluetooth: bool,
 ) -> ! {
     error!("{e}");
     let extra = extra_help(e, selection, adapter);
@@ -274,10 +274,7 @@ fn report_failure(
         Extra::NotSearched {
             miss: dmm_lib::error::BluetoothOnlyMiss::SwitchedOff,
             ..
-        } => eprintln!(
-            "{}",
-            style(l.help().cli_bluetooth_off_hint(no_bluetooth)).yellow()
-        ),
+        } => eprintln!("{}", style(open::bluetooth_off_hint(l)).yellow()),
         Extra::WrongPick => {
             if let Some(hint) = e.lib().and_then(|lib| open::wrong_pick_hint(l, lib)) {
                 eprintln!("{}", style(hint).yellow());

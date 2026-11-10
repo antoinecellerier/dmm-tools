@@ -74,6 +74,9 @@ not-found-bluetooth-only = No { $model } found over Bluetooth
 setup-label = { $link }: { $check }
 setup-usb-check = check it is plugged in and the meter is powered on.
 setup-bluetooth-check = turn on Bluetooth on this computer and data transmission on the meter.
+# After "Bluetooth:", when the search was switched off; how to switch it on
+# follows as a step of its own.
+setup-bluetooth-off-check = not searched.
 # Linux. Two command lines follow.
 setup-usb-linux-rule = Ensure the udev rule is installed:
 # Linux. The setup guide's address follows.

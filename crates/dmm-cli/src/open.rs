@@ -98,6 +98,24 @@ pub(crate) enum PickedBy {
     Recording,
 }
 
+/// Whether `--no-bluetooth` is what switched the radio's search off, as
+/// opposed to the saved setting: the way to switch it on differs. Set once,
+/// by `main`.
+static NO_BLUETOOTH_FLAG: OnceLock<bool> = OnceLock::new();
+
+/// Record whether `--no-bluetooth` was given, for the help a failed open
+/// prints.
+pub(crate) fn note_no_bluetooth_flag(given: bool) {
+    let _ = NO_BLUETOOTH_FLAG.set(given);
+}
+
+/// How this run switches the radio's search back on, by what switched it
+/// off: the flag, or the saved setting. In `l`'s language.
+pub(crate) fn bluetooth_off_hint(l: &Localizer) -> Cow<'_, str> {
+    l.help()
+        .cli_bluetooth_off_hint(NO_BLUETOOTH_FLAG.get().copied().unwrap_or(false))
+}
+
 /// The row the user picked, and where; unset under Auto-detect. Set once,
 /// before anything is opened.
 static PICKED: OnceLock<(registry::Listing, PickedBy)> = OnceLock::new();
@@ -312,13 +330,13 @@ pub(crate) fn open_with_help(
     let (dmm, device) = match selection {
         Selection::Auto => {
             let (dmm, detected) = unless_stopped(dmm_lib::open_auto(opts), opts.stop)
-                .map_err(|e| open_error_help(selection, opts.adapter, e))?;
+                .map_err(|e| open_error_help(selection, opts, e))?;
             note_detected(&detected);
             (dmm, detected.device)
         }
         Selection::Device(device) => (
             unless_stopped(dmm_lib::open_device(device, opts), opts.stop)
-                .map_err(|e| open_error_help(selection, opts.adapter, e))?,
+                .map_err(|e| open_error_help(selection, opts, e))?,
             device,
         ),
     };
@@ -371,14 +389,14 @@ pub(crate) fn open_recording_with_help(
         // hides how the meter was picked.
         Selection::Auto => {
             let (transport, bridge) = dmm_lib::open_transport(&[], opts)
-                .map_err(|e| open_error_help(selection, opts.adapter, e))?;
+                .map_err(|e| open_error_help(selection, opts, e))?;
             let (transport, recorder) = recording::RecordingTransport::new(transport);
             let transport = Box::new(transport) as Boxed;
             let detected = dmm_lib::detect::detect_device(&*transport, bridge)
-                .map_err(|e| open_error_help(selection, opts.adapter, e))?;
+                .map_err(|e| open_error_help(selection, opts, e))?;
             note_detected(&detected);
             let dmm = dmm_lib::Dmm::from_detected(transport, &detected)
-                .map_err(|e| open_error_help(selection, opts.adapter, e))?;
+                .map_err(|e| open_error_help(selection, opts, e))?;
             (dmm, recorder, detected.device, Some(detected))
         }
         Selection::Device(device) => {
@@ -386,13 +404,13 @@ pub(crate) fn open_recording_with_help(
             // goes through the same recorder so `capture` has one code path.
             let transport: Boxed = if device.requires_hardware {
                 dmm_lib::open_device_transport(device, opts)
-                    .map_err(|e| open_error_help(selection, opts.adapter, e))?
+                    .map_err(|e| open_error_help(selection, opts, e))?
             } else {
                 Box::new(dmm_lib::transport::NullTransport)
             };
             let (transport, recorder) = recording::RecordingTransport::new(transport);
             let dmm = dmm_lib::Dmm::new(Box::new(transport) as Boxed, (device.new_protocol)())
-                .map_err(|e| open_error_help(selection, opts.adapter, e))?;
+                .map_err(|e| open_error_help(selection, opts, e))?;
             (dmm, recorder, device, None)
         }
     };
@@ -406,9 +424,9 @@ fn detect_only(
     opts: dmm_lib::OpenOptions<'_>,
 ) -> Result<&'static SelectableDevice, crate::l10n::Failure> {
     let (transport, bridge) = dmm_lib::open_transport(&[], opts)
-        .map_err(|e| open_error_help(Selection::Auto, opts.adapter, e))?;
+        .map_err(|e| open_error_help(Selection::Auto, opts, e))?;
     let detected = dmm_lib::detect::detect_device(&*transport, bridge)
-        .map_err(|e| open_error_help(Selection::Auto, opts.adapter, e))?;
+        .map_err(|e| open_error_help(Selection::Auto, opts, e))?;
     note_detected(&detected);
     Ok(detected.device)
 }
@@ -532,12 +550,24 @@ pub(crate) fn picked(selection: Selection) -> Option<registry::Listing> {
 /// to report. The rest go back as they came, for [`crate::report_failure`].
 fn open_error_help(
     selection: Selection,
-    adapter: Option<&str>,
+    opts: dmm_lib::OpenOptions<'_>,
     error: dmm_lib::error::Error,
 ) -> crate::l10n::Failure {
-    match Diagnosis::of(&error, adapter, picked(selection)) {
+    match Diagnosis::of(&error, opts.adapter, picked(selection)) {
         Diagnosis::NotFound { bluetooth_searched } => {
-            print_not_found_help(LinksSearched::from_usb_failure(bluetooth_searched));
+            // The radio skipped only for its switch: say how to turn it on.
+            let hint = bluetooth_off_hint(crate::l10n::get());
+            let off = !bluetooth_searched
+                && dmm_shared::help::bluetooth_switched_off(
+                    opts.bluetooth,
+                    opts.adapter,
+                    opened_device(selection),
+                );
+            print_not_found_help(if off {
+                LinksSearched::UsbBluetoothOff { hint: &hint }
+            } else {
+                LinksSearched::from_usb_failure(bluetooth_searched)
+            });
             print_experimental_note(selection);
             OpenFailed::NotFound.into()
         }
@@ -709,7 +739,11 @@ mod tests {
             Err(Error::Timeout)
         ));
         // Reaches its caller as it left, so the command can tell.
-        let failure = open_error_help(Selection::Auto, None, Error::Cancelled);
+        let failure = open_error_help(
+            Selection::Auto,
+            dmm_lib::OpenOptions::new(),
+            Error::Cancelled,
+        );
         assert!(matches!(failure.lib(), Some(Error::Cancelled)));
     }
 

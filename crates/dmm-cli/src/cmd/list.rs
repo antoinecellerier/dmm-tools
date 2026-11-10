@@ -11,10 +11,15 @@ use dmm_shared::help::LinksSearched;
 use dmm_shared::tr;
 
 /// The links a listing looked at, for the help it prints when it found
-/// nothing. The open path answers this for itself — this is for `list`, which
+/// nothing, with `off_hint` the way to switch the radio's search on when it
+/// is off. The open path answers this for itself — this is for `list`, which
 /// searches whatever it was told to and never opens anything.
-fn links_searched(bluetooth: bool) -> LinksSearched<'static> {
-    LinksSearched::from_usb_failure(scans_bluetooth(bluetooth))
+fn links_searched(bluetooth: bool, off_hint: &str) -> LinksSearched<'_> {
+    if !bluetooth && dmm_lib::BLUETOOTH_SUPPORTED {
+        LinksSearched::UsbBluetoothOff { hint: off_hint }
+    } else {
+        LinksSearched::from_usb_failure(scans_bluetooth(bluetooth))
+    }
 }
 
 /// Whether `list` scans the radio: only where probing is on and the build
@@ -87,7 +92,10 @@ pub(crate) fn cmd_list(bluetooth: bool) -> bool {
             tr!(l, "list-none-heard")
         };
         eprintln!("{}", style(heading).yellow());
-        print_setup_sections(links_searched(bluetooth));
+        print_setup_sections(links_searched(
+            bluetooth,
+            &crate::open::bluetooth_off_hint(l),
+        ));
     }
     if found == 0 {
         return !cables_failed;
@@ -103,22 +111,22 @@ pub(crate) fn cmd_list(bluetooth: bool) -> bool {
 mod tests {
     use super::*;
 
-    /// With the radio out of the picture, the help that follows an empty
-    /// listing must not offer steps for it.
+    /// With the radio's search switched off, the help that follows an empty
+    /// listing says so and how to switch it on, rather than offering its
+    /// steps; a build without the radio says nothing of it.
     #[test]
-    fn a_listing_that_skipped_the_radio_offers_no_bluetooth_steps() {
-        let links: Vec<String> = crate::l10n::get()
-            .help()
-            .sections(&links_searched(false))
-            .into_iter()
-            .map(|s| s.link)
-            .collect();
-        assert_eq!(links, ["USB cable"]);
+    fn a_listing_that_skipped_the_radio_says_how_to_search_it() {
+        let help = crate::l10n::get().help();
+        let off = help.sections(&links_searched(false, "switch it on"));
+        let links: Vec<&str> = off.iter().map(|s| s.link.as_str()).collect();
+        if dmm_lib::BLUETOOTH_SUPPORTED {
+            assert_eq!(links, ["USB cable", "Bluetooth"]);
+            assert_eq!(off[1].steps, ["switch it on"]);
+        } else {
+            assert_eq!(links, ["USB cable"]);
+        }
         assert_eq!(
-            crate::l10n::get()
-                .help()
-                .sections(&links_searched(true))
-                .len(),
+            help.sections(&links_searched(true, "unused")).len(),
             if dmm_lib::BLUETOOTH_SUPPORTED { 2 } else { 1 }
         );
     }

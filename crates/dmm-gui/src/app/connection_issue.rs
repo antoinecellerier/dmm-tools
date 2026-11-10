@@ -337,7 +337,18 @@ impl App {
                 // sections come from the library so the CLI's help and this panel
                 // stay the same advice; only the closing line is the GUI's, since
                 // the CLI has no Connect button.
-                let links = LinksSearched::from_usb_failure(*bluetooth_searched);
+                // The radio skipped only for its switch: say where it is.
+                let hint = l10n.help().gui_bluetooth_off_hint();
+                let links = if !*bluetooth_searched
+                    && dmm_shared::help::bluetooth_switched_off(
+                        self.settings.shared.bluetooth,
+                        self.settings.overrides.adapter.as_deref(),
+                        self.selected_device(),
+                    ) {
+                    LinksSearched::UsbBluetoothOff { hint: &hint }
+                } else {
+                    LinksSearched::from_usb_failure(*bluetooth_searched)
+                };
                 ConnectionNotice {
                     kind: if *bluetooth_searched {
                         NoticeKind::NoMeterFound
@@ -978,6 +989,30 @@ mod tests {
             "{}",
             n.body
         );
+    }
+
+    /// With searching the radio off, a meter that could be behind a
+    /// Bluetooth adapter gets the switch under the cable help.
+    #[test]
+    fn a_switched_off_search_names_the_settings_checkbox() {
+        let mut app = app("ut61eplus");
+        app.settings.shared.bluetooth = false;
+        let n = notice_for(&mut app, not_found(false));
+        assert_eq!(n.kind, NoticeKind::UsbNotFound);
+        let links: Vec<&str> = n.sections.iter().map(|s| s.link.as_str()).collect();
+        if !dmm_lib::BLUETOOTH_SUPPORTED {
+            assert_eq!(links, ["USB cable"]);
+            return;
+        }
+        assert_eq!(links, ["USB cable", "Bluetooth"]);
+        assert_eq!(
+            n.sections[1].steps,
+            ["Tick \"Look for Bluetooth devices\" in Settings (\u{2699})."]
+        );
+        // Searching on, the cable help stands alone as before.
+        app.settings.shared.bluetooth = true;
+        let n = notice_for(&mut app, not_found(false));
+        assert_eq!(n.sections.len(), 1);
     }
 
     /// The waiting notice is measured to fit the big meter's window, so its
