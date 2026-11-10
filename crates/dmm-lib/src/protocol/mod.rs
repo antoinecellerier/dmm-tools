@@ -1161,6 +1161,74 @@ mod tests {
         }
     }
 
+    /// The spec table and row a reading is given are ones its entry's spec
+    /// sheet lists, so the translated texts (lib.ftl) and the `dump_specs`
+    /// review sheet cover every spec the panel can show; a reading with a row
+    /// has its table too. Checked over every golden reading and each mock
+    /// scenario's first reading, and each source whose entry has a sheet must
+    /// reach a row of it. The UT61+ checks its lookups more closely in its own
+    /// spec tests, the simulated ZT-5B forwards to the ZT-5B driver, which the
+    /// zt5b goldens cover, and the UT803, with no golden directory yet, has
+    /// its family's own coverage test.
+    #[test]
+    fn every_spec_a_reading_gets_is_on_its_sheet() {
+        use crate::mock::{MockMode, MockProtocol};
+        fn check(protocol: &dyn Protocol, m: &crate::measurement::Measurement, by: &str) -> bool {
+            let sheet = protocol.spec_sheet();
+            let spec = protocol.spec_info(m);
+            let Some(mode) = protocol.mode_spec_info(m) else {
+                assert!(
+                    spec.is_none(),
+                    "{by}: {:?} has a spec row but no table",
+                    m.mode
+                );
+                return false;
+            };
+            let tables: Vec<_> = sheet
+                .iter()
+                .filter(|t| std::ptr::eq(t.mode, mode))
+                .collect();
+            assert!(
+                !tables.is_empty(),
+                "{by}: {:?}'s mode spec is not on the sheet",
+                m.mode
+            );
+            let Some(spec) = spec else {
+                return false;
+            };
+            assert!(
+                tables
+                    .iter()
+                    .flat_map(|t| &t.rows)
+                    .any(|row| std::ptr::eq(row.spec, spec)),
+                "{by}: {:?} {:?}'s spec row is not in its table on the sheet",
+                m.mode,
+                m.range_label
+            );
+            true
+        }
+        for id in golden_ids() {
+            let (protocol, readings) = golden_readings(&id);
+            let mut reached = false;
+            for (file, m) in &readings {
+                reached |= check(protocol.as_ref(), m, &format!("{id}/{file}"));
+            }
+            assert!(
+                reached || protocol.spec_sheet().is_empty(),
+                "{id}: no golden reading reaches a row of its spec sheet"
+            );
+        }
+        let mut reached = false;
+        for &mode in MockMode::ALL {
+            let mut protocol = MockProtocol::with_mode(mode);
+            let m = protocol
+                .request_measurement(&crate::transport::NullTransport)
+                .unwrap();
+            reached |= check(&protocol, &m, &format!("mock {mode:?}"));
+        }
+        assert!(reached, "no mock reading reaches a row of its spec sheet");
+    }
+
     /// A device short of `Verified` is one nobody has finished running, so its
     /// step list must still have something left to confirm.
     #[test]

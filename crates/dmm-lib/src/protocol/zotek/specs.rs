@@ -1019,6 +1019,8 @@ mod tests {
         let zt300ab = ZotekProtocol::new_zt300ab();
         assert!(zt300ab.spec_info(&ohms).is_none());
         assert!(zt300ab.mode_spec_info(&ohms).is_none());
+        assert!(zt300ab.spec_info(&other).is_none());
+        assert!(zt300ab.mode_spec_info(&other).is_none());
         assert!(zt300ab.spec_sheet().is_empty());
     }
 }

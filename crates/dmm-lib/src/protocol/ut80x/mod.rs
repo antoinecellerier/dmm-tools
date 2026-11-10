@@ -3094,6 +3094,7 @@ raw_payload=11"#
         for (i, (why, _)) in UT803_NO_SPEC.iter().enumerate() {
             assert!(listed_reached[i], "no reading is {why}");
         }
+        assert_eq!(proto.spec_sheet().len(), specs_ut803::ALL.len());
         for table in specs_ut803::ALL {
             for row in table.ranges {
                 assert!(
