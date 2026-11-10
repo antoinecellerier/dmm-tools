@@ -450,7 +450,9 @@ fn refuse_replay_format(
 }
 
 /// Why `read` refused its flags before opening anything: the one `Error:`
-/// line `main` prints ([`crate::l10n::Localized`]).
+/// line `main` prints ([`crate::l10n::Localized`]). `Alarm` and `Clock`
+/// carry text already in the run's language, so their `Display` is that
+/// language too; nothing logs a refusal.
 #[derive(Debug)]
 pub(crate) enum Refused {
     /// The `--alarm-*` flags, as they word it.
@@ -504,6 +506,35 @@ impl crate::l10n::Localized for Refused {
 
 crate::l10n::localized_error!(Refused);
 
+/// A recording or an export that would not read, and why: the closing
+/// `Error:` line of `read --replay` or `--import`.
+#[derive(Debug)]
+pub(crate) struct NotReadable {
+    path: std::path::PathBuf,
+    error: dmm_shared::export::ReadError,
+}
+
+impl NotReadable {
+    fn new(path: &Path, error: dmm_shared::export::ReadError) -> Self {
+        Self {
+            path: path.to_path_buf(),
+            error,
+        }
+    }
+}
+
+impl crate::l10n::Localized for NotReadable {
+    fn text<'a>(&'a self, l: &'a Localizer) -> Cow<'a, str> {
+        Cow::Owned(format!(
+            "{}: {}",
+            self.path.display(),
+            l.read_error(&self.error)
+        ))
+    }
+}
+
+crate::l10n::localized_error!(NotReadable);
+
 /// Play a recording back as the session, with no meter on the cable.
 ///
 /// The clock carries the recording's own start, so every reading exports at
@@ -528,8 +559,8 @@ fn read_replay(
             style(format!("{} {hint}", tr!(l, "common-note-label"))).dim()
         );
     }
-    let recorded = dmm_shared::replay::recorded_at(&replay)
-        .map_err(|e| format!("{}: {}", path.display(), l.read_error(&e)))?;
+    let recorded =
+        dmm_shared::replay::recorded_at(&replay).map_err(|e| NotReadable::new(path, e))?;
     let dmm = replay.open(clock.with_wall_origin(recorded.into()))?;
     // A copy is dated from its first frame, whose wall time the pinned
     // origin maps to when it was measured, so a copy that starts partway
@@ -1258,16 +1289,15 @@ fn read_import(
     options: RunOptions,
 ) -> Result<(), crate::l10n::Failure> {
     use dmm_shared::export::{ExportKind, read_csv_from, read_json_from};
-    let fail = |e: String| format!("{}: {e}", path.display());
     let input = std::fs::File::open(path)
         .map(std::io::BufReader::new)
-        .map_err(|e| fail(e.to_string()))?;
-    let imported = match ExportKind::of_file(path).map_err(|e| fail(e.to_string()))? {
+        .map_err(|e| crate::output::at_path(path, e))?;
+    let imported = match ExportKind::of_file(path).map_err(|e| crate::output::at_path(path, e))? {
         ExportKind::Json => read_json_from(input, None),
         // A replay never reaches here: it plays as `--replay` does.
         ExportKind::Csv | ExportKind::Replay => read_csv_from(input, None),
     }
-    .map_err(|e| fail(crate::l10n::get().read_error(&e)))?;
+    .map_err(|e| NotReadable::new(path, e))?;
     let device = imported
         .device
         .clone()
@@ -1324,6 +1354,32 @@ mod tests {
     use crate::test_fixtures::selection;
     use clap::Parser;
     use dmm_lib::protocol::registry;
+
+    /// A file that would not read is worded on the terminal in the run's
+    /// language, and logged in English.
+    #[test]
+    fn an_unreadable_file_is_logged_in_english() {
+        use dmm_shared::export::{ReadError, ReadReason};
+        let e = NotReadable::new(
+            Path::new("x.csv"),
+            ReadError {
+                line: Some(1),
+                reason: ReadReason::NoColumn("timestamp"),
+            },
+        );
+        assert_eq!(e.to_string(), "x.csv: line 1: no `timestamp` column");
+        let options = dmm_shared::l10n::Options {
+            pseudo: true,
+            ..Default::default()
+        };
+        let pseudo = Localizer::new(
+            &dmm_shared::l10n::EN_US,
+            &crate::l10n::resources(),
+            &options,
+        );
+        let text = crate::l10n::Failure::from(e).text(&pseudo);
+        assert!(text.starts_with("x.csv: ["), "{text}");
+    }
 
     /// The English every test reads.
     fn l() -> &'static Localizer {
