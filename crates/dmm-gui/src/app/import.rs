@@ -15,7 +15,6 @@
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant, SystemTime};
 
-use dmm_lib::alarm::Alarm;
 use dmm_lib::measurement::Measurement;
 use dmm_lib::transport::Link;
 use dmm_shared::l10n::Localizer;
@@ -467,13 +466,12 @@ impl App {
         self.clear_session();
         self.capture.recording.discard();
         self.capture.recording.clear_history();
+        // The file's readings name no meter that answered.
+        self.capture.source = None;
         self.markers.clear();
         self.source.reset();
-        // A file, or the meter after one, is judged afresh: bound to its own
-        // first reading, not to the quantity and zone the last session left.
-        if let Some(alarm) = &self.alarm {
-            self.alarm = Some(Alarm::new(alarm.limits(), alarm.hysteresis()));
-        }
+        // A file, or the meter after one, is judged afresh.
+        self.restart_alarm();
     }
 
     /// Take the next chunk of an import under way, or pick up the parsed

@@ -531,6 +531,54 @@ impl App {
         self.held.clear();
     }
 
+    /// Another meter answered: what the session holds is the last one's.
+    /// The graph, the history, the statistics and the alarm counts start
+    /// again, as Clear starts them, and a running recording with samples
+    /// stops, as a file names one meter; what it recorded stays, to export
+    /// under the meter it came from.
+    ///
+    /// `news` is what the same hello had to say, such as the model saved as
+    /// the device, which a stop toast would otherwise cover.
+    fn start_new_source(&mut self, news: Option<String>) {
+        info!("UI: another meter answered; the session starts again");
+        self.clear_session();
+        self.restart_alarm();
+        self.capture.source = None;
+        if self.capture.recording.is_active()
+            && self.capture.recording.recording_samples().len() > 0
+        {
+            self.apply_recording_toggle();
+            // The model the meter names, as the other-model news does.
+            let meter = self.connection.meter.as_ref().and_then(|m| {
+                m.named_other
+                    .map(|named| registry::named_under_pick(self.picked_listing(), named))
+                    .or(m.listing)
+            });
+            let name = meter.map_or(super::export::UNKNOWN_DEVICE, |l| l.display_name());
+            let stopped = tr!(
+                self.l10n,
+                "connection-other-meter-recording",
+                meter = self.l10n.label(dmm_lib::text::TextKind::Model, name)
+            );
+            let message = match news {
+                Some(news) => format!("{stopped}\n{news}"),
+                None => stopped.into_owned(),
+            };
+            self.toast = Some(Toast::error(message));
+        }
+    }
+
+    /// Judge the next reading afresh against the same limits: bound to its
+    /// own first reading, not to the quantity and zone the last source left.
+    pub(super) fn restart_alarm(&mut self) {
+        if let Some(alarm) = &self.alarm {
+            self.alarm = Some(dmm_lib::alarm::Alarm::new(
+                alarm.limits(),
+                alarm.hysteresis(),
+            ));
+        }
+    }
+
     pub(super) fn drain_messages(&mut self) {
         // Drain with `try_recv` rather than `try_iter` so a hung-up sender is
         // distinguishable from an empty queue: the acquisition thread dropping
@@ -676,6 +724,8 @@ impl App {
     /// A link is up: record the meter, save or toast about the model it
     /// names, and clear the error and reconnect state.
     fn on_connected(&mut self, meter: ConnectedMeter) {
+        // What this hello has to say is whatever toast it raises.
+        let toast_before = self.toast.as_ref().map(|t| t.message.clone());
         self.connection.link_up();
         self.held.clear();
         self.capture.device_aux_slots = meter.max_aux_values;
@@ -704,19 +754,13 @@ impl App {
                 .as_ref()
                 .is_some_and(|m| id(m.named_other) == id(named));
         // A detecting reconnect saves and announces only a meter other than
-        // the one on screen: by the model it names, else the one it opened
-        // as. A name heard before and missed now is no other meter: detection
-        // that misses the name falls back to the family's first model, as a
-        // UT161E reads as the UT61E+.
-        let new_meter = !self.connection.meter.as_ref().is_some_and(|m| {
-            let before = m.named_other.or(m.device);
-            id(before) == id(named.or(picked))
-                || (m.name.is_some()
-                    && meter.name.is_none()
-                    && before
-                        .zip(picked)
-                        .is_some_and(|(before, picked)| before.family == picked.family))
-        });
+        // the one on screen.
+        let source = meter.source();
+        let new_meter = !self
+            .connection
+            .meter
+            .as_ref()
+            .is_some_and(|m| m.source().same_meter(&source, self.connection.detecting));
         self.connection.meter = Some(meter);
         let family = &self.settings.shared.device_family;
         let detecting = self.connection.detecting;
@@ -762,6 +806,20 @@ impl App {
             // saved device, so the next session opens it pinned instead of
             // probing the cable again.
             _ => self.remember_detected_device(device_id, &reported, new_meter),
+        }
+        // Last, so a recording stopped says so, with the news above after it.
+        if self
+            .capture
+            .source
+            .is_some_and(|before| !before.continues(&source, self.connection.detecting))
+        {
+            let news = self
+                .toast
+                .as_ref()
+                .map(|t| &t.message)
+                .filter(|&m| Some(m) != toast_before.as_ref())
+                .cloned();
+            self.start_new_source(news);
         }
         if let Some(meter) = &self.connection.meter {
             info!(
@@ -2258,14 +2316,21 @@ mod tests {
         );
     }
 
-    /// Another meter answering mid-recording restarts the history under its
-    /// name; the recording carries on under the one it started with.
+    /// Another meter answering mid-recording ends the recording, which keeps
+    /// its samples and the meter they came from, and starts the history
+    /// under the new one's name.
     #[test]
-    fn a_new_meter_mid_recording_restarts_only_the_history() {
+    fn a_new_meter_mid_recording_stops_it() {
         let mut app = connected_app();
         app.toggle_recording();
         deliver_readings(&mut app, &[DC]);
         app.deliver(connected("ut181a", Stability::Experimental, 4));
+        assert!(!app.capture.recording.is_active(), "stopped");
+        assert!(
+            toast_text(&app).is_some_and(|t| t.starts_with("Recording stopped: UNI-T UT181A")),
+            "{:?}",
+            toast_text(&app)
+        );
         deliver_readings(&mut app, &[DC]);
 
         let ut61eplus = registry::find_device("ut61eplus").expect("a registry entry");
@@ -2274,12 +2339,209 @@ mod tests {
             app.capture.recording_layout.device.as_deref(),
             Some(ut61eplus.display_name())
         );
+        assert_eq!(app.capture.recording.recording_samples().len(), 1);
         assert_eq!(
             app.capture.history_layout.device.as_deref(),
             Some(ut181a.display_name())
         );
-        assert_eq!(app.capture.recording.recording_samples().len(), 2);
         assert_eq!(app.capture.recording.history_samples().len(), 1);
+    }
+
+    /// Another meter in the same mode is still another meter: the
+    /// statistics, the graph and the alarm counts start again with the
+    /// history.
+    #[test]
+    fn another_meter_in_the_same_mode_starts_the_statistics_again() {
+        let mut app = connected_app();
+        deliver_readings(&mut app, &[DC, DC]);
+        assert_eq!(app.capture.session.stats.count, 2);
+        app.deliver(DmmMessage::Disconnected(dmm_lib::error::Error::LinkLost));
+        app.deliver(connected("ut181a", Stability::Experimental, 4));
+        assert_eq!(app.capture.session.stats.count, 0);
+        assert_eq!(app.graph.len(), 0);
+        deliver_readings(&mut app, &[DC]);
+        assert_eq!(app.capture.session.stats.count, 1);
+        assert_eq!(app.graph.len(), 1);
+        assert_eq!(app.capture.recording.export_samples().len(), 1);
+    }
+
+    /// Record pressed before any meter answered waits for one: the first
+    /// meter to answer is the recording's, not another one.
+    #[test]
+    fn a_recording_started_before_a_meter_answered_keeps_running() {
+        let mut app = app("ut61eplus", false);
+        app.toggle_recording();
+        app.deliver(connected("ut61eplus", Stability::Verified, 0));
+        deliver_readings(&mut app, &[DC]);
+        assert!(app.capture.recording.is_active());
+        assert_eq!(app.capture.recording.recording_samples().len(), 1);
+    }
+
+    /// The same meter back after a manual Disconnect and Connect carries on:
+    /// nothing is cleared and the recording keeps going.
+    #[test]
+    fn the_same_meter_after_a_disconnect_carries_on() {
+        let mut app = connected_app();
+        app.toggle_recording();
+        deliver_readings(&mut app, &[DC, DC]);
+        app.disconnect();
+        app.deliver(connected("ut61eplus", Stability::Verified, 0));
+        assert!(app.capture.recording.is_active());
+        assert_eq!(app.capture.session.stats.count, 2);
+        assert!(app.toast.is_none());
+    }
+
+    /// Another meter answering after Disconnect, a pick in Settings and
+    /// Connect is another source too: the link went in between, the
+    /// session's stores did not.
+    #[test]
+    fn another_meter_after_a_disconnect_stops_the_recording() {
+        let mut app = connected_app();
+        app.toggle_recording();
+        deliver_readings(&mut app, &[DC]);
+        app.disconnect();
+        app.settings.shared.device_family = "ut181a".to_string();
+        app.deliver(connected("ut181a", Stability::Experimental, 4));
+        assert!(!app.capture.recording.is_active());
+        assert_eq!(app.capture.session.stats.count, 0);
+    }
+
+    /// A meter picked in Settings is the entry picked: another one of the
+    /// family is another meter, even when the first named itself and this
+    /// one doesn't, which under detection would be a missed name.
+    #[test]
+    fn another_pick_of_the_same_family_stops_the_recording() {
+        let mut app = app("mock", false);
+        app.deliver(DmmMessage::Connected(ConnectedMeter {
+            name: Some("Mock UT61E+".to_string()),
+            ..ConnectedMeter::test_fixture(Some("mock"))
+        }));
+        app.toggle_recording();
+        deliver_readings(&mut app, &[DC]);
+        app.settings.shared.device_family = "mock-zt5b".to_string();
+        app.deliver(connected("mock-zt5b", Stability::Verified, 0));
+        assert!(!app.capture.recording.is_active());
+        assert!(
+            toast_text(&app).is_some_and(|t| t.starts_with("Recording stopped: Mock ZT-5B")),
+            "{:?}",
+            toast_text(&app)
+        );
+    }
+
+    /// A UT61E+ pick opens that entry whatever the meter names, so a UT161E
+    /// on its cable is the same meter whether a link hears its name or not.
+    #[test]
+    fn a_picked_meter_whose_name_comes_and_goes_is_the_same_meter() {
+        let named = || {
+            DmmMessage::Connected(ConnectedMeter {
+                name: Some("UT161E".to_string()),
+                named_other: dmm_lib::protocol::registry::find_device("ut161e"),
+                ..ConnectedMeter::test_fixture(Some("ut61eplus"))
+            })
+        };
+        let unnamed = || DmmMessage::Connected(ConnectedMeter::test_fixture(Some("ut61eplus")));
+        for (first, second) in [(named(), unnamed()), (unnamed(), named())] {
+            let mut app = app("ut61eplus", false);
+            app.deliver(first);
+            app.toggle_recording();
+            deliver_readings(&mut app, &[DC]);
+            app.deliver(DmmMessage::Disconnected(dmm_lib::error::Error::LinkLost));
+            app.deliver(second);
+            assert!(app.capture.recording.is_active());
+        }
+    }
+
+    /// The toast that stops a recording names the model the meter named, and
+    /// keeps what the same hello had to say: under Auto-detect, that the new
+    /// meter is now the saved device.
+    #[test]
+    fn the_stop_toast_names_the_model_and_keeps_the_news() {
+        let mut app = app(registry::AUTO_DEVICE_ID, false);
+        app.connection.detecting = true;
+        app.deliver(connected("ut181a", Stability::Experimental, 4));
+        app.toggle_recording();
+        deliver_readings(&mut app, &[DC]);
+        app.toast = None;
+        app.deliver(DmmMessage::Connected(ConnectedMeter {
+            name: Some("UT161E".to_string()),
+            named_other: dmm_lib::protocol::registry::find_device("ut161e"),
+            ..ConnectedMeter::test_fixture(Some("ut61eplus"))
+        }));
+        assert!(!app.capture.recording.is_active());
+        let text = toast_text(&app).expect("a toast");
+        assert!(
+            text.starts_with("Recording stopped: UNI-T UT161E answered"),
+            "{text}"
+        );
+        assert!(text.contains("saved as your device"), "{text}");
+    }
+
+    /// The alarm judges a new meter afresh, as it does a file: bound to the
+    /// new meter's first reading, not to the quantity the last one left.
+    #[test]
+    fn another_meter_restarts_the_alarm() {
+        let mut app = connected_app();
+        let limits = dmm_lib::alarm::Limits::check(None, Some(5.0)).expect("a limit");
+        app.alarm = Some(dmm_lib::alarm::Alarm::new(limits, Default::default()));
+        deliver_readings(&mut app, &[DC]);
+        assert!(app.alarm.as_ref().and_then(|a| a.quantity()).is_some());
+        app.deliver(connected("ut181a", Stability::Experimental, 4));
+        let alarm = app.alarm.as_ref().expect("the limits stay");
+        assert_eq!(alarm.quantity(), None);
+        assert_eq!(alarm.limits(), limits);
+    }
+
+    /// Clear empties the history, not the recording: another meter after it
+    /// still stops a recording holding the first one's samples.
+    #[test]
+    fn another_meter_after_clear_still_stops_the_recording() {
+        let mut app = connected_app();
+        app.toggle_recording();
+        deliver_readings(&mut app, &[DC]);
+        app.clear_session();
+        app.deliver(connected("ut181a", Stability::Experimental, 4));
+        assert!(!app.capture.recording.is_active());
+        assert_eq!(app.capture.recording.recording_samples().len(), 1);
+    }
+
+    /// A UT161E is the same meter whichever way detection finds it: by its
+    /// own model, or through the UT61E+ fallback with or without its name.
+    /// None of those reconnects stops its recording.
+    #[test]
+    fn a_ut161e_found_either_way_is_the_same_meter() {
+        let ut161e = || dmm_lib::protocol::registry::find_device("ut161e");
+        let by_model = || DmmMessage::Connected(ConnectedMeter::test_fixture(Some("ut161e")));
+        let fallback_named = || {
+            DmmMessage::Connected(ConnectedMeter {
+                name: Some("UT161E".to_string()),
+                named_other: ut161e(),
+                ..ConnectedMeter::test_fixture(Some("ut61eplus"))
+            })
+        };
+        let by_name = || {
+            DmmMessage::Connected(ConnectedMeter {
+                name: Some("UT161E".to_string()),
+                ..ConnectedMeter::test_fixture(Some("ut161e"))
+            })
+        };
+        let fallback = || DmmMessage::Connected(ConnectedMeter::test_fixture(Some("ut61eplus")));
+        for (first, second) in [
+            (by_model(), fallback_named()),
+            (by_name(), fallback()),
+            (fallback(), fallback_named()),
+            (fallback_named(), fallback()),
+            (fallback_named(), by_model()),
+        ] {
+            let mut app = app(registry::AUTO_DEVICE_ID, false);
+            app.connection.detecting = true;
+            app.deliver(first);
+            app.toggle_recording();
+            deliver_readings(&mut app, &[DC]);
+            app.deliver(DmmMessage::Disconnected(dmm_lib::error::Error::LinkLost));
+            app.deliver(second);
+            assert!(app.capture.recording.is_active());
+            assert_eq!(app.capture.session.stats.count, 1);
+        }
     }
 
     /// A device picked in Settings only takes effect at the next connect;

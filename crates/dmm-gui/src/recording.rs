@@ -246,8 +246,8 @@ enum ExportPin {
 ///
 /// One store, so a reading both hold is paid for once. The history is the
 /// store from `history_start` on, following the graph: it restarts with the
-/// graph, on Clear and on a new meter. A recording is the samples pushed
-/// between Record and Stop, and carries on across those restarts. While it
+/// graph and on Clear. A recording is the samples pushed between Record and
+/// Stop, and carries on across those restarts. While it
 /// runs, both end at the newest reading and the store is the longer of the
 /// two. Once stopped and passed by the history — the graph restarted, or
 /// dropped its oldest — it moves out into a buffer of its own, so memory is
@@ -572,10 +572,9 @@ impl Recording {
     }
 
     /// Start the history no earlier than `start`, the graph's oldest point,
-    /// so the history holds what the graph does. Only ever forward: a new
-    /// meter restarts the history while the graph keeps its older trace, and
-    /// those readings are the other meter's. A recording spans the graph's
-    /// resets and is left alone.
+    /// so the history holds what the graph does. Only ever forward: a
+    /// history cleared takes none of its readings back. A recording spans
+    /// the graph's resets and is left alone.
     ///
     /// `start` itself is kept: it is the reading the graph restarted on.
     pub fn trim_before(&mut self, start: Instant) {
@@ -1135,8 +1134,7 @@ mod tests {
     }
 
     /// The history only ever starts later: a graph whose oldest point is
-    /// older than the history — a new meter restarted it, the graph kept
-    /// its trace — takes none of the old readings back.
+    /// older than the history takes none of the cleared readings back.
     #[test]
     fn the_history_only_moves_forward() {
         let mut r = Recording::new();

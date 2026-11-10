@@ -9,6 +9,7 @@ use dmm_lib::transform::Transform;
 use dmm_lib::transport::Link;
 
 use super::Connection;
+use super::connection::SourceMeter;
 use super::plot_input::{PlotInput, Plotted, resolve_plot_input};
 use crate::graph::{Graph, PlotSample};
 use crate::recording::Recording;
@@ -101,6 +102,10 @@ pub(super) struct Capture {
     /// profile. 0 until the first `Connected`, and kept on disconnect so a
     /// capture stays exportable with its full column layout.
     pub(super) device_aux_slots: usize,
+    /// The meter whose readings these stores hold, from the first reading
+    /// since another meter last answered; `None` before any. Clear keeps it:
+    /// a recording still holds that meter's samples.
+    pub(super) source: Option<SourceMeter>,
 }
 
 impl Capture {
@@ -115,6 +120,7 @@ impl Capture {
             recording_layout: CaptureLayout::default(),
             history_layout: CaptureLayout::default(),
             device_aux_slots: 0,
+            source: None,
         }
     }
 
@@ -194,12 +200,11 @@ impl Capture {
     ) -> bool {
         // The connected meter's row, not the selection: a device picked in
         // Settings takes effect at the next connect, and this reading may
-        // still be the old meter's. A file names one meter, so another one
-        // starts another history. Compared by the name `CaptureLayout::new`
-        // latches, which both mocks have though neither has a device id.
+        // still be the old meter's. Another meter answering has already
+        // started the stores again (`App::start_new_source`).
         let meter = connection.listing();
-        if meter.map(|l| l.display_name()) != self.history_layout.device.as_deref() {
-            self.recording.clear_history();
+        if self.source.is_none() {
+            self.source = connection.meter.as_ref().map(|m| m.source());
         }
         if let Some(start) = graph.first_point_time() {
             self.recording.trim_before(start);

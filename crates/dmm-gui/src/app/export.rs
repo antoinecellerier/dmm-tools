@@ -24,7 +24,7 @@ use crate::recording::{BufferRole, Recording, Sample, render_csv, render_json, r
 
 /// What the CSV's `# device:` comment says when nothing ever identified the
 /// meter — a recording toggled on under Auto-detect before one answered.
-const UNKNOWN_DEVICE: &str = "unknown";
+pub(super) const UNKNOWN_DEVICE: &str = "unknown";
 
 /// Extension of a replay file: the dialog's filter and default name for one.
 /// `--replay` reads the file's header, not its name.

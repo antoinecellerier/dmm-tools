@@ -68,6 +68,10 @@ can't tell apart end the session with a notice instead, and stop a running
 recording. Click **Disconnect** (or press `Ctrl+O`) while it is retrying to stop
 the loop, then **Connect** to look for another adapter or cable.
 
+When a different meter answers, after a reconnect under Auto-detect or a Device
+picked in Settings, the graph, history, statistics and alarm counts start
+again, and a running recording stops.
+
 ## Top Bar
 
 The top bar contains:
@@ -216,7 +220,7 @@ in a narrow graph.
   limit the menu also removes it. On the value axis it offers only what is
   done at a value, on the time axis only what is done to a reading, and on a
   marker's flag that marker's deletion
-- Timeline is continuous across reconnects (data is not cleared)
+- Timeline is continuous across reconnects to the same meter (data is not cleared)
 - History buffer holds up to the configured [buffer size](#settings) (oldest
   dropped). A change of mode or quantity clears the graph; auto-range crossing
   a decade (Ω→kΩ) keeps it, with the fixed Y range and reference lines, in
@@ -320,7 +324,7 @@ A thin strip below the main plot showing the full capture history.
 - **Alarms** — crossings of each [alarm limit](#alarm), while limits are
   set
 - **Reset** button — clears statistics, integral and alarm counts
-- Stats persist across reconnects (use Clear for full reset)
+- Stats persist across reconnects to the same meter (use Clear for full reset)
 - Stats and ∫ carry across an auto-range step (Ω→kΩ); turning the dial
   starts them again
 - A second row shows **visible window stats** — the same figures over the

@@ -189,6 +189,63 @@ pub(crate) struct ConnectedMeter {
     pub(crate) named_other: Option<&'static SelectableDevice>,
 }
 
+impl ConnectedMeter {
+    /// Which meter this is, as far as a later link can be compared with it.
+    pub(crate) fn source(&self) -> SourceMeter {
+        SourceMeter {
+            entry: self.named_other.or(self.device),
+            opened: self.device,
+            named: self.name.is_some(),
+        }
+    }
+}
+
+/// What tells one meter from another across links: the model it names, or
+/// else the entry it opened as, and whether it named itself.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct SourceMeter {
+    entry: Option<&'static SelectableDevice>,
+    opened: Option<&'static SelectableDevice>,
+    named: bool,
+}
+
+impl SourceMeter {
+    /// Whether `now` is this meter again: the same model named or opened, or
+    /// this one with its name missed this time. Detection that misses the
+    /// name falls back to the family's first model, as a UT161E reads as the
+    /// UT61E+; a pick opens the entry picked whatever the meter names. A
+    /// meter picked by its own name that names nothing now is another entry.
+    pub(crate) fn same_meter(&self, now: &SourceMeter, detecting: bool) -> bool {
+        let id = |d: Option<&SelectableDevice>| d.map(|d| d.id);
+        id(self.entry) == id(now.entry) || name_missed(self, now, detecting)
+    }
+
+    /// Whether `now` carries this meter's session on: the same meter, or one
+    /// link knowing its model where this one heard no name. Not
+    /// [`Self::same_meter`]: the model it names is still news to save and
+    /// announce.
+    pub(crate) fn continues(&self, now: &SourceMeter, detecting: bool) -> bool {
+        self.same_meter(now, detecting) || name_missed(now, self, detecting)
+    }
+}
+
+/// Whether `unnamed` can be `named` with its name missed: no name heard, of
+/// the family `named` names, and either under detection, which falls back,
+/// or opened as the same entry, as a pick is.
+fn name_missed(named: &SourceMeter, unnamed: &SourceMeter, detecting: bool) -> bool {
+    named.named
+        && !unnamed.named
+        && named
+            .entry
+            .zip(unnamed.opened)
+            .is_some_and(|(entry, opened)| entry.family == opened.family)
+        && (detecting
+            || named
+                .opened
+                .zip(unnamed.opened)
+                .is_some_and(|(before, now)| before.id == now.id))
+}
+
 #[cfg(test)]
 impl ConnectedMeter {
     /// A meter that said nothing about itself beyond which entry it is: no

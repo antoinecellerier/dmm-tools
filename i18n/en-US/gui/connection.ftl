@@ -114,6 +114,11 @@ connection-several-cables-action = Leave only this meter's cable plugged in, the
 # A toast, when that notice ends a running recording. What it holds can still
 # be exported.
 connection-several-cables-recording = Recording stopped: the link dropped and this meter's USB cable can't be told from the others
+# A toast, when a different meter answers the session during a recording,
+# as after a reconnect under Auto-detect or a device picked in Settings.
+# $meter is the meter that answered, a model name. What was recorded can
+# still be exported.
+connection-other-meter-recording = Recording stopped: { $meter } answered instead of the meter it started on. What was recorded can still be exported.
 # Any other failure to connect or to keep reading. The error itself
 # follows, then connection-click-connect.
 connection-failed = Connection failed
