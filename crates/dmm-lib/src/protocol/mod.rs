@@ -208,6 +208,67 @@ pub(crate) fn assert_digits_spell_value(m: &crate::measurement::Measurement) {
     }
 }
 
+/// The golden fixture directories, `tests/golden/<id>/`, by name, sorted.
+#[cfg(test)]
+pub(crate) fn golden_ids() -> Vec<String> {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/golden");
+    let mut ids: Vec<String> = std::fs::read_dir(&root)
+        .unwrap_or_else(|e| panic!("{}: {e}", root.display()))
+        .map(|entry| entry.unwrap())
+        .filter(|entry| entry.path().is_dir())
+        .map(|entry| entry.file_name().into_string().unwrap())
+        .collect();
+    ids.sort();
+    ids
+}
+
+/// Device `id`'s protocol and each golden fixture under `tests/golden/<id>/`
+/// decoded with it, by file name. Panics when `id` is not a registry id or
+/// has no fixtures. Only `raw_hex` is read; `tests/golden_tests.rs` checks
+/// the rest of each fixture.
+#[cfg(test)]
+pub(crate) fn golden_readings(
+    id: &str,
+) -> (
+    Box<dyn Protocol>,
+    Vec<(String, crate::measurement::Measurement)>,
+) {
+    let entry = registry::find_device(id)
+        .unwrap_or_else(|| panic!("golden directory {id:?} is not a registry id"));
+    let protocol = (entry.new_protocol)();
+    let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/golden")
+        .join(id);
+    let mut paths: Vec<_> = std::fs::read_dir(&dir)
+        .unwrap_or_else(|e| panic!("{}: {e}", dir.display()))
+        .map(|entry| entry.unwrap().path())
+        .filter(|path| path.extension().is_some_and(|e| e == "yaml"))
+        .collect();
+    paths.sort();
+    assert!(!paths.is_empty(), "no fixtures in {}", dir.display());
+    let readings = paths
+        .iter()
+        .map(|path| {
+            let yaml = std::fs::read_to_string(path).unwrap();
+            let hex = yaml
+                .lines()
+                .find_map(|l| l.strip_prefix("raw_hex:"))
+                .unwrap_or_else(|| panic!("{}: no raw_hex", path.display()));
+            let hex: String = hex.chars().filter(char::is_ascii_hexdigit).collect();
+            let payload: Vec<u8> = (0..hex.len())
+                .step_by(2)
+                .map(|i| u8::from_str_radix(&hex[i..i + 2], 16).unwrap())
+                .collect();
+            let m = protocol
+                .parse_payload(&payload)
+                .unwrap_or_else(|e| panic!("{}: {e}", path.display()));
+            let name = path.file_name().unwrap().to_string_lossy().into_owned();
+            (name, m)
+        })
+        .collect();
+    (protocol, readings)
+}
+
 /// Whether `mode` is the `Unknown(0x..)` fallback a parser writes for a mode
 /// code its family's table doesn't list.
 pub fn is_unknown_mode(mode: &str) -> bool {

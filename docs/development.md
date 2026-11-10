@@ -219,7 +219,9 @@ device id (`ut61eplus`, `ut804`, …), and its `.yaml` files are parsed by that
 device's `Protocol::parse_payload`. They use the same format as capture YAML
 samples (`raw_hex`, `mode`, `value`, `unit`, `range_label`, `flags`, `aux`,
 `main_label`), so you can copy a sample directly from a capture report into a
-golden file; `golden_tests.rs` says which fields are optional.
+golden file; `golden_tests.rs` says which fields are optional. A test in
+`crates/dmm-lib/src/text.rs` also checks that every label a fixture decodes to
+is one its family's `all_labels` lists ([Translations](#translations)).
 
 To add a golden test:
 

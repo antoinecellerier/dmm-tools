@@ -2165,11 +2165,10 @@ mod tests {
 
     /// Every function each split-digit layout lights, alone, with each of
     /// its prefixes, either coupling and PEAK, decodes without a report to
-    /// listed labels; as do the ZT-5B's golden readings.
+    /// listed labels.
     #[test]
     fn the_labels_of_every_function_drawn_are_listed() {
         let all = crate::text::listed();
-        crate::text::assert_golden_listed(all, "zt5b");
         let digits = b"1234".map(|c| Cell {
             glyph: Glyph::from_segments(segments(char::from(c))),
             dp: false,

@@ -1998,14 +1998,12 @@ pub(super) mod tests {
     /// without a report, over every combination of up to three of the
     /// annunciators the functions read with each prefix, each word that
     /// names a mode, and up to two of the secondary display's; its modes are
-    /// [`MODES`]; and the golden readings' labels are in it.
+    /// [`MODES`].
     #[test]
     fn the_listed_labels_are_the_quiet_replies() {
         use crate::text::TextKind;
         use std::collections::BTreeSet;
         let all = crate::text::listed();
-        crate::text::assert_golden_listed(all, "bm52x");
-        crate::text::assert_golden_listed(all, "bm82x");
         let up_to = |anns: &[Ann], most: usize| -> Vec<Vec<Ann>> {
             let mut sets = vec![Vec::new()];
             for &ann in anns {

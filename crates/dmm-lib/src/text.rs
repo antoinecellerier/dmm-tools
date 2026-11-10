@@ -132,7 +132,7 @@ mod tests {
 #[cfg(any(test, feature = "test-support"))]
 pub use list::{Labels, all_texts};
 #[cfg(test)]
-pub(crate) use list::{assert_golden_listed, assert_listed, listed};
+pub(crate) use list::{assert_listed, listed};
 
 #[cfg(any(test, feature = "test-support"))]
 mod list {
@@ -240,41 +240,6 @@ mod list {
     pub(crate) fn listed() -> &'static Labels {
         static LISTED: std::sync::OnceLock<Labels> = std::sync::OnceLock::new();
         LISTED.get_or_init(all_texts)
-    }
-
-    /// Panic unless every label of each golden fixture under
-    /// `tests/golden/<device>/`, decoded with that device's parser, is
-    /// listed for it ([`assert_listed`]).
-    #[cfg(test)]
-    pub(crate) fn assert_golden_listed(all: &Labels, device: &'static str) {
-        let entry = registry::find_device(device).expect("a registry id");
-        let protocol = (entry.new_protocol)();
-        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("tests/golden")
-            .join(device);
-        let mut paths: Vec<_> = std::fs::read_dir(&dir)
-            .unwrap_or_else(|e| panic!("{}: {e}", dir.display()))
-            .map(|entry| entry.unwrap().path())
-            .filter(|path| path.extension().is_some_and(|e| e == "yaml"))
-            .collect();
-        paths.sort();
-        assert!(!paths.is_empty(), "no fixtures in {}", dir.display());
-        for path in paths {
-            let yaml = std::fs::read_to_string(&path).unwrap();
-            let hex = yaml
-                .lines()
-                .find_map(|l| l.strip_prefix("raw_hex:"))
-                .unwrap_or_else(|| panic!("{}: no raw_hex", path.display()));
-            let hex: String = hex.chars().filter(char::is_ascii_hexdigit).collect();
-            let payload: Vec<u8> = (0..hex.len())
-                .step_by(2)
-                .map(|i| u8::from_str_radix(&hex[i..i + 2], 16).unwrap())
-                .collect();
-            let m = protocol
-                .parse_payload(&payload)
-                .unwrap_or_else(|e| panic!("{}: {e}", path.display()));
-            assert_listed(all, protocol.as_ref(), &m, device);
-        }
     }
 
     /// Panic unless every label of reading `m`, and of the choices
@@ -389,6 +354,22 @@ mod list {
                 .collect();
             for device in registry::DEVICES {
                 assert!(with_modes.contains(device.id), "{}", device.id);
+            }
+        }
+
+        /// Every label a captured frame decodes to is listed for the device
+        /// whose golden directory holds it, so a new directory is checked
+        /// the day it lands. `tests/golden_tests.rs` walks the same
+        /// directories for the readings themselves.
+        #[test]
+        fn golden_readings_labels_are_listed() {
+            let ids = crate::protocol::golden_ids();
+            assert!(!ids.is_empty());
+            for id in ids {
+                let (protocol, readings) = crate::protocol::golden_readings(&id);
+                for (_, m) in &readings {
+                    assert_listed(listed(), protocol.as_ref(), m, &id);
+                }
             }
         }
 

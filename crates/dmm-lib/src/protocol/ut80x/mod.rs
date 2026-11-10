@@ -3563,12 +3563,11 @@ raw_payload=11"#
     }
 
     /// The list holds exactly the labels of the readings each model's parser
-    /// accepts without a report, and the UT804's golden readings.
+    /// accepts without a report.
     #[test]
     fn the_listed_labels_are_the_accepted_readings() {
         use crate::text::TextKind;
         let all = crate::text::listed();
-        crate::text::assert_golden_listed(all, "ut804");
         let models = [
             Model::Ut803,
             Model::Ut804,

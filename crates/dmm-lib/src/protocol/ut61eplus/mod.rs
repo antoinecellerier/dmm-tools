@@ -3567,14 +3567,6 @@ raw_payload=14"#
     }
 
     #[test]
-    fn the_golden_readings_labels_are_listed() {
-        let all = crate::text::listed();
-        for device in ["ut61eplus", "ut161e", "ut61b+"] {
-            crate::text::assert_golden_listed(all, device);
-        }
-    }
-
-    #[test]
     fn every_models_dial_and_secondary_labels_are_listed() {
         use crate::text::TextKind;
         let all = crate::text::listed();

@@ -2033,12 +2033,11 @@ raw_payload=30"#
 
     /// The list holds exactly the labels of the readings parsed without a
     /// report: the documented payloads, and every spec §6 word with both
-    /// sub-values on every rung; and the golden readings' labels.
+    /// sub-values on every rung.
     #[test]
     fn the_listed_labels_are_the_quiet_readings() {
         use crate::text::TextKind;
         let all = crate::text::listed();
-        crate::text::assert_golden_listed(all, "ut181a");
         let protocol = super::super::Ut181aProtocol::new();
         let mut payloads = documented_payloads();
         for word in mode::known_words() {

@@ -1008,13 +1008,11 @@ pub(crate) mod tests {
     /// The list holds exactly the labels of the frames the VC871 and the
     /// OW69B decode without a report: every function code under every
     /// combination of the status bits that name the mode, Motor's texts,
-    /// and every sub-display function under REL, MIN and MAX; and the
-    /// VC871's captured frames' labels.
+    /// and every sub-display function under REL, MIN and MAX.
     #[test]
     fn the_listed_labels_are_the_quiet_frames() {
         use crate::text::TextKind;
         let all = crate::text::listed();
-        crate::text::assert_golden_listed(all, "cms061");
         let protocol = |model: &Model| {
             let entry = model.entry;
             (entry.new_protocol)()
