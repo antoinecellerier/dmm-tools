@@ -26,6 +26,7 @@ pub(crate) fn cmd_info(
         println!("{}", tr!(l, "info-detected", meter = meter.to_string()));
     }
     print_reported_name(l, reported.as_deref(), |line| println!("{line}"));
+    crate::open::warn_other_model(&dmm, device);
 
     let transport = dmm.transport().transport_name();
     println!("{}", tr!(l, "info-transport", transport = transport));

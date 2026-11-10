@@ -3,7 +3,7 @@
 //! reading column shows when there is nothing to read.
 
 use dmm_lib::protocol::registry;
-use dmm_shared::help::Diagnosis;
+use dmm_shared::help::{Diagnosis, MeterChoice};
 use dmm_shared::l10n::Localizer;
 use dmm_shared::reopen::ReopenPin;
 use dmm_shared::tr;
@@ -106,17 +106,21 @@ fn detected_toast(
 }
 
 /// What the toast says when the meter names another model than the one
-/// picked: its tables, specs and keys are the picked model's until it is
-/// chosen.
-fn other_model_toast(l10n: &Localizer, reported: &str, picked: &str, named: &str) -> String {
-    tr!(
-        l10n,
-        "connection-other-model",
-        reported = reported,
-        picked = picked,
-        named = named
+/// picked: its tables, specs and keys are the picked model's until `named`
+/// is chosen, under the brand of `pick`.
+fn other_model_toast(
+    l10n: &Localizer,
+    reported: &str,
+    picked: &str,
+    named: &'static registry::SelectableDevice,
+    pick: Option<registry::Listing>,
+) -> String {
+    format!(
+        "{} {}",
+        l10n.help().other_model(reported, picked),
+        l10n.help()
+            .gui_choose_meter(MeterChoice::Entry(named), pick)
     )
-    .into_owned()
 }
 
 /// What the toast says when detection fell back without hearing the meter's
@@ -812,13 +816,9 @@ impl App {
                     // Under the name it was picked by, and the named model
                     // under the same brand.
                     let pick = self.picked_listing();
-                    let named = registry::named_under_pick(pick, named);
                     let picked = registry::connected_listing(pick, picked).display_name();
                     self.toast = Some(Toast::error(other_model_toast(
-                        &self.l10n,
-                        &reported,
-                        picked,
-                        named.display_name(),
+                        &self.l10n, &reported, picked, named, pick,
                     )));
                 }
             }
@@ -1989,8 +1989,8 @@ mod tests {
         assert_eq!(
             connect(Some("ut161e")).as_deref(),
             Some(
-                "The meter reports \"UT161E\", not the UNI-T UT61E+ selected. Choose UNI-T UT161E or \
-                 Auto-detect in Settings."
+                "The meter reports \"UT161E\", not the UNI-T UT61E+ selected. Pick UNI-T UT161E or \
+                 Auto-detect in Settings (\u{2699})."
             )
         );
         assert_eq!(connect(None), None);

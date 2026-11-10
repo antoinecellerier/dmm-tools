@@ -12,7 +12,7 @@ use console::style;
 use dmm_lib::mock::MockMode;
 use dmm_lib::protocol::registry::{self, SelectableDevice, Selection};
 use dmm_lib::text::TextKind;
-use dmm_shared::help::{Diagnosis, LinksSearched};
+use dmm_shared::help::{Diagnosis, LinksSearched, MeterChoice};
 use dmm_shared::l10n::Localizer;
 use dmm_shared::tr;
 use std::borrow::Cow;
@@ -342,7 +342,37 @@ pub(crate) fn open_with_help(
     };
     warn_if_experimental(device, dmm.profile());
     warn_cables_at_open(selection, opts, dmm.transport());
+    warn_other_model(&dmm, device);
     Ok((dmm, device))
+}
+
+/// Say that the meter is another model than `device`, the one this run
+/// opened, and what to pass instead, as dmm-gui's toast does — once a run,
+/// and only once its name is known: the open heard it, or the command asked
+/// it (on a UT61+ asking is a command it beeps at, so commands that need no
+/// name don't).
+pub(crate) fn warn_other_model(dmm: &BoxedDmm, device: &'static SelectableDevice) {
+    static TOLD: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+    let (Some(named), Some(reported)) = (dmm.named_other_model(), dmm.known_name()) else {
+        return;
+    };
+    if TOLD.swap(true, std::sync::atomic::Ordering::Relaxed) {
+        return;
+    }
+    let l = crate::l10n::get();
+    let pick = picked_row();
+    let help = l.help();
+    let meter = prose_name(meter_name(device));
+    // Nothing was picked: detection opened it as another model.
+    let fact = match pick {
+        Some(_) => help.other_model(&escaped(reported), &meter),
+        None => help.other_model_detected(&escaped(reported), &meter),
+    };
+    eprintln!(
+        "{} {fact} {}",
+        warning_label(),
+        help.cli_choose_meter(MeterChoice::Entry(named), pick)
+    );
 }
 
 /// Say that other cables were there to open and this run took the first, as

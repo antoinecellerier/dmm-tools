@@ -144,10 +144,6 @@ connection-detected-reports =
         [yes] 已检测到 { $meter } (万用表报告的名称为“{ $reported }”)，并保存为当前设备。在“设置”中选择“自动检测”可重新探测。
        *[no] 已检测到 { $meter } (万用表报告的名称为“{ $reported }”)
     }
-# The meter named another model than the one picked in Settings. $reported
-# is the name it gave, e.g. UT161E; $picked the model picked, $named the
-# model that name belongs to, e.g. UNI-T UT161E.
-connection-other-model = 万用表报告的名称为“{ $reported }”，与所选的 { $picked } 不符。请在“设置”中选择 { $named } 或“自动检测”。
 # Detection settled on a meter, then the meter named another. $reported is
 # the name it gave, $named the model it belongs to. $saved is yes when
 # Settings now names that model.

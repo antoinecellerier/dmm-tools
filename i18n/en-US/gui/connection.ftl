@@ -159,10 +159,6 @@ connection-detected-reports =
         [yes] Detected { $meter } (the meter reports "{ $reported }"), saved as your device. Pick Auto-detect in Settings to probe again.
        *[no] Detected { $meter } (the meter reports "{ $reported }")
     }
-# The meter named another model than the one picked in Settings. $reported
-# is the name it gave, e.g. UT161E; $picked the model picked, $named the
-# model that name belongs to, e.g. UNI-T UT161E.
-connection-other-model = The meter reports "{ $reported }", not the { $picked } selected. Choose { $named } or Auto-detect in Settings.
 # Detection settled on a meter, then the meter named another. $reported is
 # the name it gave, $named the model it belongs to. $saved is yes when
 # Settings now names that model.

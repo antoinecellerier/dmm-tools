@@ -109,6 +109,13 @@ cables-at-open =
     }
 # Follows cables-at-open when nothing tells those cables apart.
 cables-no-reconnect = These cables can't be told apart, so a dropped link will end this session unless --adapter names a cable's path.
+# The meter named another model than the one picked. $reported is the name
+# it gave, e.g. UT161E; $picked the model picked, e.g. UNI-T UT61E+. Each
+# app follows it with what to pick (choose-meter-gui, choose-meter-cli).
+other-model = The meter reports "{ $reported }", not the { $picked } selected.
+# The same when detection opened the meter, without hearing its name in
+# time, as $picked; $reported as above.
+other-model-detected = The meter reports "{ $reported }"; detection opened it as the { $picked }.
 # A cable or Bluetooth link is open but no meter on it identified itself.
 # A notice title in the GUI; dmm-cli starts a sentence with it, naming the
 # link after it (cli/connect.ftl).

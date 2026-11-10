@@ -250,6 +250,23 @@ impl<'a> Help<'a> {
         }
     }
 
+    /// That the meter reported `reported` as its name, not the `picked`
+    /// model; each app follows it with what to pick.
+    pub fn other_model(self, reported: &str, picked: &str) -> Cow<'a, str> {
+        tr!(self.0, "other-model", reported = reported, picked = picked)
+    }
+
+    /// [`Self::other_model`] when nothing was picked: detection opened the
+    /// meter as `opened`.
+    pub fn other_model_detected(self, reported: &str, opened: &str) -> Cow<'a, str> {
+        tr!(
+            self.0,
+            "other-model-detected",
+            reported = reported,
+            picked = opened
+        )
+    }
+
     /// That `several` cables could have been opened and the first was: the
     /// notice both binaries give once a meter opens on one.
     pub fn cables_at_open(self, several: SeveralCables) -> Cow<'a, str> {
@@ -1760,6 +1777,10 @@ mod tests {
         assert_eq!(
             help.cli_choose_meter(MeterChoice::AutoDetect, None),
             "Pass --device auto."
+        );
+        assert_eq!(
+            help.other_model("UT161E", "UNI-T UT61E+"),
+            "The meter reports \"UT161E\", not the UNI-T UT61E+ selected."
         );
     }
 

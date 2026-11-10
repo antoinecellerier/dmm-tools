@@ -104,6 +104,10 @@ setup-bluetooth-scan = 'dmm-cli list' を実行すると、通信範囲内のア
 cables-at-open = 使用できる USB ケーブルが { $count } 本接続されています。最初に見つかったケーブルを使用しています。別のケーブルを選択するには、--adapter を指定してください。
 # Follows cables-at-open when nothing tells those cables apart.
 cables-no-reconnect = これらのケーブルは区別できません。--adapter でケーブルのパスを指定しない限り、リンクが切断されるとそのまま接続が終了します。
+# The meter named another model than the one picked. $reported is the name
+# it gave, e.g. UT161E; $picked the model picked, e.g. UNI-T UT61E+. Each
+# app follows it with what to pick (choose-meter-gui, choose-meter-cli).
+other-model = マルチメーターは選択した { $picked } ではなく「{ $reported }」と報告しています。
 # A cable or Bluetooth link is open but no meter on it identified itself.
 # A notice title in the GUI; dmm-cli starts a sentence with it, naming the
 # link after it (cli/connect.ftl).

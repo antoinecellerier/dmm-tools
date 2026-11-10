@@ -293,6 +293,8 @@ fn read_meter(
             }
             None => None,
         };
+        // After the open's own lines: the replay's name ask may have heard it.
+        crate::open::warn_other_model(&dmm, device);
         info!("connected, starting measurement loop");
         run_read_loop(
             stop,

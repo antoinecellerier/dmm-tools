@@ -145,10 +145,6 @@ connection-detected-reports =
         [yes] Se detectó el multímetro { $meter } (se identifica como “{ $reported }”) y se guardó como tu dispositivo. Elige Detección automática en Configuración para volver a detectar el multímetro.
        *[no] Se detectó el multímetro { $meter } (se identifica como “{ $reported }”)
     }
-# The meter named another model than the one picked in Settings. $reported
-# is the name it gave, e.g. UT161E; $picked the model picked, $named the
-# model that name belongs to, e.g. UNI-T UT161E.
-connection-other-model = El multímetro se identifica como “{ $reported }”, no como el modelo seleccionado, { $picked }. Elige { $named } o Detección automática en Configuración.
 # Detection settled on a meter, then the meter named another. $reported is
 # the name it gave, $named the model it belongs to. $saved is yes when
 # Settings now names that model.

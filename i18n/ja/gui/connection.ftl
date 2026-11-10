@@ -144,10 +144,6 @@ connection-detected-reports =
         [yes] 「{ $reported }」と報告するマルチメーターを { $meter } として検出し、使用するデバイスとして保存しました。もう一度検出するには、[設定] で [自動検出] を選択してください。
        *[no] 「{ $reported }」と報告するマルチメーターを { $meter } として検出しました。
     }
-# The meter named another model than the one picked in Settings. $reported
-# is the name it gave, e.g. UT161E; $picked the model picked, $named the
-# model that name belongs to, e.g. UNI-T UT161E.
-connection-other-model = マルチメーターは選択した { $picked } ではなく「{ $reported }」と報告しています。[設定] で { $named } または [自動検出] を選択してください。
 # Detection settled on a meter, then the meter named another. $reported is
 # the name it gave, $named the model it belongs to. $saved is yes when
 # Settings now names that model.

@@ -108,6 +108,10 @@ cables-at-open =
     }
 # Follows cables-at-open when nothing tells those cables apart.
 cables-no-reconnect = Não é possível distinguir esses cabos; por isso, se a conexão cair, esta sessão será encerrada, a menos que você indique o caminho de um cabo com --adapter.
+# The meter named another model than the one picked. $reported is the name
+# it gave, e.g. UT161E; $picked the model picked, e.g. UNI-T UT61E+. Each
+# app follows it with what to pick (choose-meter-gui, choose-meter-cli).
+other-model = O multímetro se identifica como “{ $reported }”, não como o modelo { $picked } selecionado.
 # A cable or Bluetooth link is open but no meter on it identified itself.
 # A notice title in the GUI; dmm-cli starts a sentence with it, naming the
 # link after it (cli/connect.ftl).

@@ -108,6 +108,10 @@ cables-at-open =
     }
 # Follows cables-at-open when nothing tells those cables apart.
 cables-no-reconnect = 这些连接线无法相互区分，除非用 --adapter 指定连接线的路径，否则连接断开后本次会话将结束。
+# The meter named another model than the one picked. $reported is the name
+# it gave, e.g. UT161E; $picked the model picked, e.g. UNI-T UT61E+. Each
+# app follows it with what to pick (choose-meter-gui, choose-meter-cli).
+other-model = 万用表报告的名称为“{ $reported }”，与所选的 { $picked } 不符。
 # A cable or Bluetooth link is open but no meter on it identified itself.
 # A notice title in the GUI; dmm-cli starts a sentence with it, naming the
 # link after it (cli/connect.ftl).

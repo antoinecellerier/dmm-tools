@@ -268,9 +268,10 @@ impl<T: Transport> Dmm<T> {
         let name = self.protocol.get_name(&self.transport)?;
         if name.is_some() {
             self.name.clone_from(&name);
-            // Once per session: the name is asked once.
+            // Once per session: the name is asked once. For the log: both
+            // apps say it themselves, with what to pick.
             if let (Some(name), Some(entry)) = (&name, self.named_other_model()) {
-                warn!(
+                info!(
                     "the meter reports {name:?}, the name of entry {}, not the {} it was opened as",
                     entry.id,
                     self.protocol.profile().display_name()
