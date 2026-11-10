@@ -105,6 +105,10 @@ setup-bluetooth-scan = Run 'dmm-cli list' to scan for adapters and meters in ran
 # holds it, e.g. ut62; $path is the file. dmm-gui shows it in a toast,
 # dmm-cli after "Warning:" and before what to do.
 saved-device-unknown = The settings file { $path } names the device "{ $device }", which this version doesn't know, so the meter is detected instead.
+# The settings file's mock_mode (the setting's name in the file, kept as it
+# is) names no scenario of the simulated meter. $given is the name as the
+# file holds it. Each app follows it with what to do.
+saved-mock-mode-unknown = The settings file's mock_mode "{ $given }" is not a mock mode, so the mock cycles through them all.
 # When the meter opened, other cables were there to open and the session
 # took the first, with --adapter a command-line option kept as it is. $count
 # is 2 or more. dmm-gui shows it in a toast, dmm-cli after "Warning:".

@@ -21,13 +21,13 @@ connect-unrecognised-report-file = Please report it at { $url }, attaching the r
 # After saved-device-unknown: how to name the meter from now on. Settings
 # is dmm-gui's panel; --device a command-line option, kept as it is.
 connect-saved-device-unknown-action = To name the meter, pass --device or pick it in dmm-gui's Settings.
+# After saved-mock-mode-unknown. Mock mode is dmm-gui's setting; --mock-mode
+# a command-line option, and 'dmm-cli read --help' a command line, kept as
+# they are.
+connect-saved-mock-mode-unknown-action = Pick a Mock mode in dmm-gui's Settings, or pass --mock-mode; 'dmm-cli read --help' lists the modes.
 # info and debug talk to a real meter. $device is the simulated meter's id,
 # e.g. mock.
 connect-needs-hardware = This command requires real hardware (not supported with --device { $device }).
-# The settings file names a simulated-meter scenario that doesn't exist.
-# mock_mode is the setting's name in the file. $error is the reason, in
-# English.
-connect-saved-mock-mode = mock_mode in the settings file: { $error }
 # The settings file dmm-gui saves is there but broken, so the run goes on
 # without it. $error is the reason, in English, naming the file, e.g.
 # "cannot parse /home/me/.config/dmm-tools/settings.json: EOF while parsing

@@ -441,17 +441,31 @@ impl App {
                 thread_ctx,
             );
         } else if let Some(device) = device_entry.filter(|d| !d.requires_hardware) {
-            let mock_mode = match self.settings.shared.mock_mode() {
+            // Only the mock has scenarios: another simulated meter ignores
+            // the setting.
+            let saved_mode = if device.id == dmm_lib::mock::MOCK.id {
+                self.settings.shared.mock_mode()
+            } else {
+                Ok(None)
+            };
+            let mock_mode = match saved_mode {
                 Ok(mode) => mode,
                 // Only a hand-edited settings file reaches this: clap
                 // rejects a bad `--mock-mode` and the Settings row writes
                 // labels. Auto-cycling silently looked like the pin was
-                // ignored, so say so — the toast takes the first line and
-                // the log the mode list that follows it.
-                Err(message) => {
-                    warn!("{message}");
-                    let headline = message.lines().next().unwrap_or_default().to_string();
-                    self.toast = Some(Toast::error(headline));
+                // ignored, so say so; the log lists the modes.
+                Err(unknown) => {
+                    warn!(
+                        "the settings file's mock_mode {:?} is not a mock mode; modes: {}",
+                        unknown.given,
+                        dmm_lib::mock::MockMode::label_list()
+                    );
+                    let message = format!(
+                        "{} {}",
+                        self.l10n.help().saved_mock_mode_unknown(&unknown),
+                        tr!(self.l10n, "connection-saved-mock-mode-unknown-action")
+                    );
+                    self.toast = Some(Toast::error(message));
                     None
                 }
             };

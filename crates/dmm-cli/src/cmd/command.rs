@@ -23,6 +23,8 @@ pub(crate) fn cmd_command(
         None => return print_available_commands(device_for_listing(selection, opts)?),
     };
 
+    // No mock scenario pinned: a button press does the same whatever the
+    // mock shows, and the run ends with it.
     let mut dmm = open_any(selection, opts, None)?;
     match dmm.send_command(&action) {
         // A name the meter doesn't have, most often mistyped: say which it

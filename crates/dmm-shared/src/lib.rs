@@ -163,14 +163,26 @@ impl SharedSettings {
     }
 
     /// The mock scenario the file pins, `None` when it pins none. A name the
-    /// mock doesn't know — only a hand-edited file has one — is the mock's
-    /// error: a first line saying so, then the valid names.
-    pub fn mock_mode(&self) -> Result<Option<dmm_lib::mock::MockMode>, String> {
+    /// mock doesn't know — only a hand-edited file has one — is refused with
+    /// that name, which [`help::Help::saved_mock_mode_unknown`] words.
+    pub fn mock_mode(&self) -> Result<Option<dmm_lib::mock::MockMode>, UnknownMockMode> {
         if self.mock_mode.is_empty() {
             return Ok(None);
         }
-        self.mock_mode.parse().map(Some)
+        self.mock_mode
+            .parse()
+            .map(Some)
+            .map_err(|_| UnknownMockMode {
+                given: self.mock_mode.clone(),
+            })
     }
+}
+
+/// A `mock_mode` in the settings file that names no mock scenario, as the
+/// file holds it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UnknownMockMode {
+    pub given: String,
 }
 
 impl Default for SharedSettings {
@@ -695,8 +707,12 @@ mod tests {
             with("dcv").mock_mode(),
             Ok(Some(dmm_lib::mock::MockMode::DcV))
         );
-        let error = with("bogus").mock_mode().unwrap_err();
-        assert_eq!(error.lines().next(), Some("unknown mock mode: bogus"));
+        assert_eq!(
+            with("bogus").mock_mode(),
+            Err(UnknownMockMode {
+                given: "bogus".to_string()
+            })
+        );
     }
 
     #[test]

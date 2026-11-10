@@ -785,7 +785,7 @@ fn open_error_help(
 
 /// The mock scenario a run on `selection` pins: `--mock-mode` when given,
 /// else the settings file's `mock_mode`, which the GUI's Mock mode row
-/// writes. `None` for a meter on a cable, and for a saved name the mock
+/// writes. `None` for any other meter, and for a saved name the mock
 /// doesn't know, which is warned about so the mock cycling isn't a mystery —
 /// the GUI does the same with it.
 pub(crate) fn pinned_mock_mode(
@@ -793,17 +793,20 @@ pub(crate) fn pinned_mock_mode(
     flag: Option<MockMode>,
     saved: Option<&dmm_shared::SharedSettings>,
 ) -> Option<MockMode> {
-    if flag.is_some() || requires_hardware(selection) {
+    // Only the mock has scenarios: another simulated meter ignores them.
+    let mock = matches!(selection, Selection::Device(d) if d.id == dmm_lib::mock::MOCK.id);
+    if flag.is_some() || !mock {
         return flag;
     }
     match saved?.mock_mode() {
         Ok(mode) => mode,
-        Err(message) => {
-            let error = message.lines().next().unwrap_or_default();
+        Err(unknown) => {
+            let l = crate::l10n::get();
             eprintln!(
-                "{} {}",
+                "{} {} {}",
                 warning_label(),
-                tr!(crate::l10n::get(), "connect-saved-mock-mode", error = error),
+                l.help().saved_mock_mode_unknown(&unknown),
+                tr!(l, "connect-saved-mock-mode-unknown-action")
             );
             None
         }

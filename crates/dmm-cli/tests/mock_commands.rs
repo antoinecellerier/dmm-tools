@@ -89,7 +89,7 @@ fn read_follows_the_saved_mock_mode() {
     let (csv, stderr) = run_with("nonsense", &[]);
     assert!(csv.lines().count() == 3, "still reads, cycling: {csv}");
     assert!(
-        stderr.contains("Warning: mock_mode in the settings file:"),
+        stderr.contains("Warning: The settings file's mock_mode \"nonsense\" is not a mock mode"),
         "got {stderr}"
     );
     let replay = concat!(

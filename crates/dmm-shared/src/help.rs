@@ -323,6 +323,16 @@ impl<'a> Help<'a> {
         tr!(self.0, "saved-device-unknown", device = device, path = path)
     }
 
+    /// That the settings file's `mock_mode` names no scenario, so the mock
+    /// cycles through them all; each app follows it with what to do.
+    pub fn saved_mock_mode_unknown(self, unknown: &crate::UnknownMockMode) -> Cow<'a, str> {
+        tr!(
+            self.0,
+            "saved-mock-mode-unknown",
+            given = unknown.given.as_str()
+        )
+    }
+
     /// Why a `--device` value was refused: no meter has that name. For
     /// [`crate::l10n::arg_errors::refused`].
     pub fn unknown_device(self) -> Cow<'a, str> {

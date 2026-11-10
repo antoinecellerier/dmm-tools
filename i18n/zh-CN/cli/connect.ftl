@@ -14,10 +14,6 @@
 # info and debug talk to a real meter. $device is the simulated meter's id,
 # e.g. mock.
 connect-needs-hardware = 此命令需要真实硬件 (--device { $device } 不支持)。
-# The settings file names a simulated-meter scenario that doesn't exist.
-# mock_mode is the setting's name in the file. $error is the reason, in
-# English.
-connect-saved-mock-mode = 设置文件中的 mock_mode: { $error }
 # The settings file dmm-gui saves is there but broken, so the run goes on
 # without it. $error is the reason, in English, naming the file, e.g.
 # "cannot parse /home/me/.config/dmm-tools/settings.json: EOF while parsing

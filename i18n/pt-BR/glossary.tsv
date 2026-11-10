@@ -132,7 +132,7 @@ identify itself (a meter)	identificar-se	v.	connection-not-identified, no-meter-
 driver	driver	s. m.	setup-usb-windows-warning	MS-T «driver» → «driver» (masc.)	«o driver», plural «drivers».
 Device Manager	Gerenciador de Dispositivos	s. próprio m.	setup-usb-windows-open	MS-T «Device Manager» → «Gerenciador de Dispositivos»	Windows' own name: capitals as Windows shows them.
 System Settings > Privacy & Security (macOS)	Ajustes do Sistema > Privacidade e Segurança > Monitoração de Entrada; … > Bluetooth	—	setup-usb-macos-privacy, setup-bluetooth-macos-privacy	Apple support pt-BR mchl4cedafb6 «Ajustes do Sistema … Privacidade e Segurança … Monitoração de Entrada»; mchl211c911f «Altere o ajuste Privacidade e Segurança no Mac»	macOS's own names, capitals as Apple writes them.
-settings file	arquivo de configurações	s. m.	CLI help, connect-saved-mock-mode	MS-T «settings» → «configurações», «file» → «arquivo»	Never «ficheiro» (pt-PT).
+settings file	arquivo de configurações	s. m.	CLI help, saved-mock-mode-unknown	MS-T «settings» → «configurações», «file» → «arquivo»	Never «ficheiro» (pt-PT).
 command-line option / flag	opção de linha de comando	s. f.	comments, notices naming --flags	MS-T «command-line option» → «opção de linha de comando» (fem.)	
 timeout	tempo limite esgotado	s. m.	error-timeout, debug-timeout	MS-T «time-out» → «tempo limite»; «time out» → «atingir tempo limite»	"""Timed out waiting for …"" → «Tempo limite esgotado ao aguardar …»."
 checksum	soma de verificação	s. f.	error-checksum-mismatch	MS-T «checksum» → «soma de verificação» (fem.)	

@@ -133,7 +133,7 @@ identify itself (a meter)	识别	v.	connection-not-identified, no-meter-answered
 driver	驱动程序	n.	setup-usb-windows-warning	MS-T driver => 驱动程序	
 Device Manager	设备管理器	n.	setup-usb-windows-open	MS-T Device Manager => 设备管理器	UNVERIFIED Windows names: 'USB Input Device' → «USB 输入设备», and the HID group «人体学输入设备», which Microsoft's zh-cn touchscreen support page and MS-T write «人机接口设备». Check on a Chinese Windows. «其他设备»: Microsoft support zh-cn Bluetooth page.
 System Settings > Privacy & Security (macOS)	系统设置 > 隐私与安全 > 输入监控；… > 蓝牙	n.	setup-usb-macos-privacy, setup-bluetooth-macos-privacy	Apple support zh-cn mchl211c911f «点按边栏中的“隐私与安全”»	macOS's own names.
-settings file	设置文件	n.	CLI help, connect-saved-mock-mode	MS-T settings => 设置	
+settings file	设置文件	n.	CLI help, saved-mock-mode-unknown	MS-T settings => 设置	
 command-line option / flag	命令行选项	n.	comments, notices naming --flags	MS-T command-line option => 命令行选项	The --flag itself is verbatim.
 timeout	超时	n.	error-timeout, debug-timeout	MS-T time-out => 超时	
 checksum	校验和	n.	error-checksum-mismatch	MS-T checksum => 校验和	

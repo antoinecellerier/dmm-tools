@@ -132,7 +132,7 @@ identify itself (a meter)	s'identifier	v.	connection-not-identified, no-meter-an
 driver	pilote	n. m.	setup-usb-windows-warning	MS Terminology driver => pilote	
 Device Manager	Gestionnaire de périphériques	n. pr. m.	setup-usb-windows-open	MS Terminology Device Manager => Gestionnaire de périphériques	The quoted Windows names must be Windows' own French names. «Périphériques d’interface utilisateur» and «Autres périphériques»: Microsoft support fr-fr (touchscreen and Bluetooth pages). 'USB Input Device' is in neither MS Terminology nor public fr-fr docs: unverified, check on a French Windows.
 System Settings > Privacy & Security (macOS)	Réglages Système > Confidentialité et sécurité > Surveillance de l’entrée ; … > Bluetooth	—	setup-usb-macos-privacy, setup-bluetooth-macos-privacy	Apple support fr-fr mchl4cedafb6, mchl211c911f	Apple writes the typographic apostrophe in «Surveillance de l’entrée». Older macOS: Préférences Système > Sécurité et confidentialité.
-settings file	fichier de paramètres	n. m.	CLI help, connect-saved-mock-mode	MS Terminology settings => paramètres	
+settings file	fichier de paramètres	n. m.	CLI help, saved-mock-mode-unknown	MS Terminology settings => paramètres	
 command-line option / flag	option de ligne de commande	n. f.	comments, notices naming --flags	MS Terminology command-line option => option de ligne de commande	The --flag itself is verbatim.
 timeout	délai d'attente dépassé	n. m.	error-timeout, debug-timeout	MS Terminology time-out => délai d'attente / délai d'expiration	
 checksum	somme de contrôle	n. f.	error-checksum-mismatch	MS Terminology checksum => somme de contrôle	

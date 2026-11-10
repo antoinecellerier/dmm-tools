@@ -147,6 +147,10 @@ connection-late-copied = Command copied
 
 ## Toasts.
 
+# After shared.ftl's saved-mock-mode-unknown. Mock mode is the setting's
+# name in Settings.
+connection-saved-mock-mode-unknown-action = Pick a Mock mode in Settings (⚙).
+
 # A meter identified itself while Settings was on Auto-detect. $meter is
 # its name, e.g. UNI-T UT61E+. $saved is yes when Settings now names it, no
 # for a session that detects every time.
