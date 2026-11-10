@@ -14,8 +14,8 @@ struct TriageLogger;
 static LOGGER: TriageLogger = TriageLogger;
 
 /// Where unrecognised data is reported. Its lines come back through
-/// `capture_reports` already, and its once-per-process warning tells a
-/// user to report the meter, which is what triage is answering.
+/// `capture_reports` already, and its once-per-process line is the report
+/// a user is asked to send, which is what triage is answering.
 const UNRECOGNISED: &str = "dmm_lib::protocol::unrecognised";
 
 fn from_lib(target: &str) -> bool {

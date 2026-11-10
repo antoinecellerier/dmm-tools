@@ -531,6 +531,9 @@ pub struct App {
     applied: AppliedChrome,
     /// Transient status toast.
     toast: Option<Toast>,
+    /// The report the library keeps of data a meter sent that no parser
+    /// knows was asked for: once per process, as the library keeps one.
+    told_unrecognised: bool,
     /// The Save as theme row under Customize colors.
     theme_save: controls::theme_save::ThemeSave,
     /// The export waiting on its save dialog or its write, if any.
@@ -657,6 +660,7 @@ impl App {
             on_wayland: false,
             applied: AppliedChrome::default(),
             toast: None,
+            told_unrecognised: false,
             theme_save: Default::default(),
             export: None,
             meter_fit: MeterFit::new(),

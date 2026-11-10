@@ -737,7 +737,9 @@ fn unrecognised_data_warns_once_by_default() {
     assert_eq!(stdout.matches(",DC V,,V,").count(), 3, "got {stdout}");
     assert_eq!(
         stderr
-            .matches("unrecognised display text: \"CUT\", shown as no reading")
+            .matches(
+                "sent data this tool doesn't know (display text: \"CUT\", shown as no reading)"
+            )
             .count(),
         1,
         "got {stderr}"
@@ -749,6 +751,9 @@ fn unrecognised_data_warns_once_by_default() {
         1,
         "got {stderr}"
     );
+    // A recording is the report: no meter to run the debug command on.
+    assert!(stderr.contains("attaching the recording"), "got {stderr}");
+    assert!(!stderr.contains("debug --count"), "got {stderr}");
 }
 
 /// The three-frame recording with markers on its second frame and between

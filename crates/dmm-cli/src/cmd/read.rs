@@ -1107,7 +1107,10 @@ fn run_read_loop<T: dmm_lib::transport::Transport>(
     let mut stream = stream_over(&mut dmm, tick, &stop);
 
     while !stop.load(Ordering::SeqCst) && (count == 0 || i < count) {
-        match stream.tick() {
+        let event = stream.tick();
+        // On any tick: a frame no parser knows may give no reading at all.
+        crate::open::warn_unrecognised();
+        match event {
             Ok(StreamEvent::Measurement(m)) => {
                 let due = markers.front().zip(start).is_some_and(|(next, start)| {
                     start

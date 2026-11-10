@@ -182,6 +182,7 @@ fn main() {
         Cmd::Capture(args) => run_capture(args, selection, opts),
     };
 
+    open::warn_unrecognised();
     if let Err(e) = result {
         report_failure(l, &e, selection, cli.adapter.as_deref());
     }

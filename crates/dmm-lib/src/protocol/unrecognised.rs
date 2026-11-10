@@ -2,20 +2,41 @@
 //!
 //! Every parser that meets data outside its spec — display text, a mode or
 //! range code, an undefined bit, a frame type — calls [`report_unknown`]
-//! instead of logging on its own. The first call of the process warns and
-//! says how to report it; every later call logs at DEBUG. One warning per
-//! process keeps a meter parked on an unknown value, or a GUI that
-//! reconnects, from repeating it; the report it brings in carries the trace
-//! that shows the rest. The state is process-wide rather than per driver
-//! because a reconnect builds a new driver, which would warn again.
+//! instead of logging on its own. The first call of the process is kept
+//! ([`first_unrecognised`]) for each app to ask for a report in its own
+//! terms, and logged; every later call logs at DEBUG. One report per process
+//! keeps a meter parked on an unknown value, or a GUI that reconnects, from
+//! repeating it; the report it brings in carries the trace that shows the
+//! rest. The state is process-wide rather than per driver because a
+//! reconnect builds a new driver, which would report again; any thread can
+//! read it, a replay import's as much as the meter's.
 
 use super::REPO_ISSUES_URL;
-use log::{debug, warn};
+use log::{debug, info};
 use std::cell::{Cell, RefCell};
 use std::fmt;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::OnceLock;
 
-static WARNED: AtomicBool = AtomicBool::new(false);
+/// The process's first report of data a parser doesn't know.
+static FIRST: OnceLock<Unrecognised> = OnceLock::new();
+
+/// Data a parser met outside its spec, the first time in this process: for
+/// each app to ask for a report, naming the meter.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Unrecognised {
+    /// The registry id of the entry being read, one that opens and decodes
+    /// the meter (for the report's `--device`).
+    pub device: &'static str,
+    /// The kind of data, in English: `"display text"`, `"mode byte"`.
+    pub what: &'static str,
+    /// What the meter sent, as the parser formatted it.
+    pub value: String,
+}
+
+/// The process's first [`Unrecognised`] report, once there is one.
+pub fn first_unrecognised() -> Option<&'static Unrecognised> {
+    FIRST.get()
+}
 
 thread_local! {
     /// Reports made on this thread while [`capture_reports`] runs.
@@ -26,9 +47,9 @@ thread_local! {
 
 /// Report data the parser for `device_id` does not recognise.
 ///
-/// `device_id` is the registry id of the entry being read: the hint tells
-/// the user to run `--device` with it, so it must be one that opens and
-/// decodes their meter, not a family label another model shares.
+/// `device_id` is the registry id of the entry being read: the apps' report
+/// hint passes it to `--device`, so it must be one that opens and decodes
+/// their meter, not a family label another model shares.
 ///
 /// `what` names the kind of data (`"display text"`, `"mode byte"`), `value`
 /// what the meter sent, formatted by the caller with `format_args!` so
@@ -43,34 +64,32 @@ pub(crate) fn report_unknown(device_id: &'static str, what: &'static str, value:
             reports.push(format!("{device_id}: unrecognised {what}: {value}"));
         }
     });
-    if !first(&WARNED) {
+    // Whichever thread gets there first keeps its report; the rest log it.
+    let mut first = false;
+    FIRST.get_or_init(|| {
+        first = true;
+        Unrecognised {
+            device: device_id,
+            what,
+            value: value.to_string(),
+        }
+    });
+    if !first {
         debug!("{device_id}: unrecognised {what}: {value}");
         return;
     }
-    warn!(
-        "{device_id}: unrecognised {what}: {value} \u{2014} further unrecognised data is logged at debug level"
+    // A fact for the log: each app asks for the report in its own terms.
+    info!(
+        "{device_id}: unrecognised {what}: {value}; further unrecognised data is logged at debug \
+         level; reports go to {REPO_ISSUES_URL}"
     );
-    // Named `--device`, not left to auto-detection: the reporter is running
-    // a meter we do not fully parse, which is where detection is least sure.
-    warn!(
-        "report it at {REPO_ISSUES_URL}, with the meter in this state, attaching the output of: \
-         RUST_LOG=dmm_lib=trace dmm-cli --device {device_id} debug --count 20"
-    );
-    warn!(
-        "RUST_LOG=dmm_lib=debug logs every occurrence; RUST_LOG=dmm_lib=error hides this warning"
-    );
-}
-
-/// Whether this is the first call to flip `flag`.
-fn first(flag: &AtomicBool) -> bool {
-    !flag.swap(true, Ordering::Relaxed)
 }
 
 /// Run `f` and return what it reported on this thread, one line per call.
 ///
-/// For tests, where the process-wide warning fires once whichever test gets
-/// there first, and for `dmm-cli triage`, which files each report beside the
-/// payload that raised it. Captures do not nest.
+/// For tests, where the process-wide report is kept once whichever test
+/// gets there first, and for `dmm-cli triage`, which files each report
+/// beside the payload that raised it. Captures do not nest.
 #[doc(hidden)]
 pub fn capture_reports<R>(f: impl FnOnce() -> R) -> (R, Vec<String>) {
     CAPTURED.with_borrow_mut(|captured| *captured = Some(Vec::new()));
@@ -96,12 +115,16 @@ pub(crate) fn silently<R>(f: impl FnOnce() -> R) -> (R, bool) {
 mod tests {
     use super::*;
 
+    /// The first report of the process is kept for the apps, whichever
+    /// thread made it.
     #[test]
-    fn only_the_first_call_warns() {
-        let flag = AtomicBool::new(false);
-        assert!(first(&flag));
-        assert!(!first(&flag));
-        assert!(!first(&flag));
+    fn the_first_report_is_kept() {
+        report_unknown("ut61eplus", "mode byte", format_args!("0x7f"));
+        let first = first_unrecognised().expect("a report is kept");
+        assert!(
+            !first.device.is_empty() && !first.what.is_empty(),
+            "{first:?}"
+        );
     }
 
     #[test]

@@ -623,6 +623,7 @@ impl App {
     }
 
     pub(super) fn drain_messages(&mut self) {
+        self.tell_unrecognised(dmm_lib::protocol::first_unrecognised());
         // Drain with `try_recv` rather than `try_iter` so a hung-up sender is
         // distinguishable from an empty queue: the acquisition thread dropping
         // its sender is the only signal that it has died.
@@ -746,6 +747,32 @@ impl App {
             // Disconnect properly: send stop signal so the background thread exits
             self.disconnect();
         }
+    }
+
+    /// Ask for a report, once, when a meter sent data no parser knows: the
+    /// library logs it, which a desktop user never sees.
+    fn tell_unrecognised(&mut self, report: Option<&dmm_lib::protocol::Unrecognised>) {
+        if self.told_unrecognised {
+            return;
+        }
+        let Some(report) = report else {
+            return;
+        };
+        // A caution gives way to an error on screen: ask once it's gone.
+        if self
+            .toast
+            .as_ref()
+            .is_some_and(|t| t.is_error() && !t.expired())
+        {
+            return;
+        }
+        self.told_unrecognised = true;
+        let message = format!(
+            "{} {}",
+            self.l10n.help().unrecognised_data(report),
+            tr!(self.l10n, "connection-unrecognised-report")
+        );
+        self.caution_toast(message);
     }
 
     /// What to tell the user about a library failure, for this session's
@@ -1839,6 +1866,42 @@ mod tests {
             detected_device_to_save("ut61eplus", true, false, Some("ut161e")),
             Some("ut161e")
         );
+    }
+
+    /// Data no parser knows is reported once, under the meter's name, with
+    /// where to send it; the library keeps one report a process, so the app
+    /// asks once too.
+    #[test]
+    fn unrecognised_data_is_reported_once() {
+        let mut app = app("ut61eplus", false);
+        let report = dmm_lib::protocol::Unrecognised {
+            device: "ut61eplus",
+            what: "mode byte",
+            value: "0x7f".to_string(),
+        };
+        app.tell_unrecognised(None);
+        assert!(app.toast.is_none());
+        app.tell_unrecognised(Some(&report));
+        let toast = app.toast.take().expect("a toast");
+        assert_eq!(
+            toast.message,
+            "The UNI-T UT61E+ sent data this tool doesn't know (mode byte: 0x7f). Please report \
+             it through Help & Feedback in the top bar."
+        );
+        app.tell_unrecognised(Some(&report));
+        assert!(app.toast.is_none(), "asked once");
+
+        // Behind an error toast, it waits rather than being lost.
+        let mut app = super::super::test_support::test_app();
+        app.toast = Some(Toast::error("refused".to_string()));
+        app.tell_unrecognised(Some(&report));
+        assert_eq!(
+            app.toast.as_ref().map(|t| t.message.as_str()),
+            Some("refused")
+        );
+        app.toast = None;
+        app.tell_unrecognised(Some(&report));
+        assert!(app.toast.is_some(), "asked once the error is gone");
     }
 
     /// A key the meter refused because it is another model says which to

@@ -22,9 +22,9 @@ paths:
 
 - `log` crate, structured levels: `TRACE` for raw HID bytes, `DEBUG` for protocol events (request/response/checksum), `INFO` for connection state, `WARN` for recoverable issues (timeouts, retries), `ERROR` for failures.
 - `RUST_LOG=dmm_lib=trace` should give complete wire-level debugging.
-- Never log at `INFO` or above inside the measurement loop; per-frame trouble logs at `DEBUG`.
+- Never log at `INFO` or above inside the measurement loop; per-frame trouble logs at `DEBUG`. The one exception is `report_unknown`'s first report of the process, logged at `INFO`.
 - Both binaries show `dmm_lib` warnings by default, so a new `warn!` fires at most once per connect, detection or command.
-- Data the spec doesn't cover (display text, a mode or range code, an undefined bit, a frame type) goes through `protocol::unrecognised::report_unknown`, not a bare `warn!` or `debug!`: it warns once per process with a report hint. A code that decides a reading's scale, such as a range or a metric prefix, goes through `protocol::unknown_scale`, which gives no unit: the base unit would pass for a reading off by powers of a thousand. Only report what is outside the spec and the captures — a documented value, benign or not, stays silent, or every user of that meter sees the warning each session.
+- Data the spec doesn't cover (display text, a mode or range code, an undefined bit, a frame type) goes through `protocol::unrecognised::report_unknown`, not a bare `warn!` or `debug!`: it keeps the first report of the process, which each app asks the user to send, once. A code that decides a reading's scale, such as a range or a metric prefix, goes through `protocol::unknown_scale`, which gives no unit: the base unit would pass for a reading off by powers of a thousand. Only report what is outside the spec and the captures — a documented value, benign or not, stays silent, or every user of that meter sees the warning each session.
 
 ## Dependencies
 

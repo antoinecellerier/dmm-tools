@@ -256,6 +256,21 @@ impl<'a> Help<'a> {
         tr!(self.0, "other-model", reported = reported, picked = picked)
     }
 
+    /// That the meter sent data no parser knows, as `report` has it; each
+    /// app follows it with how to report it.
+    pub fn unrecognised_data(self, report: &dmm_lib::protocol::Unrecognised) -> Cow<'a, str> {
+        let meter = registry::find_device(report.device)
+            .map_or(Cow::Borrowed(report.device), |d| {
+                self.0.label(TextKind::Model, d.display_name())
+            });
+        tr!(
+            self.0,
+            "unrecognised-data",
+            meter = meter,
+            detail = format!("{}: {}", report.what, report.value)
+        )
+    }
+
     /// [`Self::other_model`] when nothing was picked: detection opened the
     /// meter as `opened`.
     pub fn other_model_detected(self, reported: &str, opened: &str) -> Cow<'a, str> {

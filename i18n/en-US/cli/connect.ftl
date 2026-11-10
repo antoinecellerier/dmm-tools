@@ -11,6 +11,13 @@
 ## Refusals before anything is opened. Each follows "Error:" or "Warning:"
 ## (common.ftl) on the same line.
 
+# After shared.ftl's unrecognised-data, on a warning line: where to report
+# it. $url is the issue tracker; a command line to run follows on a line of
+# its own.
+connect-unrecognised-report = Please report it at { $url } with the meter in this state, attaching the output of:
+# The same when the data came from a recording being played back: $url as
+# above.
+connect-unrecognised-report-file = Please report it at { $url }, attaching the recording.
 # $device is the meter id dmm-gui saved in the settings file, e.g.
 # ut61eplus.
 connect-unknown-device = unknown device: { $device }

@@ -22,7 +22,7 @@ pub(crate) mod zotek;
 pub use capture_step::{CaptureStep, Need};
 pub use expect::{Expect, Mismatch, RangeExpect, RangeShown, Shown, ValueExpect};
 #[doc(hidden)]
-pub use unrecognised::capture_reports;
+pub use unrecognised::{Unrecognised, capture_reports, first_unrecognised};
 /// A parsed UT61E+ reading, for the CLI's and GUI's tests.
 #[cfg(any(test, feature = "test-support"))]
 pub use ut61eplus::make_test_measurement;

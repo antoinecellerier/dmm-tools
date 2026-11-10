@@ -33,6 +33,9 @@ connection-waiting-switch-on = Switch on the meter's data transmission, or pick 
 connection-selected-meter = { $model } is selected in Settings (⚙). If your meter is another, pick it there, or pick Auto-detect.
 # The same when the title above already names the meter picked.
 connection-selected-meter-named = If your meter is another, pick it in Settings (⚙), or pick Auto-detect there.
+# After shared.ftl's unrecognised-data, in a toast: where to report it.
+# { project-link } is the top bar's Help & Feedback link.
+connection-unrecognised-report = Please report it through { project-link } in the top bar.
 # The closing line under the steps. "Connect" is the top bar's button.
 connection-click-connect = Click "Connect" after resolving the issue.
 # The closing line after the Bluetooth steps when nothing answered at the

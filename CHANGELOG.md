@@ -7,13 +7,14 @@
 - **Failure notices name the meter picked in Settings and point to Auto-detect** — "No USB cable found" after a meter swap sent you to drivers.
 - **"No USB cable found" says when Bluetooth wasn't searched** — and how to switch the search on.
 - **A refused mode or range switch says to check the dial**
+- **Data the meter sends that this tool doesn't know asks for a report** — the request only reached the log.
 
 ### CLI
 
 - **`--bluetooth` scans Bluetooth for one run, whatever the saved setting**
 - **An unknown `--device` value points to `--help`, which lists the devices**
 - **A mistyped `command` name is answered with the meter's commands**
-- **dmm-cli's connection warnings come in the chosen language** — several USB cables, or a meter naming another model, with what to pass.
+- **dmm-cli's connection warnings come in the chosen language** — several USB cables, a meter naming another model, data it doesn't know.
 - **dmm-cli says which meter is picked when its data won't read**
 - **"No USB cable found" says when Bluetooth wasn't searched** — and how to switch the search on.
 

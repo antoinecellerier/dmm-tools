@@ -375,6 +375,45 @@ pub(crate) fn warn_other_model(dmm: &BoxedDmm, device: &'static SelectableDevice
     );
 }
 
+/// Ask for a report, once per run, when a meter sent data no parser knows:
+/// what it sent, where to report it and the command whose output to
+/// attach, which names the entry with `--device`, not left to detection —
+/// the meter is one this tool doesn't fully read, where detection is least
+/// sure.
+pub(crate) fn warn_unrecognised() {
+    static TOLD: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+    let Some(report) = dmm_lib::protocol::first_unrecognised() else {
+        return;
+    };
+    if TOLD.swap(true, std::sync::atomic::Ordering::Relaxed) {
+        return;
+    }
+    let l = crate::l10n::get();
+    let url = format!("{}/issues", dmm_shared::help::PROJECT_URL);
+    // A recording has no meter to run the command on: the file is the
+    // report.
+    if matches!(PICKED.get(), Some((_, PickedBy::Recording))) {
+        eprintln!(
+            "{} {} {}",
+            warning_label(),
+            l.help().unrecognised_data(report),
+            tr!(l, "connect-unrecognised-report-file", url = url)
+        );
+        return;
+    }
+    eprintln!(
+        "{} {} {}",
+        warning_label(),
+        l.help().unrecognised_data(report),
+        tr!(l, "connect-unrecognised-report", url = url)
+    );
+    let command = format!(
+        "  RUST_LOG=dmm_lib=trace dmm-cli --device {} debug --count 20",
+        report.device
+    );
+    eprintln!("{}", style(command).dim());
+}
+
 /// Say that other cables were there to open and this run took the first, as
 /// dmm-gui does at its first open. Nothing for a meter opened over
 /// Bluetooth, or a cable the only one of its kind.

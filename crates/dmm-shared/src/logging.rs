@@ -2,9 +2,9 @@
 //!
 //! `RUST_LOG` and `RUST_LOG_STYLE` are read as `env_logger::init` reads them.
 //! Unset or empty, `dmm_lib` logs at WARN and everything else at ERROR, so
-//! what the meter library has to say about a connection — data it does not
-//! recognise, a cable it had to pick among several — reaches the terminal
-//! without the user asking for it. A set `RUST_LOG` is used as it is: a
+//! what the meter library warns about reaches the terminal without the
+//! user asking for it; what the apps word themselves (data it does not
+//! recognise, a cable it had to pick among several) it logs at INFO. A set `RUST_LOG` is used as it is: a
 //! `dmm_lib` directive beside it would outrank a global `RUST_LOG=trace`.
 
 use log::LevelFilter;

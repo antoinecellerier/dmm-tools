@@ -321,8 +321,10 @@ scaled, pre-seeded or manual session stays consistent with its own timestamps, a
 tests need not wait.
 
 **Unrecognised data asks for a report, once.** Data outside a parser's spec goes through
-`report_unknown()`, which warns on its first call of the process and logs later calls at DEBUG. A
-meter parked on an unknown value would otherwise repeat it every frame.
+`report_unknown()`, which keeps its first call of the process (`first_unrecognised()`) and logs it;
+later calls log at DEBUG. Each binary asks for the report once, in its own terms: dmm-cli with the
+command whose output to attach, dmm-gui with a toast pointing at Help & Feedback, since a desktop
+user never sees the log. A meter parked on an unknown value would otherwise repeat it every frame.
 
 **Bluetooth runs only inside its own calls.** Behind the default-on `bluetooth` feature, the
 transport runs each `btleplug` call in `block_on` on the caller's thread: no thread, no channel, as
@@ -362,7 +364,7 @@ Protocol families are in [protocol.md](protocol.md); each family's internals are
 | `protocol/<family>/` | One family each: see [protocol.md](protocol.md) and its `mod.rs` |
 | `protocol/framing.rs` | The shared read loop and the frame shapes several families send |
 | `protocol/cycle.rs` | Reaching a mode, range or flag by pressing a button and reading back |
-| `protocol/unrecognised.rs` | `report_unknown()`, once per process |
+| `protocol/unrecognised.rs` | `report_unknown()` and the first report it keeps, once per process |
 | `protocol/capture_step.rs` | `CaptureStep` and `Need`: what a capture step asks the user to set up |
 | `protocol/expect.rs` | `Expect`: what a correct reading looks like after a capture step |
 | `protocol/steps.rs` | The gate capture steps every family starts with |
