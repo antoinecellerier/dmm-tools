@@ -60,7 +60,6 @@ impl Localizer {
                 "error-command-rejected",
                 reason = self.rejected(reason)
             ),
-            Error::UnknownDevice(device) => tr!(self, "error-unknown-device", device = device),
             Error::NotSimulated(device) => tr!(self, "error-not-simulated", device = *device),
             // It quotes the file, so its control characters are escaped.
             Error::Replay(detail) => tr!(
@@ -828,8 +827,7 @@ mod tests {
             Some(Error::ChecksumMismatch { .. }) => vec![Error::Timeout],
             Some(Error::Timeout) => unsupported().into_iter().map(Error::from).collect(),
             Some(Error::UnsupportedCommand(_)) => rejected().into_iter().map(Error::from).collect(),
-            Some(Error::CommandRejected(_)) => vec![Error::UnknownDevice("ut99".into())],
-            Some(Error::UnknownDevice(_)) => vec![Error::NotSimulated("ut61eplus")],
+            Some(Error::CommandRejected(_)) => vec![Error::NotSimulated("ut61eplus")],
             Some(Error::NotSimulated(_)) => {
                 vec![Error::Replay("line 3: `ZZ` is not a hex byte".into())]
             }

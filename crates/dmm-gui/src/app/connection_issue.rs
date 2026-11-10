@@ -1334,7 +1334,7 @@ mod tests {
     /// text arriving with an "adapter not found: " prefix from elsewhere.
     #[test]
     fn a_mention_of_the_phrase_is_not_the_adapter_case() {
-        let issue = ConnectionIssue::of(Error::UnknownDevice(
+        let issue = ConnectionIssue::of(Error::Replay(
             "meter reports adapter not found somewhere".to_string(),
         ));
         assert_eq!(issue.diagnosis(), Some(&Diagnosis::Other));

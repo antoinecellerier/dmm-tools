@@ -120,7 +120,7 @@ Some library errors build their English message at run time with `format!`, so t
 | Group | Errors | Treatment |
 |---|---|---|
 | Developer diagnostics | invalid response, checksum mismatch, replay parse, HID | Lead-in translated, detail stays English |
-| Already structured | `Timeout`, `LinkLost`, `AdapterNotFound`, `UnknownDevice`, `DeviceNotIdentified`, `WrongCable`, `NoTransportFound`, `BluetoothOnly` | Translated by variant and fields |
+| Already structured | `Timeout`, `LinkLost`, `AdapterNotFound`, `DeviceNotIdentified`, `WrongCable`, `NoTransportFound`, `BluetoothOnly` | Translated by variant and fields |
 | Built from sentences | `UnsupportedCommand`, `CommandRejected`, `Bluetooth`, about 40 messages, many in `protocol/cycle.rs` | A reason enum per error |
 
 The reason enums' details:

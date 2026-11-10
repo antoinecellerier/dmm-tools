@@ -31,9 +31,6 @@ error-timeout = tempo limite esgotado ao aguardar a resposta
 error-unsupported-command = comando não suportado: { $reason }
 # $reason is one of the "The meter did not do it" sentences below.
 error-command-rejected = comando recusado: { $reason }
-# $device is the meter's name or ID, as typed with --device or as the
-# settings file holds it, sometimes with an explanation in English.
-error-unknown-device = dispositivo desconhecido: { $device }
 # A meter on a cable was opened as a simulated one. $device is its ID, e.g.
 # ut61eplus.
 error-not-simulated = dispositivo desconhecido: { $device } não é um multímetro simulado

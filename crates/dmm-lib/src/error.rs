@@ -48,9 +48,6 @@ pub enum Error {
     #[error("command rejected: {0}")]
     CommandRejected(Rejected),
 
-    #[error("unknown device: {0}")]
-    UnknownDevice(String),
-
     /// A registry entry opened as a simulated meter that no simulation
     /// serves; its id.
     #[error("unknown device: {0} is not simulated")]
@@ -333,8 +330,7 @@ impl Error {
             Self::InvalidResponse { .. }
             | Self::WrongMeter { .. }
             | Self::ChecksumMismatch { .. } => ErrorKind::Protocol,
-            Self::UnknownDevice(_)
-            | Self::NotSimulated(_)
+            Self::NotSimulated(_)
             | Self::AdapterNotFound(_)
             | Self::NotAnAdapter(_)
             | Self::WrongCable { .. }
@@ -560,14 +556,10 @@ mod tests {
     #[test]
     fn kind_maps_config() {
         assert_eq!(
-            Error::UnknownDevice("foo".into()).kind(),
-            ErrorKind::Configuration
-        );
-        // Each the variant it was carved out of.
-        assert_eq!(
             Error::NotSimulated("ut61eplus").kind(),
             ErrorKind::Configuration
         );
+        // The variant it was carved out of.
         assert_eq!(
             Error::NotAnAdapter("/dev/hidraw3".into()).kind(),
             Error::AdapterNotFound("/dev/hidraw3".into()).kind()
