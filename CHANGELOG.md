@@ -10,6 +10,7 @@
 ### CLI
 
 - **`--bluetooth` scans Bluetooth for one run, whatever the saved setting**
+- **An unknown `--device` value points to `--help`, which lists the devices**
 - **dmm-cli says which meter is picked when its data won't read**
 - **"No USB cable found" says when Bluetooth wasn't searched** — and how to switch the search on.
 

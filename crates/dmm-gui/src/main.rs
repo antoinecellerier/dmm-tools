@@ -13,7 +13,7 @@ mod settings;
 mod specs;
 mod theme;
 
-use clap::builder::{PossibleValue, TypedValueParser, ValueParser};
+use clap::builder::{PossibleValue, ValueParser};
 use clap::{CommandFactory, FromArgMatches, Parser, ValueEnum};
 use dmm_lib::protocol::registry;
 use dmm_lib::replay::Replay;
@@ -194,18 +194,6 @@ fn build_mock_mode_help(l: &Localizer) -> String {
         &tr!(l, "command-line-mock-mode-intro"),
         "dmm-gui --mock-mode dcv",
     )
-}
-
-/// `value` of the option `id`, refused after parsing for `reason`: worded
-/// as clap words a value its own parser refuses, so the shared renderer
-/// puts it in the user's language.
-fn refused(cmd: &clap::Command, id: &str, value: &str, reason: String) -> clap::Error {
-    let parser = move |_: &str| Err::<(), String>(reason.clone());
-    let arg = cmd.get_arguments().find(|a| a.get_id() == id);
-    parser
-        .parse_ref(cmd, arg, std::ffi::OsStr::new(value))
-        .err()
-        .unwrap_or_else(|| clap::Error::new(clap::error::ErrorKind::ValueValidation).with_cmd(cmd))
 }
 
 /// `value` of the option `id`, refused after parsing as none of `values`:
@@ -439,8 +427,8 @@ fn parse_args(l: &Localizer) -> CliOverrides {
     // Validate and canonicalize --device if provided.
     let device = args.device.map(|raw| {
         canonical_device(&raw).unwrap_or_else(|| {
-            let reason = tr!(l, "command-line-unknown-device").into_owned();
-            refuse(refused(&cmd, "device", &raw, reason))
+            let reason = l.help().unknown_device().into_owned();
+            refuse(arg_errors::refused(&cmd, "device", &raw, reason))
         })
     });
 
@@ -478,7 +466,7 @@ fn parse_args(l: &Localizer) -> CliOverrides {
     let replay = args.replay.map(|path| {
         let typed = path.display().to_string();
         load_replay(path, args.replay_draws_keys, l)
-            .unwrap_or_else(|reason| refuse(refused(&cmd, "replay", &typed, reason)))
+            .unwrap_or_else(|reason| refuse(arg_errors::refused(&cmd, "replay", &typed, reason)))
     });
 
     let (device, clock) = resolve_device_and_clock(
@@ -497,7 +485,7 @@ fn parse_args(l: &Localizer) -> CliOverrides {
             .next()
             .map(|v| v.to_string_lossy().into_owned())
             .unwrap_or_default();
-        refuse(refused(&cmd, r.id, &typed, r.reason))
+        refuse(arg_errors::refused(&cmd, r.id, &typed, r.reason))
     });
 
     CliOverrides {
@@ -1073,7 +1061,7 @@ Options:, [possible values: …]) are in shared.ftl.";
         cmd.build();
         for (e, first) in [
             (
-                refused(&cmd, "device", "ut62", "why".to_string()),
+                arg_errors::refused(&cmd, "device", "ut62", "why".to_string()),
                 "error: invalid value 'ut62' for '--device <DEVICE>': why",
             ),
             (

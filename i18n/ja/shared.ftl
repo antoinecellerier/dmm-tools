@@ -235,6 +235,9 @@ args-value-required = '{ $arg }' には値が必要ですが、指定されて�
 args-invalid-value = '{ $arg }' には値 '{ $value }' を使用できません
 # The same, with the reason the value was refused. $reason may be English.
 args-invalid-value-because = '{ $arg }' には値 '{ $value }' を使用できません: { $reason }
+# Why a --device value was refused, as $reason above: no meter has that
+# name.
+device-unknown = 不明なデバイスです。--help で一覧を確認できます
 # The values an option takes, on a line of their own under the error. $values
 # is the list, separated by commas.
 args-possible-values = [指定可能な値: { $values }]

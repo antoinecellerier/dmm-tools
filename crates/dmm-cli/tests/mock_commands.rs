@@ -153,10 +153,50 @@ fn command_sends_to_the_mock() {
 fn auto_is_a_device_value_and_reaches_the_usb_cable() {
     let (_, stderr) = run(&["--device", "auto", "--adapter", "no-such-adapter", "info"]);
     assert!(
-        !stderr.contains("unknown device"),
+        !stderr.contains("no such device"),
         "auto was rejected before anything was opened: {stderr}"
     );
     assert!(stderr.contains("adapter not found"), "got {stderr}");
+}
+
+/// A typed `--device` that names no meter is refused as clap refuses a
+/// value, pointing at the list, before anything opens.
+#[test]
+fn an_unknown_device_points_at_the_list() {
+    let out = dmm_cli()
+        .args(["--device", "ut62", "info"])
+        .output()
+        .expect("run dmm-cli");
+    let stderr = String::from_utf8(out.stderr).expect("utf-8 stderr");
+    assert!(
+        stderr.starts_with(
+            "error: invalid value 'ut62' for '--device <DEVICE>': no such device; --help lists them"
+        ),
+        "{stderr}"
+    );
+    assert_eq!(out.status.code(), Some(2));
+}
+
+/// A saved device id this build doesn't know keeps its own message: it came
+/// from the settings file, not from the command line.
+#[cfg(target_os = "linux")]
+#[test]
+fn an_unknown_saved_device_is_said_as_such() {
+    let config = std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join("dmm-cli-saved-unknown");
+    std::fs::create_dir_all(config.join("dmm-tools")).expect("config dir");
+    std::fs::write(
+        config.join("dmm-tools/settings.json"),
+        r#"{"device_family": "ut62"}"#,
+    )
+    .expect("settings file");
+    let out = dmm_cli()
+        .env("XDG_CONFIG_HOME", &config)
+        .arg("info")
+        .output()
+        .expect("run dmm-cli");
+    let stderr = String::from_utf8(out.stderr).expect("utf-8 stderr");
+    assert!(stderr.contains("unknown device: ut62"), "{stderr}");
+    assert_eq!(out.status.code(), Some(1));
 }
 
 /// Naming the mock still picks it, rather than probing for a meter: the

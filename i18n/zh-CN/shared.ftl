@@ -239,6 +239,9 @@ args-value-required = '{ $arg }' 需要一个值，但没有提供
 args-invalid-value = 为 '{ $arg }' 提供的值 '{ $value }' 无效
 # The same, with the reason the value was refused. $reason may be English.
 args-invalid-value-because = 为 '{ $arg }' 提供的值 '{ $value }' 无效: { $reason }
+# Why a --device value was refused, as $reason above: no meter has that
+# name.
+device-unknown = 没有此设备，可通过 --help 查看设备列表
 # The values an option takes, on a line of their own under the error. $values
 # is the list, separated by commas.
 args-possible-values = [可能的值: { $values }]

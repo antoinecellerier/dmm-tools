@@ -17,12 +17,24 @@ use std::sync::OnceLock;
 
 use super::{Arg, Localizer};
 use crate::tr;
-use clap::builder::StyledStr;
 use clap::builder::styling::Styles;
+use clap::builder::{StyledStr, TypedValueParser as _};
 use clap::error::{ContextKind, ContextValue, ErrorFormatter, ErrorKind};
 
 /// Two spaces, as clap indents a list under its error line.
 const TAB: &str = "  ";
+
+/// `value` of the option `id`, refused after parsing for `reason`: worded
+/// as clap words a value its own parser refuses, so [`exit`] puts it in the
+/// user's language.
+pub fn refused(cmd: &clap::Command, id: &str, value: &str, reason: String) -> clap::Error {
+    let parser = move |_: &str| Err::<(), String>(reason.clone());
+    let arg = cmd.get_arguments().find(|a| a.get_id() == id);
+    parser
+        .parse_ref(cmd, arg, std::ffi::OsStr::new(value))
+        .err()
+        .unwrap_or_else(|| clap::Error::new(ErrorKind::ValueValidation).with_cmd(cmd))
+}
 
 /// Print `e` in `l`'s language and exit, as [`clap::Error::exit`] does.
 /// `hidden` names the subcommands kept out of `--help`, which clap still

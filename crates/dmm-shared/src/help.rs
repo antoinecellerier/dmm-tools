@@ -250,6 +250,12 @@ impl<'a> Help<'a> {
         }
     }
 
+    /// Why a `--device` value was refused: no meter has that name. For
+    /// [`crate::l10n::arg_errors::refused`].
+    pub fn unknown_device(self) -> Cow<'a, str> {
+        tr!(self.0, "device-unknown")
+    }
+
     /// How to open the meter as the model it is, after a message saying it
     /// is another, as dmm-gui says it: an entry under the pick's brand, and
     /// Auto-detect as well unless nothing was `picked`, Auto-detect having

@@ -1,7 +1,6 @@
 ### The parts of dmm-gui's --help built as it runs: the first lines of the
 ### help of --device and --mock-mode, which go on with lists made from the
-### meters; and why a value the command line gave was refused. What each
-### option does is in gui-help.ftl.
+### meters. What each option does is in gui-help.ftl.
 ###
 ### Words in --flag form are typed by the user and stay as they are.
 
@@ -12,10 +11,3 @@ command-line-device-intro = Dispositivo al que conectarse. En esta sesión anula
 # Before the list of the simulated meter's modes. "Mock mode" is the
 # setting's name in the GUI's Settings.
 command-line-mock-mode-intro = Fijar el dispositivo simulado en un modo de medición concreto en lugar de recorrer los modos automáticamente. Implica --device mock y, en esta sesión, anula el valor guardado de Modo simulado.
-
-## Why a value was refused: the reason alone, in lower case and with no full
-## stop, after the option and the value on a line from the command-line
-## parser ("error: invalid value 'ut62' for '--device <DEVICE>': …").
-
-# A --device value that names no meter dmm-gui knows.
-command-line-unknown-device = no existe ese dispositivo; usa --help para ver la lista

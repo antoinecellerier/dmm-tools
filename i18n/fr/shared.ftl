@@ -239,6 +239,9 @@ args-value-required = '{ $arg }' attend une valeur, mais aucune n’a été four
 args-invalid-value = valeur '{ $value }' non valide pour '{ $arg }'
 # The same, with the reason the value was refused. $reason may be English.
 args-invalid-value-because = valeur '{ $value }' non valide pour '{ $arg }' : { $reason }
+# Why a --device value was refused, as $reason above: no meter has that
+# name.
+device-unknown = appareil inconnu : consultez la liste avec --help
 # The values an option takes, on a line of their own under the error. $values
 # is the list, separated by commas.
 args-possible-values = [valeurs possibles : { $values }]

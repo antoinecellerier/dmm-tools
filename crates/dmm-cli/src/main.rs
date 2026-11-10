@@ -82,8 +82,8 @@ fn main() {
     l10n::get().log_load_report();
 
     // Whether the meter was named on the command line, as opposed to coming
-    // from the settings file or from detection. Only `read --replay` and
-    // `--import` ask.
+    // from the settings file or from detection. `read --replay`, `--import`
+    // and the unknown-device refusal ask.
     let device_named = cli.device.is_some();
 
     // Nothing named a meter, so none is assumed: detection is the fallback,
@@ -104,6 +104,15 @@ fn main() {
         open::note_picked(&device_id, by);
     }
     let Some(selection) = registry::resolve_selection(&device_id) else {
+        // Typed: refused as clap refuses a value, pointing at the list, as
+        // dmm-gui does.
+        if device_named {
+            let mut cmd = cli::command(l);
+            cmd.build();
+            let reason = l.help().unknown_device().into_owned();
+            let refused = arg_errors::refused(&cmd, "device", &device_id, reason);
+            arg_errors::exit(refused, l, &cli::hidden_subcommands());
+        }
         fail(tr!(l, "connect-unknown-device", device = &device_id));
     };
 
