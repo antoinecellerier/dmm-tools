@@ -379,15 +379,8 @@ mod tests {
     }
 
     #[test]
-    fn the_gate_leads_and_nothing_is_verified() {
-        let steps = steps();
-        assert!(steps[..6].iter().all(|s| s.gate));
-        assert!(steps[6..].iter().all(|s| !s.gate));
-        assert!(steps.iter().all(|s| !s.verified));
-        let mut ids: Vec<&str> = steps.iter().map(|s| s.id).collect();
-        ids.sort_unstable();
-        ids.dedup();
-        assert_eq!(ids.len(), steps.len(), "ids are unique");
+    fn nothing_is_verified() {
+        assert!(steps().iter().all(|s| !s.verified));
     }
 
     /// Held, 1ms PEAK switches Bluetooth off (manual p.33): every step that

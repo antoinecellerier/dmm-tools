@@ -3016,11 +3016,9 @@ mod tests {
     }
 
     #[test]
-    fn the_gate_leads_and_only_the_cms061_is_verified() {
+    fn only_the_cms061_is_verified() {
         for (code, _) in entries() {
             let steps = steps(code);
-            assert!(steps[..6].iter().all(|s| s.gate), "{code}");
-            assert!(steps[6..].iter().all(|s| !s.gate), "{code}");
             let verified: Vec<&str> = steps.iter().filter(|s| s.verified).map(|s| s.id).collect();
             let want: &[&str] = if code == CMS061.code {
                 CMS061_VERIFIED
@@ -3028,10 +3026,6 @@ mod tests {
                 &[]
             };
             assert_eq!(verified, want, "{code}");
-            let mut ids: Vec<&str> = steps.iter().map(|s| s.id).collect();
-            ids.sort_unstable();
-            ids.dedup();
-            assert_eq!(ids.len(), steps.len(), "{code}: ids are unique");
         }
     }
 

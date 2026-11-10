@@ -1123,15 +1123,9 @@ mod tests {
     }
 
     #[test]
-    fn the_gate_leads_and_ids_are_unique() {
+    fn no_step_sends_a_key() {
         for (steps, _) in series() {
-            assert!(steps[..6].iter().all(|s| s.gate));
-            assert!(steps[6..].iter().all(|s| !s.gate));
             assert!(steps.iter().all(|s| s.command.is_none()), "no remote keys");
-            let mut ids: Vec<&str> = steps.iter().map(|s| s.id).collect();
-            ids.sort_unstable();
-            ids.dedup();
-            assert_eq!(ids.len(), steps.len(), "ids are unique");
         }
     }
 

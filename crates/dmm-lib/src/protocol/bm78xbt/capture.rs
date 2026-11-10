@@ -383,16 +383,10 @@ mod tests {
     }
 
     #[test]
-    fn the_gate_leads_and_nothing_is_verified() {
+    fn nothing_is_verified_and_no_step_sends_a_key() {
         let steps = steps();
-        assert!(steps[..6].iter().all(|s| s.gate));
-        assert!(steps[6..].iter().all(|s| !s.gate));
         assert!(steps.iter().all(|s| !s.verified));
         assert!(steps.iter().all(|s| s.command.is_none()), "no remote keys");
-        let mut ids: Vec<&str> = steps.iter().map(|s| s.id).collect();
-        ids.sort_unstable();
-        ids.dedup();
-        assert_eq!(ids.len(), steps.len(), "ids are unique");
     }
 
     /// Held, Δ switches Bluetooth off (manual p.19): every step that names

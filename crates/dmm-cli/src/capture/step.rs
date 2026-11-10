@@ -1547,16 +1547,25 @@ mod tests {
         "vc890",
     ];
 
+    /// Every meter's steps open with its gate, however many steps that is.
+    /// A meter with no gate step at all is refused too: on a meter not yet
+    /// verified, its run would never pass the gate.
     #[test]
     fn every_device_finishes_its_gate_before_any_other_step() {
         for device in dmm_lib::protocol::registry::DEVICES {
-            if SPLIT_GATE.contains(&device.id) {
+            if !device.requires_hardware {
                 continue;
             }
             let steps = (device.new_protocol)().capture_steps();
             let Some(last_gate) = steps.iter().rposition(|s| s.gate) else {
-                continue;
+                panic!(
+                    "{}: no gate step, so its run never passes the gate",
+                    device.id
+                );
             };
+            if SPLIT_GATE.contains(&device.id) {
+                continue;
+            }
             let stragglers: Vec<&str> = steps[..last_gate]
                 .iter()
                 .filter(|s| !s.gate)

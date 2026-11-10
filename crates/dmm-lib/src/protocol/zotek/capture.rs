@@ -850,13 +850,12 @@ mod tests {
     use crate::protocol::zotek::keys;
     use crate::protocol::zotek::layout::LAYOUTS;
 
-    /// Every layout has its steps, a gate among them, and only the ZT-5B's,
-    /// which a reporter's meter has run (issue #31), claim a hardware run.
+    /// Only the ZT-5B's steps, which a reporter's meter has run (issue #31),
+    /// claim a hardware run.
     #[test]
-    fn every_layout_has_steps_in_its_own_modes() {
+    fn only_the_zt5bs_steps_are_verified() {
         for layout in LAYOUTS {
             let steps = steps(layout);
-            assert!(steps.iter().any(|s| s.gate), "{}", layout.entry.id);
             let verified: Vec<_> = steps.iter().filter(|s| s.verified).map(|s| s.id).collect();
             if layout.entry.id == "zt5b" {
                 assert_eq!(verified.len(), 24, "{verified:?}");

@@ -159,9 +159,10 @@ at tier 1.
 Remote driving (D) runs only at tier 2, which makes where a family puts its gate steps
 load-bearing. The run reaches tier 2 only when the *last* of them reports, and a gate step is
 never swept itself, so a step scheduled among them is one whose ranges and flags nobody walks.
-Declare the whole block first. A split gate cost the UT61+ list its AC V, DC mV and AC mV
-ladders (issue #19); a test in `step.rs` holds the order, with the families still to fix named
-in its allow-list.
+Declare the whole block first, and declare one: a run with no gate step never reaches tier 2
+on a meter not yet verified. A split gate cost the UT61+ list its AC V, DC mV and AC mV ladders
+(issue #19); a test in `step.rs` holds both rules, with the families whose order is still to fix
+named in its allow-list.
 
 A ladder the gate steps themselves sit on needs a plain step of its own after the block —
 `ohm_ranges`, `dcv_ranges` on the UT61+ — since the gate step that established the mode cannot
