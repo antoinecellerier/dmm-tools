@@ -18,7 +18,7 @@ use eframe::egui::{self, Ui};
 use crate::app::App;
 use crate::app::task::Task;
 use crate::app::toast::Toast;
-use crate::settings::PaletteOverrides;
+use crate::settings::{PaletteOverrides, ThemeChoice, ThemeMode};
 use crate::theme::named::{self, NamedTheme};
 
 /// The save dialog, while it is open.
@@ -85,7 +85,7 @@ impl App {
         };
         // The colours on screen when the answer comes: the theme may have
         // changed while the dialog was open.
-        let dark = self.applied.theme != Some(crate::settings::ThemeMode::Light);
+        let dark = self.applied.theme != Some(ThemeMode::Light);
         self.theme_save.dialog = None;
         match answer {
             Ok(Some(path)) => {
@@ -197,8 +197,8 @@ impl App {
         self.settings
             .color_overrides
             .set_for_theme(&name, PaletteOverrides::default());
-        self.settings.named_theme = Some(name.clone());
-        self.settings.overrides.theme = None;
+        // After the push, so the theme is found and brings its mode.
+        self.settings.pick_theme(ThemeChoice::Named(name.clone()));
         self.applied.ui_colors = None;
         self.toast = Some(Toast::info(tr!(self.l10n, "colors-saved", name = &name)));
     }
@@ -252,6 +252,7 @@ mod tests {
     fn a_save_into_the_folder_becomes_the_theme_in_use() {
         let folder = Folder::new("into");
         let mut app = customized_app();
+        app.settings.theme = ThemeMode::Dark;
         app.save_theme(folder.0.join("plum-light"), false, Some(&folder.0));
 
         let text = std::fs::read_to_string(folder.0.join("plum-light.json")).unwrap();
@@ -262,6 +263,9 @@ mod tests {
             .expect("switched to the saved theme");
         assert_eq!(theme.name, "Plum Light");
         assert!(!theme.dark);
+        // Its own mode is the fallback should its file go, as when it is
+        // picked on the Theme row.
+        assert_eq!(app.settings.theme, ThemeMode::Light);
         assert_eq!(
             app.settings.theme_colors(false).accent(),
             Color32::from_rgb(0x7A, 0x00, 0x62)

@@ -106,25 +106,7 @@ impl App {
             });
             let caption = tr!(l10n, "colors-theme");
             if let Some(choice) = chip_row(ui, &caption, modes.into_iter().chain(named)) {
-                match choice {
-                    ThemeChoice::Mode(mode) => {
-                        self.settings.theme = mode;
-                        self.settings.named_theme = None;
-                    }
-                    ThemeChoice::Named(name) => {
-                        // Its own mode is the fallback should its file go.
-                        if let Some(theme) = named::find(&name, &self.settings.user_themes.themes) {
-                            self.settings.theme = if theme.dark {
-                                ThemeMode::Dark
-                            } else {
-                                ThemeMode::Light
-                            };
-                        }
-                        self.settings.named_theme = Some(name);
-                    }
-                }
-                // Clear the override — user explicitly chose a theme
-                self.settings.overrides.theme = None;
+                self.settings.pick_theme(choice);
             }
             let skipped = &self.settings.user_themes.skipped;
             if !skipped.is_empty() {

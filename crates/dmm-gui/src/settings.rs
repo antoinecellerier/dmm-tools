@@ -113,8 +113,8 @@ pub enum ThemeMode {
     System,
 }
 
-/// A pick on the Theme row or from `--theme`: one of the modes, or a named
-/// theme by its name. Never saved as such — a named theme is saved in
+/// A theme picked (the Theme row, Save as theme, `--theme`): one of the
+/// modes, or a named theme by its name. Never saved as such — a named theme is saved in
 /// `Settings::named_theme`, beside the mode, so an older build that knows
 /// only the modes still reads the file.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -564,6 +564,29 @@ impl Default for Settings {
 }
 
 impl Settings {
+    /// Make `choice` the theme the user picked, for the file too: a mode
+    /// sets the named theme aside, and a named theme brings its own mode,
+    /// the fallback should its file go. Releases a `--theme` pin.
+    pub(crate) fn pick_theme(&mut self, choice: ThemeChoice) {
+        match choice {
+            ThemeChoice::Mode(mode) => {
+                self.theme = mode;
+                self.named_theme = None;
+            }
+            ThemeChoice::Named(name) => {
+                if let Some(theme) = named::find(&name, &self.user_themes.themes) {
+                    self.theme = if theme.dark {
+                        ThemeMode::Dark
+                    } else {
+                        ThemeMode::Light
+                    };
+                }
+                self.named_theme = Some(name);
+            }
+        }
+        self.overrides.theme = None;
+    }
+
     /// The named theme in use: `named_theme`, if it names a known theme.
     pub(crate) fn active_theme(&self) -> Option<&NamedTheme> {
         named::find(self.named_theme.as_deref()?, &self.user_themes.themes)
@@ -1348,6 +1371,33 @@ mod tests {
             parsed.light.status_ok,
             Some(HexColor(Color32::from_rgb(0, 150, 50)))
         );
+    }
+
+    /// A named theme brings its own mode, the fallback should its file go;
+    /// a mode sets the named theme aside; either releases a `--theme` pin.
+    #[test]
+    fn a_picked_theme_brings_its_mode_and_releases_the_flag() {
+        let mut s = Settings::default();
+        s.overrides.theme = Some((ThemeMode::Dark, None));
+        // A light built-in, picked while the file's mode is Dark.
+        let light = named::builtin()
+            .iter()
+            .find(|t| !t.dark)
+            .expect("a light built-in")
+            .name
+            .clone();
+        s.pick_theme(ThemeChoice::Named(light.clone()));
+        assert_eq!(s.theme, ThemeMode::Light);
+        assert_eq!(s.named_theme.as_deref(), Some(light.as_str()));
+        assert!(!s.overrides.has_theme());
+        // A mode sets the named theme aside.
+        s.overrides.theme = Some((ThemeMode::Light, Some(light)));
+        s.pick_theme(ThemeChoice::Mode(ThemeMode::System));
+        assert_eq!(
+            (s.theme, s.named_theme.as_deref()),
+            (ThemeMode::System, None)
+        );
+        assert!(!s.overrides.has_theme());
     }
 
     /// A named theme draws over the Default preset whatever the Colors row
