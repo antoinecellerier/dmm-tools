@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## v0.10.0 — Translations
+
+dmm-gui and dmm-cli come in Brazilian Portuguese, French, Japanese, Simplified Chinese and Spanish. The OWON CMS061, sold as the UNI-T UT217A, is verified, and the Brymen BM827s and BM525s are partly verified. More meters get remote buttons. Fixes make connections sturdier and reach every supported meter family.
 
 ### Devices
 
@@ -11,8 +13,8 @@
 ### GUI
 
 - **Brazilian Portuguese, French, Japanese, Simplified Chinese and Spanish translations available** — pick one in Settings, **Language**, or let it follow the system's language; Portuguese, Japanese, Chinese and Spanish are machine-translated until reviewed.
-- **Choose how often a screen reader announces the reading** — every 5s by default, or only while the reading has focus.
 - **More remote buttons on Voltcraft, OWON, UT217, UT61+, UT161 and UT181A meters** — such as RANGE and AUTO on the VC-880, VC650BT and VC-890, Hz/% on the UT61+ and UT161, and Inrush on the UT217.
+- **Choose how often a screen reader announces the reading** — every 5s by default, or only while the reading has focus.
 - **The UT171 gets remote buttons and function and range dropdowns** — HOLD, REL, RANGE, AUTO, MAX/MIN, PEAK, Hz/% and STORE.
 - **The graph, statistics and integral carry on when the meter auto-ranges** — they restarted at each decade step; figures keep the meter's ranges, as 31.300 MΩ beside 0.04 Ω.
 - **Pan the graph with a two-finger sideways swipe on a touchpad** — over the plot or the minimap.
@@ -100,6 +102,8 @@
 - **dmm-gui opens a file whose saved view lies far past its readings** — importing or replaying it crashed.
 - **dmm-gui refuses a theme file with unreadable top-bar text, and says why** — its Theme chips in Settings were unreadable.
 - **Control characters in a replay file or capture report print as text** — in errors and `triage` output, where they could rewrite the screen or clipboard.
+
+**Full Changelog**: https://github.com/antoinecellerier/dmm-tools/compare/v0.9.0...v0.10.0
 
 ## v0.9.0 — Graph Analysis and Alarms
 
