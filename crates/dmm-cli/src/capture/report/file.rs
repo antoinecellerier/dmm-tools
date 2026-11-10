@@ -246,6 +246,11 @@ pub(in crate::capture) fn populate_report_metadata(
     if let Ok(info) = dmm.transport().transport_info() {
         report.transport_info = Some(info);
     }
+    // The bytes are the meter's, and a report is one meter's: a run whose
+    // link reads none keeps what an earlier session of it wrote.
+    if let Some(info) = dmm.transport().info_characteristic() {
+        report.device_information = Some(hex_string(info));
+    }
     report.supported = supported;
 }
 #[cfg(test)]
@@ -276,6 +281,7 @@ mod tests {
             device_name: "UT61E+".to_string(),
             transport_name: None,
             transport_info: None,
+            device_information: Some("3D 00 01 04 00 00".to_string()),
             supported: true,
             steps: vec![],
             ..CaptureReport::default()
@@ -293,6 +299,56 @@ mod tests {
         let contents = std::fs::read_to_string(&path).unwrap();
         let parsed: CaptureReport = from_yaml(&contents).unwrap();
         assert_eq!(parsed.device_name, "UT61E+");
+        assert_eq!(
+            parsed.device_information.as_deref(),
+            Some("3D 00 01 04 00 00")
+        );
+    }
+
+    /// A meter on a link that reads device information, as an OWON over
+    /// Bluetooth does.
+    struct Owon;
+
+    impl dmm_lib::transport::Transport for Owon {
+        fn write(&self, _data: &[u8]) -> dmm_lib::error::Result<()> {
+            Ok(())
+        }
+        fn read_timeout(&self, _buf: &mut [u8], _timeout_ms: i32) -> dmm_lib::error::Result<usize> {
+            Ok(0)
+        }
+        fn link(&self) -> Option<dmm_lib::transport::Link> {
+            Some(dmm_lib::transport::Link::Bluetooth)
+        }
+        fn info_characteristic(&self) -> Option<&[u8]> {
+            Some(&[0x3D, 0x00, 0x01, 0x04, 0x00, 0x00])
+        }
+    }
+
+    /// The report written from `transport` over `report`, as a run fills it.
+    fn populated(
+        transport: Box<dyn dmm_lib::transport::Transport>,
+        mut report: CaptureReport,
+    ) -> CaptureReport {
+        let mut dmm =
+            dmm_lib::Dmm::new(transport, Box::new(dmm_lib::mock::MockProtocol::new())).unwrap();
+        populate_report_metadata(&mut report, &mut dmm, "Mock".to_string(), true);
+        report
+    }
+
+    /// A run writes the bytes its link read at connect, and a resumed run
+    /// whose link read none keeps those an earlier session wrote.
+    #[test]
+    fn the_report_keeps_the_device_information_read() {
+        let report = populated(Box::new(Owon), CaptureReport::default());
+        assert_eq!(
+            report.device_information.as_deref(),
+            Some("3D 00 01 04 00 00")
+        );
+        let resumed = populated(Box::new(dmm_lib::transport::NullTransport), report);
+        assert_eq!(
+            resumed.device_information.as_deref(),
+            Some("3D 00 01 04 00 00")
+        );
     }
 
     /// A report an editor re-saved as UTF-16 is still someone's captures:

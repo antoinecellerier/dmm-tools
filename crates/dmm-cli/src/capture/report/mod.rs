@@ -33,6 +33,9 @@ pub(crate) struct CaptureReport {
         alias = "cp2110_firmware"
     )]
     pub transport_info: Option<String>,
+    /// The bytes the link read at connect (OWON's FFF2), as frame hex.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub device_information: Option<String>,
     pub supported: bool,
     /// Registry ID of the device the capture ran against — the report
     /// otherwise only holds the name the meter reports for itself.

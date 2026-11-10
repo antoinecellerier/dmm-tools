@@ -416,12 +416,21 @@ fn tally(items: impl IntoIterator<Item = String>) -> Vec<(String, usize)> {
 }
 
 /// The device information the capture's link read at connect (OWON's
-/// FFF2), from the note the Bluetooth transport ends `transport_info` with:
-/// a protocol that reads it decodes the steps as the live run did.
+/// FFF2): a protocol that reads it decodes the steps as the live run did.
+///
+/// A report written before it had a field of its own carries the bytes only
+/// in the note the Bluetooth transport ends `transport_info` with, as
+/// `dmm-cli info` still prints it.
 fn device_information(report: &CaptureReport) -> Option<Vec<u8>> {
-    let info = report.transport_info.as_deref()?;
-    let (_, hex) = info.rsplit_once(", device information: ")?;
-    hex_bytes(hex)
+    report
+        .device_information
+        .as_deref()
+        .and_then(hex_bytes)
+        .or_else(|| {
+            let info = report.transport_info.as_deref()?;
+            let (_, hex) = info.rsplit_once(", device information: ")?;
+            hex_bytes(hex)
+        })
 }
 
 #[cfg(test)]
@@ -466,10 +475,30 @@ pub(super) mod tests {
         }
     }
 
-    /// The FFF2 bytes come from the Bluetooth transport's note; none when
-    /// it was not read, or the link reads none.
+    /// The FFF2 bytes come from the report's own field, which wins over the
+    /// note unless it does not read as hex.
     #[test]
-    fn device_information_is_read_off_the_transport_note() {
+    fn device_information_is_read_off_its_field() {
+        let report = CaptureReport {
+            device_information: Some("3D 00 01 04 00 00".to_string()),
+            transport_info: Some("BDM (12:34:56:78:9A:BC), device information: 12 63".to_string()),
+            ..CaptureReport::default()
+        };
+        assert_eq!(
+            device_information(&report),
+            Some(vec![0x3D, 0x00, 0x01, 0x04, 0x00, 0x00])
+        );
+        let garbled = CaptureReport {
+            device_information: Some("3D:00".to_string()),
+            ..report
+        };
+        assert_eq!(device_information(&garbled), Some(vec![0x12, 0x63]));
+    }
+
+    /// A report from before the field: the bytes come from the Bluetooth
+    /// transport's note; none when it was not read, or the link reads none.
+    #[test]
+    fn device_information_is_read_off_an_older_reports_note() {
         let report = |info: &str| CaptureReport {
             transport_info: Some(info.to_string()),
             ..CaptureReport::default()

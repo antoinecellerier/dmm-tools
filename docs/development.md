@@ -174,7 +174,8 @@ Each step's recorded frames are played back to the device's own protocol
 (`capture/triage/replay.rs`), so the decode is the driver's, not a script's.
 A request the protocol writes releases the reply recorded after it, the
 keys the capture pressed stay in place, and the device information the
-link read at connect (`transport_info`) is read again.
+link read at connect (`device_information`, or the note an older report's
+`transport_info` ends with) is read again.
 
 It prints four sections:
 - a header: the run's tier, sessions, truncation and diagnostics;
