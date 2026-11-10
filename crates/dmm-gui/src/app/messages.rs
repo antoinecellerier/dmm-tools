@@ -725,6 +725,10 @@ impl App {
                 DmmMessage::LateReadings(notice) => {
                     self.connection.late_readings = Some(notice);
                 }
+                DmmMessage::BluetoothTied(count) => {
+                    let message = self.l10n.help().bluetooth_tied(count).into_owned();
+                    self.caution_toast(message);
+                }
                 DmmMessage::OtherData { named, opened } => {
                     // Both by the names the pick's brand sells them under.
                     let pick = self.picked_listing();
@@ -1879,6 +1883,22 @@ mod tests {
         assert_eq!(
             detected_device_to_save("ut61eplus", true, false, Some("ut161e")),
             Some("ut161e")
+        );
+    }
+
+    /// Several Bluetooth peers matching equally well is a caution, with how
+    /// to pick another.
+    #[test]
+    fn tied_bluetooth_peers_say_how_to_pick_another() {
+        let mut app = app("ut61eplus", false);
+        app.connection.state = ConnectionState::Connected;
+        app.deliver(DmmMessage::BluetoothTied(2));
+        let toast = app.toast.take().expect("a toast");
+        assert!(!toast.is_error());
+        assert_eq!(
+            toast.message,
+            "2 Bluetooth adapters or meters match equally well. This session took the first it \
+             found. Pass --adapter with one that 'dmm-cli list' prints to pick another."
         );
     }
 

@@ -196,6 +196,10 @@ impl Transport for RecordingTransport {
         self.inner.bluetooth_selector()
     }
 
+    fn tied_peers(&self) -> Option<usize> {
+        self.inner.tied_peers()
+    }
+
     fn cable_serial(&self) -> Option<&str> {
         self.inner.cable_serial()
     }
@@ -281,6 +285,9 @@ mod tests {
         fn late_readings(&self) -> Option<LateReadings> {
             Some(LateReadings { command: None })
         }
+        fn tied_peers(&self) -> Option<usize> {
+            Some(2)
+        }
     }
 
     /// What the open path and detection ask of the link reaches it through
@@ -298,6 +305,7 @@ mod tests {
         assert_eq!(t.advertised_name(), Some("UT60BT"));
         assert_eq!(t.info_characteristic(), Some(&[0x29, 0xFF][..]));
         assert_eq!(t.late_readings(), Some(LateReadings { command: None }));
+        assert_eq!(t.tied_peers(), Some(2));
     }
 
     #[test]

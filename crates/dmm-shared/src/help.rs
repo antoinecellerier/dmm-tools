@@ -294,6 +294,12 @@ impl<'a> Help<'a> {
         tr!(self.0, "cables-at-open", count = several.count)
     }
 
+    /// That `count` Bluetooth peers matched equally well and the open took
+    /// the first: the notice both binaries give once a meter opens on one.
+    pub fn bluetooth_tied(self, count: usize) -> Cow<'a, str> {
+        tr!(self.0, "bluetooth-tied", count = count)
+    }
+
     /// After [`Self::cables_at_open`], when nothing tells the cables apart.
     pub fn cables_no_reconnect(self) -> Cow<'a, str> {
         tr!(self.0, "cables-no-reconnect")

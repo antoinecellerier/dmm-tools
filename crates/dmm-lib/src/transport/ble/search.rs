@@ -7,9 +7,7 @@ use crate::error::Result;
 use crate::transport::{BluetoothPeers, name_matches};
 use btleplug::api::{Central, Peripheral as _, RetrievePeripheralsOptions, ScanFilter};
 use btleplug::platform::{Adapter, Peripheral};
-#[cfg(windows)]
-use log::info;
-use log::{debug, warn};
+use log::{debug, info};
 
 /// A peripheral the adapter knows about, with what the platform says about it.
 pub(super) struct Candidate {
@@ -26,6 +24,9 @@ pub(super) struct Candidate {
     pub(super) taken_by: Option<String>,
     /// How sure we are that it can answer, which orders the candidates.
     pub(super) standing: Standing,
+    /// For the one an open takes, how many matched as well as it did: 1
+    /// when it stood alone.
+    pub(super) tied: usize,
 }
 
 impl Candidate {
@@ -214,6 +215,7 @@ pub(super) async fn by_address(adapter: &Adapter, selector: Option<&str>) -> Opt
         name: None,
         taken_by: None,
         standing: Standing::Known,
+        tied: 1,
         peripheral,
     })
 }
@@ -307,24 +309,30 @@ async fn usable(
             // Printed by `list` and `info`: a radio neighbour chooses it.
             name: name.as_deref().map(printable),
             taken_by,
+            tied: 1,
         });
     }
     usable
 }
 
 /// Put the candidates in [`Standing`] order and keep as many as the caller
-/// asked for, warning when several share the best standing.
+/// asked for, the one an open takes counting those that share its standing.
 fn keep_matches(mut matched: Vec<Candidate>, want: Match) -> Vec<Candidate> {
     // Stable: equals stay in the order the platform listed them.
     matched.sort_by_key(|c| c.standing);
     if want == Match::First {
         let tied = tied_for_best(&matched.iter().map(|c| c.standing).collect::<Vec<_>>());
         if tied > 1 {
-            warn!(
+            // A fact for the log: the apps say it, with how to pick another
+            // (`Transport::tied_peers`).
+            info!(
                 "{tied} Bluetooth adapters or meters match equally well; it took the first it found."
             );
         }
         matched.truncate(1);
+        if let Some(first) = matched.first_mut() {
+            first.tied = tied;
+        }
     }
     matched
 }

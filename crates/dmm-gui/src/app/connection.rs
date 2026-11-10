@@ -332,6 +332,9 @@ pub(crate) enum DmmMessage {
         named: &'static registry::SelectableDevice,
         opened: &'static registry::SelectableDevice,
     },
+    /// The open took the first of this many Bluetooth peers that matched
+    /// equally well.
+    BluetoothTied(usize),
 }
 
 /// Extract profile info from a newly opened device, optionally query its name,
@@ -597,6 +600,10 @@ where
     let mut pin = reopen.as_ref().map(|source| source.pin(&dmm)).transpose();
     let at_open =
         dmm_shared::reopen::at_open(pin.as_ref().map(Option::as_ref).map_err(|several| *several));
+    if let Some(count) = dmm.transport().tied_peers() {
+        let _ = msg_tx.send(DmmMessage::BluetoothTied(count));
+        ctx.request_repaint();
+    }
     if let Some((several, reconnects)) = at_open {
         let _ = msg_tx.send(DmmMessage::CablesAtOpen {
             several,

@@ -140,6 +140,9 @@ pub(crate) struct Ble {
     /// For an adapter on Linux, the command that shortens this link's
     /// interval by hand ([`interval_command`]), for [`Transport::late_readings`].
     interval_command: Option<String>,
+    /// How many peers matched as well as this one, for
+    /// [`Transport::tied_peers`].
+    tied: usize,
     /// Drives every btleplug call. Last, so it outlives every field whose
     /// destructor reaches into the stack.
     rt: tokio::runtime::Runtime,
@@ -219,6 +222,8 @@ struct Opened {
     selector: String,
     advertised_name: Option<String>,
     short_interval: Option<ShortInterval>,
+    /// How many peers matched as well as this one ([`Candidate::tied`]).
+    tied: usize,
 }
 
 /// What an open has started that a call-off must undo: the platform session
@@ -299,6 +304,7 @@ fn open(target: Target<'_>, stop: Option<&AtomicBool>) -> Result<Box<dyn Transpo
         heartbeats: Cell::new(0),
         selector: opened.selector,
         advertised_name: opened.advertised_name,
+        tied: opened.tied,
         _short_interval: opened.short_interval,
         interval_command,
     }))
@@ -466,6 +472,7 @@ async fn connect(target: Target<'_>, begun: &RefCell<Begun>) -> Result<Opened> {
         selector,
         advertised_name: candidate.taken_by,
         short_interval,
+        tied: candidate.tied,
     })
 }
 
@@ -989,6 +996,10 @@ impl Transport for Ble {
 
     fn bluetooth_selector(&self) -> Option<&str> {
         Some(&self.selector)
+    }
+
+    fn tied_peers(&self) -> Option<usize> {
+        (self.tied > 1).then_some(self.tied)
     }
 
     fn advertised_name(&self) -> Option<&str> {

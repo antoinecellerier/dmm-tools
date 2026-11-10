@@ -74,6 +74,13 @@ pub trait Transport: Send {
         None
     }
 
+    /// For a Bluetooth link the open took among several peers that matched
+    /// equally well, how many there were (2 or more), for the apps to say
+    /// how to pick another. `None` for every other link.
+    fn tied_peers(&self) -> Option<usize> {
+        None
+    }
+
     /// For a USB cable, its serial number as the [`crate::list_devices`]
     /// listing spells it, which [`crate::OpenOptions::adapter`] opens again
     /// across a replug, where a HID path is renumbered. `None` for a cable
@@ -268,6 +275,10 @@ impl Transport for Box<dyn Transport> {
         (**self).bluetooth_selector()
     }
 
+    fn tied_peers(&self) -> Option<usize> {
+        (**self).tied_peers()
+    }
+
     fn cable_serial(&self) -> Option<&str> {
         (**self).cable_serial()
     }
@@ -451,9 +462,14 @@ mod tests {
             fn late_readings(&self) -> Option<LateReadings> {
                 Some(LateReadings { command: None })
             }
+            fn tied_peers(&self) -> Option<usize> {
+                Some(2)
+            }
         }
         let t: Box<dyn Transport> = Box::new(Radio);
         assert_eq!(t.late_readings(), Some(LateReadings { command: None }));
+        // And how many peers tied, for the apps to say so.
+        assert_eq!(t.tied_peers(), Some(2));
     }
 
     /// A protocol reads the value through a boxed transport: a box that

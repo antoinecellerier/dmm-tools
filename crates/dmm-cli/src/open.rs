@@ -342,6 +342,7 @@ pub(crate) fn open_with_help(
     };
     warn_if_experimental(device, dmm.profile());
     warn_cables_at_open(selection, opts, dmm.transport());
+    warn_bluetooth_tied(dmm.transport());
     warn_other_model(&dmm, device);
     Ok((dmm, device))
 }
@@ -435,6 +436,15 @@ pub(crate) fn warn_unrecognised() {
         report.device
     );
     eprintln!("{}", style(command).dim());
+}
+
+/// Say that other Bluetooth peers matched as well and this run took the
+/// first, as dmm-gui does.
+fn warn_bluetooth_tied(transport: &dyn dmm_lib::transport::Transport) {
+    if let Some(count) = transport.tied_peers() {
+        let l = crate::l10n::get();
+        eprintln!("{} {}", warning_label(), l.help().bluetooth_tied(count));
+    }
 }
 
 /// Say that other cables were there to open and this run took the first, as
@@ -542,6 +552,7 @@ pub(crate) fn open_recording_with_help(
     };
     warn_if_experimental(device, dmm.profile());
     warn_cables_at_open(selection, opts, dmm.transport());
+    warn_bluetooth_tied(dmm.transport());
     Ok((dmm, recorder, device, detected))
 }
 

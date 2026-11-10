@@ -9,13 +9,14 @@
 - **A refused mode or range switch says to check the dial**
 - **Data the meter sends that this tool doesn't know asks for a report** — the request only reached the log.
 - **A ZOTEK meter sending another model's data names the model to pick** — the notice only reached the log.
+- **dmm-gui says when it took the first of several Bluetooth devices** — unless `--adapter` named it.
 
 ### CLI
 
 - **`--bluetooth` scans Bluetooth for one run, whatever the saved setting**
 - **An unknown `--device` value points to `--help`, which lists the devices**
 - **A mistyped `command` name is answered with the meter's commands**
-- **dmm-cli's connection warnings come in the chosen language** — several USB cables, a meter naming another model, data it doesn't know.
+- **dmm-cli's connection warnings come in the chosen language** — several USB cables or Bluetooth adapters, a meter naming or sending another model, unknown data.
 - **dmm-cli says which meter is picked when its data won't read**
 - **"No USB cable found" says when Bluetooth wasn't searched** — and how to switch the search on.
 
