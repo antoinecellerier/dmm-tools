@@ -120,11 +120,9 @@ pub(crate) fn bluetooth_off_hint(l: &Localizer) -> Cow<'_, str> {
 /// before anything is opened.
 static PICKED: OnceLock<(registry::Listing, PickedBy)> = OnceLock::new();
 
-/// Record the pick `device` names, so the run calls the meter by it.
-pub(crate) fn note_picked(device: &str, by: PickedBy) {
-    if let Some(listing) = registry::resolve_listing(device) {
-        let _ = PICKED.set((listing, by));
-    }
+/// Record the row picked, so the run calls the meter by it.
+pub(crate) fn note_picked(listing: registry::Listing, by: PickedBy) {
+    let _ = PICKED.set((listing, by));
 }
 
 /// The row this run calls `device` by: the user's pick when it opens

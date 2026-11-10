@@ -386,7 +386,8 @@ Protocol families are in [protocol.md](protocol.md); each family's internals are
 
 | Module | Responsibility |
 |---|---|
-| `lib.rs` | `SharedSettings`, `config_path()`, `resolve_device_family()`, `write_atomic()` |
+| `lib.rs` | `SharedSettings`, `config_path()`, `write_atomic()` |
+| `session.rs` | `resolve_device`: the meter `--device` and the settings file name |
 | `export/mod.rs` | The default file name and the JSON both binaries write |
 | `export/csv_layout.rs` | `CsvLayout`: the CSV header and row cells |
 | `export/read.rs` | Reading an export back |

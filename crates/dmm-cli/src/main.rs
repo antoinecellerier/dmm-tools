@@ -19,9 +19,10 @@ use cmd::list::cmd_list;
 use cmd::read::ReadPlan;
 use cmd::settings::{cmd_get, cmd_set};
 use console::style;
-use dmm_lib::protocol::registry::{self, SelectableDevice, Selection};
+use dmm_lib::protocol::registry::{SelectableDevice, Selection};
 use dmm_shared::help::{Diagnosis, LinksSearched};
 use dmm_shared::l10n::{Localizer, arg_errors, help_layout};
+use dmm_shared::session::UnknownDevice;
 use dmm_shared::tr;
 use l10n::{Localized, error_label};
 use log::debug;
@@ -88,33 +89,31 @@ fn main() {
 
     // Nothing named a meter, so none is assumed: detection is the fallback,
     // and `--device` or the settings file pins a model when the user wants
-    // one.
-    let device_id = dmm_shared::resolve_device_family(
-        cli.device.as_deref(),
-        settings.as_ref(),
-        registry::AUTO_DEVICE_ID,
-    );
+    // one. A typed name nothing answers to is refused as clap refuses a
+    // value, pointing at the list, as dmm-gui does.
+    let pick = dmm_shared::session::resolve_device(cli.device.as_deref(), settings.as_ref())
+        .unwrap_or_else(|UnknownDevice(raw)| {
+            let mut cmd = cli::command(l);
+            cmd.build();
+            let reason = l.help().unknown_device().into_owned();
+            let refused = arg_errors::refused(&cmd, "device", &raw, reason);
+            arg_errors::exit(refused, l, &cli::hidden_subcommands())
+        });
+    if let Some(saved) = &pick.unknown_saved {
+        fail(tr!(l, "connect-unknown-device", device = saved.as_str()));
+    }
     // A replay or an import names its own meter; a saved pick is not it.
-    if !matches!(&cli.command, Cmd::Read(a) if a.replay.is_some() || a.import.is_some()) {
+    if !matches!(&cli.command, Cmd::Read(a) if a.replay.is_some() || a.import.is_some())
+        && let Some(listing) = pick.listing
+    {
         let by = if device_named {
             open::PickedBy::Flag
         } else {
             open::PickedBy::Settings
         };
-        open::note_picked(&device_id, by);
+        open::note_picked(listing, by);
     }
-    let Some(selection) = registry::resolve_selection(&device_id) else {
-        // Typed: refused as clap refuses a value, pointing at the list, as
-        // dmm-gui does.
-        if device_named {
-            let mut cmd = cli::command(l);
-            cmd.build();
-            let reason = l.help().unknown_device().into_owned();
-            let refused = arg_errors::refused(&cmd, "device", &device_id, reason);
-            arg_errors::exit(refused, l, &cli::hidden_subcommands());
-        }
-        fail(tr!(l, "connect-unknown-device", device = &device_id));
-    };
+    let selection = pick.selection();
 
     let bluetooth = bluetooth_probing(cli.bluetooth, cli.no_bluetooth, settings.as_ref());
     open::note_no_bluetooth_flag(cli.no_bluetooth);
@@ -360,16 +359,14 @@ fn bluetooth_probing(
 mod tests {
     use super::*;
     use crate::test_fixtures::*;
+    use dmm_shared::session::resolve_device;
 
     /// Naming no meter, on the command line or in the settings file, means
     /// detection rather than a model nobody chose.
     #[test]
     fn no_flag_and_no_setting_detects_the_meter() {
-        let id = dmm_shared::resolve_device_family(None, None, registry::AUTO_DEVICE_ID);
-        assert!(matches!(
-            registry::resolve_selection(&id),
-            Some(Selection::Auto)
-        ));
+        let pick = resolve_device(None, None).expect("nothing named");
+        assert!(matches!(pick.selection(), Selection::Auto));
         assert!(requires_hardware(selection("auto")));
     }
 
@@ -380,18 +377,14 @@ mod tests {
             device_family: "ut8803".to_string(),
             ..Default::default()
         };
-        let id = dmm_shared::resolve_device_family(None, Some(&saved), registry::AUTO_DEVICE_ID);
-        let Some(Selection::Device(device)) = registry::resolve_selection(&id) else {
+        let pick = resolve_device(None, Some(&saved)).expect("a saved family");
+        let Selection::Device(device) = pick.selection() else {
             panic!("a saved family must resolve to that device");
         };
         assert_eq!(device.id, "ut8803");
 
-        let id = dmm_shared::resolve_device_family(
-            Some("ut61b+"),
-            Some(&saved),
-            registry::AUTO_DEVICE_ID,
-        );
-        assert_eq!(selection_id(selection(&id)), "ut61b+");
+        let pick = resolve_device(Some("ut61b+"), Some(&saved)).expect("a typed family");
+        assert_eq!(selection_id(pick.selection()), "ut61b+");
     }
 
     /// `--bluetooth` and `--no-bluetooth` are one run's answer; the setting is

@@ -619,18 +619,13 @@ impl Settings {
         let (mut s, unreadable) = Self::config_path()
             .map(|path| Self::read(&path))
             .unwrap_or_default();
-        // Through the shared resolver so the GUI and the CLI read the same
-        // file the same way. There is no `--device` to weigh here — that
-        // override is applied in `App::new` — so this is the settings-then-
-        // fallback half. A saved id keeps naming its meter; an older config
-        // or a fresh install falls through to detection instead of to a
-        // model the user never picked.
-        let family = dmm_shared::resolve_device_family(
-            None,
-            Some(&s.shared),
-            dmm_lib::protocol::registry::AUTO_DEVICE_ID,
-        );
-        s.shared.device_family = family;
+        // A saved id keeps naming its meter, as written, so a save never
+        // rewrites one this build doesn't know; an older config or a fresh
+        // install falls through to detection instead of to a model the user
+        // never picked. `--device` is applied in `App::new`.
+        if s.shared.saved_device().is_none() {
+            s.shared.device_family = dmm_lib::protocol::registry::AUTO_DEVICE_ID.to_string();
+        }
         s.sanitize();
         (s, unreadable)
     }
@@ -1030,12 +1025,8 @@ mod tests {
         // And a config file written before the field existed lands there too,
         // rather than on a model the user never picked.
         let s: Settings = serde_json::from_str(r#"{"theme":"Light"}"#).unwrap();
-        let family = dmm_shared::resolve_device_family(
-            None,
-            Some(&s.shared),
-            dmm_lib::protocol::registry::AUTO_DEVICE_ID,
-        );
-        assert_eq!(family, dmm_lib::protocol::registry::AUTO_DEVICE_ID);
+        let pick = dmm_shared::session::resolve_device(None, Some(&s.shared)).unwrap();
+        assert_eq!(pick.id(), dmm_lib::protocol::registry::AUTO_DEVICE_ID);
     }
 
     #[test]

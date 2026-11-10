@@ -8,11 +8,10 @@
 //! that happen to spell `"device_family"` the same way.
 //!
 //! What belongs here: the on-disk settings contract ([`SharedSettings`],
-//! [`config_path`], and [`resolve_device_family`] — the precedence both apply
-//! to the file, and [`load_json`], which tells a broken file from a missing
-//! one); durable writes ([`write_atomic`], since settings, capture
-//! reports and exports are all user data that must survive a crash
-//! mid-write); [`export`], the shape and file name of what the two write
+//! [`config_path`], and [`load_json`], which tells a broken file from a
+//! missing one); [`session`], the meter `--device` and the settings file
+//! pick; durable writes ([`write_atomic`], since settings, capture reports
+//! and exports are all user data that must survive a crash mid-write); [`export`], the shape and file name of what the two write
 //! out, so a reading saved from the GUI and one written by the CLI read the
 //! same; [`replay`], what `--replay` opens, a golden fixture included;
 //! [`help`], the help and version text both print; [`l10n`], the
@@ -40,6 +39,7 @@ pub mod l10n;
 pub mod logging;
 pub mod reopen;
 pub mod replay;
+pub mod session;
 
 use dmm_lib::stats::ShownDigits;
 use serde::{Deserialize, Serialize};
@@ -127,8 +127,7 @@ pub struct SharedSettings {
     /// Device family ID from the registry (e.g. `"ut61eplus"`, `"ut8803"`), or
     /// `"auto"` to ask the binary to work out which meter is on the cable
     /// instead of naming one.
-    /// Empty string means "not set" — consumers should fall back to the default
-    /// they hand [`resolve_device_family`].
+    /// Empty string means "not set" ([`SharedSettings::saved_device`]).
     pub device_family: String,
     /// Whether an open with no cable on it may go on to look for a Bluetooth
     /// adapter. On by default; off, nothing scans the radio and no help offers
@@ -155,6 +154,14 @@ fn bluetooth_default() -> bool {
 }
 
 impl SharedSettings {
+    /// The device the file names, `None` when it names none. Empty means not
+    /// set: what a file written before the field existed deserializes to,
+    /// and what the GUI writes when nothing is picked. Whether any meter
+    /// answers to it is [`session::resolve_device`]'s to say.
+    pub fn saved_device(&self) -> Option<&str> {
+        Some(self.device_family.as_str()).filter(|f| !f.is_empty())
+    }
+
     /// The mock scenario the file pins, `None` when it pins none. A name the
     /// mock doesn't know — only a hand-edited file has one — is the mock's
     /// error: a first line saying so, then the valid names.
@@ -175,31 +182,6 @@ impl Default for SharedSettings {
             language: String::new(),
         }
     }
-}
-
-/// Which device family to use: a `--device` flag wins, then `device_family`
-/// in the settings file, then `fallback`.
-///
-/// Here rather than in either binary because both apply the same rule to the
-/// same file. `fallback` is passed in rather than looked up, so the settings
-/// half of this crate does not reach into `dmm-lib`'s registry.
-pub fn resolve_device_family(
-    cli_device: Option<&str>,
-    saved: Option<&SharedSettings>,
-    fallback: &str,
-) -> String {
-    if let Some(device) = cli_device {
-        return device.to_string();
-    }
-    // Empty means "not set": that is what a file written before the field
-    // existed deserializes to, and what the GUI writes when nothing is picked.
-    if let Some(family) = saved
-        .map(|s| s.device_family.as_str())
-        .filter(|f| !f.is_empty())
-    {
-        return family.to_string();
-    }
-    fallback.to_string()
 }
 
 /// Return the canonical path to the shared settings file.
@@ -698,46 +680,6 @@ mod tests {
             device_family: family.to_string(),
             ..Default::default()
         }
-    }
-
-    #[test]
-    fn the_cli_flag_wins_over_the_settings_file() {
-        let s = saved("ut8803");
-        assert_eq!(
-            resolve_device_family(Some("ut171"), Some(&s), "ut61eplus"),
-            "ut171"
-        );
-    }
-
-    #[test]
-    fn the_settings_file_wins_over_the_fallback() {
-        let s = saved("ut8803");
-        assert_eq!(resolve_device_family(None, Some(&s), "ut61eplus"), "ut8803");
-    }
-
-    #[test]
-    fn a_missing_settings_file_falls_back() {
-        assert_eq!(resolve_device_family(None, None, "ut61eplus"), "ut61eplus");
-    }
-
-    /// A file written before `device_family` existed, or by a GUI where the
-    /// user never picked one, deserializes to the empty string — which is
-    /// "not set", not a device id.
-    #[test]
-    fn an_empty_device_family_falls_back() {
-        let s = saved("");
-        assert_eq!(
-            resolve_device_family(None, Some(&s), "ut61eplus"),
-            "ut61eplus"
-        );
-    }
-
-    #[test]
-    fn the_cli_flag_wins_with_no_settings_file() {
-        assert_eq!(
-            resolve_device_family(Some("ut171"), None, "ut61eplus"),
-            "ut171"
-        );
     }
 
     /// Empty pins nothing; a label or alias pins that scenario; anything

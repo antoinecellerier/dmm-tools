@@ -19,6 +19,7 @@ use dmm_lib::clock::ClockFlagError;
 use dmm_lib::protocol::registry;
 use dmm_lib::replay::Replay;
 use dmm_shared::l10n::{Localizer, arg_errors, clap_help, help_layout};
+use dmm_shared::session::UnknownDevice;
 use dmm_shared::tr;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -390,22 +391,10 @@ fn completion_command() -> clap::Command {
     dmm_shared::help::with_completion_values(Args::command()).mut_arg("theme", with_theme_list)
 }
 
-/// The id `--device <raw>` is stored under, or `None` for an unknown name:
-/// the listing row's id, so a sold-as name (`ut217a`) keeps its own row
-/// rather than the maker's, as the Settings row and `dmm-cli` do; and
-/// `auto` as a choice rather than an unknown device.
-fn canonical_device(raw: &str) -> Option<String> {
-    match registry::resolve_selection(raw)? {
-        registry::Selection::Auto => Some(registry::AUTO_DEVICE_ID.to_string()),
-        registry::Selection::Device(_) => {
-            registry::resolve_listing(raw).map(|l| l.id().to_string())
-        }
-    }
-}
-
 /// The command line, worded in `l`'s language: its `--help`, and the
-/// errors that end the run before a window opens.
-fn parse_args(l: &Localizer) -> CliOverrides {
+/// errors that end the run before a window opens. `saved` is the settings
+/// file's half, which `--device` overrides.
+fn parse_args(l: &Localizer, saved: &dmm_shared::SharedSettings) -> CliOverrides {
     let mut cmd = command(l);
     let matches = cmd
         .try_get_matches_from_mut(std::env::args_os())
@@ -423,13 +412,17 @@ fn parse_args(l: &Localizer) -> CliOverrides {
         std::process::exit(0);
     }
 
-    // Validate and canonicalize --device if provided.
-    let device = args.device.map(|raw| {
-        canonical_device(&raw).unwrap_or_else(|| {
+    // A typed --device is stored under its listing row's id, so a sold-as
+    // name (`ut217a`) keeps its own row rather than the maker's, as the
+    // Settings row and `dmm-cli` do; a name nothing answers to ends the run.
+    let pick = dmm_shared::session::resolve_device(args.device.as_deref(), Some(saved))
+        .unwrap_or_else(|UnknownDevice(raw)| {
             let reason = l.help().unknown_device().into_owned();
             refuse(arg_errors::refused(&cmd, "device", &raw, reason))
-        })
-    });
+        });
+    // Only the typed one is an override: the saved one is already the
+    // Settings row, and detection writes over it.
+    let device = args.device.is_some().then(|| pick.id().to_string());
 
     // Parse --theme if provided. A named theme reads the user's themes
     // folder, whose files may replace a built-in; the modes never do.
@@ -631,7 +624,7 @@ fn main() -> eframe::Result<()> {
     // The window keeps this one, so what loading it found is logged once.
     let l10n = Arc::new(l10n::startup(&settings.shared.language));
     l10n.log_load_report();
-    let overrides = parse_args(&l10n);
+    let overrides = parse_args(&l10n, &settings.shared);
 
     // After parsing: `--help`, `--version` and a bad flag exit there, so
     // running them leaves no `.bad` copy and, from a build tree, the desktop
@@ -708,7 +701,7 @@ fn main() -> eframe::Result<()> {
             system_font_fallback: false,
             ..Default::default()
         };
-        let fallback_overrides = parse_args(&fallback_l10n);
+        let fallback_overrides = parse_args(&fallback_l10n, &fallback_settings.shared);
         return eframe::run_native(
             "dmm-tools",
             fallback_options,
@@ -729,15 +722,6 @@ fn main() -> eframe::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn device_names_keep_their_listing_row() {
-        assert_eq!(canonical_device("ut217a").as_deref(), Some("ut217a"));
-        assert_eq!(canonical_device("UT61E+").as_deref(), Some("ut61eplus"));
-        assert_eq!(canonical_device("cms061").as_deref(), Some("cms061"));
-        assert_eq!(canonical_device("auto").as_deref(), Some("auto"));
-        assert_eq!(canonical_device("no-such-meter"), None);
-    }
 
     fn resolve(
         device: Option<&str>,

@@ -554,7 +554,7 @@ fn read_replay(
     let l = crate::l10n::get();
     let replay = dmm_shared::replay::load(path)?;
     // The file names its meter, by the row it was recorded under.
-    crate::open::note_picked(replay.listing.id(), crate::open::PickedBy::Recording);
+    crate::open::note_picked(replay.listing, crate::open::PickedBy::Recording);
     // On screen the pace is the point; into a file it is only a wait.
     if clock.is_real() && !matches!(options.destination, output::Destination::Stdout) {
         let hint = tr!(l, "read-paced-replay", flag = "--mock-clock-scale max");
