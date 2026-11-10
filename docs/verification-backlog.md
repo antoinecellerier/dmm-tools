@@ -211,15 +211,6 @@ reader from the system.
 - macOS: with no `language` setting, an English macOS starts both apps in
   English.
 
-## Windows console
-
-- `dmm-gui.exe` from Explorer: its console at most flashes; from cmd and
-  PowerShell, `--help` and the `RUST_LOG` logs print there. Decides
-  `free_own_console` (`dmm-gui/src/main.rs`).
-- After an Explorer launch with `RUST_LOG=warn`, a CSV export and the
-  settings file hold no log lines. Decides whether nulling the std handles
-  in `free_own_console` keeps stdio writes out of files opened later.
-
 ## Known defects
 
 Bugs a reader can reproduce: symptom, cause, and the fix where known.
