@@ -44,7 +44,10 @@ struct MenuReading {
     /// reading only: a marker or cursor goes on `at`, exactly.
     time: String,
     /// What "Copy" puts on the clipboard: the meter's digits, else the
-    /// trace's value as the crosshair writes it, followed by its unit.
+    /// trace's value to five significant digits in a prefix that fits it,
+    /// as the statistics write a figure, followed by its unit: a point read
+    /// before an auto-range step is in the plotted unit now, a thousand
+    /// times the number it showed. A level keeps the crosshair's digits.
     digits: String,
 }
 
@@ -497,8 +500,13 @@ impl Graph {
                     .map(|d| d.trim().to_string())
                     .filter(|d| !d.is_empty())
                     .unwrap_or_else(|| {
-                        let digits = format!("{value:.prec$}", prec = self.decimals(true));
-                        match self.current_unit.as_str() {
+                        let (digits, unit) = if self.levels {
+                            let digits = format!("{value:.prec$}", prec = self.decimals(true));
+                            (digits, self.current_unit.as_str().into())
+                        } else {
+                            dmm_shared::stat_figure(value, &self.current_unit, None)
+                        };
+                        match &*unit {
                             "" => digits,
                             unit => format!("{digits} {unit}"),
                         }

@@ -203,6 +203,39 @@ fn the_menu_names_the_reading() {
     assert!(entries.contains(&"Copy 1.000".to_string()), "{entries:?}");
 }
 
+/// Without the meter's digits, Copy writes the point as a figure: in a
+/// prefix that fits it, not a megohm reading the trace re-expressed in Ω
+/// after an auto-range step.
+#[test]
+fn copy_without_digits_writes_a_fitting_prefix() {
+    let mut g = Graph::new();
+    g.time_window_secs = 10.0;
+    let t0 = Instant::now();
+    for i in 0..=30 {
+        g.push(
+            1.2345,
+            t0 + Duration::from_secs(i),
+            "\u{3a9}",
+            "M\u{3a9}",
+            None,
+        );
+    }
+    g.push(
+        980.0,
+        t0 + Duration::from_secs(31),
+        "\u{3a9}",
+        "\u{3a9}",
+        None,
+    );
+    let middle = |plot: egui::Rect| egui::pos2(plot.left() + 0.5 * plot.width(), plot.center().y);
+    let ctx = open_menu(&mut g, middle);
+    let entries = menu_entries(&mut g, &ctx);
+    assert!(
+        entries.contains(&"Copy 1.2345 M\u{3a9}".to_string()),
+        "{entries:?}"
+    );
+}
+
 /// "Add reference line" draws one at the height right-clicked, rounded, and
 /// switches the lines on without taking the caret into their field.
 #[test]
