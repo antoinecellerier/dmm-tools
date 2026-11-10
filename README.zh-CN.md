@@ -70,7 +70,7 @@ $ dmm-cli read --interval-ms 2500 --count 5
 | 万用表 | USB | 蓝牙 | 议题 |
 |---|---|---|---|
 | UNI-T UT61E+ | ✅ 已验证 | ✅ 已验证（适配器） | — |
-| UNI-T UT61B+ | ✅ 已验证 | 🧪 实验性（适配器） | [#19](https://github.com/antoinecellerier/dmm-tools/issues/19) |
+| UNI-T UT61B+ | ✅ 已验证 | 🧪 实验性（适配器） | [#7](https://github.com/antoinecellerier/dmm-tools/issues/7) |
 | UNI-T UT161E | ✅ 已验证 | 🧪 实验性（适配器） | [#7](https://github.com/antoinecellerier/dmm-tools/issues/7) |
 | UNI-T UT61D+, UT161B/D | 🧪 实验性 | 🧪 实验性（适配器） | [#7](https://github.com/antoinecellerier/dmm-tools/issues/7) |
 | UNI-T UT804 | ✅ 已验证 | — | [#16](https://github.com/antoinecellerier/dmm-tools/issues/16) |

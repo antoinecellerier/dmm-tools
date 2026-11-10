@@ -6,7 +6,8 @@
 //! table with `<!-- devices:start -->` / `<!-- devices:end -->` (an HTML
 //! comment, invisible on GitHub), but the two are treated differently: the CLI
 //! reference's block is generated from the registry, while the README's stays
-//! hand-written — it is editorial — and is only checked for omissions.
+//! hand-written — it is editorial — and is checked for omissions and for the
+//! issue each row links.
 //!
 //! `UPDATE_DOCS=1 cargo test -p dmm-cli` rewrites the generated block; a plain
 //! run fails with a diff. This lives in `dmm-cli` because that is the binary
@@ -126,15 +127,20 @@ fn cli_reference_device_table_matches_the_registry() {
 
 /// The README's table is hand-written on purpose — it abbreviates runs of
 /// models ("UT161B/D/E"), prefixes the brand a reader would search for, and
-/// gives each link a status no enum holds — so this checks only that nothing
-/// is *missing*, and that each row links one verification issue at most.
+/// gives each link a status no enum holds — so this checks what can be checked
+/// without rendering it: nothing is missing, and every link is right.
 ///
-/// The rule is per protocol family, not per device, because those abbreviations
-/// mean a model need not appear under its own display name: a family counts as
-/// listed when the block names it (`DeviceFamily`'s `Display`) or any one of its models,
+/// Coverage is per protocol family, because the abbreviations mean a model
+/// need not appear under its own display name: a family counts as listed when
+/// the block names it (`DeviceFamily`'s `Display`) or any one of its models,
 /// including one model of an entry that lists several ("Brymen BM829s/BM827s").
 /// Every verification issue must be linked, so a new experimental family cannot
 /// ship without a row pointing readers at where to help.
+///
+/// Links are per device: a row links one issue at most, and a row naming a
+/// model links that model's issue, or none if it has none. A model an
+/// abbreviation hides ("UT161B/D" for the UT161D) names no row, so only the
+/// whole-table check covers its issue.
 #[test]
 fn readme_device_table_names_every_family_and_issue() {
     let (_, text, block) = marked_block("README.md");
@@ -149,23 +155,55 @@ fn readme_device_table_names_every_family_and_issue() {
             "README device table names neither the {family_name} family nor any of its models {models:?}"
         );
     }
-    for device in registry::DEVICES {
-        let Some(issue) = (device.new_protocol)().profile().verification_issue else {
-            continue;
-        };
-        // With the closing bracket, so #1 does not match a link to #16.
-        assert!(
-            block.contains(&format!("/issues/{issue})")),
-            "README device table has no link to verification issue #{issue} ({})",
-            device.id
-        );
-    }
     for row in block.lines() {
         assert!(
             row.matches("/issues/").count() <= 1,
             "README device table row links more than one issue: {row}"
         );
     }
+    for device in registry::DEVICES {
+        if !device.requires_hardware {
+            continue;
+        }
+        // With the closing bracket, so #1 does not match a link to #16.
+        let link = ((device.new_protocol)().profile().verification_issue)
+            .map(|issue| format!("/issues/{issue})"));
+        if let Some(link) = &link {
+            assert!(
+                block.contains(link),
+                "README device table has no link to verification issue {link} ({})",
+                device.id
+            );
+        }
+        for row in block.lines() {
+            let Some(meter) = row.split('|').nth(1) else {
+                continue;
+            };
+            if !listed_models(device.display_name()).any(|m| names_model(meter, m)) {
+                continue;
+            }
+            match &link {
+                Some(link) => assert!(
+                    row.contains(link),
+                    "README device table row names {} but does not link its issue {link}: {row}",
+                    device.id
+                ),
+                None => assert!(
+                    !row.contains("/issues/"),
+                    "README device table row names {}, which has no issue, yet links one: {row}",
+                    device.id
+                ),
+            }
+        }
+    }
+}
+
+/// Whether `cell` names `model` as a whole name: "UT71A" is not named by
+/// "UT171A", nor "ZT-5B" by "ZT-5BQ" or "ZT-5B-X", nor "UT61B" by "UT61B+".
+fn names_model(cell: &str, model: &str) -> bool {
+    let part = |c: char| c.is_ascii_alphanumeric() || c == '+' || c == '-';
+    cell.match_indices(model)
+        .any(|(at, _)| !cell[..at].ends_with(part) && !cell[at + model.len()..].starts_with(part))
 }
 
 #[test]

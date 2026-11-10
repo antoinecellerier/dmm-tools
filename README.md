@@ -68,7 +68,7 @@ $ dmm-cli read --interval-ms 2500 --count 5
 | Meter | USB | Bluetooth | Issue |
 |---|---|---|---|
 | UNI-T UT61E+ | ✅ Verified | ✅ Verified (adapter) | — |
-| UNI-T UT61B+ | ✅ Verified | 🧪 Experimental (adapter) | [#19](https://github.com/antoinecellerier/dmm-tools/issues/19) |
+| UNI-T UT61B+ | ✅ Verified | 🧪 Experimental (adapter) | [#7](https://github.com/antoinecellerier/dmm-tools/issues/7) |
 | UNI-T UT161E | ✅ Verified | 🧪 Experimental (adapter) | [#7](https://github.com/antoinecellerier/dmm-tools/issues/7) |
 | UNI-T UT61D+, UT161B/D | 🧪 Experimental | 🧪 Experimental (adapter) | [#7](https://github.com/antoinecellerier/dmm-tools/issues/7) |
 | UNI-T UT804 | ✅ Verified | — | [#16](https://github.com/antoinecellerier/dmm-tools/issues/16) |

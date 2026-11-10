@@ -251,8 +251,8 @@ markers, and a `dmm-cli` test guards each. The one in `docs/cli-reference.md` is
 rendered from the registry: after changing an entry or the `DEVICES` order run
 `UPDATE_DOCS=1 cargo test -p dmm-cli` to rewrite it rather than editing it by
 hand, or the test fails with a diff. The one in `README.md` is hand-written on
-purpose — the test only checks that every protocol family and every
-verification issue still appears in it, one issue per row at most.
+purpose: the test checks that every protocol family and verification issue
+appears in it, each row linking the issue of the model it names.
 
 ## Doc screenshots and snippets
 

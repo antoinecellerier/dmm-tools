@@ -70,7 +70,7 @@ $ dmm-cli read --interval-ms 2500 --count 5
 | 機種 | USB | Bluetooth | Issue |
 |---|---|---|---|
 | UNI-T UT61E+ | ✅ 検証済み | ✅ 検証済み (アダプター) | — |
-| UNI-T UT61B+ | ✅ 検証済み | 🧪 試験的 (アダプター) | [#19](https://github.com/antoinecellerier/dmm-tools/issues/19) |
+| UNI-T UT61B+ | ✅ 検証済み | 🧪 試験的 (アダプター) | [#7](https://github.com/antoinecellerier/dmm-tools/issues/7) |
 | UNI-T UT161E | ✅ 検証済み | 🧪 試験的 (アダプター) | [#7](https://github.com/antoinecellerier/dmm-tools/issues/7) |
 | UNI-T UT61D+, UT161B/D | 🧪 試験的 | 🧪 試験的 (アダプター) | [#7](https://github.com/antoinecellerier/dmm-tools/issues/7) |
 | UNI-T UT804 | ✅ 検証済み | — | [#16](https://github.com/antoinecellerier/dmm-tools/issues/16) |
