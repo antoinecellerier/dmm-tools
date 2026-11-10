@@ -473,6 +473,21 @@ impl App {
         self.connection.state = ConnectionState::Connecting;
     }
 
+    /// Connect again for a device or mock mode picked in Settings, still
+    /// paused if the session was: Pause halts acquisition until the user
+    /// resumes, and a pick in Settings is no resume. The new thread reads its
+    /// controls before its first reading; the gap is already marked.
+    pub(super) fn reconnect_keeping_pause(&mut self, ctx: &egui::Context) {
+        let paused = self.connection.paused;
+        self.connect(ctx);
+        if paused {
+            self.connection.paused = true;
+            if let Some(worker) = &self.connection.worker {
+                worker.control(connection::ThreadControl::SetPaused(true));
+            }
+        }
+    }
+
     pub(super) fn disconnect(&mut self) {
         // Data stops here. The graph keeps its history across a reconnect, so
         // the resulting hole needs marking as a genuine gap.
@@ -1226,6 +1241,31 @@ mod tests {
         let readouts = app.readouts();
         assert!(!readouts.plain);
         assert!(readouts.range.is_empty(), "listed again by the new link");
+    }
+
+    /// A device or mock mode picked in Settings reconnects the session, and a
+    /// pause holds across it: the new thread reads nothing until Resume. A
+    /// Connect of the user's own starts reading again.
+    #[test]
+    fn a_settings_reconnect_keeps_the_pause() {
+        let mut app = app("mock", false);
+        let ctx = crate::app::styled_context();
+        app.connect(&ctx);
+        app.set_paused(true);
+        app.reconnect_keeping_pause(&ctx);
+        assert!(app.connection.paused);
+        std::thread::sleep(Duration::from_millis(400));
+        let worker = app.connection.worker.as_ref().expect("a thread");
+        assert!(
+            !worker
+                .rx
+                .try_iter()
+                .any(|m| matches!(m, DmmMessage::Measurement(_))),
+            "the new thread read the meter"
+        );
+        app.connect(&ctx);
+        assert!(!app.connection.paused);
+        app.disconnect_and_wait();
     }
 
     /// A Sample interval picked while connected goes to the running session

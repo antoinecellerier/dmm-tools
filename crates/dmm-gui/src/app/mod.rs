@@ -1157,7 +1157,7 @@ impl eframe::App for App {
         if self.connection.needs_reconnect {
             self.connection.needs_reconnect = false;
             if !self.source.is_import() {
-                self.connect(&ctx);
+                self.reconnect_keeping_pause(&ctx);
             }
         }
 
