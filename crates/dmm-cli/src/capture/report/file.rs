@@ -22,10 +22,7 @@ pub(in crate::capture) fn hex_bytes(hex: &str) -> Option<Vec<u8>> {
         .collect()
 }
 
-pub(crate) fn save_report(
-    report: &CaptureReport,
-    path: &str,
-) -> Result<(), Box<dyn std::error::Error>> {
+pub(crate) fn save_report(report: &CaptureReport, path: &str) -> Result<(), crate::l10n::Failure> {
     let yaml = to_yaml(report)?;
     // Atomic write (.tmp + fsync + rename), so a crash mid-write doesn't
     // corrupt the existing report.
@@ -120,7 +117,7 @@ pub(in crate::capture) fn load_or_create_report(
     device_id: &str,
     plan_path: Option<&str>,
     input: &Input,
-) -> Result<Option<(CaptureReport, String)>, Box<dyn std::error::Error>> {
+) -> Result<Option<(CaptureReport, String)>, crate::l10n::Failure> {
     let output_path = capture_path(output_override, device_id, plan_path);
     let l = crate::l10n::get();
 

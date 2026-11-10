@@ -133,7 +133,7 @@ pub(crate) fn cmd_get(
     setting: Option<SettingArg>,
     format: SettingsFormat,
     mock_mode: Option<dmm_lib::mock::MockMode>,
-) -> Result<(), Box<dyn std::error::Error>> {
+) -> Result<(), crate::l10n::Failure> {
     let setting = setting.map(Setting::from);
     let mut dmm = open_any(selection, opts, mock_mode)?;
     run_get(&mut dmm, setting, format)
@@ -146,7 +146,7 @@ pub(crate) fn cmd_set(
     setting: SettingArg,
     choice: Option<String>,
     mock_mode: Option<dmm_lib::mock::MockMode>,
-) -> Result<(), Box<dyn std::error::Error>> {
+) -> Result<(), crate::l10n::Failure> {
     let setting = Setting::from(setting);
     let mut dmm = open_any(selection, opts, mock_mode)?;
     run_set(&mut dmm, setting, choice)
@@ -156,7 +156,7 @@ fn run_get<T: dmm_lib::transport::Transport>(
     dmm: &mut dmm_lib::Dmm<T>,
     setting: Option<Setting>,
     format: SettingsFormat,
-) -> Result<(), Box<dyn std::error::Error>> {
+) -> Result<(), crate::l10n::Failure> {
     let model_name = crate::open::profile_name(dmm.profile());
     let reading = dmm.request_measurement()?;
 
@@ -201,7 +201,7 @@ fn run_set<T: dmm_lib::transport::Transport>(
     dmm: &mut dmm_lib::Dmm<T>,
     setting: Setting,
     choice: Option<String>,
-) -> Result<(), Box<dyn std::error::Error>> {
+) -> Result<(), crate::l10n::Failure> {
     run_set_within(dmm, setting, choice, SWITCH_TIMEOUT)
 }
 
@@ -212,7 +212,7 @@ fn run_set_within<T: dmm_lib::transport::Transport>(
     setting: Setting,
     choice: Option<String>,
     switch_timeout: Duration,
-) -> Result<(), Box<dyn std::error::Error>> {
+) -> Result<(), crate::l10n::Failure> {
     let model_name = crate::open::profile_name(dmm.profile());
     let reading = dmm.request_measurement()?;
     let choices = dmm.choices(setting, &reading);
@@ -276,7 +276,7 @@ fn run_set_within<T: dmm_lib::transport::Transport>(
                 reason,
             }
             .into(),
-            other => Box::<dyn std::error::Error>::from(other),
+            other => other.into(),
         });
     }
 
@@ -653,9 +653,7 @@ fn settings_json(
 
 /// One object per invocation, and nothing else on stdout — `get --format json`
 /// answers a question rather than streaming, unlike `read`.
-fn print_json(
-    doc: serde_json::Map<String, serde_json::Value>,
-) -> Result<(), Box<dyn std::error::Error>> {
+fn print_json(doc: serde_json::Map<String, serde_json::Value>) -> Result<(), crate::l10n::Failure> {
     println!(
         "{}",
         serde_json::to_string_pretty(&serde_json::Value::Object(doc))?

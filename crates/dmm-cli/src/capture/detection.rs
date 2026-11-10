@@ -190,7 +190,7 @@ pub(super) fn run_detection_check(
     previous: Option<&DetectionCheck>,
     input: &Input,
     reopen: Reopen<'_>,
-) -> Result<Option<DetectionCheck>, Box<dyn std::error::Error>> {
+) -> Result<Option<DetectionCheck>, crate::l10n::Failure> {
     if !device.requires_hardware || previous.is_some_and(|p| p.power_cycled) {
         return Ok(None);
     }
@@ -268,7 +268,7 @@ pub(super) fn run_detection_check(
 /// Enter goes on, `s` or `q` skips. Only Enter says the meter was restarted:
 /// `q` ends every other prompt, and a stray key must not file a stale meter
 /// as a fresh one.
-fn confirmed(input: &Input, msg: &str) -> Result<bool, Box<dyn std::error::Error>> {
+fn confirmed(input: &Input, msg: &str) -> Result<bool, crate::l10n::Failure> {
     loop {
         match input.key(msg)? {
             '\n' => return Ok(true),

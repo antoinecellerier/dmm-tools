@@ -337,7 +337,7 @@ fn watch_for_state(
     timeout: Duration,
     on_timeout: OnTimeout,
     errors: &mut ErrorLog,
-) -> Result<Watched, Box<dyn std::error::Error>> {
+) -> Result<Watched, crate::l10n::Failure> {
     let l = crate::l10n::get();
     let start = Instant::now();
     let mut hinted = false;
@@ -558,7 +558,7 @@ pub(super) enum Confirmed {
 pub(super) fn ask_confirmation(
     input: &Input,
     retake: Retake,
-) -> Result<Confirmed, Box<dyn std::error::Error>> {
+) -> Result<Confirmed, crate::l10n::Failure> {
     let l = crate::l10n::get();
     let retake_arg = match retake {
         Retake::Offered => "yes",
@@ -659,7 +659,7 @@ impl CaptureRun {
         &mut self,
         state: dmm_lib::protocol::Expect,
         errors: &mut ErrorLog,
-    ) -> Result<Watched, Box<dyn std::error::Error>> {
+    ) -> Result<Watched, crate::l10n::Failure> {
         let l = crate::l10n::get();
         let (mut watcher, timeout) = if self.trust.reads_parse() {
             eprintln!(
@@ -701,7 +701,7 @@ impl CaptureRun {
         step: &CaptureStep,
         interactive: bool,
         prev: &PrevState,
-    ) -> Result<StepOutcome, Box<dyn std::error::Error>> {
+    ) -> Result<StepOutcome, crate::l10n::Failure> {
         let l = crate::l10n::get();
         // Check if already captured (resume)
         if already_captured(&self.report, step.id) {
@@ -1353,7 +1353,7 @@ mod tests {
             .capture_step(&step, false, &PrevState::default())
             .err()
             .expect("the run ends on a lost link");
-        let err = err.downcast_ref::<dmm_lib::error::Error>().unwrap();
+        let err = err.lib().expect("the library's error");
         assert!(link_gone(err), "got {err:?}");
         assert!(run.report.steps.is_empty(), "no step filed");
     }

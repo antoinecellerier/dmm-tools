@@ -14,7 +14,7 @@ pub(crate) fn cmd_command(
     selection: Selection,
     opts: dmm_lib::OpenOptions<'_>,
     action: Option<String>,
-) -> Result<(), Box<dyn std::error::Error>> {
+) -> Result<(), crate::l10n::Failure> {
     let action = match action {
         Some(a) => a,
         None => return print_available_commands(device_for_listing(selection, opts)?),
@@ -27,9 +27,7 @@ pub(crate) fn cmd_command(
 }
 
 /// Print supported commands for a device without connecting.
-fn print_available_commands(
-    device: &'static SelectableDevice,
-) -> Result<(), Box<dyn std::error::Error>> {
+fn print_available_commands(device: &'static SelectableDevice) -> Result<(), crate::l10n::Failure> {
     let protocol = (device.new_protocol)();
     let profile = protocol.profile();
     let l = crate::l10n::get();

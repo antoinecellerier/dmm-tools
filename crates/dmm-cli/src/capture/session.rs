@@ -40,7 +40,7 @@ crate::l10n::localized_error!(NotResponding);
 /// The run's closing error for a failed [`verify_meter`]: [`NotResponding`]
 /// for a meter that never answered, whose activation steps are already on
 /// screen, and the library's own error for anything else.
-pub(super) fn closing_error(e: dmm_lib::error::Error) -> Box<dyn std::error::Error> {
+pub(super) fn closing_error(e: dmm_lib::error::Error) -> crate::l10n::Failure {
     if e.kind() == ErrorKind::Timeout {
         NotResponding.into()
     } else {
@@ -189,7 +189,7 @@ pub(super) fn confirm_other_model(
     input: &Input,
     opened: registry::Listing,
     named: registry::Listing,
-) -> Result<bool, Box<dyn std::error::Error>> {
+) -> Result<bool, crate::l10n::Failure> {
     let l = crate::l10n::get();
     let (opened_name, named_name) = (
         l.label(TextKind::Model, opened.display_name()),
@@ -248,7 +248,7 @@ impl CaptureRun {
         all_steps: &[CaptureStep],
         step_filter: &Option<std::collections::HashSet<String>>,
         unverified_only: bool,
-    ) -> Result<ProtocolPass, Box<dyn std::error::Error>> {
+    ) -> Result<ProtocolPass, crate::l10n::Failure> {
         // Keep only what this run selects: the checklist below covers the steps
         // that will actually run.
         let mut steps: Vec<CaptureStep> = all_steps
@@ -431,7 +431,7 @@ fn steps_without<'a>(
 fn ask_missing_needs(
     steps: &[CaptureStep],
     input: &Input,
-) -> Result<Vec<Need>, Box<dyn std::error::Error>> {
+) -> Result<Vec<Need>, crate::l10n::Failure> {
     let l = crate::l10n::get();
     let Some((table, needs)) = render_needs(l, steps) else {
         return Ok(Vec::new());
@@ -512,7 +512,7 @@ impl CaptureRun {
     pub(super) fn batch_review(
         &mut self,
         to_review: &[String],
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    ) -> Result<(), crate::l10n::Failure> {
         let input = &self.input;
         let rows: Vec<(String, String)> = to_review
             .iter()
@@ -571,7 +571,7 @@ impl CaptureRun {
     pub(super) fn freeform_pass(
         &mut self,
         step_filter: &Option<std::collections::HashSet<String>>,
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    ) -> Result<(), crate::l10n::Failure> {
         let (dmm, recorder, input) = (&mut self.dmm, &self.recorder, &self.input);
         let is_filtered = step_filter.is_some();
         if is_filtered && !step_included(step_filter, "extra") {

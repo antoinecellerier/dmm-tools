@@ -23,7 +23,7 @@ crate::l10n::localized_error!(InputGone);
 
 /// The one error for a keyboard reader that has gone away, so a dead thread
 /// ends the run with a reason instead of hanging on a channel nobody feeds.
-fn input_gone() -> Box<dyn std::error::Error> {
+fn input_gone() -> crate::l10n::Failure {
     InputGone.into()
 }
 
@@ -103,7 +103,7 @@ impl Input {
     }
 
     /// The key waiting, if any. Never blocks, so the watcher keeps reading.
-    pub(crate) fn try_key(&self) -> Result<Option<Key>, Box<dyn std::error::Error>> {
+    pub(crate) fn try_key(&self) -> Result<Option<Key>, crate::l10n::Failure> {
         let Some(keys) = &self.keys else {
             return Ok(None);
         };
@@ -116,7 +116,7 @@ impl Input {
 
     /// Ask for one keystroke. Enter reads as `'\n'`, as it did when this was a
     /// direct `read_char`.
-    pub(crate) fn key(&self, msg: &str) -> Result<char, Box<dyn std::error::Error>> {
+    pub(crate) fn key(&self, msg: &str) -> Result<char, crate::l10n::Failure> {
         eprint!("{msg}");
         std::io::stderr().flush()?;
         let Some(keys) = &self.keys else {
@@ -142,7 +142,7 @@ impl Input {
 
     /// Ask for a line, echoing it: the reader thread holds the terminal in raw
     /// mode, so nothing else will.
-    pub(crate) fn line(&self, msg: &str) -> Result<String, Box<dyn std::error::Error>> {
+    pub(crate) fn line(&self, msg: &str) -> Result<String, crate::l10n::Failure> {
         eprint!("{msg}");
         std::io::stderr().flush()?;
         let Some(keys) = &self.keys else {
@@ -170,7 +170,7 @@ impl Input {
     }
 }
 
-fn read_stdin_line() -> Result<String, Box<dyn std::error::Error>> {
+fn read_stdin_line() -> Result<String, crate::l10n::Failure> {
     let mut input = String::new();
     std::io::stdin().read_line(&mut input)?;
     Ok(input.trim().to_string())

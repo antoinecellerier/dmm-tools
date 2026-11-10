@@ -136,7 +136,7 @@ fn render_step_checklist(listing: Listing, steps: &[dmm_lib::protocol::CaptureSt
 pub(super) fn validate_step_filter(
     step_filter: &Option<std::collections::HashSet<String>>,
     steps: &[dmm_lib::protocol::CaptureStep],
-) -> Result<(), Box<dyn std::error::Error>> {
+) -> Result<(), crate::l10n::Failure> {
     let Some(filter) = step_filter else {
         return Ok(());
     };

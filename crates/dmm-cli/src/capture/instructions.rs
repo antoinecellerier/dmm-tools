@@ -135,7 +135,7 @@ pub(crate) fn export(
     device: &'static SelectableDevice,
     plan_path: Option<&str>,
     path: &str,
-) -> Result<(), Box<dyn std::error::Error>> {
+) -> Result<(), crate::l10n::Failure> {
     let plan = plan_path.map(super::plan::load).transpose()?;
     let steps = run_steps(device, plan.as_deref());
     let l = crate::l10n::get();
@@ -217,7 +217,7 @@ pub(super) fn install(
     path: &str,
     device: &'static SelectableDevice,
     plan: Option<&[CaptureStep]>,
-) -> Result<(), Box<dyn std::error::Error>> {
+) -> Result<(), crate::l10n::Failure> {
     let source =
         std::fs::read_to_string(path).map_err(|e| crate::output::at_path(Path::new(path), e))?;
     let file = file_format::read(&source).map_err(|problems| Unreadable {
@@ -407,10 +407,6 @@ mod tests {
         path.display().to_string()
     }
 
-    fn english(e: &dyn std::error::Error) -> String {
-        e.to_string()
-    }
-
     #[test]
     fn every_meters_steps_export_and_read_back() {
         for device in registry::DEVICES {
@@ -432,7 +428,7 @@ mod tests {
         let path = write("other-meter", &file_for(device("ut61eplus")));
         let e = install(&path, device("bm82x"), None).unwrap_err();
         std::fs::remove_file(&path).unwrap();
-        let text = english(&*e);
+        let text = e.to_string();
         assert!(text.contains("ut61eplus, not bm82x"), "{text}");
     }
 
@@ -442,7 +438,7 @@ mod tests {
         let path = write("translated-id", &file);
         let e = install(&path, device("ut61eplus"), None).unwrap_err();
         std::fs::remove_file(&path).unwrap();
-        let text = english(&*e);
+        let text = e.to_string();
         assert!(text.contains(": vcc."), "{text}");
         assert!(text.contains("dcv, "), "{text}");
     }

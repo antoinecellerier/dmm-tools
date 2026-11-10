@@ -887,7 +887,7 @@ mod tests {
             ..Default::default()
         };
         let pseudo = Localizer::new(&dmm_shared::l10n::EN_US, &crate::l10n::resources(), &pseudo);
-        let text = crate::l10n::error_text(&pseudo, &e);
+        let text = crate::l10n::Failure::from(e).text(&pseudo);
         assert!(text.starts_with('['), "{text}");
     }
 

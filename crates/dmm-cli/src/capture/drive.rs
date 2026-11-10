@@ -261,7 +261,7 @@ impl CaptureRun {
         &mut self,
         step: &CaptureStep,
         last: &Measurement,
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    ) -> Result<(), crate::l10n::Failure> {
         if !self.driver.active() {
             return Ok(());
         }
@@ -376,7 +376,7 @@ impl CaptureRun {
         &mut self,
         step: &CaptureStep,
         prev: Option<&Measurement>,
-    ) -> Result<bool, Box<dyn std::error::Error>> {
+    ) -> Result<bool, crate::l10n::Failure> {
         let last = match prev {
             Some(m) => m.clone(),
             // A meter that will not answer has nothing to switch; the step's own
@@ -407,7 +407,7 @@ impl CaptureRun {
         &mut self,
         step: &CaptureStep,
         last: &Measurement,
-    ) -> Result<bool, Box<dyn std::error::Error>> {
+    ) -> Result<bool, crate::l10n::Failure> {
         // A command step's own command is what puts the meter where it belongs,
         // and a step that names no mode has nothing to switch to.
         if !self.driver.active() || step.command.is_some() {
@@ -509,7 +509,7 @@ impl CaptureRun {
         setting: Setting,
         choice: &dmm_lib::protocol::Choice,
         samples_wanted: usize,
-    ) -> Result<Driven, Box<dyn std::error::Error>> {
+    ) -> Result<Driven, crate::l10n::Failure> {
         let instruction = sub_step_instruction(setting, &choice.label);
         let proven = self.driver.proven(setting);
         recording::lock(&self.recorder).set_step(Some(id));
@@ -601,7 +601,7 @@ impl CaptureRun {
         setting: Setting,
         choices: &[dmm_lib::protocol::Choice],
         charge: bool,
-    ) -> Result<Option<Measurement>, Box<dyn std::error::Error>> {
+    ) -> Result<Option<Measurement>, crate::l10n::Failure> {
         // Back to auto range or off — or, on a setting with no such value (a
         // UT181A in Peak has no auto range), to the value the sweep started on.
         let Some(off) = choices

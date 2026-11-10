@@ -16,13 +16,12 @@ mod triage;
 mod watch;
 
 pub(crate) use detection::Reopen;
-pub(crate) use input::{ErrorLog, Input, InputGone};
-pub(crate) use instructions::{OtherDevice, UnknownIds, Unreadable, export as export_instructions};
-pub(crate) use listing::{StepListFormat, UnknownSteps, list_steps};
+pub(crate) use input::{ErrorLog, Input};
+pub(crate) use instructions::export as export_instructions;
+pub(crate) use listing::{StepListFormat, list_steps};
 pub(crate) use report::{
     CaptureReport, SampleData, StepResult, StepStatus, needs_attention, save_report,
 };
-pub(crate) use session::NotResponding;
 pub(crate) use step::{
     CaptureStep, DETECTION_STEP_ID, FREEFORM_STEP_ID, link_gone, read_past_blank,
     samples_after_switch,
@@ -56,7 +55,7 @@ pub(crate) fn cmd_capture(
     device: &'static dmm_lib::protocol::registry::SelectableDevice,
     detected_at_open: Option<&dmm_lib::detect::Detected>,
     reopen: Reopen<'_>,
-) -> Result<(), Box<dyn std::error::Error>> {
+) -> Result<(), crate::l10n::Failure> {
     // `--list-steps` and `--format` never get here: `main` answers them
     // without opening the meter.
     let CaptureArgs {
@@ -191,7 +190,7 @@ pub(crate) fn cmd_capture(
         if !pass.quit {
             run.freeform_pass(&step_filter)?;
         }
-        Ok::<_, Box<dyn std::error::Error>>(())
+        Ok::<_, crate::l10n::Failure>(())
     })();
     if let Err(e) = passes {
         // A pulled cable or a lost link ends the run part-way: keep what the
@@ -256,11 +255,7 @@ pub(crate) fn cmd_capture(
         Err(e) => eprintln!(
             "{} {}",
             crate::l10n::warning_label(),
-            tr!(
-                l,
-                "capture-detect-failed",
-                error = crate::l10n::error_text(l, &*e),
-            )
+            tr!(l, "capture-detect-failed", error = e.text(l))
         ),
     }
 
@@ -410,11 +405,7 @@ fn save_no_response(
         }
         Err(save) => eprintln!(
             "{}",
-            tr!(
-                l,
-                "capture-no-response-not-saved",
-                error = crate::l10n::error_text(l, &*save),
-            )
+            tr!(l, "capture-no-response-not-saved", error = save.text(l))
         ),
     }
 }
@@ -429,7 +420,7 @@ fn write_no_response_report(
     device: &'static dmm_lib::protocol::registry::SelectableDevice,
     output_override: Option<&str>,
     error: &dmm_lib::error::Error,
-) -> Result<(String, usize), Box<dyn std::error::Error>> {
+) -> Result<(String, usize), crate::l10n::Failure> {
     let mut report = CaptureReport::default();
     let supported = dmm.profile().stability.is_verified();
     // `verify_meter` only fails when the meter gave no name, so there is none

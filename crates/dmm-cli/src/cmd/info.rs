@@ -11,7 +11,7 @@ use dmm_shared::tr;
 pub(crate) fn cmd_info(
     selection: Selection,
     opts: dmm_lib::OpenOptions<'_>,
-) -> Result<(), Box<dyn std::error::Error>> {
+) -> Result<(), crate::l10n::Failure> {
     let l = crate::l10n::get();
     let (mut dmm, device) = open_with_help(selection, opts)?;
     // The name detection got, if it ran: the session keeps it.

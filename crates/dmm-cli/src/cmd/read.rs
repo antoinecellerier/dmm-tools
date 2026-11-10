@@ -187,7 +187,7 @@ impl ReadPlan {
         self,
         opts: dmm_lib::OpenOptions<'_>,
         settings: Option<&dmm_shared::SharedSettings>,
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    ) -> Result<(), crate::l10n::Failure> {
         let Self {
             selection,
             source,
@@ -224,7 +224,7 @@ fn read_meter(
     options: RunOptions,
     meter: MeterSource,
     clock: dmm_lib::Clock,
-) -> Result<(), Box<dyn std::error::Error>> {
+) -> Result<(), crate::l10n::Failure> {
     let MeterSource {
         reconnect,
         mock_mode,
@@ -237,7 +237,7 @@ fn read_meter(
             ..opts
         };
         let (mut dmm, device) = match open_with_help(selection, opts) {
-            Err(e) if called_off(&*e) => return Ok(()),
+            Err(e) if called_off(&e) => return Ok(()),
             opened => opened?,
         };
         // Once, before the loop: on a UT61+ asking the meter its name is a
@@ -515,7 +515,7 @@ fn read_replay(
     format: OutputFormat,
     options: RunOptions,
     clock: dmm_lib::Clock,
-) -> Result<(), Box<dyn std::error::Error>> {
+) -> Result<(), crate::l10n::Failure> {
     let l = crate::l10n::get();
     let replay = dmm_shared::replay::load(path)?;
     // The file names its meter, by the row it was recorded under.
@@ -644,7 +644,7 @@ impl Run {
         out: format::Output,
         tick: Duration,
         next_marker: u32,
-    ) -> Result<Self, Box<dyn std::error::Error>> {
+    ) -> Result<Self, crate::l10n::Failure> {
         let RunOptions {
             destination,
             count: _,
@@ -703,7 +703,7 @@ impl Run {
         mut m: dmm_lib::measurement::Measurement,
         file_extra: usize,
         marker: Option<(u32, &str)>,
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    ) -> Result<(), crate::l10n::Failure> {
         // Before everything else: the unit-change check, the stats, the
         // integrator and the formatter must all see the same series, and after
         // a transform that series is the scaled one. (`--integrate` on a
@@ -821,7 +821,7 @@ impl Run {
         mut self,
         protocol_errors: usize,
         fatal: Option<dmm_lib::error::Error>,
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    ) -> Result<(), crate::l10n::Failure> {
         let l = crate::l10n::get();
         info!("shutting down");
         self.writer.flush()?;
@@ -1036,7 +1036,7 @@ fn run_read_loop<T: dmm_lib::transport::Transport>(
     meter: Option<Meter<T>>,
     // A recording's markers, in file order; none for a meter.
     markers: Vec<dmm_lib::replay::ReplayMarker>,
-) -> Result<(), Box<dyn std::error::Error>> {
+) -> Result<(), crate::l10n::Failure> {
     let count = options.count;
     let (device, mut reopen) = match meter {
         Some(Meter {
@@ -1256,7 +1256,7 @@ fn read_import(
     path: &Path,
     format: OutputFormat,
     options: RunOptions,
-) -> Result<(), Box<dyn std::error::Error>> {
+) -> Result<(), crate::l10n::Failure> {
     use dmm_shared::export::{ExportKind, read_csv_from, read_json_from};
     let fail = |e: String| format!("{}: {e}", path.display());
     let input = std::fs::File::open(path)

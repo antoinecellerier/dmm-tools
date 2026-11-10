@@ -33,7 +33,7 @@ use findings::reparse_findings;
 pub(crate) fn cmd_triage(
     args: &TriageArgs,
     named_device: Option<&str>,
-) -> Result<(), Box<dyn std::error::Error>> {
+) -> Result<(), crate::l10n::Failure> {
     let report = load::load(&args.report).map_err(|e| load::scrub(&e))?;
     let device = load::device(named_device, &report)?;
     let plan = args.plan.as_deref().map(super::plan::load).transpose()?;

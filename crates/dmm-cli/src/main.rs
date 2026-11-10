@@ -173,7 +173,7 @@ fn main() {
     };
 
     if let Err(e) = result {
-        report_failure(l, &*e, selection, cli.adapter.as_deref(), cli.no_bluetooth);
+        report_failure(l, &e, selection, cli.adapter.as_deref(), cli.no_bluetooth);
     }
 }
 
@@ -215,7 +215,7 @@ fn run_capture(
     args: CaptureArgs,
     selection: Selection,
     opts: dmm_lib::OpenOptions<'_>,
-) -> Result<(), Box<dyn std::error::Error>> {
+) -> Result<(), crate::l10n::Failure> {
     if let Some(path) = &args.export_instructions {
         // Like --list-steps: the run's steps, without opening the meter when it
         // is named.
@@ -243,7 +243,7 @@ fn run_capture(
 /// help answers it.
 fn report_failure(
     l: &Localizer,
-    e: &(dyn std::error::Error + 'static),
+    e: &l10n::Failure,
     selection: Selection,
     adapter: Option<&str>,
     no_bluetooth: bool,
@@ -257,7 +257,7 @@ fn report_failure(
     let msg = match extra {
         // By the name it was picked by, which the error doesn't carry.
         Extra::NotSearched { model, miss } => l.bluetooth_only(model, miss),
-        _ => l10n::error_text(l, e),
+        _ => e.text(l),
     };
     eprintln!("{} {msg}", error_label());
     match extra {
@@ -310,12 +310,8 @@ enum Extra {
 /// one is settled on: the one named, or the one detection found before the
 /// meter went quiet. A failure the open's own help answered never comes
 /// here: it arrives as [`open::OpenFailed`].
-fn extra_help(
-    error: &(dyn std::error::Error + 'static),
-    selection: Selection,
-    adapter: Option<&str>,
-) -> Extra {
-    let Some(error) = error.downcast_ref::<dmm_lib::error::Error>() else {
+fn extra_help(error: &l10n::Failure, selection: Selection, adapter: Option<&str>) -> Extra {
+    let Some(error) = error.lib() else {
         return Extra::None;
     };
     match Diagnosis::of(error, adapter, open::picked(selection)) {
@@ -413,7 +409,7 @@ mod tests {
             BluetoothOnlyMiss::UsbAdapter,
         ] {
             assert_eq!(
-                extra_help(&err(miss), ut60bt, None),
+                extra_help(&err(miss).into(), ut60bt, None),
                 Extra::NotSearched {
                     model: open::meter_name(device),
                     miss
@@ -422,7 +418,7 @@ mod tests {
             );
         }
         assert_eq!(
-            extra_help(&err(BluetoothOnlyMiss::NotInRange), ut60bt, None),
+            extra_help(&err(BluetoothOnlyMiss::NotInRange).into(), ut60bt, None),
             Extra::None
         );
     }
@@ -440,19 +436,19 @@ mod tests {
             panic!("a named meter");
         };
         assert_eq!(
-            extra_help(&Error::Timeout, ut61eplus, None),
+            extra_help(&Error::Timeout.into(), ut61eplus, None),
             Extra::NoResponse(device)
         );
         assert_eq!(
-            extra_help(&Error::Timeout, Selection::Auto, None),
+            extra_help(&Error::Timeout.into(), Selection::Auto, None),
             Extra::None
         );
         assert_eq!(
-            extra_help(&Error::cable_pulled(), ut61eplus, None),
+            extra_help(&Error::cable_pulled().into(), ut61eplus, None),
             Extra::None
         );
-        let echoed: Box<dyn std::error::Error> = "unknown range: timeout".into();
-        assert_eq!(extra_help(&*echoed, ut61eplus, None), Extra::None);
+        let echoed = l10n::Failure::Text("unknown range: timeout".to_string());
+        assert_eq!(extra_help(&echoed, ut61eplus, None), Extra::None);
     }
 
     /// A named adapter the stack could not reach is explained by its link;
@@ -462,7 +458,9 @@ mod tests {
     fn a_named_adapter_that_would_not_connect_gets_the_bluetooth_steps() {
         use dmm_lib::error::{BluetoothIssue, Error};
         let address = "12:34:56:78:9A:BC";
-        let stack = Error::Bluetooth(BluetoothIssue::Stack("Timed out after 10s".to_string()));
+        let stack = l10n::Failure::from(Error::Bluetooth(BluetoothIssue::Stack(
+            "Timed out after 10s".to_string(),
+        )));
         let auto = Selection::Auto;
         assert_eq!(
             extra_help(&stack, auto, Some(address)),
@@ -471,7 +469,7 @@ mod tests {
         assert_eq!(extra_help(&stack, auto, None), Extra::None);
         assert_eq!(extra_help(&stack, auto, Some("00C5B27A")), Extra::None);
         assert_eq!(
-            extra_help(&Error::LinkLost, auto, Some(address)),
+            extra_help(&Error::LinkLost.into(), auto, Some(address)),
             Extra::None
         );
     }
@@ -482,7 +480,7 @@ mod tests {
     #[test]
     fn an_unreachable_bluetooth_only_meter_gets_its_own_steps() {
         use dmm_lib::error::{BluetoothIssue, Error};
-        let stack = Error::Bluetooth(BluetoothIssue::PoweredOff);
+        let stack = l10n::Failure::from(Error::Bluetooth(BluetoothIssue::PoweredOff));
         let ut60bt = selection("ut60bt");
         let Selection::Device(device) = ut60bt else {
             panic!("a named meter");
@@ -500,7 +498,7 @@ mod tests {
         );
         assert_eq!(extra_help(&stack, Selection::Auto, None), Extra::None);
         assert_eq!(
-            extra_help(&Error::LinkLost, selection("ut60bt"), None),
+            extra_help(&Error::LinkLost.into(), selection("ut60bt"), None),
             Extra::None
         );
     }

@@ -17,7 +17,7 @@ pub(crate) fn cmd_debug(
     opts: dmm_lib::OpenOptions<'_>,
     count: usize,
     interval_ms: u64,
-) -> Result<(), Box<dyn std::error::Error>> {
+) -> Result<(), crate::l10n::Failure> {
     let stop = setup_ctrlc()?;
     let l = crate::l10n::get();
 
@@ -26,7 +26,7 @@ pub(crate) fn cmd_debug(
         ..opts
     };
     let (mut dmm, _device) = match open_with_help(selection, opts) {
-        Err(e) if called_off(&*e) => return Ok(()),
+        Err(e) if called_off(&e) => return Ok(()),
         opened => opened?,
     };
 

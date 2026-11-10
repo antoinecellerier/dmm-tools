@@ -60,7 +60,7 @@ struct PlanExpect {
 }
 
 /// The steps in `path`, ready for the capture loop.
-pub(crate) fn load(path: &str) -> Result<Vec<CaptureStep>, Box<dyn std::error::Error>> {
+pub(crate) fn load(path: &str) -> Result<Vec<CaptureStep>, crate::l10n::Failure> {
     let text = std::fs::read_to_string(path).map_err(|e| format!("{path}: {e}"))?;
     Ok(parse(path, &text)?)
 }

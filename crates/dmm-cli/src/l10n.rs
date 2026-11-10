@@ -142,14 +142,15 @@ pub(crate) fn english() -> &'static Localizer {
 
 /// An error dmm-cli words itself: the closing `Error:` line of a command.
 /// [`localized_error!`] gives it a `Display` in English, which is what the
-/// log gets; the terminal gets [`Localized::text`] in the run's language,
-/// once the type is listed in [`ours`].
+/// log gets, and a way into [`Failure`], which shows [`Localized::text`] in
+/// the run's language.
 pub(crate) trait Localized: std::error::Error + 'static {
     /// The error in `l`'s language.
     fn text<'a>(&'a self, l: &'a Localizer) -> Cow<'a, str>;
 }
 
-/// `Display`, in English, and `Error` for a [`Localized`] type.
+/// `Display`, in English, and `Error` for a [`Localized`] type, and its
+/// conversion into a [`Failure`].
 macro_rules! localized_error {
     ($t:ty) => {
         impl std::fmt::Display for $t {
@@ -162,40 +163,109 @@ macro_rules! localized_error {
         }
 
         impl std::error::Error for $t {}
+
+        impl From<$t> for $crate::l10n::Failure {
+            fn from(e: $t) -> Self {
+                Self::Ours(Box::new(e))
+            }
+        }
     };
 }
 pub(crate) use localized_error;
 
-/// `e` as one of dmm-cli's [`Localized`] errors: a line per type.
-fn ours<'e>(e: &'e (dyn std::error::Error + 'static)) -> Option<&'e dyn Localized> {
-    fn of<'e, T: Localized>(e: &'e (dyn std::error::Error + 'static)) -> Option<&'e dyn Localized> {
-        e.downcast_ref::<T>().map(|t| t as &dyn Localized)
-    }
-    of::<crate::open::OpenFailed>(e)
-        .or_else(|| of::<crate::cmd::settings::SetFailed>(e))
-        .or_else(|| of::<crate::format::NoFrame>(e))
-        .or_else(|| of::<crate::capture::NotResponding>(e))
-        .or_else(|| of::<crate::capture::InputGone>(e))
-        .or_else(|| of::<crate::capture::UnknownSteps>(e))
-        .or_else(|| of::<crate::capture::Unreadable>(e))
-        .or_else(|| of::<crate::capture::OtherDevice>(e))
-        .or_else(|| of::<crate::capture::UnknownIds>(e))
+/// Why a command failed, as it travels to the `Error:` line, kept by what
+/// words it, so the line is in the run's language whatever kind it is.
+///
+/// Not an [`std::error::Error`] itself, so nothing can box one and hide
+/// which it is; a new [`Localized`] type comes in through its
+/// [`localized_error!`] or does not compile at its `?`. The one way round
+/// that is inside an `io::Error`, which only the replay writer's frameless
+/// reading takes (see the `From<std::io::Error>`).
+#[derive(Debug)]
+pub(crate) enum Failure {
+    /// The library's, worded by variant.
+    Lib(dmm_lib::error::Error),
+    /// One of dmm-cli's own.
+    Ours(Box<dyn Localized>),
+    /// The system's, whose text is its own.
+    Io(std::io::Error),
+    /// Text with nothing left to word: a file's own error, a parser's.
+    Text(String),
 }
 
-/// `e` as the terminal shows it: a library error or one of dmm-cli's own
-/// in `l`'s language, anything else as it reads. One of ours may come
-/// inside an `io::Error`, as a writer returns it.
-pub(crate) fn error_text(l: &Localizer, e: &(dyn std::error::Error + 'static)) -> String {
-    if let Some(e) = e.downcast_ref::<dmm_lib::error::Error>() {
-        return l.error(e);
+impl Failure {
+    /// The failure as the terminal shows it, in `l`'s language.
+    pub(crate) fn text(&self, l: &Localizer) -> String {
+        match self {
+            Self::Lib(e) => l.error(e),
+            Self::Ours(e) => e.text(l).into_owned(),
+            Self::Io(e) => e.to_string(),
+            Self::Text(text) => text.clone(),
+        }
     }
-    let inner = e
-        .downcast_ref::<std::io::Error>()
-        .and_then(std::io::Error::get_ref)
-        .map(|inner| inner as &(dyn std::error::Error + 'static));
-    match ours(inner.unwrap_or(e)) {
-        Some(ours) => ours.text(l).into_owned(),
-        None => e.to_string(),
+
+    /// The library's error, when it is one.
+    pub(crate) fn lib(&self) -> Option<&dmm_lib::error::Error> {
+        match self {
+            Self::Lib(e) => Some(e),
+            _ => None,
+        }
+    }
+}
+
+/// In English, for the log.
+impl std::fmt::Display for Failure {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Lib(e) => e.fmt(f),
+            Self::Ours(e) => e.fmt(f),
+            Self::Io(e) => e.fmt(f),
+            Self::Text(text) => f.write_str(text),
+        }
+    }
+}
+
+impl From<dmm_lib::error::Error> for Failure {
+    fn from(e: dmm_lib::error::Error) -> Self {
+        Self::Lib(e)
+    }
+}
+
+/// A writer returns an [`std::io::Error`], and one of ours can come inside
+/// it: a replay's line that has no meter frame to record.
+impl From<std::io::Error> for Failure {
+    fn from(e: std::io::Error) -> Self {
+        match e.downcast::<crate::format::NoFrame>() {
+            Ok(ours) => ours.into(),
+            Err(e) => Self::Io(e),
+        }
+    }
+}
+
+impl From<String> for Failure {
+    fn from(text: String) -> Self {
+        Self::Text(text)
+    }
+}
+
+/// The handler the run installs for Ctrl-C could not be set.
+impl From<ctrlc::Error> for Failure {
+    fn from(e: ctrlc::Error) -> Self {
+        Self::Text(e.to_string())
+    }
+}
+
+/// A value that would not serialize, for `--format json`.
+impl From<serde_json::Error> for Failure {
+    fn from(e: serde_json::Error) -> Self {
+        Self::Text(e.to_string())
+    }
+}
+
+/// A capture report that would not serialize.
+impl From<serde_saphyr::SerializeError> for Failure {
+    fn from(e: serde_saphyr::SerializeError) -> Self {
+        Self::Text(e.to_string())
     }
 }
 
@@ -218,6 +288,28 @@ pub(crate) fn note_label() -> StyledObject<Cow<'static, str>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Each kind of failure reaches the terminal through the messages, and
+    /// the log in English. (One of ours inside a writer's `io::Error`: the
+    /// replay writer's test in `format.rs`.)
+    #[test]
+    fn a_failure_is_worded_in_the_runs_language() {
+        let options = dmm_shared::l10n::Options {
+            pseudo: true,
+            ..Default::default()
+        };
+        let pseudo = Localizer::new(&dmm_shared::l10n::EN_US, &resources(), &options);
+        let ours = Failure::from(crate::open::OpenFailed::NotFound);
+        let lib = Failure::from(dmm_lib::error::Error::Timeout);
+        for failure in [&ours, &lib] {
+            let text = failure.text(&pseudo);
+            assert!(text.starts_with('['), "{text}");
+            assert!(!failure.to_string().starts_with('['), "{failure}");
+        }
+        // The system's own text is all there is to show.
+        let io = Failure::from(std::io::Error::other("disk full"));
+        assert_eq!(io.text(&pseudo), "disk full");
+    }
 
     /// Every lookup in dmm-cli names an en-US message with the variables
     /// it is given, and every message in its own files is used.

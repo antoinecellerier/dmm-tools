@@ -15,7 +15,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 /// [`OpenOptions::stop`](dmm_lib::OpenOptions::stop) takes, and what a
 /// command's loop ends on. Once only per run, and before a command's open, so
 /// a Bluetooth search can be called off and takes its half-up peer down.
-fn setup_ctrlc() -> Result<Arc<AtomicBool>, Box<dyn std::error::Error>> {
+fn setup_ctrlc() -> Result<Arc<AtomicBool>, crate::l10n::Failure> {
     let stop = Arc::new(AtomicBool::new(false));
     let raised = stop.clone();
     ctrlc::set_handler(move || {
@@ -40,11 +40,8 @@ fn unavailable(l: &dmm_shared::l10n::Localizer, e: &dmm_lib::error::Error) -> St
 
 /// Whether a failed open was Ctrl+C calling it off: a quiet end to the
 /// command, with nothing to report.
-fn called_off(error: &(dyn std::error::Error + 'static)) -> bool {
-    matches!(
-        error.downcast_ref::<dmm_lib::error::Error>(),
-        Some(dmm_lib::error::Error::Cancelled)
-    )
+fn called_off(error: &crate::l10n::Failure) -> bool {
+    matches!(error.lib(), Some(dmm_lib::error::Error::Cancelled))
 }
 
 #[cfg(test)]
