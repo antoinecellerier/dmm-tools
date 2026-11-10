@@ -55,9 +55,12 @@ point, not a fourth reference. The general rules are in
 - The device table is hand-written and guarded by a test; keep its status
   words those of `Stability::label()`, capitalised, with the emoji
   `device-catalog.md` gives them.
-- One device row per verification issue and status, brand first in the Meter cell;
-  columns Meter, USB, Bluetooth, Issue. A Bluetooth status says "(adapter)"
-  or "(built in)"; `—` marks a link the meter is not supported over.
+- A verified model has a row of its own, unless it is a rebrand with no
+  functional change. Models not yet verified may share a row when they are
+  close siblings with one issue and status ("UT61D+, UT161B/D"). Brand first
+  in the Meter cell; columns Meter, USB, Bluetooth, Issue. A Bluetooth status
+  says "(adapter)" or "(built in)"; `—` marks a link the meter is not
+  supported over.
 - Row order, so the table opens on what hardware confirmed and keeps a
   brand's series together: brands, then each brand's series (its rows in one
   `docs/supported-devices.md` section), then rows, each ranked by best status
@@ -72,8 +75,8 @@ point, not a fourth reference. The general rules are in
 
 `README.<lang>.md` follows the rules above in its language, the first
 paragraph in the terms of `i18n/<lang>/glossary.tsv`. It is refreshed at the
-release step, never with the English change (`docs/localization-design.md`,
-User documentation). Besides the English structure and links, a copy keeps:
+release step; an English change need not reach the copies before then, though
+it may (`docs/localization-design.md`, User documentation). Besides the English structure and links, a copy keeps:
 
 - the hash line first, and the language row with itself bold;
 - a line under the row naming the English README as the reference, which

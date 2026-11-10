@@ -267,7 +267,7 @@ Once verified:
 Update these in the same commit as the code:
 
 - The verification issue — the exception to "same commit": it is posted after the code and linked in a commit of its own (Phase 4). One issue per model name prefix: UT71A–E share one, a rebrand under another name gets its own, and a meter that reports only its packet layout gets one per layout entry, shared by the brands that send it. Its checklist is the `--list-steps --format md` output; `DeviceProfile.verification_issue`, the README row and the catalog's Status link it
-- `README.md` — hand-edit the supported-devices table: one row per verification issue, abbreviated model runs, a USB and a Bluetooth status. What its test checks is in [Generated doc tables](development.md#generated-doc-tables). The translated `README.<lang>.md` copies take the row at the release step ([User documentation](localization-design.md#user-documentation))
+- `README.md` — hand-edit the supported-devices table: a row per verified model, close siblings not yet verified sharing one with abbreviated model runs, a USB and a Bluetooth status. What its test checks is in [Generated doc tables](development.md#generated-doc-tables). The translated `README.<lang>.md` copies take the row by the release step ([User documentation](localization-design.md#user-documentation))
 - `docs/cli-reference.md` — regenerate the `--device` table ([Generated doc tables](development.md#generated-doc-tables)), and hand-edit the surrounding prose and anything the device adds to the CLI
 - `docs/supported-devices.md` — add or update the device entry. Counts, form factor, cable and VID:PID live here; the generated `--device` table links here rather than repeating them
 - `docs/protocol.md` — index entry pointing at the new family's spec

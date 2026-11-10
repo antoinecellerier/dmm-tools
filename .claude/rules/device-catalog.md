@@ -22,8 +22,10 @@ supported yet. The general rules are in `docs-user-facing.md`.
   series, whose meters send nothing to tell them apart) lends its label only
   to the models that have run; the others stay `🧪 Experimental`, as an
   untested UT61+ sibling does.
-- Status links the verification issue for the last two, and for a Verified
-  model whose evidence is a reporter's issue; Notes never carry the evidence.
+- Status links the model's verification issue whenever it has one, whatever
+  its status: the checklist reads as status, where a reporter's thread whose
+  captures fed it reads as discussion (that thread is cited in the family
+  spec). Notes never carry the evidence.
 - The README's device table uses the same words and emoji.
 - Research stays out: decompilation sources, line counts, hashes,
   cross-correlation with community code, protocol summaries, candidate
