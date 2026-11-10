@@ -106,7 +106,8 @@ without the adapter: turn the meter on, then long-press SEL on the UT60BT,
 or short-press the Bluetooth button on the UT202BT, until the Bluetooth
 symbol shows. The UT202BT switches Bluetooth off after 5 minutes without a
 connection. For either, keep **Look for Bluetooth devices** ticked and
-leave out `--no-bluetooth`.
+leave out `--no-bluetooth`; with that box unticked, `dmm-cli --bluetooth`
+scans for one run.
 
 The ZOTEK meters (ZOYI, BSIDE, ANENG) have Bluetooth built in too and need no
 pairing: switch Bluetooth on at the meter as
@@ -221,8 +222,8 @@ on their own once it transmits again.
   when the meter behind it says nothing. Unplug the cable, or pass
   `--adapter <address>`. Naming the meter skips a Brymen BU-86X unless the
   meter is one of its own.
-- Leave out `--no-bluetooth`, and tick **Look for Bluetooth devices** in the
-  GUI's settings: with either off, nothing scans.
+- Tick **Look for Bluetooth devices** in the GUI's settings, or pass
+  `dmm-cli --bluetooth` for one run; `--no-bluetooth` turns scanning off.
 
 A UT-D07A that is listed and connects but fails with "no UART … characteristic"
 carries a different service layout — please report it on

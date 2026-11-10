@@ -107,7 +107,7 @@ fn main() {
         fail(tr!(l, "connect-unknown-device", device = &device_id));
     };
 
-    let bluetooth = bluetooth_probing(cli.no_bluetooth, settings.as_ref());
+    let bluetooth = bluetooth_probing(cli.bluetooth, cli.no_bluetooth, settings.as_ref());
     open::note_no_bluetooth_flag(cli.no_bluetooth);
     let opts = dmm_lib::OpenOptions {
         adapter: cli.adapter.as_deref(),
@@ -333,10 +333,15 @@ fn extra_help(error: &l10n::Failure, selection: Selection, adapter: Option<&str>
 
 /// Whether this run may look for a Bluetooth adapter.
 ///
-/// The saved setting decides, and `--no-bluetooth` overrides it for one run —
-/// the file is never written back: the GUI owns it.
-fn bluetooth_probing(no_bluetooth: bool, saved: Option<&dmm_shared::SharedSettings>) -> bool {
-    !no_bluetooth && saved.is_none_or(|s| s.bluetooth)
+/// The saved setting decides, and `--bluetooth` or `--no-bluetooth`
+/// overrides it for one run — the file is never written back: the GUI owns
+/// it.
+fn bluetooth_probing(
+    bluetooth: bool,
+    no_bluetooth: bool,
+    saved: Option<&dmm_shared::SharedSettings>,
+) -> bool {
+    bluetooth || (!no_bluetooth && saved.is_none_or(|s| s.bluetooth))
 }
 
 #[cfg(test)]
@@ -377,20 +382,24 @@ mod tests {
         assert_eq!(selection_id(selection(&id)), "ut61b+");
     }
 
-    /// `--no-bluetooth` is one run's answer; the setting is every run's. With
-    /// neither, the radio is searched — the file a v0.7 install left behind
-    /// has no such field, and that version always searched.
+    /// `--bluetooth` and `--no-bluetooth` are one run's answer; the setting is
+    /// every run's. With neither, the radio is searched — the file a v0.7
+    /// install left behind has no such field, and that version always
+    /// searched.
     #[test]
     fn the_flag_overrides_the_saved_bluetooth_setting() {
         let saved = |bluetooth| dmm_shared::SharedSettings {
             bluetooth,
             ..Default::default()
         };
-        assert!(bluetooth_probing(false, None));
-        assert!(bluetooth_probing(false, Some(&saved(true))));
-        assert!(!bluetooth_probing(true, Some(&saved(true))));
-        assert!(!bluetooth_probing(false, Some(&saved(false))));
-        assert!(!bluetooth_probing(true, Some(&saved(false))));
+        assert!(bluetooth_probing(false, false, None));
+        assert!(bluetooth_probing(false, false, Some(&saved(true))));
+        assert!(!bluetooth_probing(false, true, Some(&saved(true))));
+        assert!(!bluetooth_probing(false, false, Some(&saved(false))));
+        assert!(!bluetooth_probing(false, true, Some(&saved(false))));
+        // --bluetooth wins over a saved "off".
+        assert!(bluetooth_probing(true, false, Some(&saved(false))));
+        assert!(bluetooth_probing(true, false, None));
     }
 
     /// A meter with the radio built in that was not looked for is named as

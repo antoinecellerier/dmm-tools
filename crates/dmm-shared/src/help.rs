@@ -244,9 +244,9 @@ impl<'a> Help<'a> {
     /// `--no-bluetooth` switched it off, else the saved setting did.
     pub fn cli_bluetooth_off_hint(self, flag_given: bool) -> Cow<'a, str> {
         if flag_given {
-            tr!(self.0, "bluetooth-off-cli-flag")
+            tr!(self.0, "bluetooth-off-cli-instead")
         } else {
-            tr!(self.0, "bluetooth-off-cli-setting")
+            tr!(self.0, "bluetooth-off-cli-saved")
         }
     }
 
@@ -1347,11 +1347,12 @@ mod tests {
     fn each_binary_names_its_own_bluetooth_switch() {
         assert_eq!(
             english().cli_bluetooth_off_hint(true),
-            "Leave out --no-bluetooth."
+            "Pass --bluetooth in place of --no-bluetooth."
         );
         assert_eq!(
             english().cli_bluetooth_off_hint(false),
-            "Tick \"Look for Bluetooth devices\" in dmm-gui's settings, which dmm-cli reads too."
+            "Pass --bluetooth, or tick \"Look for Bluetooth devices\" in dmm-gui's settings, which \
+             dmm-cli reads too."
         );
         assert_eq!(
             english().gui_bluetooth_off_hint(),
@@ -1379,14 +1380,17 @@ mod tests {
         assert!(!bluetooth_switched_off(false, None, Some(entry("bm86x"))));
 
         let links = LinksSearched::UsbBluetoothOff {
-            hint: "Leave out --no-bluetooth.",
+            hint: "Pass --bluetooth in place of --no-bluetooth.",
         };
         assert_eq!(english().not_found_title(&links), "No USB cable found");
         let sections = english().sections(&links);
         let labels: Vec<&str> = sections.iter().map(|s| s.link.as_str()).collect();
         assert_eq!(labels, ["USB cable", "Bluetooth"]);
         assert_eq!(sections[1].check, "not searched.");
-        assert_eq!(sections[1].steps, ["Leave out --no-bluetooth."]);
+        assert_eq!(
+            sections[1].steps,
+            ["Pass --bluetooth in place of --no-bluetooth."]
+        );
     }
 
     /// The short form drops the word the status line no longer needs; the

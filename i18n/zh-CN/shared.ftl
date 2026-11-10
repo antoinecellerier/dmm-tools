@@ -122,8 +122,6 @@ screen-only-reading = 请在万用表显示屏上查看示波器读数
 # The GUI checkbox that lets a connection search over Bluetooth. The CLI
 # reads the same setting, so its help names the checkbox too.
 bluetooth-setting = 查找蓝牙设备
-bluetooth-off-cli-flag = 去掉 --no-bluetooth。
-bluetooth-off-cli-setting = 在 dmm-gui 的设置中勾选“{ bluetooth-setting }”，dmm-cli 也读取该设置。
 bluetooth-off-gui = 在“设置”(⚙) 中勾选“{ bluetooth-setting }”。
 
 ## What is connected, when an --adapter value matched nothing.

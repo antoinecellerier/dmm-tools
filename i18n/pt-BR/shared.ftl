@@ -122,8 +122,6 @@ screen-only-reading = Veja as leituras do osciloscópio no display do multímetr
 # The GUI checkbox that lets a connection search over Bluetooth. The CLI
 # reads the same setting, so its help names the checkbox too.
 bluetooth-setting = Procurar dispositivos Bluetooth
-bluetooth-off-cli-flag = Omita a opção --no-bluetooth.
-bluetooth-off-cli-setting = Marque “{ bluetooth-setting }” nas configurações do dmm-gui, que o dmm-cli também lê.
 bluetooth-off-gui = Marque “{ bluetooth-setting }” em Configurações (⚙).
 
 ## What is connected, when an --adapter value matched nothing.

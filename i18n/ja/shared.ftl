@@ -118,8 +118,6 @@ screen-only-reading = オシロスコープの測定値はマルチメーター�
 # The GUI checkbox that lets a connection search over Bluetooth. The CLI
 # reads the same setting, so its help names the checkbox too.
 bluetooth-setting = Bluetooth デバイスを探す
-bluetooth-off-cli-flag = --no-bluetooth を付けずに実行してください。
-bluetooth-off-cli-setting = dmm-gui の設定で [{ bluetooth-setting }] チェック ボックスをオンにしてください。dmm-cli もこの設定を読み取ります。
 bluetooth-off-gui = [設定] (⚙) で [{ bluetooth-setting }] チェック ボックスをオンにしてください。
 
 ## What is connected, when an --adapter value matched nothing.

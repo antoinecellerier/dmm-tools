@@ -156,6 +156,11 @@ pub(crate) struct Cli {
     #[arg(long)]
     pub(crate) no_bluetooth: bool,
 
+    /// Scan for Bluetooth adapters and meters on this run, whatever the saved
+    /// 'bluetooth' setting says.
+    #[arg(long, conflicts_with = "no_bluetooth")]
+    pub(crate) bluetooth: bool,
+
     /// Language of messages and help, or `system` for the system's. If
     /// omitted, falls back to `language` in the settings file (written by
     /// dmm-gui's Language row), then to the system's.
@@ -704,6 +709,14 @@ mod tests {
     fn clap_parse_list() {
         let cli = Cli::try_parse_from(["dmm-cli", "list"]).unwrap();
         assert!(matches!(cli.command, Cmd::List));
+    }
+
+    /// One run turns the radio's search on or off, not both.
+    #[test]
+    fn bluetooth_on_and_off_together_are_refused() {
+        let cli = Cli::try_parse_from(["dmm-cli", "--bluetooth", "list"]).unwrap();
+        assert!(cli.bluetooth && !cli.no_bluetooth);
+        assert!(Cli::try_parse_from(["dmm-cli", "--bluetooth", "--no-bluetooth", "list"]).is_err());
     }
 
     #[test]

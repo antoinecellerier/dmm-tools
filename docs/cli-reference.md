@@ -32,6 +32,7 @@ Set `NO_COLOR=1` to disable colored output.
 | `--device <DEVICE>` | `auto` | Meter model to connect to, or `auto` to work out which meter is connected. See [Devices](#devices) below. |
 | `--adapter <SERIAL_PATH_OR_ADDRESS>` | | Select a specific adapter when more than one is reachable. Use the serial number or HID path of a USB cable, or the address of a Bluetooth adapter or meter, from `list` output. |
 | `--no-bluetooth` | | Turn off Bluetooth scanning for this run. Overrides the `bluetooth` setting in the settings file; an address given to `--adapter` is still opened. |
+| `--bluetooth` | | Scan for Bluetooth adapters and meters on this run. Overrides the `bluetooth` setting in the settings file. |
 | `--lang <LANG>` | | Language of messages and help: an id from the list `--help` shows (`en` or `en_GB` picks `en-US`), or `system` for the system's. Overrides the `language` setting in the settings file; see [Language](setup.md#language). A script that matches output text passes `--lang en-US`. |
 | `-h, --help` | | Print help |
 | `-V, --version` | | Print version |

@@ -123,8 +123,10 @@ screen-only-reading = See the meter's screen for oscilloscope readings
 # The GUI checkbox that lets a connection search over Bluetooth. The CLI
 # reads the same setting, so its help names the checkbox too.
 bluetooth-setting = Look for Bluetooth devices
-bluetooth-off-cli-flag = Leave out --no-bluetooth.
-bluetooth-off-cli-setting = Tick "{ bluetooth-setting }" in dmm-gui's settings, which dmm-cli reads too.
+# How dmm-cli switches the search on: after --no-bluetooth, and when the
+# saved setting is off.
+bluetooth-off-cli-instead = Pass --bluetooth in place of --no-bluetooth.
+bluetooth-off-cli-saved = Pass --bluetooth, or tick "{ bluetooth-setting }" in dmm-gui's settings, which dmm-cli reads too.
 bluetooth-off-gui = Tick "{ bluetooth-setting }" in Settings (⚙).
 # How to open the meter as the model it is, after a message saying it is
 # another, in dmm-gui. $choice is entry ($model the meter to pick, e.g.
