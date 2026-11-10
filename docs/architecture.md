@@ -195,10 +195,10 @@ the last payload the session has ended (`Protocol::ended`, `StreamEvent::Ended`)
 lives beside the parser, so a recorder cannot drift from it.
 
 `MockProtocol` is the hardware-free meter the GUI, the CLI demos and the screenshots run against. It
-reaches its settings through the same cycle driver as the button-cycling families. A simulated
-meter wraps the family's unchanged driver around an in-memory transport that streams the family's
-own packets and takes the key frames the driver writes. `mock::open_simulated` opens either by its
-registry entry.
+reaches its settings through the same cycle driver as the button-cycling families, and takes which
+flags each mode reacts to from the UT61+ driver's own rule. A simulated meter wraps the family's
+unchanged driver around an in-memory transport that streams the family's own packets and takes the
+key frames the driver writes. `mock::open_simulated` opens either by its registry entry.
 
 Code: `replay.rs`, `mock/`.
 

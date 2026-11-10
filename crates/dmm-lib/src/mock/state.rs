@@ -178,6 +178,16 @@ impl MeterState {
         }
     }
 
+    /// Whether REL is on.
+    pub(super) fn rel_on(&self) -> bool {
+        self.rel
+    }
+
+    /// Whether Peak is recording.
+    pub(super) fn peak_on(&self) -> bool {
+        self.peak != PeakState::Off
+    }
+
     /// Whether HOLD has the display frozen.
     pub(super) fn held(&self) -> bool {
         self.hold
@@ -192,8 +202,9 @@ impl MeterState {
     }
 
     /// REL: take `value` as the baseline later readings are measured
-    /// against, or drop it. An overload is no number to subtract from, so it
-    /// leaves REL without a baseline and readings pass through unchanged.
+    /// against, or drop it. The caller refuses to turn REL on over an
+    /// overload, as the meter does, so only a value that is a number is
+    /// ever taken.
     pub(super) fn press_rel(&mut self, value: MeasuredValue) {
         self.rel = !self.rel;
         self.rel_base = match (self.rel, value) {
@@ -256,8 +267,8 @@ impl MeterState {
     /// Peak: Off → P-MAX → P-MIN → P-MAX …, as the real device cycles.
     /// Entering it ends MIN/MAX — the meter never shows both.
     ///
-    /// The caller decides whether the mode reacts to Peak at all
-    /// ([`super::scenarios::Scenario::peak_applies`]).
+    /// The caller decides whether the mode reacts to Peak at all, from the
+    /// UT61E+ driver's answer.
     pub(super) fn press_peak(&mut self) {
         // Only when it is recording: `exit_minmax` puts the range back to
         // what MIN/MAX saved, which would undo a rung chosen since.

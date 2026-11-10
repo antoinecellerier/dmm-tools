@@ -289,8 +289,3 @@ Bugs a reader can reproduce: symptom, cause, and the fix where known.
   Visible row's ∫ wraps onto a line of its own, just above the session's ∫
   line. Fix, untried: keep that ∫ with its row, or draw the session's ∫
   first. Any live mock at a quarter of a 1600 px screen.
-- **The mock offers Peak outside the AC modes.** Its Hz, Ω, capacitance,
-  temperature and NCV scenarios take Peak, where the UT61E+ offers it only in
-  `AC_PEAK_MODES` (`protocol/ut61eplus/tables/mod.rs`). Cause:
-  `Scenario::peak_applies` (`mock/scenarios.rs`) excludes only the DC
-  scenarios. Fix: narrow it to the AC ones.

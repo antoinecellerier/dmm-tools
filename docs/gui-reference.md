@@ -165,8 +165,8 @@ A row of buttons shown when connected and receiving data (visible in the
 
 Buttons highlight blue when the corresponding flag is active in the current
 measurement. LIGHT and the buttons below it in this table do not highlight. On the
-mock, the buttons respond to toggle flags and SELECT or Hz/%, or a pick in the
-mode dropdown, moves to the next scenario.
+mock, the flag buttons act where a UT61E+'s would, and SELECT or Hz/%, or a pick
+in the mode dropdown, moves to the next scenario.
 
 ## Graph
 

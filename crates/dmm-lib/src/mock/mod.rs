@@ -26,7 +26,7 @@ use crate::protocol::cycle::{self, CycleButton, CycleMeter, FlagSetting};
 use crate::protocol::registry::SelectableDevice;
 use crate::protocol::ut61eplus::mode::Mode;
 use crate::protocol::ut61eplus::specs::SpecModel;
-use crate::protocol::ut61eplus::{METER_KEYS, UT61EPLUS_COMMANDS};
+use crate::protocol::ut61eplus::{METER_KEYS, UT61EPLUS_COMMANDS, flag_states_for};
 // The mock stands in for a UT61E+, so it labels its ranges from the UT61E+
 // table rather than carrying a second copy that can drift.
 use crate::protocol::ut61eplus::tables::{self, ut61e_plus::UT61E_PLUS};
@@ -503,18 +503,27 @@ impl Protocol for MockProtocol {
     fn send_command(&mut self, _transport: &dyn Transport, command: &str) -> Result<()> {
         let elapsed = self.elapsed_secs();
         let scenario = self.current_scenario();
+        let value = || (scenario.value_fn)(elapsed, scenario.duration_secs);
+        // A press that would turn a flag on where the UT61E+ ignores that
+        // button leaves it off, as does the meter: the UT61E+ driver's own
+        // answer. One already lit, carried over from another scenario, still
+        // answers its button.
+        let applies = |flag| !flag_states_for(&UT61E_PLUS, flag, scenario.mode_raw).is_empty();
         match command {
-            cmd::HOLD => {
-                let value = (scenario.value_fn)(elapsed, scenario.duration_secs);
-                self.state.press_hold(value, elapsed);
-            }
+            cmd::HOLD if !self.state.held() && !applies(FlagSetting::Hold) => {}
+            cmd::HOLD => self.state.press_hold(value(), elapsed),
             // Under HOLD the UT61E+ drops REL and Hz/%, and SELECT, RANGE and
             // AUTO land and release it (ut61-family spec §6.3).
             cmd::REL if self.state.held() => {}
-            cmd::REL => {
-                let value = (scenario.value_fn)(elapsed, scenario.duration_secs);
-                self.state.press_rel(value);
-            }
+            // The meter also refuses REL over OL, whatever the mode. The
+            // scenario's live value stands for the screen: only `ohm_ol`
+            // reads OL, and it reads nothing else, so a MIN/MAX or Peak
+            // started there shows OL too.
+            cmd::REL
+                if !self.state.rel_on()
+                    && (!applies(FlagSetting::Rel)
+                        || !matches!(value(), MeasuredValue::Normal(_))) => {}
+            cmd::REL => self.state.press_rel(value()),
             cmd::RANGE => {
                 self.state.release_hold();
                 let ladder = self.range_ladder(scenario.mode_raw);
@@ -524,15 +533,11 @@ impl Protocol for MockProtocol {
                 self.state.release_hold();
                 self.state.set_auto_range();
             }
+            cmd::MINMAX if !self.state.minmax_recording() && !applies(FlagSetting::MinMax) => {}
             cmd::MINMAX => self.state.press_minmax(),
             cmd::EXIT_MINMAX => self.state.exit_minmax(),
-            cmd::PEAK => {
-                // The meter reacts to Peak only where the mode has one, and
-                // silently ignores the press elsewhere.
-                if scenario.peak_applies() {
-                    self.state.press_peak();
-                }
-            }
+            cmd::PEAK if !self.state.peak_on() && !applies(FlagSetting::Peak) => {}
+            cmd::PEAK => self.state.press_peak(),
             cmd::EXIT_PEAK => self.state.exit_peak(),
             "select2" if self.state.held() => {}
             cmd::SELECT | "select2" => {
@@ -688,23 +693,13 @@ impl CycleMeter for MockProtocol {
         self.send_command(transport, cmd::AUTO)
     }
 
-    /// Each flag only where the live scenario reacts to it — offering one
-    /// elsewhere would list a state select cannot reach, and would tell
-    /// anyone developing against the mock that a control works where the real
-    /// meter ignores it. MIN/MAX is the MAX/MIN ring, with no AVG.
-    ///
-    /// Keyed on the scenario rather than the `mode` argument: the resistance
-    /// scenarios share mode byte 0x06 and disagree about Peak, so the byte
-    /// alone cannot answer.
-    fn flag_states(&self, setting: FlagSetting, _mode: u16) -> &'static [u16] {
-        let scenario = self.current_scenario();
-        match setting {
-            FlagSetting::Hold if scenario.hold_applies() => &[0, 1],
-            FlagSetting::Rel if scenario.rel_applies() => &[0, 1],
-            FlagSetting::MinMax if scenario.minmax_applies() => &[0, 1, 2],
-            FlagSetting::Peak if scenario.peak_applies() => &[0, 1, 2],
-            _ => &[],
-        }
+    /// The UT61E+ driver's own answer for the scenario's mode byte: each
+    /// flag only where that meter reacts to it, so nobody developing against
+    /// the mock sees a control work where the real meter ignores it. Every
+    /// scenario reports a UT61+ mode byte, the temperature and sub-value
+    /// ones included, so none needs a rule of its own.
+    fn flag_states(&self, setting: FlagSetting, mode: u16) -> &'static [u16] {
+        flag_states_for(&UT61E_PLUS, setting, mode)
     }
 
     fn exit_flag(&mut self, transport: &dyn Transport, setting: FlagSetting) -> Result<()> {
@@ -1989,12 +1984,95 @@ mod tests {
                 Setting::Peak,
             ] {
                 for choice in proto.choices(setting, &m) {
-                    proto.select(&transport, setting, choice.id).unwrap();
+                    match proto.select(&transport, setting, choice.id) {
+                        // Listed, as the UT61E+ lists REL in Ω, but refused
+                        // over the OL on screen: nothing new to read.
+                        Err(Error::CommandRejected(Rejected::DidNothing { .. }))
+                            if mode == MockMode::OhmOl && setting == Setting::Rel =>
+                        {
+                            continue;
+                        }
+                        other => other.unwrap(),
+                    }
                     let m = proto.request_measurement(&transport).unwrap();
                     crate::text::assert_listed(all, &proto, &m, devices::MOCK.id);
                 }
                 proto = MockProtocol::with_mode(mode);
             }
         }
+    }
+
+    /// The mock offers what the UT61E+ driver offers for the same reading,
+    /// in every scenario: the flag rules are the driver's, not a copy.
+    #[test]
+    fn every_scenario_offers_what_the_ut61eplus_driver_does() {
+        let transport = NullTransport;
+        let driver = crate::protocol::ut61eplus::Ut61PlusProtocol::for_id("ut61eplus");
+        for &mode in MockMode::ALL {
+            let mut proto = MockProtocol::with_mode(mode);
+            let m = proto.request_measurement(&transport).unwrap();
+            for setting in Setting::ALL {
+                if setting == Setting::Mode {
+                    continue;
+                }
+                assert_eq!(
+                    proto.choices(setting, &m),
+                    driver.choices(setting, &m),
+                    "{mode:?} {setting:?}"
+                );
+            }
+        }
+    }
+
+    /// The flag a press would turn on, read off a reading.
+    fn lit(m: &Measurement, command: &str) -> bool {
+        let f = &m.flags;
+        match command {
+            cmd::HOLD => f.hold,
+            cmd::REL => f.rel,
+            cmd::MINMAX => f.min || f.max,
+            cmd::PEAK => f.peak_max || f.peak_min,
+            other => panic!("{other} is no flag"),
+        }
+    }
+
+    /// A press lights its flag exactly where the UT61E+ driver offers it,
+    /// in every scenario, except that REL is refused over OL as the meter
+    /// refuses it.
+    #[test]
+    fn a_press_lights_its_flag_where_the_driver_offers_it() {
+        let transport = NullTransport;
+        let driver = crate::protocol::ut61eplus::Ut61PlusProtocol::for_id("ut61eplus");
+        for &mode in MockMode::ALL {
+            for (command, setting) in [
+                (cmd::HOLD, Setting::Hold),
+                (cmd::REL, Setting::Rel),
+                (cmd::MINMAX, Setting::MinMax),
+                (cmd::PEAK, Setting::Peak),
+            ] {
+                let mut proto = MockProtocol::with_mode(mode);
+                let before = proto.request_measurement(&transport).unwrap();
+                let offered = !driver.choices(setting, &before).is_empty();
+                let over_ol = command == cmd::REL && mode == MockMode::OhmOl;
+                proto.send_command(&transport, command).unwrap();
+                let m = proto.request_measurement(&transport).unwrap();
+                assert_eq!(lit(&m, command), offered && !over_ol, "{mode:?} {command}");
+            }
+        }
+    }
+
+    /// A flag lit before a switch into a mode that ignores its button still
+    /// goes off at that button. The mock keeps REL across SELECT, which no
+    /// capture has settled for the meter; the button is what this pins.
+    #[test]
+    fn a_flag_carried_into_a_dead_mode_still_turns_off() {
+        let transport = NullTransport;
+        let mut proto = MockProtocol::with_mode(MockMode::Capacitance);
+        proto.send_command(&transport, cmd::REL).unwrap();
+        proto.send_command(&transport, cmd::SELECT).unwrap();
+        assert_eq!(proto.current_mode(), MockMode::Hz);
+        assert!(proto.request_measurement(&transport).unwrap().flags.rel);
+        proto.send_command(&transport, cmd::REL).unwrap();
+        assert!(!proto.request_measurement(&transport).unwrap().flags.rel);
     }
 }

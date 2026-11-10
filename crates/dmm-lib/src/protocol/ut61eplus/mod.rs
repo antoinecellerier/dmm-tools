@@ -680,9 +680,10 @@ const MINMAX_DEAD: &[Mode] = &[
 /// that list. Peak depends on the model as well, so it stays with the
 /// table.
 ///
-/// The lists narrow `get`/`set` and the capture sweep alone: the GUI's
-/// buttons and `dmm-cli command` press through `send_command`, so a wrong
-/// entry cannot stop a press, only `set` reaching a state the meter has.
+/// On a meter the lists narrow `get`/`set` and the capture sweep alone: the
+/// GUI's buttons and `dmm-cli command` press through `send_command`, so a
+/// wrong entry cannot stop a press, only `set` reaching a state the meter
+/// has.
 pub(crate) fn flag_states_for(
     table: &ModelTable,
     setting: cycle::FlagSetting,
