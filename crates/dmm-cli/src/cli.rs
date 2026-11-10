@@ -137,10 +137,8 @@ where
     about = "CLI tool for USB and Bluetooth digital multimeters"
 )]
 pub(crate) struct Cli {
-    /// Device to connect to [auto, ut61eplus, ut8803, ut171, ut181a, mock, ...].
-    /// If omitted, falls back to `device_family` in ~/.config/dmm-tools/settings.json
-    /// (written by dmm-gui), then to `auto`, which detects the meter over the
-    /// USB cable.
+    // Help set at run time (`with_run_time_help`), naming where the
+    // settings file is on this computer.
     #[arg(long)]
     pub(crate) device: Option<String>,
 
@@ -575,7 +573,11 @@ fn with_run_time_help(cmd: clap::Command, l: &Localizer) -> clap::Command {
     with_flag_help(cmd, l)
         .after_help(build_after_help(l))
         .after_long_help(build_after_long_help(l))
-        .mut_arg("device", |a| a.long_help(build_device_help(l)))
+        .mut_arg("device", |a| {
+            let path = resolved_config_path_display();
+            a.help(tr!(l, "help-device", path = path).into_owned())
+                .long_help(build_device_help(l))
+        })
         .mut_subcommand("completions", |c| {
             c.after_help(build_completions_after_help(l))
         })
@@ -590,10 +592,11 @@ fn build_device_help(l: &Localizer) -> String {
 /// device ids and mock modes a shell offers. English whatever the run
 /// speaks, as a script installed once serves every later run.
 pub(crate) fn completion_command() -> clap::Command {
-    let cmd = with_flag_help(
-        <Cli as clap::CommandFactory>::command(),
-        crate::l10n::english(),
-    );
+    let english = crate::l10n::english();
+    // A script outlives the computer it was made on: no path in it.
+    let device_help = tr!(english, "help-device", path = "the settings file").into_owned();
+    let cmd = with_flag_help(<Cli as clap::CommandFactory>::command(), english)
+        .mut_arg("device", |a| a.help(device_help));
     dmm_shared::help::with_completion_values(cmd)
 }
 
@@ -950,6 +953,15 @@ mod tests {
         ] {
             assert!(script.contains(help), "{help}: {script}");
         }
+    }
+
+    /// `-h` names where the settings file `--device` falls back to is, on
+    /// this computer.
+    #[test]
+    fn the_device_help_names_the_settings_file() {
+        let mut cmd = command(crate::l10n::english());
+        let help = cmd.render_help().to_string();
+        assert!(help.contains(&resolved_config_path_display()), "{help}");
     }
 
     /// `auto` is a value `--device` takes, and the only one the registry does

@@ -16,9 +16,6 @@
 # dmm-cli
 dmm-cli =
     .about = Ferramenta de linha de comando para multímetros digitais USB e Bluetooth
-# dmm-cli --device
-dmm-cli--device =
-    .help = Dispositivo a conectar [auto, ut61eplus, ut8803, ut171, ut181a, mock, ...]. Se omitido, usa `device_family` em ~/.config/dmm-tools/settings.json (gravado pelo dmm-gui) e, em seguida, `auto`, que detecta o multímetro pelo cabo USB
 # dmm-cli --lang
 dmm-cli--lang =
     .help = Idioma das mensagens e da ajuda, ou `system` para o idioma do sistema. Se omitido, usa `language` do arquivo de configurações (definido pela opção Idioma do dmm-gui) e, em seguida, o idioma do sistema

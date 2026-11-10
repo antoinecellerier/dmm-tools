@@ -47,7 +47,7 @@ nothing answers, the CLI lists what each meter needs switched on.
 **Device resolution precedence** (highest to lowest):
 
 1. `--device <DEVICE>` on the command line
-2. `device_family` field in `~/.config/dmm-tools/settings.json` (written by `dmm-gui` when you pick a device or Auto-detect finds one — the CLI reads it but never writes to it)
+2. `device_family` in the settings file, which `dmm-gui` writes when you pick a device or Auto-detect finds one; the CLI reads it but never writes to it. It is `~/.config/dmm-tools/settings.json` on Linux, and `dmm-cli -h` names it on any platform.
 3. `auto` as a final fallback
 
 A detected run prints one dim stderr line naming the meter and the `--device <id>` that pins it.

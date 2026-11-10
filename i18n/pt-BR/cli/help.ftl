@@ -7,9 +7,11 @@
 ### environment variables (RUST_LOG, LANG) are typed by the user and stay as
 ### they are. Command lines, file paths and values arrive as variables.
 
-## The first line of --device's long help (dmm-cli --help).
+## --device's help: what -h shows, and the first line of what --help
+## shows, before the list of devices.
 
 # Before the list of devices.
+help-device = Dispositivo a conectar [auto, ut61eplus, ut8803, ut171, ut181a, mock, ...]. Se omitido, usa `device_family` de { $path } (gravado pelo dmm-gui) e, em seguida, `auto`, que detecta o multímetro pelo cabo USB
 help-device-intro = Dispositivo a conectar.
 
 ## After the options of dmm-cli -h.

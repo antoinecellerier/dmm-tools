@@ -16,9 +16,6 @@
 # dmm-cli
 dmm-cli =
     .about = USB または Bluetooth で接続するデジタル マルチメーター用の CLI ツール
-# dmm-cli --device
-dmm-cli--device =
-    .help = 接続するデバイス [auto, ut61eplus, ut8803, ut171, ut181a, mock, ...]。省略すると ~/.config/dmm-tools/settings.json (dmm-gui が書き込む) の `device_family`、次に USB ケーブル経由でマルチメーターを検出する `auto` を使用する
 # dmm-cli --lang
 dmm-cli--lang =
     .help = メッセージとヘルプの言語。システムの言語を使うには `system` を指定する。省略すると設定ファイルの `language` (dmm-gui の [言語] 行で書き込まれる)、次にシステムの言語を使用する

@@ -16,9 +16,6 @@
 # dmm-cli
 dmm-cli =
     .about = CLI tool for USB and Bluetooth digital multimeters
-# dmm-cli --device
-dmm-cli--device =
-    .help = Device to connect to [auto, ut61eplus, ut8803, ut171, ut181a, mock, ...]. If omitted, falls back to `device_family` in ~/.config/dmm-tools/settings.json (written by dmm-gui), then to `auto`, which detects the meter over the USB cable
 # dmm-cli --lang
 dmm-cli--lang =
     .help = Language of messages and help, or `system` for the system's. If omitted, falls back to `language` in the settings file (written by dmm-gui's Language row), then to the system's

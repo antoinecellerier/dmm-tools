@@ -16,9 +16,6 @@
 # dmm-cli
 dmm-cli =
     .about = 适用于 USB 和蓝牙数字万用表的命令行工具
-# dmm-cli --device
-dmm-cli--device =
-    .help = 要连接的设备 [auto, ut61eplus, ut8803, ut171, ut181a, mock, ...]。省略时，依次采用 ~/.config/dmm-tools/settings.json 中的 `device_family` (由 dmm-gui 写入)，再采用 `auto`，即通过 USB 连接线检测万用表
 # dmm-cli --lang
 dmm-cli--lang =
     .help = 消息和帮助的语言，或用 `system` 采用系统语言。省略时，依次采用设置文件中的 `language` (由 dmm-gui 的“语言”一行写入)，再采用系统语言
