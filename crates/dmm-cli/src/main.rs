@@ -20,7 +20,7 @@ use cmd::read::ReadPlan;
 use cmd::settings::{cmd_get, cmd_set};
 use console::style;
 use dmm_lib::protocol::registry::{self, SelectableDevice, Selection};
-use dmm_shared::help::{Diagnosis, LinksSearched, MeterChoice};
+use dmm_shared::help::{Diagnosis, LinksSearched};
 use dmm_shared::l10n::{Localizer, arg_errors, help_layout};
 use dmm_shared::tr;
 use l10n::{Localized, error_label};
@@ -278,10 +278,11 @@ fn report_failure(
             "{}",
             style(l.help().cli_bluetooth_off_hint(no_bluetooth)).yellow()
         ),
-        Extra::ChooseMeter(choice) => eprintln!(
-            "{}",
-            style(l.help().cli_choose_meter(choice, open::picked(selection))).yellow()
-        ),
+        Extra::WrongPick => {
+            if let Some(hint) = e.lib().and_then(|lib| open::wrong_pick_hint(l, lib)) {
+                eprintln!("{}", style(hint).yellow());
+            }
+        }
         Extra::NotSearched { .. } | Extra::NoResponse(_) | Extra::None => {}
     }
     std::process::exit(1);
@@ -299,8 +300,9 @@ enum Extra {
         model: &'static str,
         activation: &'static str,
     },
-    /// The meter is another than the one chosen: which to pick instead.
-    ChooseMeter(MeterChoice),
+    /// Data that wouldn't read, which a wrong pick explains: which meter to
+    /// pick instead, or the line naming the pick ([`open::wrong_pick_hint`]).
+    WrongPick,
     /// A meter with the radio built in, not looked for: the name it was
     /// picked by, and why.
     NotSearched {
@@ -327,7 +329,7 @@ fn extra_help(error: &l10n::Failure, selection: Selection, adapter: Option<&str>
             Extra::BluetoothOnly { model, activation }
         }
         Diagnosis::BluetoothNotSearched { model, miss } => Extra::NotSearched { model, miss },
-        Diagnosis::OtherMeter(choice) => Extra::ChooseMeter(choice),
+        Diagnosis::OtherMeter(_) | Diagnosis::BadData => Extra::WrongPick,
         _ => Extra::None,
     }
 }
@@ -443,10 +445,24 @@ mod tests {
             },
             raw: Vec::new(),
         };
-        let bm82x = registry::find_device("bm82x").expect("an entry");
         assert_eq!(
             extra_help(&other.into(), selection("bm86x"), None),
-            Extra::ChooseMeter(MeterChoice::Entry(bm82x))
+            Extra::WrongPick
+        );
+    }
+
+    /// Data that wouldn't read gets the line naming the pick, which a saved
+    /// device makes easy to forget.
+    #[test]
+    fn unreadable_data_names_the_pick() {
+        use dmm_lib::error::Error;
+        let mismatch = Error::ChecksumMismatch {
+            expected: 1,
+            actual: 2,
+        };
+        assert_eq!(
+            extra_help(&mismatch.into(), selection("ut61eplus"), None),
+            Extra::WrongPick
         );
     }
 

@@ -389,7 +389,7 @@ impl crate::l10n::Localized for SetFailed {
                     "settings-refused-other-model",
                     choice = choice_text(l, *setting, choice),
                     reason = l.rejected(reason),
-                    remedy = l.help().cli_choose_meter(pick, None),
+                    remedy = l.help().cli_choose_meter(pick, crate::open::picked_row()),
                 )
             }
             Self::Refused {

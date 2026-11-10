@@ -6,6 +6,10 @@
 
 - **Failure notices name the meter picked in Settings and point to Auto-detect** — "No USB cable found" after a meter swap sent you to drivers.
 
+### CLI
+
+- **dmm-cli says which meter is picked when its data won't read**
+
 ### Bug fixes
 
 - **dmm-gui starts afresh and stops a recording when a different meter answers** — the new meter's readings joined the first one's graph, statistics and recording.

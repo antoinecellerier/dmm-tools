@@ -1161,6 +1161,14 @@ fn run_read_loop<T: dmm_lib::transport::Transport>(
                             count = protocol_errors
                         ),
                     );
+                    // Before any reading, the frames are most often another
+                    // meter's than the one picked.
+                    let hint = (protocol_errors == 1 && i == 0)
+                        .then(|| crate::open::wrong_pick_hint(l, &e))
+                        .flatten();
+                    if let Some(hint) = hint {
+                        eprintln!("{}", style(hint).yellow());
+                    }
                 }
             }
             // A read cut short by Ctrl+C is the end of the run, not a lost

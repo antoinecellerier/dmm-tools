@@ -156,6 +156,42 @@ pub(crate) fn print_reported_name(l: &Localizer, reported: Option<&str>, print: 
     print(tr!(l, "connect-reported-name", name = name).into_owned());
 }
 
+/// The row the user picked, on the command line or in the settings file
+/// (not a replay's own); `None` under Auto-detect.
+pub(crate) fn picked_row() -> Option<registry::Listing> {
+    match PICKED.get() {
+        Some(&(_, PickedBy::Recording)) | None => None,
+        Some(&(listing, _)) => Some(listing),
+    }
+}
+
+/// What data that won't read, before any reading came in, says about the
+/// pick: the meter to pick, when the meter names one, else the line naming
+/// the pick, which a saved device makes easy to forget. `None` for any other
+/// failure, under Auto-detect for unreadable data, and for a recording,
+/// which names its own meter. In `l`'s language.
+pub(crate) fn wrong_pick_hint(l: &Localizer, error: &dmm_lib::error::Error) -> Option<String> {
+    pick_hint(l, error, PICKED.get().copied())
+}
+
+/// [`wrong_pick_hint`] for the row `pick` names, and where it was picked.
+fn pick_hint(
+    l: &Localizer,
+    error: &dmm_lib::error::Error,
+    pick: Option<(registry::Listing, PickedBy)>,
+) -> Option<String> {
+    let picked = match pick {
+        Some((_, PickedBy::Recording)) => return None,
+        Some((listing, _)) => Some(listing),
+        None => None,
+    };
+    match Diagnosis::of(error, None, picked) {
+        Diagnosis::OtherMeter(choice) => Some(l.help().cli_choose_meter(choice, picked)),
+        Diagnosis::BadData => pick.map(|(listing, by)| selected_line(l, listing, by)),
+        _ => None,
+    }
+}
+
 /// Print [`picked_line`], when there is one, under a failed open's headline.
 fn print_picked() {
     if let Some(line) = picked_line(crate::l10n::get()) {
@@ -679,6 +715,42 @@ mod tests {
 
     /// The line names the meter by the name it was picked by, and says
     /// where: a pick saved by dmm-gui is the one a user forgets.
+    /// Data that won't read names the pick, or the meter to pick when the
+    /// meter names one; nothing under Auto-detect for plain bad data, and
+    /// nothing for a recording, which names its own meter.
+    #[test]
+    fn unreadable_data_points_at_the_pick() {
+        use dmm_lib::error::Error;
+        let l = crate::l10n::english();
+        let mismatch = Error::ChecksumMismatch {
+            expected: 1,
+            actual: 2,
+        };
+        let other = Error::WrongMeter {
+            reason: dmm_lib::error::WrongMeter::OtherSeries {
+                found: "Brymen BM82x",
+                opened: "Brymen BM86x",
+                id: "bm82x",
+            },
+            raw: Vec::new(),
+        };
+        let saved = registry::resolve_listing("bm86x").map(|l| (l, PickedBy::Settings));
+        let hint = pick_hint(l, &mismatch, saved).expect("the pick is named");
+        assert!(hint.contains("saved by dmm-gui"), "{hint}");
+        assert_eq!(pick_hint(l, &mismatch, None), None);
+        assert_eq!(
+            pick_hint(l, &other, saved).as_deref(),
+            Some("Pass --device bm82x, or --device auto.")
+        );
+        assert_eq!(
+            pick_hint(l, &other, None).as_deref(),
+            Some("Pass --device bm82x.")
+        );
+        let recorded = registry::resolve_listing("bm86x").map(|l| (l, PickedBy::Recording));
+        assert_eq!(pick_hint(l, &mismatch, recorded), None);
+        assert_eq!(pick_hint(l, &Error::LinkLost, saved), None);
+    }
+
     #[test]
     fn the_selected_line_says_where_the_meter_was_picked() {
         let et2517a = registry::resolve_listing("et-2517a").expect("a registry row");
