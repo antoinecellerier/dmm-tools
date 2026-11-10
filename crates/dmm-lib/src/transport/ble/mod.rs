@@ -808,6 +808,28 @@ fn link_error(e: btleplug::Error) -> Error {
     }
 }
 
+/// A write that failed on an open link, `connected` whether the link is
+/// still up after it. Gone, it is a lost link whatever the stack said, as a
+/// read that finds the link down is; a pulled cable reads the same. Up, the
+/// stack refused this write (a permission, a GATT error), and its reason is
+/// what to report: the link is fine.
+///
+/// A stack that marks the link down a moment after failing the write (BlueZ
+/// may) gives the stack's reason for that one write; the next write or read
+/// finds the link down.
+fn write_error(e: btleplug::Error, connected: bool) -> Error {
+    match e {
+        btleplug::Error::NotConnected | btleplug::Error::DeviceNotFound => Error::LinkLost,
+        other if !connected => {
+            // At debug: every consumer reports the lost link itself, and
+            // `debug` goes on polling one.
+            debug!("Bluetooth: a write failed as the link went down: {other}");
+            Error::LinkLost
+        }
+        other => stack_error(other),
+    }
+}
+
 /// The peer answered but carries no profile we know.
 fn missing_characteristic(role: CharacteristicRole) -> Error {
     BluetoothIssue::NoCharacteristic { role }.into()
@@ -834,10 +856,14 @@ impl Transport for Ble {
         let write_type = write_type(self.profile, &self.write_char);
         self.rt.block_on(async {
             for part in data.chunks(chunk) {
-                self.peripheral
+                if let Err(e) = self
+                    .peripheral
                     .write(&self.write_char, part, write_type)
                     .await
-                    .map_err(link_error)?;
+                {
+                    let connected = self.peripheral.is_connected().await.unwrap_or(false);
+                    return Err(write_error(e, connected));
+                }
             }
             Ok(())
         })
@@ -1000,6 +1026,27 @@ impl Drop for Ble {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A write that fails with the link down is the link lost, as capture,
+    /// the GUI and `read` treat a pulled cable; with the link up, it is the
+    /// stack refusing that write.
+    #[test]
+    fn a_failed_write_is_a_lost_link_when_the_link_is_down_or_says_so() {
+        let stack = || btleplug::Error::RuntimeError("operation failed".to_string());
+        assert!(matches!(write_error(stack(), false), Error::LinkLost));
+        assert!(matches!(
+            write_error(stack(), true),
+            Error::Bluetooth(BluetoothIssue::Stack(_))
+        ));
+        assert!(matches!(
+            write_error(btleplug::Error::NotConnected, true),
+            Error::LinkLost
+        ));
+        assert!(matches!(
+            write_error(btleplug::Error::PermissionDenied, true),
+            Error::Bluetooth(_)
+        ));
+    }
 
     #[test]
     fn the_interval_command_sets_the_handle_and_nothing_else() {
