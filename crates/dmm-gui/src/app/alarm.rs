@@ -52,7 +52,7 @@ impl AlarmEditor {
 
     /// No limit typed: nothing for the chip to switch on. A band alone
     /// watches nothing.
-    fn is_blank(&self) -> bool {
+    pub(super) fn is_blank(&self) -> bool {
         self.low.trim().is_empty() && self.high.trim().is_empty()
     }
 }
@@ -332,8 +332,10 @@ impl App {
             if self.alarm.take().is_some() {
                 self.toast = Some(Toast::info(tr!(self.l10n, "alarm-off-toast")));
             }
+            self.alarm_bound_before = None;
         } else {
             self.alarm = Some(Alarm::new(limits, band));
+            self.alarm_bound_before = None;
             let limits = self.l10n.alarm_limits(&limits, band);
             self.toast = Some(Toast::info(tr!(
                 self.l10n,
@@ -390,9 +392,47 @@ impl App {
         self.alarm_editor.band = band.describe().unwrap_or_default();
     }
 
+    /// Judge one reading, as shown, against the limits. `Err` says the
+    /// alarm went off instead: a new source restarted it, and its first
+    /// reading bound it to another quantity or limit unit than the last
+    /// source's, where the same numbers would mean another value. The fields
+    /// keep them for Apply, as a scale change leaves them.
+    fn judge(&mut self, m: &Measurement) -> Result<Option<Breach>, String> {
+        let Some(alarm) = self.alarm.as_mut() else {
+            return Ok(None);
+        };
+        let breach = alarm.check(m);
+        let Some(now) = alarm.binding() else {
+            return Ok(breach);
+        };
+        let Some(before) = self.alarm_bound_before.take() else {
+            return Ok(breach);
+        };
+        match now.moved_from(&before) {
+            Some(moved) => {
+                let message = tr!(self.l10n, "alarm-off-other-unit", unit = moved).into_owned();
+                self.alarm = None;
+                Err(message)
+            }
+            None => Ok(breach),
+        }
+    }
+
     /// Judge one reading, as shown, against the limits.
     pub(super) fn check_alarm(&mut self, m: &Measurement) -> Option<PendingBreach> {
-        let breach = self.alarm.as_mut()?.check(m)?;
+        let breach = match self.judge(m) {
+            Ok(breach) => breach?,
+            Err(off) => {
+                // After the toast a new meter's stop raised, if it is up.
+                // (Not `caution_toast`, which gives way to a failure: the
+                // alarm going off must be said all the same.)
+                self.toast = Some(match self.toast.take().filter(|t| !t.expired()) {
+                    Some(toast) => toast.with_caution(&off),
+                    None => Toast::caution(off),
+                });
+                return None;
+            }
+        };
         if !breach.crossing {
             // Out before the alarm saw it cross: said, not marked. In the
             // error style all the same, as the badge and the reading are:
@@ -405,12 +445,17 @@ impl App {
 
     /// Judge one imported reading, as the file holds it: as
     /// [`check_alarm`](Self::check_alarm), but a first reading found out
-    /// goes unsaid — the import's progress and result toasts hold the slot.
-    pub(super) fn check_imported(&mut self, m: &Measurement) -> Option<PendingBreach> {
-        let breach = self.alarm.as_mut()?.check(m)?;
-        breach
-            .crossing
-            .then(|| PendingBreach::new(&self.l10n, m, &breach))
+    /// goes unsaid — the import's progress and result toasts hold the slot,
+    /// and the alarm going off is handed back in `Err` for the result's.
+    pub(super) fn check_imported(
+        &mut self,
+        m: &Measurement,
+    ) -> Result<Option<PendingBreach>, String> {
+        Ok(self.judge(m)?.and_then(|breach| {
+            breach
+                .crossing
+                .then(|| PendingBreach::new(&self.l10n, m, &breach))
+        }))
     }
 
     /// Mark each breach the drain found on its reading. No toast: the badge,
@@ -560,11 +605,23 @@ mod tests {
         assert_eq!(alarm.bound_unit(), None);
         assert_eq!(alarm.limits().high, Some(5.0));
         app.toast = None;
-        assert!(app.check_imported(&reading(&app, 6.0, "V")).is_none());
+        assert!(
+            app.check_imported(&reading(&app, 6.0, "V"))
+                .unwrap()
+                .is_none()
+        );
         assert!(app.toast.is_none());
         assert_eq!(app.reading_state().alarm, Some(dmm_lib::alarm::Zone::Above));
-        assert!(app.check_imported(&reading(&app, 4.0, "V")).is_none());
-        assert!(app.check_imported(&reading(&app, 6.0, "V")).is_some());
+        assert!(
+            app.check_imported(&reading(&app, 4.0, "V"))
+                .unwrap()
+                .is_none()
+        );
+        assert!(
+            app.check_imported(&reading(&app, 6.0, "V"))
+                .unwrap()
+                .is_some()
+        );
     }
 
     /// The graph's menu sets a limit at a height in the plotted unit, keeps

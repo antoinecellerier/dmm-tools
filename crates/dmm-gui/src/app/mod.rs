@@ -496,6 +496,9 @@ pub struct App {
     /// The alarm judging every reading against the **Alarm** row's limits,
     /// while any are set. Session-only, as the transform is.
     alarm: Option<dmm_lib::alarm::Alarm>,
+    /// What the alarm was bound to before a new source restarted it, until
+    /// its first reading binds it again.
+    alarm_bound_before: Option<dmm_lib::alarm::Binding>,
     /// Draft text for the **Alarm** row.
     alarm_editor: alarm::AlarmEditor,
 
@@ -646,6 +649,7 @@ impl App {
             transform: Transform::default(),
             transform_editor: TransformEditor::default(),
             alarm: None,
+            alarm_bound_before: None,
             alarm_editor: alarm::AlarmEditor::default(),
             graph,
             capture,

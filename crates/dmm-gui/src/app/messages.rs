@@ -635,8 +635,14 @@ impl App {
 
     /// Judge the next reading afresh against the same limits: bound to its
     /// own first reading, not to the quantity and zone the last source left.
+    /// Should that reading put the limits in another unit, the alarm goes
+    /// off instead (see `check_alarm`).
     pub(super) fn restart_alarm(&mut self) {
         if let Some(alarm) = &self.alarm {
+            // A restart before the last one bound keeps the binding before it.
+            if let Some(binding) = alarm.binding() {
+                self.alarm_bound_before = Some(binding.clone());
+            }
             self.alarm = Some(dmm_lib::alarm::Alarm::new(
                 alarm.limits(),
                 alarm.hysteresis(),
@@ -2801,6 +2807,60 @@ mod tests {
         let alarm = app.alarm.as_ref().expect("the limits stay");
         assert_eq!(alarm.bound_unit(), None);
         assert_eq!(alarm.limits(), limits);
+    }
+
+    /// Limits typed for the last meter's volts mean nothing for the next
+    /// one's ohms: the alarm goes off at its first reading, saying so after
+    /// the news already up, with the fields kept for Apply.
+    #[test]
+    fn a_restarted_alarm_in_another_unit_turns_off() {
+        let mut app = connected_app();
+        let limits = dmm_lib::alarm::Limits::check(None, Some(5.0)).expect("a limit");
+        app.alarm = Some(dmm_lib::alarm::Alarm::new(limits, Default::default()));
+        app.alarm_editor.set_drafts("", "5");
+        deliver_readings(&mut app, &[DC]);
+        app.deliver(connected("ut181a", Stability::Experimental, 4));
+        app.toast = Some(super::Toast::info("news"));
+        let mut ohms = reading("\u{3a9}", MeasuredValue::Normal(12.0), Instant::now());
+        ohms.unit = "k\u{3a9}".into();
+        app.deliver(DmmMessage::Measurement(ohms));
+        assert!(app.alarm.is_none());
+        assert!(!app.alarm_editor.is_blank(), "the fields stay for Apply");
+        let toast = app.toast.as_ref().expect("a toast");
+        assert_eq!(
+            toast.message,
+            "news\nReadings in \u{3a9} \u{2014} alarm off; set its limits again in the new unit"
+        );
+        assert!(toast.is_caution());
+        // A new alarm starts with nothing carried.
+        app.set_limits(limits, Default::default());
+        deliver_readings(&mut app, &[DC]);
+        assert!(app.alarm.is_some());
+    }
+
+    /// A label the scale pins cannot hide a new meter's quantity: limits in
+    /// amps from a clamp's millivolts mean nothing for ohms shown as "A".
+    #[test]
+    fn a_relabel_does_not_carry_an_alarm_to_another_quantity() {
+        let mut app = connected_app();
+        app.transform = dmm_lib::transform::Transform::linear(100.0, 0.0, Some("A".into()));
+        let limits = dmm_lib::alarm::Limits::check(None, Some(5.0)).expect("a limit");
+        app.set_limits(limits, Default::default());
+        let mut mv = reading("DC mV", MeasuredValue::Normal(12.3), Instant::now());
+        mv.unit = "mV".into();
+        app.deliver(DmmMessage::Measurement(mv));
+        assert_eq!(app.alarm.as_ref().and_then(|a| a.bound_unit()), Some("A"));
+        app.deliver(connected("ut181a", Stability::Experimental, 4));
+        let mut ohms = reading("\u{3a9}", MeasuredValue::Normal(12.0), Instant::now());
+        ohms.unit = "k\u{3a9}".into();
+        app.deliver(DmmMessage::Measurement(ohms));
+        assert!(app.alarm.is_none());
+        let toast = app.toast.as_ref().expect("a toast");
+        assert!(
+            toast.message.contains("Readings in \u{3a9}"),
+            "{}",
+            toast.message
+        );
     }
 
     /// Clear empties the history, not the recording: another meter after it

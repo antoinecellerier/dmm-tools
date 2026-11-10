@@ -273,6 +273,7 @@ impl App {
         // limit of 5 meant for volts becomes 5 A under a clamp scale. The
         // alarm stops instead, its fields kept for Apply.
         let alarm = self.alarm.take().is_some();
+        self.alarm_bound_before = None;
         let also = match (recording, alarm) {
             (true, true) => "both",
             (true, false) => "recording",

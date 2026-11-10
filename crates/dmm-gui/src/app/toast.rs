@@ -107,6 +107,17 @@ impl Toast {
         }
     }
 
+    /// This toast with a caution after it, on a line of its own: news that
+    /// came while it was up. A failure stays one; anything else turns a
+    /// caution, and the joined toast is up for its full time again.
+    pub(super) fn with_caution(self, more: &str) -> Self {
+        let kind = match self.kind {
+            ToastKind::Error => ToastKind::Error,
+            ToastKind::Ok | ToastKind::Caution => ToastKind::Caution,
+        };
+        Self::new(format!("{}\n{more}", self.message), kind)
+    }
+
     /// Whether it is a failure.
     pub(super) fn is_error(&self) -> bool {
         self.kind == ToastKind::Error

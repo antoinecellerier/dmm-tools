@@ -36,6 +36,7 @@
 - **dmm-gui stays paused when a device or mock mode picked in Settings reconnects it** — it started reading again.
 - **dmm-cli detects the meter when the settings file names a device it doesn't know** — every command stopped, `list` and `completions` too.
 - **Alarms judge an imported scaled file in its own unit** — a limit of 5 on a kV file meant 5 V.
+- **dmm-gui turns an alarm off when an import or another meter is in another unit** — the same numbers judged the new unit.
 - **Markers start at 1 when dmm-gui connects after an import** — the first one took the number after the imported file's last marker.
 - **A cable pulled at `capture`'s meter check asks for no report** — it saved a no-response report and asked you to attach it.
 - **The mock ignores HOLD, REL, MIN/MAX and Peak where a UT61E+ does**

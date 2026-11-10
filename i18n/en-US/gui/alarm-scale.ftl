@@ -141,6 +141,10 @@ alarm-invalid-band = Invalid hysteresis: { $reason }
 alarm-on-toast = Alarm on: { $limits }
 # The alarm turned off.
 alarm-off-toast = Alarm off
+# The alarm carried over to an import or another meter turned off: the new
+# readings put its limits in another unit than before. $unit is the new
+# one, e.g. V or kV.
+alarm-off-other-unit = Readings in { $unit } — alarm off; set its limits again in the new unit
 
 ## The graph: a dotted line at each limit, labelled at its right end.
 

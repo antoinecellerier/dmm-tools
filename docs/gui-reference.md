@@ -465,7 +465,9 @@ Limits are in the base unit (V, A, Ω, …), as the [scale](#scale)'s factor
 is, or in the scale's unit while one is applied or a scaled file is imported.
 They watch the quantity and unit of the first reading after they are set:
 after a dial turn to another quantity, or on a file's rows in another unit,
-the row reads **idle** until they come back. They last for the session.
+the row reads **idle** until they come back. They last for the session; an
+import or another meter whose readings are in another unit turns the alarm
+off.
 Without a recording, a marker leaves with its reading when the graph clears;
 the count stays. `dmm-cli read` offers the same alarm as `--alarm-high`,
 `--alarm-low` and `--alarm-hysteresis`.

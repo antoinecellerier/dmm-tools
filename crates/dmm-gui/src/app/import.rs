@@ -223,6 +223,9 @@ pub(super) struct Ingest {
     first: Option<Instant>,
     /// Readings the loader left out, past the limit it read the file with.
     left_out: usize,
+    /// The alarm went off on the file's first reading, which put its limits
+    /// in another unit: said with the result.
+    alarm_off: Option<String>,
 }
 
 /// Parse `path` and stamp its readings from `base`.
@@ -556,6 +559,7 @@ impl App {
             view,
             first,
             left_out,
+            alarm_off: None,
         }))
     }
 
@@ -581,7 +585,10 @@ impl App {
             }
             // After the file's marker, as for a live reading, in the unit it
             // shows if it was scaled when written (`LimitUnit::of`).
-            breaches.extend(self.check_imported(&m));
+            match self.check_imported(&m) {
+                Ok(breach) => breaches.extend(breach),
+                Err(off) => ingest.alarm_off = Some(off),
+            }
             ingest.taken += 1;
             self.last_measurement = Some(m);
             if full {
@@ -639,7 +646,10 @@ impl App {
                 file = &name
             )
         };
-        self.toast = Some(Toast::info(message.into_owned()));
+        self.toast = Some(match ingest.alarm_off.as_deref() {
+            Some(off) => Toast::info(message.into_owned()).with_caution(off),
+            None => Toast::info(message.into_owned()),
+        });
         self.source.imported = Some(ImportedFrom {
             path: ingest.path,
             readings: ingest.taken,
@@ -762,6 +772,14 @@ timestamp,mode,value,unit,range,flags,marker,note
         let _ = std::fs::remove_file(path);
     }
 
+    /// Written under a ×1000 kV scale: the meter's volts ride along as Raw.
+    const KV_CSV: &str = "\
+# device: UNI-T UT61E+
+timestamp,mode,value,unit,range,flags,aux1_label,aux1_value,aux1_unit
+2026-09-17T12:42:50.783+02:00,DC V,4000,kV,22V,AUTO,Raw,4.000,V
+2026-09-17T12:42:50.879+02:00,DC V,5500,kV,22V,AUTO,Raw,5.500,V
+";
+
     /// A file written under a ×1000 kV scale: its readings carry the meter's
     /// volts as Raw, so limits typed in kV mean kV, as they did live.
     #[test]
@@ -769,20 +787,47 @@ timestamp,mode,value,unit,range,flags,marker,note
         let mut app = test_app();
         let limits = dmm_lib::alarm::Limits::check(None, Some(4500.0)).unwrap();
         app.set_limits(limits, dmm_lib::alarm::Hysteresis::Auto);
-        let path = file(
-            "kv.csv",
-            "\
-# device: UNI-T UT61E+
-timestamp,mode,value,unit,range,flags,aux1_label,aux1_value,aux1_unit
-2026-09-17T12:42:50.783+02:00,DC V,4000,kV,22V,AUTO,Raw,4.000,V
-2026-09-17T12:42:50.879+02:00,DC V,5500,kV,22V,AUTO,Raw,5.500,V
-",
-        );
+        let path = file("kv.csv", KV_CSV);
         import(&mut app, path.clone());
         assert_eq!(app.alarm_limit_unit(), dmm_lib::alarm::LimitUnit::Shown);
         let marker = app.markers.iter().next().expect("the breach's marker");
         assert_eq!(marker.note, "Above high limit 4500 kV");
         assert_eq!(app.alarm.as_ref().map(|a| a.high_count), Some(1));
+        let _ = std::fs::remove_file(path);
+    }
+
+    /// An alarm bound to the last session's volts, carried into a file in
+    /// kV, goes off: the same limits would mean a thousand times more. The
+    /// result says so; a file in the same unit keeps the alarm on.
+    #[test]
+    fn an_import_in_another_unit_turns_the_alarm_off() {
+        let mut app = test_app();
+        let limits = dmm_lib::alarm::Limits::check(None, Some(5.0)).unwrap();
+        app.set_limits(limits, dmm_lib::alarm::Hysteresis::Auto);
+        let volts = Measurement::test_fixture(
+            dmm_lib::measurement::MeasuredValue::Normal(1.0),
+            "V",
+            dmm_lib::flags::StatusFlags::default(),
+        );
+        assert!(app.check_alarm(&volts).is_none());
+        let path = file("kv-off.csv", KV_CSV);
+        import(&mut app, path.clone());
+        assert!(app.alarm.is_none());
+        let toast = app.toast.as_ref().expect("the result");
+        assert!(
+            toast.message.ends_with(
+                "\nReadings in kV \u{2014} alarm off; set its limits again in the new unit"
+            ),
+            "{}",
+            toast.message
+        );
+        let _ = std::fs::remove_file(path);
+
+        app.set_limits(limits, dmm_lib::alarm::Hysteresis::Auto);
+        assert!(app.check_alarm(&volts).is_none());
+        let path = file("volts.csv", CSV);
+        import(&mut app, path.clone());
+        assert!(app.alarm.is_some(), "volts again: the alarm stays on");
         let _ = std::fs::remove_file(path);
     }
 
