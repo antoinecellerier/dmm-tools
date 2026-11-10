@@ -167,8 +167,8 @@ impl Protocol for ZotekProtocol {
         )?;
         if let Some(other) = self.other_layout(packet[frame::TYPE_AT]) {
             warn!(
-                "zotek: the meter sends the {} layout; choose Auto-detect or --device {}",
-                other.entry.model, other.entry.id
+                "zotek: the meter sends the {} layout (entry {}), not the {} it was opened as",
+                other.entry.model, other.entry.id, self.layout.entry.model
             );
         }
         let (reading, showing) = layout::decode_showing(&packet)?;

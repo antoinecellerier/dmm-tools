@@ -359,10 +359,11 @@ fn open_first_match(
     for &kt in &candidates {
         if let Ok(device) = api.open(kt.vid, kt.pid) {
             if cables > 1 {
-                // The words of dmm-gui's `connection-cables-at-open`, which
-                // says this on screen.
+                // What was found, not what to do about it: how to pick
+                // another is each app's to say (dmm-gui's
+                // `connection-cables-at-open` toast says it on screen).
                 warn!(
-                    "{cables} USB cables this session could open are plugged in. It took the first it found. Pass --adapter to pick another."
+                    "{cables} USB cables this session could open are plugged in; it took the first it found."
                 );
             }
             return Ok((device, kt));

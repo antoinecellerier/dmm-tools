@@ -271,10 +271,9 @@ impl<T: Transport> Dmm<T> {
             // Once per session: the name is asked once.
             if let (Some(name), Some(entry)) = (&name, self.named_other_model()) {
                 warn!(
-                    "the meter reports {name:?}, not the {} it was opened as; open it with \
-                     --device {}",
-                    self.protocol.profile().display_name(),
-                    entry.id
+                    "the meter reports {name:?}, the name of entry {}, not the {} it was opened as",
+                    entry.id,
+                    self.protocol.profile().display_name()
                 );
             }
         }

@@ -321,7 +321,7 @@ fn keep_matches(mut matched: Vec<Candidate>, want: Match) -> Vec<Candidate> {
         let tied = tied_for_best(&matched.iter().map(|c| c.standing).collect::<Vec<_>>());
         if tied > 1 {
             warn!(
-                "Multiple Bluetooth adapters or meters found ({tied}). Pass --adapter to pick one."
+                "{tied} Bluetooth adapters or meters match equally well; it took the first it found."
             );
         }
         matched.truncate(1);
