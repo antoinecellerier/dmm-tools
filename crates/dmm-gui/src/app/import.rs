@@ -528,7 +528,7 @@ impl App {
         self.capture.recording_layout = CaptureLayout {
             device: device.map(Into::into),
             device_id,
-            experimental: Some(experimental),
+            experimental,
             link,
             aux_slots: family_slots,
             extra_slots,

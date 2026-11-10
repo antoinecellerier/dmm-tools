@@ -266,39 +266,15 @@ impl App {
         self.toast = Some(Toast::info(message.into_owned()));
     }
 
-    /// Flip the recording state, remembering which meter the samples came
-    /// from.
-    ///
-    /// The device has to be captured here rather than read back at export
-    /// time: the Settings selection can change while a recording is held in
-    /// the buffer (it only schedules a reconnect, and neither connect nor
-    /// disconnect clears the samples), so reading it later labelled the file
-    /// with whatever meter happened to be picked last.
+    /// Flip the recording state. A new recording names no meter until its
+    /// first sample, which latches the one it came from
+    /// ([`CaptureLayout`]): Record works before any meter answers, and the
+    /// file has to name the meter its samples are of, not whatever is picked
+    /// at export time.
     pub(super) fn apply_recording_toggle(&mut self) {
         self.capture.recording.toggle(self.clock.now());
         if self.capture.recording.is_active() {
-            self.capture.recording_layout = CaptureLayout::new(
-                // The meter picked, or the one detection found; under
-                // Auto-detect with nothing connected there is no meter to
-                // name, and the export falls back to its own placeholder.
-                self.active_listing(),
-                // Only from a live connection: disconnected, `stability` is
-                // the Verified default `disconnect()` restored, and latching
-                // that marked a UT181A connected after Record as a verified
-                // protocol.
-                self.connection
-                    .state
-                    .is_linked()
-                    .then(|| !self.connection.stability().is_verified()),
-                // Empty while disconnected for the same reason; the export
-                // then falls back to whatever link answers during the
-                // recording.
-                self.connection.link(),
-                self.capture.device_aux_slots,
-                // The transform's Raw sub-value needs a fixed column of its
-                // own, after the meter's — see `extra_slots`.
-                self.transform.extra_aux_count(),
-            );
+            self.capture.recording_layout = CaptureLayout::default();
         }
     }
 
@@ -513,7 +489,11 @@ impl App {
             }
         }
 
-        let replay_possible = self.replay_device_id().is_some();
+        // An empty buffer names no meter yet: the click says there is
+        // nothing to save, rather than this entry claiming the meter has no
+        // frames.
+        let replay_possible =
+            self.replay_device_id().is_some() || self.capture.recording.export_samples().len() == 0;
         // The click that opens the menu counts as a click outside the entry
         // that takes the focus, so egui surrenders that focus the next time
         // the entry is read back (`Context::get_response`) — which the page
@@ -1030,7 +1010,16 @@ mod tests {
     #[test]
     fn down_skips_a_disabled_entry() {
         let mut run = MenuRun::new();
+        // The mock's readings: there are samples, and none has a frame.
         run.app.capture.history_layout.device_id = None;
+        run.app.capture.recording.push(
+            &dmm_lib::measurement::Measurement::test_fixture(
+                dmm_lib::measurement::MeasuredValue::Normal(1.0),
+                "V",
+                dmm_lib::flags::StatusFlags::default(),
+            ),
+            0,
+        );
         run.frame(1.0, vec![]);
         run.frame(1.0, vec![]);
         let arrow = run.node_rect("Export file type");
@@ -1045,6 +1034,33 @@ mod tests {
             .focused_rect()
             .expect("Down keeps the focus in the menu");
         assert_eq!(after, json, "Down stayed on JSON…");
+    }
+
+    /// An empty buffer names no meter yet, which is no reason to call its
+    /// frames missing: Replay… stays enabled, and its click says there is
+    /// nothing to save.
+    #[test]
+    fn an_empty_buffer_leaves_replay_enabled() {
+        let mut run = MenuRun::new();
+        run.app.capture.history_layout.device_id = None;
+        run.frame(1.0, vec![]);
+        run.frame(1.0, vec![]);
+        let arrow = run.node_rect("Export file type");
+
+        run.click(arrow.center());
+        run.key(Key::ArrowDown);
+        let json = run
+            .focused_rect()
+            .expect("Down keeps the focus in the menu");
+        run.key(Key::ArrowDown);
+        let after = run
+            .focused_rect()
+            .expect("Down keeps the focus in the menu");
+        assert_ne!(after, json, "Down moved on to Replay…");
+        assert!(matches!(
+            run.app.prepare_export(ExportFormat::Replay),
+            Err(ExportError::NoReadings | ExportError::NotConnected)
+        ));
     }
 
     /// `Fonts::has_glyph` is a false negative for the icon font — see

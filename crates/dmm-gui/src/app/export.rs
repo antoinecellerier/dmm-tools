@@ -22,8 +22,8 @@ use super::toast::Toast;
 use crate::markers::Marker;
 use crate::recording::{BufferRole, Recording, Sample, render_csv, render_json, render_replay};
 
-/// What the CSV's `# device:` comment says when nothing ever identified the
-/// meter — a recording toggled on under Auto-detect before one answered.
+/// What the CSV's `# device:` comment says when nothing identified the meter
+/// the samples came from.
 pub(super) const UNKNOWN_DEVICE: &str = "unknown";
 
 /// Extension of a replay file: the dialog's filter and default name for one.
@@ -322,14 +322,11 @@ impl App {
             return Err(self.nothing_to_export(role));
         };
         // The meter these samples came from, not whatever is selected now.
-        // Nothing named it and nothing was ever identified — a recording
-        // toggled on before a meter answered — so the file says so rather
-        // than crediting the samples to a model that was only selected later.
+        // A meter that answered with no name to give is said to be unknown.
         let device_model = self
             .export_layout()
             .device
             .clone()
-            .or_else(|| self.active_listing().map(|l| l.display_name().into()))
             .unwrap_or(UNKNOWN_DEVICE.into());
         // A replay is refused now rather than after the user picked a path:
         // the mock synthesises its readings, so a sample of it has no frame.
@@ -343,9 +340,8 @@ impl App {
                     return Err(ExportError::NoWireFormat);
                 };
                 // What the samples came over, latched with the rest of the
-                // provenance; the live link only where a recording started
-                // before a meter answered.
-                Some((id, self.export_layout().link.or(self.connection.link())))
+                // provenance.
+                Some((id, self.export_layout().link))
             }
             _ => None,
         };
@@ -448,24 +444,17 @@ impl App {
         }
     }
 
-    /// Whether the exported readings came off a protocol short of verified:
-    /// what the recording latched from the meter it ran against, else the
-    /// connection as it stands, as the meter's name falls back.
+    /// Whether the exported readings came off a protocol short of verified,
+    /// as latched from the meter they came from.
     pub(super) fn experimental(&self) -> bool {
-        self.export_layout()
-            .experimental
-            .unwrap_or_else(|| !self.connection.stability().is_verified())
+        self.export_layout().experimental
     }
 
-    /// The meter whose frames a replay file would carry: the one the
-    /// recording named, else the one selected or detected now, as the CSV's
-    /// provenance falls back. `None` for the mock, which has no wire format.
+    /// The meter whose frames a replay file would carry, as latched from the
+    /// meter the samples came from. `None` for the mock, which has no wire
+    /// format, and before any sample.
     pub(super) fn replay_device_id(&self) -> Option<&'static str> {
-        self.export_layout().device_id.or_else(|| {
-            self.active_listing()
-                .filter(|l| l.device.requires_hardware)
-                .map(|l| l.id())
-        })
+        self.export_layout().device_id
     }
 
     /// Fold in whatever the pending export's dialog or writer answered.
@@ -790,7 +779,8 @@ mod tests {
 
     /// Record works with nothing connected, and `disconnect()` puts the
     /// stability back to Verified — so a recording started before the meter
-    /// answered exported a UT181A's readings as a verified protocol.
+    /// answered exported a UT181A's readings as a verified protocol. Its
+    /// first sample names the meter instead.
     #[test]
     fn a_recording_started_before_the_meter_answered_is_still_experimental() {
         use crate::app::connection::DmmMessage;
@@ -804,19 +794,29 @@ mod tests {
 
         app.toggle_recording();
         assert_eq!(
-            app.capture.recording_layout.experimental, None,
-            "nothing was connected to take a stability from"
+            app.capture.recording_layout.device, None,
+            "nothing was connected to take a meter from"
         );
 
         // The meter answers, on a protocol no report has confirmed.
         app.deliver(DmmMessage::Connected(ConnectedMeter {
             name: Some("UT181A".to_string()),
             stability: Stability::Experimental,
+            link: Some(dmm_lib::transport::Link::UsbCable),
             ..ConnectedMeter::test_fixture(Some("ut181a"))
         }));
-        app.capture.recording.push(&measurement(0), 0);
+        assert_eq!(
+            app.capture.recording_layout.device, None,
+            "named at its first sample, not at the hello"
+        );
+        app.deliver(DmmMessage::Measurement(measurement(0)));
 
-        assert_eq!(app.capture.recording_layout.experimental, Some(true));
+        let ut181a = dmm_lib::protocol::registry::find_device("ut181a").expect("registry");
+        let layout = &app.capture.recording_layout;
+        assert_eq!(layout.device.as_deref(), Some(ut181a.display_name()));
+        assert_eq!(layout.device_id, Some("ut181a"));
+        assert_eq!(layout.link, Some(dmm_lib::transport::Link::UsbCable));
+        assert!(layout.experimental);
         assert!(app.experimental(), "the recording ran against that meter");
         let json = String::from_utf8(
             render_json(

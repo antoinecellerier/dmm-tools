@@ -15,10 +15,10 @@ use crate::graph::{Graph, PlotSample};
 use crate::recording::Recording;
 
 /// Provenance and column layout the sample buffer is exported with. Taken
-/// when recording starts — or, for the history, from the connection its first
-/// reading arrived on — and kept across disconnect, so a file describes the
-/// meter its samples came from rather than whatever is selected at export
-/// time.
+/// from the connection the first reading of a recording, or of the history,
+/// arrived on — or from an imported file — and kept across disconnect, so a
+/// file describes the meter its samples came from rather than whatever is
+/// selected at export time.
 #[derive(Default)]
 pub(super) struct CaptureLayout {
     /// Meter the buffered samples came from. Outlives disconnect so a capture
@@ -36,12 +36,7 @@ pub(super) struct CaptureLayout {
     /// export's `experimental` field. Taken alongside `device` and for the
     /// same reason: disconnecting clears the connection's stability, so read
     /// at export time it would mark an unplugged UT181A's readings verified.
-    ///
-    /// `None` until a meter has been connected during the recording — Record
-    /// works while disconnected, and the stability read then is the default
-    /// the disconnect left behind, not a meter's. The export falls back to the
-    /// live connection, as `device` and `device_id` do.
-    pub(super) experimental: Option<bool>,
+    pub(super) experimental: bool,
     /// The link those samples came over, for the replay export's `# link:`
     /// line. Taken alongside `device_id` and for the same reason: a
     /// disconnect clears the connection's link, and a file exported after
@@ -62,11 +57,24 @@ pub(super) struct CaptureLayout {
 }
 
 impl CaptureLayout {
-    /// The layout for samples from `meter`, by the name the session calls it,
-    /// as Record and the history's first reading both latch it.
-    pub(super) fn new(
+    /// The layout for samples arriving on `connection`, by the name the
+    /// session calls its meter, as the first reading of a recording and of
+    /// the history both latch it. A reading only arrives on a live
+    /// connection, so its stability and link are the meter's rather than the
+    /// defaults a disconnect leaves behind.
+    fn from_connection(connection: &Connection, aux_slots: usize, extra_slots: usize) -> Self {
+        Self::new(
+            connection.listing(),
+            !connection.stability().is_verified(),
+            connection.link(),
+            aux_slots,
+            extra_slots,
+        )
+    }
+
+    fn new(
         meter: Option<registry::Listing>,
-        experimental: Option<bool>,
+        experimental: bool,
         link: Option<Link>,
         aux_slots: usize,
         extra_slots: usize,
@@ -94,7 +102,8 @@ pub(super) struct Capture {
     /// current unit has a meaningful one.
     pub(super) session: SeriesStats,
     pub(super) recording: Recording,
-    /// What the recording's export names and lays out, latched at Record.
+    /// What the recording's export names and lays out, latched at its first
+    /// sample.
     pub(super) recording_layout: CaptureLayout,
     /// The same for the graph's history, latched as it starts.
     pub(super) history_layout: CaptureLayout,
@@ -202,27 +211,23 @@ impl Capture {
         // Settings takes effect at the next connect, and this reading may
         // still be the old meter's. Another meter answering has already
         // started the stores again (`App::start_new_source`).
-        let meter = connection.listing();
         if self.source.is_none() {
             self.source = connection.meter.as_ref().map(|m| m.source());
         }
         if let Some(start) = graph.first_point_time() {
             self.recording.trim_before(start);
         }
+        // A scale change clears the history, so the transform in force now
+        // is the one every sample in it went through.
         if self.recording.history_is_empty() {
-            // The history's counterpart of what Record latches, from the
-            // connection its first reading arrived on. A reading only
-            // arrives on a live connection, so this stability and this link
-            // are the meter's rather than the defaults a disconnect leaves
-            // behind. A scale change clears the history, so the transform in
-            // force now is the one every sample in it went through.
-            self.history_layout = CaptureLayout::new(
-                meter,
-                Some(!connection.stability().is_verified()),
-                connection.link(),
-                self.device_aux_slots,
-                extra_aux,
-            );
+            self.history_layout =
+                CaptureLayout::from_connection(connection, self.device_aux_slots, extra_aux);
+        }
+        // Record works before any meter answers: the first sample says which
+        // one the recording is of.
+        if self.recording.is_active() && self.recording.recording_samples().len() == 0 {
+            self.recording_layout =
+                CaptureLayout::from_connection(connection, self.device_aux_slots, extra_aux);
         }
         self.recording.push(m, extra_aux)
     }

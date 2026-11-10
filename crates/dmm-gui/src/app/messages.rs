@@ -729,19 +729,6 @@ impl App {
         self.connection.link_up();
         self.held.clear();
         self.capture.device_aux_slots = meter.max_aux_values;
-        // A reconnect mid-recording is the same meter, so the in-flight capture
-        // picks the slot count back up — it was 0 before the first Connected of
-        // the session.
-        if self.capture.recording.is_active() {
-            self.capture.recording_layout.aux_slots = meter.max_aux_values;
-            // The meter Record was pressed ahead of: the first one to answer
-            // during this recording is the one its samples come from, and the
-            // only one the export can still name once the cable is out.
-            self.capture
-                .recording_layout
-                .experimental
-                .get_or_insert(!meter.stability.is_verified());
-        }
         let device_id = meter.device.map(|d| d.id);
         let reported = meter.name.clone().unwrap_or_default();
         let (named, picked) = (meter.named_other, meter.device);
@@ -2272,7 +2259,7 @@ mod tests {
             Some(ut181a.display_name())
         );
         assert_eq!(app.capture.history_layout.device_id, Some("ut181a"));
-        assert_eq!(app.capture.history_layout.experimental, Some(true));
+        assert!(app.capture.history_layout.experimental);
         assert_eq!(app.capture.history_layout.aux_slots, 4);
 
         app.disconnect();
