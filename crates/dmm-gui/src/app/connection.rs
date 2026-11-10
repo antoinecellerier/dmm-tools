@@ -12,7 +12,7 @@ use log::{error, info, warn};
 use std::borrow::Cow;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, mpsc};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 /// Control messages from the UI to the background thread.
 ///
@@ -116,11 +116,40 @@ fn handle_control(
                 Err(mpsc::TryRecvError::Disconnected) => return false,
             }
         };
-        match msg {
-            ThreadControl::SetPaused(p) => *paused = p,
-            ThreadControl::SetInterval(ms) => *tick = interval_tick(ms),
+        apply_control(msg, paused, tick);
+    }
+}
+
+fn apply_control(msg: ThreadControl, paused: &mut bool, tick: &mut Duration) {
+    match msg {
+        ThreadControl::SetPaused(p) => *paused = p,
+        ThreadControl::SetInterval(ms) => *tick = interval_tick(ms),
+    }
+}
+
+/// Wait `interval` before the next reconnect attempt, applying control
+/// messages as they come: a pause or a new interval is recorded, and takes
+/// effect once the link is back, as there is nothing to halt until then.
+/// None cuts the wait short, so a click doesn't start an early attempt or
+/// bring two cable checks closer than the interval. On real time, as every
+/// wait on the control channel is.
+///
+/// Returns `false` when the UI hung up, which ends the thread.
+fn wait_to_reconnect(
+    ctrl_rx: &mpsc::Receiver<ThreadControl>,
+    interval: Duration,
+    paused: &mut bool,
+    tick: &mut Duration,
+) -> bool {
+    let deadline = Instant::now() + interval;
+    while let Some(left) = deadline.checked_duration_since(Instant::now()) {
+        match ctrl_rx.recv_timeout(left) {
+            Ok(msg) => apply_control(msg, paused, tick),
+            Err(mpsc::RecvTimeoutError::Timeout) => break,
+            Err(mpsc::RecvTimeoutError::Disconnected) => return false,
         }
     }
+    true
 }
 
 /// What a newly opened meter told us about itself: sent once per connection,
@@ -655,15 +684,8 @@ where
                     });
                     ctx.request_repaint();
 
-                    // Sleep, but wake early on a control message or the UI
-                    // hanging up. A pause that arrives mid-reconnect is
-                    // recorded and takes effect once the link is back: there
-                    // is nothing to halt until then.
-                    match ctrl_rx.recv_timeout(reconnect_interval) {
-                        Err(mpsc::RecvTimeoutError::Disconnected) => return,
-                        Ok(ThreadControl::SetPaused(p)) => paused = p,
-                        Ok(ThreadControl::SetInterval(ms)) => tick = interval_tick(ms),
-                        Err(mpsc::RecvTimeoutError::Timeout) => {}
+                    if !wait_to_reconnect(&ctrl_rx, reconnect_interval, &mut paused, &mut tick) {
+                        return;
                     }
 
                     let check = match (pin.as_deref_mut(), &reopen) {
@@ -1248,6 +1270,78 @@ mod tests {
         drop(ctrl_tx);
         thread.join().unwrap();
         assert_eq!(open_at_reopen, 0, "the old link was still open");
+    }
+
+    /// The reconnect wait records a pause and a new interval, runs to its
+    /// deadline all the same, and ends at once when the UI hangs up.
+    #[test]
+    fn the_reconnect_wait_records_control_and_ends_on_a_hang_up() {
+        let interval = Duration::from_millis(50);
+        let (tx, rx) = mpsc::channel();
+        tx.send(ThreadControl::SetPaused(true)).unwrap();
+        tx.send(ThreadControl::SetInterval(2000)).unwrap();
+        let (mut paused, mut tick) = (false, Duration::ZERO);
+        let start = Instant::now();
+        assert!(wait_to_reconnect(&rx, interval, &mut paused, &mut tick));
+        assert!(start.elapsed() >= interval);
+        assert!(paused);
+        assert_eq!(tick, Duration::from_millis(2000));
+
+        drop(tx);
+        assert!(!wait_to_reconnect(
+            &rx,
+            Duration::from_secs(60),
+            &mut paused,
+            &mut tick
+        ));
+    }
+
+    /// A Pause clicked while reconnecting is recorded without cutting the
+    /// wait short: each click used to start an attempt at once.
+    #[test]
+    fn control_messages_leave_the_reconnect_wait_whole() {
+        let interval = Duration::from_millis(200);
+        let live = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let (opened_tx, opened_rx) = mpsc::channel();
+        let (msg_tx, msg_rx) = mpsc::channel();
+        let (ctrl_tx, ctrl_rx) = mpsc::channel();
+        let (_cmd_tx, cmd_rx) = mpsc::channel();
+        let opens = std::sync::atomic::AtomicUsize::new(0);
+        let entry = dmm_lib::protocol::registry::find_device("ut61eplus").expect("registry");
+        let open_fn = move |_: Option<&ReopenPin>| {
+            if opens.fetch_add(1, Ordering::SeqCst) > 0 {
+                // Stamped here, as the attempt starts, so load on the test
+                // thread can't make two look closer than they were.
+                let _ = opened_tx.send(Instant::now());
+                return Err(dmm_lib::error::Error::Timeout);
+            }
+            dmm_lib::Dmm::new(Dropout::open(&live), (entry.new_protocol)()).map(|d| (d, None))
+        };
+        let mut thread_ctx = thread_context(msg_tx, ctrl_rx, cmd_rx);
+        thread_ctx.reconnect_interval = interval;
+        let thread = std::thread::spawn(move || run_device_thread(open_fn, thread_ctx));
+        let mut attempts = Vec::new();
+        while attempts.len() < 3 {
+            // Each Reconnecting goes out just before the wait.
+            let waiting = next_of(&msg_rx, Duration::from_secs(10), |m| {
+                matches!(m, DmmMessage::Reconnecting { .. }).then_some(())
+            });
+            waiting.expect("the thread reconnects");
+            for paused in [true, false, true] {
+                ctrl_tx.send(ThreadControl::SetPaused(paused)).unwrap();
+            }
+            attempts.push(
+                opened_rx
+                    .recv_timeout(Duration::from_secs(10))
+                    .expect("an attempt follows the wait"),
+            );
+        }
+        drop(ctrl_tx);
+        thread.join().unwrap();
+        for pair in attempts.windows(2) {
+            let gap = pair[1].saturating_duration_since(pair[0]);
+            assert!(gap >= interval, "attempts {gap:?} apart");
+        }
     }
 
     /// The same across threads: a thread stopped mid-open (Disconnect, Cancel
