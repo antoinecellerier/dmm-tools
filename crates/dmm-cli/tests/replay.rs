@@ -666,7 +666,30 @@ fn naming_a_device_alongside_a_replay_is_refused() {
         "1",
     ]);
     assert!(!ok, "expected a refusal");
-    assert!(stderr.contains("names its own meter"), "got {stderr}");
+    assert!(
+        stderr.contains("--replay names its own meter"),
+        "got {stderr}"
+    );
+}
+
+/// Imported, the same recording is refused under the flag typed: `--import`,
+/// not the `--replay` it is played as.
+#[test]
+fn naming_a_device_alongside_an_imported_replay_names_import() {
+    let dir = dir_for("device-import");
+    let path = recording_in(&dir);
+    let (_, stderr, ok) = run(&[
+        "--device",
+        "ut61eplus",
+        "read",
+        "--import",
+        path.to_str().expect("utf-8 path"),
+    ]);
+    assert!(!ok, "expected a refusal");
+    assert!(
+        stderr.contains("--import names its own meter"),
+        "got {stderr}"
+    );
 }
 
 /// Every recording the repo ships is real meter data: played with the default

@@ -108,6 +108,19 @@ impl ReadPlan {
                 hysteresis,
                 bell: alarm.alarm_bell,
             });
+        // A replay or an export names its own meter, so a `--device`
+        // alongside it would either be ignored or contradict the file. Only
+        // a typed flag is refused: the settings file names a meter for every
+        // run, and a file must not need it edited. On the flags as typed,
+        // before an imported replay file is folded into a replay.
+        if device_named {
+            if replay.is_some() {
+                return Err(Refused::ReplayNamesItsDevice);
+            }
+            if import.is_some() {
+                return Err(Refused::ImportNamesItsDevice);
+            }
+        }
         // An import names its own meter, as a replay does; a replay file
         // imported is a replay played without waiting.
         // Detected as the GUI detects it: an extensionless replay file is
@@ -121,21 +134,11 @@ impl ReadPlan {
             other => (replay, other, mock_clock_scale),
         };
         let clock = session_clock(l, mock_clock_scale, mock_clock_preseed, replay.is_some())?;
-        // A replay file names its own meter, so a `--device` alongside it
-        // would either be ignored or contradict the file. Only a typed flag is
-        // refused: the settings file names a meter for every run, and a replay
-        // must not need it edited.
-        if replay.is_some() && device_named {
-            return Err(Refused::ReplayNamesItsDevice);
-        }
         // Settled before anything opens, so a run that cannot write what it
         // was asked for fails with no meter attached.
         let (format, destination, note) = resolve_output(l, &format, output);
         let source = match (import, replay) {
             (Some(path), _) => {
-                if device_named {
-                    return Err(Refused::ImportNamesItsDevice);
-                }
                 if let Some(refused) = refuse_for_import(format, interval_ms) {
                     return Err(refused);
                 }
