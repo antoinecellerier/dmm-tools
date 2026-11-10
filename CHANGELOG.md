@@ -12,97 +12,94 @@
 
 - **Brazilian Portuguese, French, Japanese, Simplified Chinese and Spanish translations available** — pick one in Settings, **Language**, or let it follow the system's language; Portuguese, Japanese, Chinese and Spanish are machine-translated until reviewed.
 - **Choose how often a screen reader announces the reading** — every 5s by default, or only while the reading has focus.
-- **Screen readers say units by name, such as millivolts for mV** — they spelled the symbols out letter by letter.
+- **More remote buttons on Voltcraft, OWON, UT217, UT61+, UT161 and UT181A meters** — such as RANGE and AUTO on the VC-880, VC650BT and VC-890, Hz/% on the UT61+ and UT161, and Inrush on the UT217.
+- **The UT171 gets remote buttons and function and range dropdowns** — HOLD, REL, RANGE, AUTO, MAX/MIN, PEAK, Hz/% and STORE.
+- **The graph, statistics and integral carry on when the meter auto-ranges** — they restarted at each decade step; figures keep the meter's ranges, as 31.300 MΩ beside 0.04 Ω.
 - **Pan the graph with a two-finger sideways swipe on a touchpad** — over the plot or the minimap.
 - **The graph hover lists every series and tags the height per axis** — it showed one value without a right axis, and no height with one.
-- **The graph, statistics and integral carry on when the meter auto-ranges** — they restarted at each decade step; figures keep the meter's ranges, as 31.300 MΩ beside 0.04 Ω. The graph menu's Copy now includes the unit.
+- **Screen readers say units by name, such as millivolts for mV** — they spelled the symbols out letter by letter.
 - **The Specifications panel covers the Brymen BM820s and BM520s series** — the Minipa ET-2517A and ET-2615A, which share their entries, show the same figures.
-- **The Voltcraft VC-880, VC650BT and VC-890 get RANGE, AUTO and MAX/MIN/AVG buttons**
-- **The UT61+ and UT161 meters get a Hz/% button**
-- **The UT181A gets a SAVE button**
-- **More OWON and Voltcraft keys get buttons** — Inrush, 4-20mA, Display, Lo or LPF, COMP, AC/DC and MOTOR, and an x on the Voltcraft REL.
-- **The UT171 gets remote buttons and function and range dropdowns** — HOLD, REL, RANGE, AUTO, MAX/MIN, PEAK, Hz/% and STORE.
-- **The integral takes a readable prefix** — `12.340 nAh`, not `0.0000 mAh`.
+- **dmm-gui says when it took the first of several USB cables** — unless `--adapter` named it.
 - **The Device list shows each brand's own model names, in name order** — the UNI-T UT217A, Minipa, ANENG and BSIDE meters under their brand; ANENG's were listed beside ZOTEK's.
 - **A meter picked by another brand's name keeps that name** — a UT217A shows as the UNI-T UT217A, in the top bar, messages and exports.
-- **Default export file names carry the model alone** — such as `measurements-B41T+-…`, without `OWON`.
-- **dmm-gui says when it took the first of several USB cables** — unless `--adapter` named it.
+- **The integral takes a readable prefix** — `12.340 nAh`, not `0.0000 mAh`.
+- **The graph menu's Copy includes the unit** — such as `1.0000 V`.
 - **dmm-gui.exe shows its icon in Windows Explorer and shortcuts**
+- **Default export file names carry the model alone** — such as `measurements-B41T+-…`, without `OWON`.
 
 ### CLI
 
 - **Brazilian Portuguese, French, Japanese, Simplified Chinese and Spanish translations available** — chosen by `--lang`, dmm-gui's Language setting or the system's language.
-- **`capture` shows its step instructions in your own translation** — export them with `--export-instructions`, translate the file, and pass it back with `--instructions`.
 - **`read` reconnects to a meter whose link drops** — a pulled cable or lost Bluetooth link ended the run; `--no-reconnect` keeps that.
+- **`capture` shows its step instructions in your own translation** — export them with `--export-instructions`, translate the file, and pass it back with `--instructions`.
+- **`dmm-cli command` and `set` drive the UT171's keys, function and range**
 - **`read` statistics and `--integrate` carry on when the meter auto-ranges** — they restarted at each decade step; figures keep the meter's ranges, as 31.300 MΩ beside 0.04 Ω.
 - **`dmm-cli command` on the VC-880, VC650BT and VC-890 takes the common names** — `range`, `auto`, `minmax`, `exit_minmax`; the old names still work.
-- **`dmm-cli command` and `set` drive the UT171's keys, function and range**
-- **The integral takes a readable prefix** — `12.340 nAh`, not `0.0000 mAh`.
-- **`--help` lists each brand's own model names in name order, such as `ut217a` under UNI-T**
-- **A meter picked by another brand's name keeps that name** — `--device ut217a` shows the UNI-T UT217A in messages and exports.
 - **`info`, `capture` and connection errors name the selected meter, and whether dmm-gui saved it** — a wrong saved device showed only as a meter that never answered.
 - **`capture` asks before running on a meter that reports another model** — such as a UT217A opened as the UT217B, which only a warning flagged.
-- **Default export file names carry the model alone** — such as `measurements-B41T+-…`, without `OWON`.
 - **`capture` holds each remote key until the meter is ready** — they went out at once, whatever the meter showed.
 - **`capture` asks a UT803 only for positions its dial has, hFE included** — it asked for tachometer, duty, 4-20 mA and ADP.
 - **`capture` shows a live status line while it reads the meter** — slow modes went quiet for many seconds.
-- **`capture` warns when its output is piped or redirected** — such a run can't confirm readings, and it didn't say so.
+- **`capture`'s report shows where each sweep left the meter** — a HOLD or manual range it couldn't undo showed only on the terminal.
+- **The integral takes a readable prefix** — `12.340 nAh`, not `0.0000 mAh`.
+- **`--help` lists each brand's own model names, in name order** — such as `ut217a` under UNI-T.
+- **A meter picked by another brand's name keeps that name** — `--device ut217a` shows the UNI-T UT217A in messages and exports.
+- **Default export file names carry the model alone** — such as `measurements-B41T+-…`, without `OWON`.
 - **dmm-cli.exe shows its icon in Windows Explorer**
+- **`capture` warns when its output is piped or redirected** — such a run can't confirm readings, and it didn't say so.
 
 ### Bug fixes
 
-- **dmm-gui shows Connecting… and a Cancel button while it opens a meter** — Connect stayed clickable, and a second click opened the meter twice.
-- **dmm-gui takes readings in while its window is minimized or hidden** — they queued in memory, and restoring the window stalled it while they all came in.
 - **dmm-gui started from Explorer on Windows opens no console window** — closing that window closed the app too.
+- **dmm-gui takes readings in while its window is minimized or hidden** — they queued in memory, and restoring the window stalled it while they all came in.
+- **dmm-gui shows Connecting… and a Cancel button while it opens a meter** — Connect stayed clickable, and a second click opened the meter twice.
+- **dmm-gui reconnects to the same USB cable** — with several plugged in, a dropped link could carry on with another meter's readings; cables it can't tell apart end the session.
+- **dmm-gui keeps a cable session on the cable** — a reconnect could come back over Bluetooth.
+- **dmm-gui keeps a Bluetooth link opened right after Disconnect or Cancel** — the abandoned attempt, still opening, cut the new link when it finished.
 - **dmm-gui rescales when dragged to a monitor with another display scale** — it kept the scale of the monitor it opened on.
 - **dmm-gui keeps its Light or Dark theme when the system's theme changes** — it switched with the system's and lost its custom colours.
 - **The UT181A and UT171 keep reading after joining the stream mid-frame** — readings could stop for tens of seconds, and a refused UT181A command look accepted.
 - **OWON's and Voltcraft's 15-byte meters read when their model code went unread** — a backlog of readings could get the meter refused as sending 6-byte frames.
-- **CMS and UT217 oscilloscope mode points to the meter's screen for readings** — it showed `0.00 W` or `0.00 VA`, whatever the screen read.
 - **`capture` stops on a pulled cable or lost link, saying how to resume** — it spun at full CPU and filed empty steps.
-- **dmm-gui keeps a Bluetooth link opened right after Disconnect or Cancel** — the abandoned attempt, still opening, cut the new link when it finished.
-- **dmm-gui reconnects to the same USB cable** — with several plugged in, a dropped link could carry on with another meter's readings; cables it can't tell apart end the session.
-- **dmm-gui keeps a cable session on the cable** — a reconnect could come back over Bluetooth.
-- **`capture` asks before replacing a report it can't read** — one an editor re-saved as UTF-16 was overwritten without a prompt.
-- **A REL reading under a scale with an offset takes the scale alone** — ×1.8 + 32 turned a +2.0 °C REL difference into 35.6 °F instead of 3.6 °F.
 - **Negative UT8803 readings keep their minus sign** — the reading and exports showed them positive.
 - **The UT8803 reads its lowest inductance range in µH** — it showed mH, a thousand times too large.
-- **The UT8802 follows UNI-T's software for sign, OL and status flags**
-- **The UT171's protocol now follows UNI-T's software** — the earlier decoding misread most of each frame.
+- **UT171 readings, modes and flags follow UNI-T's software** — the earlier decoding misread most of each frame.
+- **UT8802 sign, OL, HOLD, REL, MAX, MIN and AUTO follow UNI-T's software**
+- **A REL reading under a scale with an offset takes the scale alone** — ×1.8 + 32 turned a +2.0 °C REL difference into 35.6 °F instead of 3.6 °F.
 - **Alarms and scaling use base units on every prefixed reading** — on H, Wh, Ah, W/m² and °, a range step idled the alarm and put a scale 1000× off.
-- **4-20 mA LO on the UT804, UT71 and VC920/VC940/VC960, and HI on the UT804, read as no reading** — the graph, statistics and exports took LO as 0 % and HI as OL.
-- **Dashes, or a lone decimal point, on a Brymen display read as no reading** — a BM82x showed an EF level after a range or function change, and other models showed a warning.
+- **4-20 mA LO and HI read as no reading** — on the UT804, UT71 and VC920/VC940/VC960, LO counted as 0 % in the graph, statistics and exports, and HI on the UT804 as OL.
+- **CMS and UT217 oscilloscope mode points to the meter's screen for readings** — it showed `0.00 W` or `0.00 VA`, whatever the screen read.
+- **Dashes or a lone decimal point on a Brymen read as no reading** — a BM82x showed an EF level after a range or function change, and other models showed a warning.
 - **Dashes on the VC-880, VC650BT and VC-890 read as no reading** — they showed OL, and a number on a VC-880 or VC650BT setup screen counted as a measurement.
 - **Display text that can't be read shows `?` instead of OL** — on UT61+, UT8802, UT8803, VC-880, VC650BT, VC-890 and ZOTEK meters.
-- **NCV on the OWON CMS101 and CMS061 (UNI-T UT217B and UT217A) reads as EF and dashes** — four dashes read as 0.4, with a warning ([#45](https://github.com/antoinecellerier/dmm-tools/issues/45)).
+- **NCV on the UT217A and UT217B (CMS061, CMS101) reads as EF and dashes** — four dashes read as 0.4, with a warning ([#45](https://github.com/antoinecellerier/dmm-tools/issues/45)).
 - **UT8802 and UT8803 overloads read OL in `capture` and JSON exports** — they showed stray digits, such as `0 Ω`.
+- **UT61+, UT161, UT60BT and UT202BT readings show in an unknown mode** — an error replaced them.
+- **A reading with an unrecognised scale shows no unit** — the VC-880, VC650BT, VC-890, UT8803, BM788BT and BM787BT showed a unit far off.
 - **A scaled CSV imported and exported again keeps Raw in its own column** — dmm-cli and dmm-gui moved it into the meter's sub-value columns.
 - **UT181A and UT171 JSON exports write values in the meter's digits** — one read 12.345000267028809 where the CSV said 12.345.
 - **dmm-cli and dmm-gui exports name the meter the same way** — such as `UNI-T UT61E+`, which dmm-gui wrote as `UT61E+`.
-- **dmm-gui names and saves the meter swapped in during an Auto-detect session** — it kept the first meter's name, specifications and saved device.
-- **`capture`'s report shows where each sweep left the meter** — a HOLD or manual range it couldn't undo showed only on the terminal.
 - **dmm-gui says why a connection failed, or which data was unreadable** — a wrong cable, Bluetooth switched off or a garbled frame showed as "No response from meter".
+- **dmm-gui names and saves the meter swapped in during an Auto-detect session** — it kept the first meter's name, specifications and saved device.
 - **Screen readers speak the whole reading, mode and flags included** — Narrator cut itself off at each new value.
-- **Clicking the Scale or Alarm caret in dmm-gui puts the cursor in the row's first field** — Alarm's flashed there and went back to the caret; Scale's stayed on the caret.
-- **A retried Connect in dmm-gui shows its own progress** — the previous failure stayed on screen, so the click looked like it did nothing.
-- **Turning LIVE off in dmm-gui freezes the graph where it was** — it jumped to the session's start, or to an earlier view.
-- **A dmm-gui replay shows no remote buttons or dropdowns** — every click was refused.
-- **The EEVblog 121GW's min/max button stays lit in AVG, with its ×** — it went dark, and leaving meant going to the meter.
-- **CMS and UT217 MaxMin labels its second reading Max or Min** — it carried the mode's name, such as `DC V`.
-- **The UT803 shows hFE, and frequency as Hz whatever its alt bit says** — it showed ADP, and RPM.
+- **The UT803 shows hFE, low battery, MAX, MIN and frequency in Hz** — it showed ADP and RPM, and a low battery raised an unrecognised-data warning.
 - **The UT8803 and UT8802 show hFE with its unit, β**
-- **The UT803 shows low battery, MAX and MIN** — a low battery raised an unrecognised-data warning.
+- **CMS and UT217 MaxMin labels its second reading Max or Min** — it carried the mode's name, such as `DC V`.
 - **The unrecognised-data warning's report command names the selected meter** — a UT60BT, UT202BT or UT61B+ was told to rerun as a UT61E+.
 - **The VC-890 reads without a warning when its memory-overwrite flag is set** — it asked for a bug report.
 - **`capture` says why it refused a meter's answer, such as the `--device` to choose** — it said to enable data transmission.
-- **dmm-gui stays responsive when a dashed or dotted line runs far off the graph** — a spike just out of view could stall it with Min/Max or sub-values shown.
-- **dmm-gui imports or replays a file whose saved view lies far past its readings** — it crashed.
-- **`dmm-cli debug` calls off a Bluetooth search on Ctrl+C at once** — it waited for the search to end.
-- **Control characters in a replay file or capture report print as text** — in errors and `triage` output, where they could rewrite the screen or clipboard.
-- **dmm-gui refuses a theme file whose text can't be read on the top bar, and says why** — its Theme chips in Settings were unreadable.
-- **UT61+, UT161, UT60BT and UT202BT readings show in an unknown mode** — an error replaced them.
-- **A reading with an unrecognised scale shows no unit** — the VC-880, VC650BT, VC-890, UT8803, BM788BT and BM787BT showed a unit far off.
 - **`dmm-cli` reports a UT8802 position outside the manual's table** — reads only timed out.
+- **A retried Connect in dmm-gui shows its own progress** — the previous failure stayed on screen, so the click looked like it did nothing.
+- **Turning LIVE off in dmm-gui freezes the graph where it was** — it jumped to the session's start, or to an earlier view.
+- **The Scale and Alarm carets put the cursor in the row's first field** — Alarm's flashed there and went back to the caret; Scale's stayed on the caret.
+- **A dmm-gui replay shows no remote buttons or dropdowns** — every click was refused.
+- **The EEVblog 121GW's min/max button stays lit in AVG, with its ×** — it went dark, and leaving meant going to the meter.
+- **`capture` asks before replacing a report it can't read** — one an editor re-saved as UTF-16 was overwritten without a prompt.
+- **`dmm-cli debug` calls off a Bluetooth search on Ctrl+C at once** — it waited for the search to end.
+- **dmm-gui stays responsive when a dashed or dotted line runs far off the graph** — a spike just out of view could stall it with Min/Max or sub-values shown.
+- **dmm-gui opens a file whose saved view lies far past its readings** — importing or replaying it crashed.
+- **dmm-gui refuses a theme file with unreadable top-bar text, and says why** — its Theme chips in Settings were unreadable.
+- **Control characters in a replay file or capture report print as text** — in errors and `triage` output, where they could rewrite the screen or clipboard.
 
 ## v0.9.0 — Graph Analysis and Alarms
 
