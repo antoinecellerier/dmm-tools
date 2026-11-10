@@ -91,8 +91,9 @@ enum BigMeterMode {
 }
 
 /// Connection state.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub(super) enum ConnectionState {
+    #[default]
     Disconnected,
     /// The acquisition thread is opening the meter: detecting it under
     /// Auto-detect, or connecting to the one picked. Not connected: nothing
@@ -261,6 +262,7 @@ impl SelectedDevice {
 /// The live link to a meter: its state, what the connected protocol told us
 /// about itself, and the channels and flags shared with the acquisition
 /// thread.
+#[derive(Default)]
 pub(super) struct Connection {
     pub(super) state: ConnectionState,
     /// What the connected meter told us about itself. Kept through a lost
@@ -358,28 +360,6 @@ impl Worker {
             stop_flag: Arc::default(),
             cmd_tx: mpsc::channel().0,
             wake: Arc::default(),
-        }
-    }
-}
-
-impl Default for Connection {
-    fn default() -> Self {
-        Self {
-            state: ConnectionState::Disconnected,
-            meter: None,
-            choices: SettingChoices::default(),
-            paused: false,
-            last_error: None,
-            waiting_timeouts: 0,
-            reconnect_attempt: 0,
-            reconnect_last_error: None,
-            waiting_for_own_cable: false,
-            worker: None,
-            stopping: None,
-            needs_reconnect: false,
-            ended: false,
-            detecting: false,
-            late_readings: None,
         }
     }
 }

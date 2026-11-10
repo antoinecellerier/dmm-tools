@@ -331,11 +331,11 @@ impl App {
         let l10n = self.l10n.as_ref();
         let notice = ConnectionNotice::plain;
 
-        // The probe is still running: nothing names the meter, and neither a
-        // connection nor a failure has come back yet. It spends up to a
+        // The probe is still running: the thread was told no meter, and
+        // neither a connection nor a failure has come back yet. It spends up to a
         // couple of seconds giving each family its turn to answer, and an
         // empty column for that long reads as a hang.
-        if self.selected_device().is_none()
+        if self.connection.detecting
             && self.connection.state == ConnectionState::Connecting
             && self.connection.last_error.is_none()
         {
@@ -606,6 +606,7 @@ mod tests {
     fn auto_detect_shows_detecting_while_connecting() {
         let mut auto = app(registry::AUTO_DEVICE_ID);
         auto.connection.state = ConnectionState::Connecting;
+        auto.connection.detecting = true;
         assert_eq!(
             auto.connection_notice().map(|n| n.kind),
             Some(NoticeKind::Detecting)
@@ -613,6 +614,15 @@ mod tests {
         let mut picked = app("ut61eplus");
         picked.connection.state = ConnectionState::Connecting;
         assert!(picked.connection_notice().is_none());
+
+        // A replay names its meter, whatever Settings says: nothing is
+        // detected, so it is only connecting.
+        let mut replay = app(registry::AUTO_DEVICE_ID);
+        replay.source.replay = Some(crate::ReplaySource::fixture());
+        replay.connect(&crate::app::styled_context());
+        assert_eq!(replay.connection.state, ConnectionState::Connecting);
+        assert!(replay.connection_notice().is_none());
+        replay.disconnect_and_wait();
     }
 
     /// A session with nothing wrong has nothing to say: the reading column

@@ -148,7 +148,7 @@ impl App {
                 },
                 // Nothing to name yet: under Auto-detect the families are
                 // being probed, otherwise the picked meter is being opened.
-                ConnectionState::Connecting if self.selected_device().is_none() => {
+                ConnectionState::Connecting if self.connection.detecting => {
                     (gray, tr!(l10n, "top-bar-detecting").into_owned())
                 }
                 ConnectionState::Connecting => (gray, tr!(l10n, "top-bar-connecting").into_owned()),
