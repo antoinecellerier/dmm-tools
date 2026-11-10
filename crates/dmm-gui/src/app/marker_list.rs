@@ -322,16 +322,18 @@ impl App {
 
     /// Put the `--replay` file's saved view in place once `m` is at or past
     /// the furthest moment it shows, so its window and cursors land on
-    /// readings the graph already holds.
+    /// readings the graph already holds, and once a reading is plotted: its
+    /// Y range and references go back only on the trace they were set on.
     pub(super) fn apply_replay_view(&mut self, m: &dmm_lib::measurement::Measurement) {
         let Some((start, _)) = self.clock.wall_origin() else {
             return;
         };
-        let due = self.source.replay_view.as_ref().is_some_and(|(_, reach)| {
-            start
-                .checked_add(*reach)
-                .is_some_and(|at| at <= m.timestamp)
-        });
+        let due = self.graph.plotted_mode().is_some()
+            && self.source.replay_view.as_ref().is_some_and(|(_, reach)| {
+                start
+                    .checked_add(*reach)
+                    .is_some_and(|at| at <= m.timestamp)
+            });
         if due && let Some((view, _)) = self.source.replay_view.take() {
             self.graph.apply_view_state(&view, start);
         }

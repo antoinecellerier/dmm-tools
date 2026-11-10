@@ -1857,6 +1857,45 @@ mod tests {
         assert!(app.source.replay_view.is_none(), "applied once");
     }
 
+    /// A word shown first (the leads lifted) plots no trace, so the view's
+    /// range waits for the first reading that does: it goes back only on
+    /// the trace it was set on.
+    #[test]
+    fn a_replays_view_waits_for_a_plotted_reading() {
+        let mut app = test_app();
+        let mut source = crate::ReplaySource::fixture();
+        source.replay = Arc::new(
+            dmm_lib::replay::Replay::parse(
+                "# dmm-replay 1\n\
+                 # device: ut61eplus\n\
+                 # recorded: 2026-09-02T10:00:00Z\n\
+                 # view: {\"y\":{\"min\":0.5,\"max\":1.5},\"mode\":\"DC V\",\"unit\":\"V\"}\n\
+                 0 02 30 20 31 2E 36 31 30 39 03 02 30 30 30\n",
+            )
+            .expect("a well-formed recording"),
+        );
+        app.source.replay = Some(source);
+        let ctx = crate::app::styled_context();
+        app.connect(&ctx);
+        app.disconnect();
+        let (start, _) = app.clock.wall_origin().expect("the Connect pins it");
+        let play = |app: &mut App, ms, value| {
+            let mut m =
+                Measurement::test_fixture(value, "V", dmm_lib::flags::StatusFlags::default());
+            m.mode = "DC V".into();
+            m.timestamp = start + Duration::from_millis(ms);
+            app.deliver(DmmMessage::Measurement(m));
+        };
+        play(&mut app, 0, MeasuredValue::NoReading("Auto"));
+        assert!(
+            app.source.replay_view.is_some(),
+            "no trace to put it on yet"
+        );
+        play(&mut app, 100, MeasuredValue::Normal(1.0));
+        assert!(app.source.replay_view.is_none());
+        assert!(app.graph.view_state(start).y.is_some(), "the range is in");
+    }
+
     /// The mitigation itself: the meter that answered the probe is saved, so
     /// the session after this one opens it pinned rather than walking the
     /// cascade at every connect.

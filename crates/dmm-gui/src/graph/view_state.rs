@@ -6,6 +6,7 @@
 //! import or a playback of the file puts that reading at its own origin, and
 //! the view lands where it was.
 
+use dmm_lib::transform::{PrefixRatio, prefix_ratio};
 use serde::{Deserialize, Serialize};
 use std::time::Instant;
 
@@ -44,6 +45,17 @@ pub(crate) struct ViewState {
     /// The cursors, when they are on.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) cursors: Option<Cursors>,
+    /// The trace the Y range and the references were set against: its
+    /// mode, its sub-value (absent for the main reading) and its unit, which
+    /// is written even with nothing plotted. A view without a unit is from
+    /// before they were saved, and applies its range and references to
+    /// whatever is plotted.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) mode: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) series: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) unit: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
@@ -110,15 +122,37 @@ impl Graph {
                 a: self.cursors.a.map(|t| t + shift),
                 b: self.cursors.b.map(|t| t + shift),
             }),
+            mode: self.current_mode.clone(),
+            series: self.current_series.clone(),
+            unit: Some(self.current_unit.clone()),
         }
+    }
+
+    /// How a value of `view`'s Y range or references reads on the trace
+    /// plotted now: `Some(None)` as it is (a view from before the trace was
+    /// saved), `Some(Some(ratio))` through a ratio — another prefix of its
+    /// unit when a replay applies its view at a reading a decade off the
+    /// last —, `None` not at all: another mode, sub-value or quantity, whose
+    /// numbers it is not.
+    fn view_unit_step(&self, view: &ViewState) -> Option<Option<PrefixRatio>> {
+        let Some(unit) = view.unit.as_deref() else {
+            return Some(None);
+        };
+        if view.mode != self.current_mode || view.series != self.current_series {
+            return None;
+        }
+        prefix_ratio(unit, &self.current_unit).map(Some)
     }
 
     /// Put back a view saved by an export whose first reading is the one
     /// taken at `first`. What makes no sense here — a window of no width, a
-    /// window or cursor on none of the readings the graph holds — is left as
-    /// it is, and a window wider than those readings and the widest zoom is
-    /// narrowed to fit.
+    /// window or cursor on none of the readings the graph holds, a Y range
+    /// or references set against another trace than the one plotted — is
+    /// left as it is, and a window wider than those readings and the widest
+    /// zoom is narrowed to fit.
     pub(crate) fn apply_view_state(&mut self, view: &ViewState, first: Instant) {
+        let step = self.view_unit_step(view);
+        let here = |v: f64| step.map(|r| r.map_or(v, |r| r.apply(v)));
         let shift = self.origin_after(first);
         let (data_min, data_max) = self.data_time_range();
         let usable = |v: &f64| v.is_finite() && *v > 0.0;
@@ -134,8 +168,11 @@ impl Graph {
             }
             None => self.live = true,
         }
-        match view.y {
-            Some(YRange { min, max }) if min.is_finite() && max.is_finite() && min < max => {
+        let y = view.y.map(|YRange { min, max }| (here(min), here(max)));
+        match y {
+            // Set against another trace: the range in force stays.
+            _ if step.is_none() => {}
+            Some((Some(min), Some(max))) if min.is_finite() && max.is_finite() && min < max => {
                 self.y_axis.fixed = true;
                 self.y_axis.user_set = true;
                 self.y_axis.min.restore(min);
@@ -152,14 +189,16 @@ impl Graph {
         if let Some(window) = view.envelope.filter(usable) {
             self.envelope_window.restore(window);
         }
-        let references: Vec<f64> = view
-            .references
-            .iter()
-            .copied()
-            .filter(|v| v.is_finite())
-            .collect();
-        self.ref_lines.set(&references);
-        self.show_ref_line = view.references_shown;
+        if step.is_some() {
+            let references: Vec<f64> = view
+                .references
+                .iter()
+                .filter_map(|&v| here(v))
+                .filter(|v| v.is_finite())
+                .collect();
+            self.ref_lines.set(&references);
+            self.show_ref_line = view.references_shown;
+        }
         if let Some(triggers) = view.triggers {
             self.show_crossings = triggers;
         }
@@ -221,6 +260,77 @@ mod tests {
         assert_eq!(h.ref_lines.values(), [1.5, 3.0]);
         assert!(h.y_axis.fixed);
         assert_eq!((h.y_axis.min.value(), h.y_axis.max.value()), (-1.0, 70.0));
+    }
+
+    /// A Y range and references go back only on the trace they were set
+    /// against: in another prefix of its unit they are re-expressed (a
+    /// replay may apply its view at a reading a decade below the last), and
+    /// on another mode they are left out, the graph's own staying.
+    #[test]
+    fn a_range_and_references_go_back_only_on_their_trace() {
+        let t0 = Instant::now();
+        let mut g = graph_from(t0, 10);
+        g.y_axis.fixed = true;
+        g.y_axis.min.set(0.5);
+        g.y_axis.max.set(1.5);
+        g.ref_lines.set(&[1.2]);
+        let view = g.view_state(t0);
+        assert_eq!(
+            (
+                view.mode.as_deref(),
+                view.series.as_deref(),
+                view.unit.as_deref()
+            ),
+            (Some("DC V"), None, Some("V"))
+        );
+
+        let mut mv = Graph::new();
+        mv.push(950.0, t0, "DC V", "mV", None);
+        mv.apply_view_state(&view, t0);
+        assert!(mv.y_axis.fixed);
+        assert_eq!(
+            (mv.y_axis.min.value(), mv.y_axis.max.value()),
+            (500.0, 1500.0)
+        );
+        assert_eq!(mv.ref_lines.values(), [1200.0]);
+
+        let mut ac = Graph::new();
+        ac.push(0.95, t0, "AC V", "V", None);
+        ac.ref_lines.set(&[3.0]);
+        ac.y_axis.fixed = true;
+        ac.y_axis.min.set(0.0);
+        ac.apply_view_state(&view, t0);
+        assert_eq!(ac.y_axis.min.value(), 0.0, "another mode's range stays out");
+        assert!(ac.y_axis.fixed, "and the graph's own stays");
+        assert_eq!(ac.ref_lines.values(), [3.0]);
+
+        // Saved with nothing plotted (a Clear before the export): its range
+        // belongs to no trace.
+        let mut cleared = graph_from(t0, 10);
+        cleared.y_axis.fixed = true;
+        cleared.clear();
+        let empty = cleared.view_state(t0);
+        assert_eq!(
+            (empty.mode.as_deref(), empty.unit.as_deref()),
+            (None, Some(""))
+        );
+        let mut ac = Graph::new();
+        ac.push(0.95, t0, "AC V", "V", None);
+        ac.apply_view_state(&empty, t0);
+        assert!(!ac.y_axis.fixed);
+
+        // A view from before the trace was saved applies to what is plotted.
+        let old = ViewState {
+            mode: None,
+            series: None,
+            unit: None,
+            ..view
+        };
+        let mut ac = Graph::new();
+        ac.push(0.95, t0, "AC V", "V", None);
+        ac.apply_view_state(&old, t0);
+        assert!(ac.y_axis.fixed);
+        assert_eq!(ac.ref_lines.values(), [1.2]);
     }
 
     /// Times count from the file's first reading, not the graph's origin: a
@@ -296,6 +406,9 @@ mod screenshot_views {
                 a: Some(0.0),
                 b: Some(0.0),
             }),
+            mode: Some("DC V".into()),
+            series: Some("AC".into()),
+            unit: Some("V".into()),
         };
         match serde_json::to_value(full).expect("serialises") {
             serde_json::Value::Object(map) => map.keys().cloned().collect(),
