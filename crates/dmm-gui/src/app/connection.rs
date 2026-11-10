@@ -311,6 +311,9 @@ pub(super) struct ThreadContext {
     /// [`RECONNECT_INTERVAL`] outside the tests, which have no meter to wait for.
     pub reconnect_interval: Duration,
     pub stop_flag: Arc<AtomicBool>,
+    /// Raised by the UI after each control message and command
+    /// ([`super::Worker`]): it ends the wait for the next reading.
+    pub wake: Arc<AtomicBool>,
     /// What a real meter's reopen goes by; `None` for the mock and a replay,
     /// which reopen as they opened.
     pub reopen: Option<ReopenSource>,
@@ -449,6 +452,7 @@ where
         simulated,
         reconnect_interval,
         stop_flag,
+        wake,
         reopen,
         after,
     } = thread_ctx;
@@ -509,11 +513,15 @@ where
         });
         ctx.request_repaint();
     }
-    let mut stream = new_stream(&mut dmm, tick, simulated, &stop_flag);
+    let mut stream = new_stream(&mut dmm, tick, simulated, &stop_flag, &wake);
     let mut protocol_errors: u32 = 0;
     let mut paused = false;
     let mut last_keys: ListedKeys = Default::default();
     loop {
+        // Cleared before the channels are read, and by a swap, which reads
+        // the UI's raise and so sees every message sent before it; a plain
+        // store clears without that ordering.
+        wake.swap(false, Ordering::SeqCst);
         let asked = tick;
         if stop_flag.load(Ordering::Relaxed) || !handle_control(&ctrl_rx, &mut paused, &mut tick) {
             info!("background thread: stopping");
@@ -707,7 +715,7 @@ where
                 }
                 // A fresh stream restarts tick scheduling from the
                 // post-reconnect instant.
-                stream = new_stream(&mut dmm, tick, simulated, &stop_flag);
+                stream = new_stream(&mut dmm, tick, simulated, &stop_flag, &wake);
                 protocol_errors = 0;
                 // The dial may have moved while the link was down.
                 last_keys = Default::default();
@@ -739,21 +747,28 @@ fn session_tick<T: Transport>(dmm: &dmm_lib::Dmm<T>, tick: Duration, simulated: 
     }
 }
 
-/// A stream over `dmm` whose pacing sleep observes the stop request too.
+/// A stream over `dmm` whose pacing sleep observes the stop request and the
+/// wake too.
 ///
-/// Without it a 2 s interval keeps the USB handle open for the rest of the
-/// tick (plus the read timeout) after the user clicks Disconnect, while the UI
-/// already shows Disconnected and offers Connect again. Every stream the
-/// thread builds, the first and each one after a reconnect, goes through here.
+/// Without the stop a 2 s interval keeps the USB handle open for the rest of
+/// the tick (plus the read timeout) after the user clicks Disconnect, while
+/// the UI already shows Disconnected and offers Connect again. Without the
+/// wake a command, Pause or a new interval waits for the next reading. Every
+/// stream the thread builds, the first and each one after a reconnect, goes
+/// through here.
 fn new_stream<'a, T: Transport>(
     dmm: &'a mut dmm_lib::Dmm<T>,
     tick: Duration,
     simulated: bool,
     stop_flag: &Arc<AtomicBool>,
+    wake: &Arc<AtomicBool>,
 ) -> MeasurementStream<'a, T> {
     let tick = session_tick(dmm, tick, simulated);
     let stop = Arc::clone(stop_flag);
-    MeasurementStream::new(dmm, tick).with_cancel(move || stop.load(Ordering::Relaxed))
+    let wake = Arc::clone(wake);
+    MeasurementStream::new(dmm, tick)
+        .with_cancel(move || stop.load(Ordering::Relaxed))
+        .with_wake(move || wake.load(Ordering::SeqCst))
 }
 
 /// Run [`run_device_thread`] on a thread of its own, turning a panic in it
@@ -1051,13 +1066,74 @@ mod tests {
         let mut dmm = dmm_lib::mock::open_simulated(mock, None, clock.clone()).unwrap();
         let stop = Arc::new(AtomicBool::new(false));
         let tick = Duration::from_secs(10);
-        let mut stream = new_stream(&mut dmm, tick, false, &stop);
+        let mut stream = new_stream(&mut dmm, tick, false, &stop, &Arc::default());
         stream.tick().unwrap(); // the first tick fires immediately
         stop.store(true, Ordering::Relaxed);
         let start = clock.now();
         stream.tick().unwrap();
         let waited = clock.now().saturating_duration_since(start);
         assert!(waited < tick, "waited out the interval: {waited:?}");
+    }
+
+    /// The next message `rx` brings that `pick` takes, within `within`.
+    fn next_of<T>(
+        rx: &mpsc::Receiver<DmmMessage>,
+        within: Duration,
+        pick: impl Fn(DmmMessage) -> Option<T>,
+    ) -> Option<T> {
+        let deadline = std::time::Instant::now() + within;
+        loop {
+            let left = deadline.checked_duration_since(std::time::Instant::now())?;
+            match rx.recv_timeout(left) {
+                Ok(msg) => {
+                    if let Some(found) = pick(msg) {
+                        return Some(found);
+                    }
+                }
+                // The thread has ended: nothing more will come.
+                Err(mpsc::RecvTimeoutError::Disconnected) => return None,
+                Err(mpsc::RecvTimeoutError::Timeout) => {}
+            }
+        }
+    }
+
+    /// A command and a new interval sent through the worker reach a meter at
+    /// the longest Sample interval at once, not when the next reading is due.
+    #[test]
+    fn commands_and_control_do_not_wait_out_the_interval() {
+        let (msg_tx, msg_rx) = mpsc::channel();
+        let (ctrl_tx, ctrl_rx) = mpsc::channel();
+        let (cmd_tx, cmd_rx) = mpsc::channel();
+        let mut thread_ctx = thread_context(msg_tx, ctrl_rx, cmd_rx);
+        thread_ctx.sample_interval_ms = MAX_SAMPLE_INTERVAL_MS;
+        let worker = super::super::Worker {
+            rx: msg_rx,
+            ctrl_tx,
+            stop_flag: Arc::clone(&thread_ctx.stop_flag),
+            cmd_tx,
+            wake: Arc::clone(&thread_ctx.wake),
+        };
+        // On real time: a manual clock would pass the interval at once.
+        let open_fn = |_: Option<&ReopenPin>| {
+            let mock = dmm_lib::protocol::registry::find_device("mock").expect("registry");
+            dmm_lib::mock::open_simulated(mock, None, dmm_lib::Clock::real()).map(|d| (d, None))
+        };
+        let thread = std::thread::spawn(move || run_device_thread(open_fn, thread_ctx));
+        let reading = |m| matches!(m, DmmMessage::Measurement(_)).then_some(());
+        let bound = Duration::from_secs(20);
+        next_of(&worker.rx, bound, reading).expect("the first reading, at once");
+
+        // Each bound is a third of the interval it must beat.
+        worker.command(RemoteCommand::Named("no-such-key".to_string()));
+        next_of(&worker.rx, bound, |m| {
+            matches!(m, DmmMessage::CommandFailed { .. }).then_some(())
+        })
+        .expect("the command is tried before the next reading is due");
+        worker.control(ThreadControl::SetInterval(1000));
+        next_of(&worker.rx, bound, reading).expect("the new interval starts at once");
+
+        drop(worker.stop());
+        thread.join().unwrap();
     }
 
     /// A link that drops on the first read, counting how many are open.
@@ -1136,6 +1212,7 @@ mod tests {
             simulated: false,
             reconnect_interval: Duration::from_millis(10),
             stop_flag: Arc::new(AtomicBool::new(false)),
+            wake: Arc::default(),
             reopen: None,
             after: None,
         }

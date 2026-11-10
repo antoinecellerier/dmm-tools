@@ -311,19 +311,41 @@ struct Worker {
     ctrl_tx: mpsc::Sender<ThreadControl>,
     /// Stop request, readable without consuming a channel message so the
     /// acquisition thread's pacing sleep can bail out on it mid-tick.
-    /// `ctrl_tx` stays the control path; this is the wake signal.
     stop_flag: Arc<AtomicBool>,
     cmd_tx: mpsc::Sender<RemoteCommand>,
+    /// Raised after every control message and command, so the thread's wait
+    /// for the next reading ends and it acts on them at once. Send through
+    /// [`Self::control`] and [`Self::command`], which raise it.
+    wake: Arc<AtomicBool>,
 }
 
 impl Worker {
-    /// Raise the flag, then hang up: the thread may be mid-sleep, and the
+    /// Raise the stop flag, then hang up: the thread may be mid-sleep, and the
     /// flag is what cuts that short; dropping the control sender ends any
     /// wait on the channel and the loop itself. The message receiver comes
     /// back, for a caller that waits for the thread to end.
     fn stop(self) -> mpsc::Receiver<DmmMessage> {
         self.stop_flag.store(true, Ordering::Relaxed);
         self.rx
+    }
+
+    /// Hand the thread a control message, and wake it to apply it.
+    fn control(&self, msg: ThreadControl) {
+        let _ = self.ctrl_tx.send(msg);
+        self.raise_wake();
+    }
+
+    /// Hand the thread a command for the meter, and wake it to send it.
+    fn command(&self, cmd: RemoteCommand) {
+        let _ = self.cmd_tx.send(cmd);
+        self.raise_wake();
+    }
+
+    /// After the send, and `SeqCst`, as the thread's `swap` that clears it:
+    /// the thread clears, then drains, so a message sent before this raise
+    /// is either drained or still waking it.
+    fn raise_wake(&self) {
+        self.wake.store(true, Ordering::SeqCst);
     }
 
     /// A worker that only hands over messages: its control and command
@@ -335,6 +357,7 @@ impl Worker {
             ctrl_tx: mpsc::channel().0,
             stop_flag: Arc::default(),
             cmd_tx: mpsc::channel().0,
+            wake: Arc::default(),
         }
     }
 }
@@ -669,7 +692,7 @@ impl App {
             self.held.clear();
         }
         if let Some(worker) = &self.connection.worker {
-            let _ = worker.ctrl_tx.send(ThreadControl::SetPaused(paused));
+            worker.control(ThreadControl::SetPaused(paused));
         }
     }
 
@@ -691,7 +714,7 @@ impl App {
 
     pub(super) fn send_command(&self, cmd: &str) {
         if let Some(worker) = &self.connection.worker {
-            let _ = worker.cmd_tx.send(RemoteCommand::Named(cmd.to_string()));
+            worker.command(RemoteCommand::Named(cmd.to_string()));
         }
     }
 
@@ -727,7 +750,7 @@ impl App {
     /// `connection.choices` listed. A refusal comes back as a toast.
     pub(super) fn select(&mut self, setting: Setting, id: u16) {
         if let Some(worker) = &self.connection.worker {
-            let _ = worker.cmd_tx.send(RemoteCommand::Select(setting, id));
+            worker.command(RemoteCommand::Select(setting, id));
         }
         // Only the mode pin: `settings.shared.mock_mode` names a scenario, and a
         // range pick leaves the mock in the scenario it is already pinned to.

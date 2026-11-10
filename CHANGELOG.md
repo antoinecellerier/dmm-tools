@@ -5,6 +5,7 @@
 ### Bug fixes
 
 - **dmm-gui names the meter of a played-back recording** — with **Show device name on connect (beeps)** off, it showed none.
+- **dmm-gui's remote buttons, dropdown picks, Pause and Sample interval act at once** — they waited for the next sample.
 - **The mock ignores HOLD, REL, MIN/MAX and Peak where a UT61E+ does**
 
 ## v0.10.0 — Translations

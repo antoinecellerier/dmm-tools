@@ -292,9 +292,7 @@ impl App {
         let ms = self.settings.sample_interval_ms;
         self.set_gap_interval(ms);
         if let Some(worker) = &self.connection.worker {
-            let _ = worker
-                .ctrl_tx
-                .send(connection::ThreadControl::SetInterval(ms));
+            worker.control(connection::ThreadControl::SetInterval(ms));
         }
     }
 
@@ -335,11 +333,13 @@ impl App {
         let (ctrl_tx, ctrl_rx) = mpsc::channel();
         let (cmd_tx, cmd_rx) = mpsc::channel::<RemoteCommand>();
         let stop_flag = Arc::new(AtomicBool::new(false));
+        let wake = Arc::new(AtomicBool::new(false));
         self.connection.worker = Some(Worker {
             rx: msg_rx,
             ctrl_tx,
             stop_flag: Arc::clone(&stop_flag),
             cmd_tx,
+            wake: Arc::clone(&wake),
         });
         let sample_interval_ms = self.settings.sample_interval_ms;
         // `None` = Auto-detect: nothing names the meter, so the opener works
@@ -357,6 +357,7 @@ impl App {
             simulated: false,
             reconnect_interval: RECONNECT_INTERVAL,
             stop_flag,
+            wake,
             reopen: None,
             after: self.connection.stopping.take(),
         };
@@ -1470,6 +1471,7 @@ mod tests {
             ctrl_tx,
             stop_flag: Arc::clone(&stop_flag),
             cmd_tx,
+            wake: Arc::default(),
         });
         let (opening_tx, opening_rx) = mpsc::channel();
         let stop = Arc::clone(&stop_flag);
@@ -1493,6 +1495,7 @@ mod tests {
                 simulated: false,
                 reconnect_interval: RECONNECT_INTERVAL,
                 stop_flag,
+                wake: Arc::default(),
                 reopen: None,
                 after: None,
             },
