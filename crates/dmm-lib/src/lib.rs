@@ -96,6 +96,8 @@ impl<T: Transport> Dmm<T> {
         Self::open(transport, protocol, detected.reported_name.clone())
     }
 
+    /// `name` is the one the meter already gave, to detection or in a
+    /// recording's header, so [`Dmm::get_name`] doesn't ask for it again.
     fn open(transport: T, protocol: Box<dyn Protocol>, name: Option<String>) -> Result<Self> {
         let clock = Clock::real();
         let mut dmm = Self {

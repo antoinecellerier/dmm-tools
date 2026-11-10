@@ -566,7 +566,7 @@ Opened via the gear icon. Persisted to `~/.config/dmm-tools/settings.json` on Li
 | **Device** | Auto-detect | Auto-detect finds the meter and saves it here; the other entries, grouped by brand, pick a model directly. Requires reconnect. |
 | **Mock mode** | Auto (cycle) | Only shown when Device is Mock. Pins the mock to one of the scenarios listed under [Command-Line Options](#command-line-options), or cycles through all of them. Requires reconnect. |
 | **Auto-connect on start** | on | Connect to meter automatically on startup |
-| **Show device name on connect (beeps)** | on | Ask meter for its name on connect. Skipped when Auto-detect already has the name. |
+| **Show device name on connect (beeps)** | on | Ask meter for its name on connect. Skipped when Auto-detect already has the name, or a recording being played back names it. |
 | **Look for Bluetooth devices** | on | When off, nothing scans for adapters or meters and the connection help offers no Bluetooth steps. An address given to `--adapter` is still opened. Takes effect on the next connect. |
 | **Sample interval** | Every reading | **Every reading** the meter produces, at its own pace (on a UT61E+, about 10 a second over USB, 3 over Bluetooth), or at most one reading per 100, 200, 300 or 500 ms, 1 s or 2 s: the one nearest each tick. |
 | **Buffer size** | 500K | Samples kept by the graph and for export alike: 100K, 500K, 1M, 2M, 5M. Applies immediately; lowering it drops the oldest points and stops a recording already past the new size. Hover shows the memory and hours each size buys; a stopped recording kept beside the graph's readings can take as much memory again. `settings.json` accepts any size from 1K to 50M. |

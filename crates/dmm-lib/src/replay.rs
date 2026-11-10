@@ -244,8 +244,9 @@ impl Replay {
     /// Session zero is the clock's wall origin where it has one, so every
     /// reading lands at the session time it was recorded at even when the
     /// origin was pinned before any sample was read. The session's transport
-    /// reports the link the file was recorded over, so a caller names it the
-    /// way it names a live meter's.
+    /// reports the link the file was recorded over, and the session knows the
+    /// file's model as the meter's name ([`Dmm::known_name`]), so a caller
+    /// names both the way it names a live meter's.
     pub fn open(&self, clock: Clock) -> Result<Dmm<ReplayTransport>> {
         let start = clock
             .wall_origin()
@@ -275,13 +276,13 @@ impl Replay {
         let protocol = ReplayProtocol {
             inner: (self.device.new_protocol)(),
             samples: Arc::clone(&self.samples),
-            model: self.model.clone(),
             clock: clock.clone(),
             start,
             next,
         };
         let transport = ReplayTransport { link: self.link };
-        let dmm = Dmm::new(transport, Box::new(protocol))?;
+        // The file's model is the name the meter gave when it was recorded.
+        let dmm = Dmm::open(transport, Box::new(protocol), self.model.clone())?;
         Ok(dmm.with_clock(clock).with_protocol_timestamps())
     }
 
@@ -515,9 +516,11 @@ fn takes_no_commands(what: impl std::fmt::Display) -> Error {
 ///
 /// Everything read-only delegates to the family's own protocol, so the specs
 /// panel, the choice lists and the profile look exactly as they would on the
-/// meter; only I/O and the device name are answered from the file.
+/// meter; only I/O is answered from the file.
 ///
-/// Left on the trait defaults on purpose: `entry_named`, since the file
+/// Left on the trait defaults on purpose: `get_name`, since [`Replay::open`]
+/// gives the session the file's model as a name it already has, and with
+/// none there is no meter to ask; `entry_named`, since the file
 /// fixes the entry and a "pick another model" warning could not be acted
 /// on; `name_before_init`, since there is no meter to start; and
 /// `spec_sheet`, which is read only off registry factories, never off an
@@ -526,7 +529,6 @@ struct ReplayProtocol {
     inner: Box<dyn Protocol>,
     /// The [`Replay`]'s own frames, shared.
     samples: Arc<Vec<(Duration, Vec<u8>)>>,
-    model: Option<String>,
     clock: Clock,
     /// Session instant the recording's t=0 maps to.
     start: Instant,
@@ -612,12 +614,6 @@ impl Protocol for ReplayProtocol {
 
     fn send_command(&mut self, _transport: &dyn Transport, command: &str) -> Result<()> {
         Err(takes_no_commands(command))
-    }
-
-    /// The file, not the meter: the UT61+ name query would poll a transport
-    /// that never answers.
-    fn get_name(&mut self, _transport: &dyn Transport) -> Result<Option<String>> {
-        Ok(self.model.clone())
     }
 
     fn profile(&self) -> &DeviceProfile {
@@ -1263,6 +1259,8 @@ mod tests {
     #[test]
     fn the_model_and_profile_come_from_the_file_and_the_family() {
         let (mut dmm, _clock, _start) = open_manual();
+        // Known before anything asks, for a caller that never does.
+        assert_eq!(dmm.known_name(), Some("UT61E+"));
         assert_eq!(
             dmm.get_name().expect("the file's model"),
             Some("UT61E+".to_string())

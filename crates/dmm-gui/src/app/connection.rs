@@ -1296,7 +1296,7 @@ mod tests {
         let mut text = dmm_lib::replay::header(
             "ut61eplus",
             "2026-09-16T10:22:31+02:00",
-            None,
+            Some("UT61E+"),
             Some(Link::Bluetooth),
         );
         let dcv = [
@@ -1318,16 +1318,12 @@ mod tests {
             .expect("the replay connects");
         drop(ctrl_tx);
         thread.join().unwrap();
-        assert!(
-            matches!(
-                first,
-                DmmMessage::Connected(ConnectedMeter {
-                    link: Some(Link::Bluetooth),
-                    ..
-                })
-            ),
-            "the replay did not connect on its recorded link"
-        );
+        let DmmMessage::Connected(meter) = first else {
+            panic!("the replay did not connect");
+        };
+        assert_eq!(meter.link, Some(Link::Bluetooth), "its recorded link");
+        // Named from the file, though the context doesn't ask the meter.
+        assert_eq!(meter.name.as_deref(), Some("UT61E+"));
     }
 
     /// A lost Bluetooth link is reopened at its own adapter's address, with
