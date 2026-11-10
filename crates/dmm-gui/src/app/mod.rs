@@ -283,8 +283,9 @@ pub(super) struct Connection {
     /// Reconnect attempt count (0 = not reconnecting). Populated from the
     /// background thread while the state is `Reconnecting`.
     pub(super) reconnect_attempt: u32,
-    /// Last reconnect failure message, if any, worded as it arrived.
-    pub(super) reconnect_last_error: Option<String>,
+    /// The last reconnect attempt's failure, if any, worded where it is
+    /// shown.
+    pub(super) reconnect_last_error: Option<dmm_lib::error::Error>,
     /// The last reconnect attempt found another cable, not this session's.
     pub(super) waiting_for_own_cable: bool,
     /// The acquisition thread's channels; `None` while none runs.
@@ -836,6 +837,28 @@ impl App {
         match self.connection.reconnect_attempt {
             0 => dmm_shared::tr!(l10n, "top-bar-reconnecting"),
             attempt => dmm_shared::tr!(l10n, "top-bar-reconnecting-attempt", attempt = attempt),
+        }
+        .into_owned()
+    }
+
+    /// The hover on the disabled button while reconnecting: what the last
+    /// attempt found, in this frame's language.
+    fn reconnecting_hover(&self) -> String {
+        let l10n = &self.l10n;
+        if self.connection.waiting_for_own_cable {
+            return format!(
+                "{} {}",
+                l10n.help().waiting_for_own_cable(),
+                dmm_shared::tr!(l10n, "top-bar-own-cable-action")
+            );
+        }
+        match &self.connection.reconnect_last_error {
+            Some(err) => dmm_shared::tr!(
+                l10n,
+                "top-bar-reconnecting-hover-error",
+                error = l10n.error(err)
+            ),
+            None => dmm_shared::tr!(l10n, "top-bar-reconnecting-hover"),
         }
         .into_owned()
     }
@@ -1568,9 +1591,12 @@ mod tests {
         }));
         found.extend(untranslated_after_clicks(
             |app| {
-                app.connection.last_error = Some(ConnectionIssue::DeviceNotFound {
-                    bluetooth_searched: false,
-                });
+                app.connection.last_error = Some(ConnectionIssue::of(
+                    dmm_lib::error::Error::NoTransportFound {
+                        cables: Vec::new(),
+                        bluetooth_searched: false,
+                    },
+                ));
             },
             &[],
             &["not-found-usb"],
@@ -2019,7 +2045,7 @@ mod tests {
         settings.shared.device_family = "ut61eplus".to_string();
         let mut app = App::from_settings(settings, dmm_lib::Clock::real());
         app.big_meter_mode = mode;
-        app.connection.last_error = Some(ConnectionIssue::NoResponse);
+        app.connection.last_error = Some(ConnectionIssue::of(dmm_lib::error::Error::Timeout));
         app
     }
 

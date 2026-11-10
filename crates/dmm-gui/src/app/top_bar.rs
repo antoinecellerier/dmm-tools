@@ -306,20 +306,8 @@ impl App {
             }
             ConnectionState::Reconnecting => {
                 let label = self.reconnecting_label();
-                let hover = if self.connection.waiting_for_own_cable {
-                    Cow::Owned(format!(
-                        "{} {}",
-                        l10n.help().waiting_for_own_cable(),
-                        tr!(l10n, "top-bar-own-cable-action")
-                    ))
-                } else {
-                    match &self.connection.reconnect_last_error {
-                        Some(err) => tr!(l10n, "top-bar-reconnecting-hover-error", error = err),
-                        None => tr!(l10n, "top-bar-reconnecting-hover"),
-                    }
-                };
                 ui.add_enabled(false, egui::Button::new(label))
-                    .on_disabled_hover_text(hover);
+                    .on_disabled_hover_text(self.reconnecting_hover());
                 // The reconnect loop retries every 2 s indefinitely, so this is
                 // the user's only way out short of killing the app — the status
                 // tooltip above tells them to click it.

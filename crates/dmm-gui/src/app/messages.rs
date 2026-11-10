@@ -628,7 +628,7 @@ impl App {
                     waiting_for_own_cable,
                 } => {
                     self.connection.reconnect_attempt = attempt;
-                    self.connection.reconnect_last_error = last_error.map(|e| self.l10n.error(&e));
+                    self.connection.reconnect_last_error = last_error;
                     self.connection.waiting_for_own_cable = waiting_for_own_cable;
                 }
                 DmmMessage::SeveralCables(several) => {
@@ -676,13 +676,13 @@ impl App {
                 // The thread has ended: the session goes with it.
                 DmmMessage::Failed(e) => {
                     error!("UI: error: {e}");
-                    self.connection.last_error = Some(self.issue_from(&e));
+                    self.connection.last_error = Some(self.issue_from(e));
                     clear_channel = true;
                 }
                 // The thread reads on, and the next good frame clears it.
                 DmmMessage::BadFrame(e) => {
                     error!("UI: error: {e}");
-                    self.connection.last_error = Some(self.issue_from(&e));
+                    self.connection.last_error = Some(self.issue_from(e));
                 }
                 DmmMessage::Panicked(msg) => {
                     error!("UI: error: internal error: {msg}");
@@ -712,9 +712,7 @@ impl App {
             // front of a dead thread.
             error!("UI: acquisition thread exited unexpectedly");
             if self.connection.last_error.is_none() {
-                self.connection.last_error = Some(ConnectionIssue::Other(
-                    tr!(self.l10n, "connection-acquisition-stopped").into_owned(),
-                ));
+                self.connection.last_error = Some(ConnectionIssue::Stopped);
             }
             clear_channel = true;
         }
@@ -727,9 +725,8 @@ impl App {
 
     /// What to tell the user about a library failure, for this session's
     /// pick and adapter.
-    fn issue_from(&self, e: &dmm_lib::error::Error) -> ConnectionIssue {
+    fn issue_from(&self, e: dmm_lib::error::Error) -> ConnectionIssue {
         ConnectionIssue::from_error(
-            &self.l10n,
             e,
             self.settings.overrides.adapter.as_deref(),
             self.picked_listing(),
@@ -860,7 +857,9 @@ impl App {
                 "UI: error: {}",
                 connection::no_response(&crate::l10n::english())
             );
-            self.connection.last_error = Some(ConnectionIssue::NoResponse);
+            // What the threshold counts is timeouts, so the notice is a
+            // timeout's.
+            self.connection.last_error = Some(self.issue_from(dmm_lib::error::Error::Timeout));
         }
     }
 
@@ -1093,10 +1092,10 @@ mod tests {
         let several = dmm_shared::reopen::SeveralCables { count: 2 };
         app.deliver(DmmMessage::SeveralCables(several));
         assert_eq!(app.connection.state, ConnectionState::Disconnected);
-        assert_eq!(
+        assert!(matches!(
             app.connection.last_error,
-            Some(ConnectionIssue::SeveralCables(several))
-        );
+            Some(ConnectionIssue::SeveralCables(s)) if s == several
+        ));
         assert!(!app.capture.recording.is_active());
         assert_eq!(app.capture.recording.export_samples().len(), 1);
         assert!(app.toast.is_some(), "the recording stopping is said");
@@ -1350,9 +1349,12 @@ mod tests {
         // The mock: Auto-detect would probe the machine's USB and Bluetooth
         // from a thread that outlives the test.
         let mut app = app("mock", false);
-        app.connection.last_error = Some(ConnectionIssue::DeviceNotFound {
-            bluetooth_searched: true,
-        });
+        app.connection.last_error = Some(ConnectionIssue::of(
+            dmm_lib::error::Error::NoTransportFound {
+                cables: Vec::new(),
+                bluetooth_searched: true,
+            },
+        ));
         app.connect(&crate::app::styled_context());
         assert!(app.connection.last_error.is_none());
         assert!(

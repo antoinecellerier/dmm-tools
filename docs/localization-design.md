@@ -82,7 +82,7 @@ An `l10n` module in `dmm-shared` holds the loader, the language choice and the s
 
 ## Choosing the language
 
-A `language` field in `SharedSettings` (empty means follow the system) is shared by both binaries. dmm-cli takes `--lang`, and the GUI's Settings has a Language row listing System, then each language by its own name. dmm-gui takes no `--lang`: its `--help` speaks the language its window would. The GUI switches immediately, because an immediate-mode UI redraws every label on the next frame anyway; a notice or toast already on screen keeps its language.
+A `language` field in `SharedSettings` (empty means follow the system) is shared by both binaries. dmm-cli takes `--lang`, and the GUI's Settings has a Language row listing System, then each language by its own name. dmm-gui takes no `--lang`: its `--help` speaks the language its window would. The GUI switches immediately, because an immediate-mode UI redraws every label on the next frame anyway; a connection notice is worded on every frame from the failure it holds, so it follows too, and only a toast already on screen keeps its language.
 
 Without a setting, `sys-locale` reports the system language: the UI language on Windows, the preferred-languages list on macOS, and the locale variables on Unix. On Unix it returns `LANGUAGE` first and reduces `C.UTF-8` to "C", so it can't apply gettext's C-locale rule itself.
 

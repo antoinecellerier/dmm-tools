@@ -221,8 +221,9 @@ state and replaces it on a language switch, and the CLI sets one for the whole r
 translated where it is shown: exports, settings and logs stay English, and so do the library's
 strings, which the apps look up by kind and English text in a `lib.ftl` generated
 from the library as they draw them (see [localization-design.md](localization-design.md)). Library
-errors are worded by variant from `lib-errors.ftl`; the GUI words one when it arrives, so a notice
-or toast already on screen keeps its language after a switch. clap has no translation hook, so
+errors are worded by variant from `lib-errors.ftl`. A connection notice keeps the failure and is
+worded on every frame, so it follows a language switch; a toast is worded when it is raised and
+keeps its language. clap has no translation hook, so
 each binary walks its command tree at start-up and swaps each command's and option's help for its
 message in `cli-help.ftl` or `gui-help.ftl`, generated from the doc comments; the GUI chooses its
 language before parsing, as its window will. clap's own words around that help (headings,

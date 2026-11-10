@@ -1,13 +1,16 @@
 //! Why the GUI has no readings to show: the failure the acquisition thread
-//! reported, classified once as it arrives, and the notice built from it for
-//! the reading column — text only; `show_connection_help` and the big meter
-//! draw it.
+//! reported, classified once as it arrives ([`Diagnosis`]) and kept whole,
+//! and the notice worded from it for the reading column on every frame, so
+//! a language switch reaches it — text only; `show_connection_help` and the
+//! big meter draw it.
 
 use dmm_lib::protocol::registry;
 use dmm_lib::text::TextKind;
 use dmm_lib::transport::Link;
 use dmm_shared::export::escape_controls;
-use dmm_shared::help::{LinksSearched, SetupSection, connected_adapters};
+use dmm_shared::help::{
+    ConnectedAdapters, Diagnosis, LinksSearched, SetupSection, connected_adapters,
+};
 use dmm_shared::l10n::{Localizer, link_key};
 use dmm_shared::reopen::SeveralCables;
 use dmm_shared::tr;
@@ -16,69 +19,25 @@ use super::{App, ConnectionState};
 
 /// Why the GUI currently has no readings to show.
 ///
-/// Replaces a `String` that carried the sentinel `"__device_not_found__"`
-/// and was probed with `contains("adapter not found")` at the render site —
-/// CLAUDE.md: "Prefer enums over string-typed status/state values." The
-/// acquisition thread already distinguishes these cases; this stops the
-/// distinction being flattened into text and parsed back out.
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// Held as data and worded where it is drawn, in the language of that frame.
+#[derive(Debug)]
 pub(crate) enum ConnectionIssue {
-    /// Nothing answered on the links that were searched. `bluetooth_searched`
-    /// is the open path's own answer to whether the radio got a turn, which
-    /// decides the title and the sections the help shows.
-    DeviceNotFound { bluetooth_searched: bool },
-    /// `--adapter` named a USB device and nothing matched it. Carries the
-    /// finished help text, including the connected-device list, because
-    /// building it enumerates the USB bus — far too heavy for the paint path.
-    AdapterNotFound { help: String },
-    /// `--adapter` named a Bluetooth adapter and nothing answered at that
-    /// address. The scan the open just ran is the only thing that would say
-    /// which addresses are live, so nothing is enumerated here.
-    BluetoothNotFound { address: String },
-    /// `--adapter` named a Bluetooth adapter the stack could not connect to —
-    /// most often one that is paired but asleep. `error` is what the stack
-    /// said, shown above the same steps an address nothing answered gets.
-    BluetoothUnreachable { address: String, error: String },
-    /// A meter with the radio built in was searched for and nothing in range
-    /// carried its name. Its display name and the registry's steps that
-    /// switch its radio on, from the error.
-    BluetoothOnlyNotFound {
-        model: &'static str,
-        activation: &'static str,
+    /// The library failed: which help that gets, and the error, whose own
+    /// words (the stack's, the selector `--adapter` named) the notice quotes.
+    /// Opening failures, a meter gone quiet, data that could not be read.
+    Lib {
+        diagnosis: Diagnosis,
+        error: dmm_lib::error::Error,
+        /// What the bus held, for an `--adapter` that matched nothing:
+        /// listing it walks every HID device, far too heavy for the paint
+        /// path, so it is listed once, when the error arrives.
+        adapters: Option<ConnectedAdapters>,
     },
-    /// The stack could not search for a meter with the radio built in —
-    /// radio off, permission denied. `error` is what the stack said, shown
-    /// above the meter's own steps.
-    BluetoothOnlyUnreachable {
-        model: &'static str,
-        activation: &'static str,
-        error: String,
-    },
-    /// A meter with the radio built in, and the radio was not searched: the
-    /// setting is off, the build has no Bluetooth, or `--adapter` names a USB
-    /// device. `message` is the library's, which says which, finished with
-    /// the GUI's own switch when the setting is off.
-    BluetoothNotSearched { message: String },
-    /// The cable is there but nothing on it answered the detection probe.
-    /// Carries the finished help — what to switch on, per meter that could
-    /// have been on that bridge — because it is built from the bridge the
-    /// error names and the render path no longer has it.
-    NotIdentified { help: String },
-    /// The meter stopped answering: the open timed out, or the stream
-    /// crossed its no-response threshold.
-    NoResponse,
-    /// The meter answered with data that could not be read — a corrupt
-    /// frame, a mode byte the tables lack. Carries what was wrong. Often
-    /// mid-session, under a live reading: nothing to switch on, nothing to
-    /// reconnect.
-    BadData(String),
     /// A lost link with nothing to say which cable is this meter's. Held as
     /// the reason, and worded where it is drawn.
     SeveralCables(SeveralCables),
-    /// Anything else — a cable that cannot carry the meter, a permission
-    /// error, a stopped thread — with its text, which is all the user has to
-    /// go on.
-    Other(String),
+    /// The acquisition thread ended without saying why.
+    Stopped,
     /// The acquisition thread panicked, with the panic's own text, which
     /// stays English; the lead-in is worded where it is drawn.
     Internal(String),
@@ -162,129 +121,51 @@ impl ConnectionNotice {
 }
 
 impl ConnectionIssue {
-    /// Classify an error the acquisition thread hands over whole.
-    ///
-    /// Matched by variant rather than by [`dmm_lib::error::ErrorKind`]: the
-    /// help needs what each one carries — the selector the user typed, the
-    /// links that were searched, the bridge nothing answered on — and the
-    /// coarse kind carries none of it. Only unreadable data, which needs no
-    /// more than its text, is matched by kind. Classified once when the error
-    /// arrives, not at the render site on every repaint. `adapter` is the
-    /// `--adapter` value the open was given, which a stack failure is
-    /// explained by when it names a Bluetooth adapter; `selected` the meter
-    /// picked in Settings, which explains one when it has the radio built in.
+    /// Classify an error the acquisition thread hands over whole, once, as it
+    /// arrives. `adapter` is the `--adapter` value the open was given, and
+    /// `selected` the meter picked in Settings ([`Diagnosis::of`]).
     pub(super) fn from_error(
-        l10n: &Localizer,
-        err: &dmm_lib::error::Error,
+        error: dmm_lib::error::Error,
         adapter: Option<&str>,
         selected: Option<registry::Listing>,
     ) -> Self {
-        if let Some(selector) = l10n.adapter_named(err) {
-            // An address is explained by the link it named, not by the USB
-            // bus — nothing on the bus could have answered it.
-            if dmm_lib::is_bluetooth_selector(&selector) {
-                return Self::BluetoothNotFound {
-                    address: selector.into_owned(),
-                };
-            }
-            return Self::AdapterNotFound {
-                help: adapter_not_found_help(l10n, &selector),
-            };
+        let diagnosis = Diagnosis::of(&error, adapter, selected);
+        let adapters = (diagnosis == Diagnosis::AdapterNotFound).then(connected_adapters);
+        Self::Lib {
+            diagnosis,
+            error,
+            adapters,
         }
-        // The open path already worked out which links it searched; carrying
-        // the answer keeps the help from deriving it again from the build,
-        // the settings and the selected meter.
-        if let dmm_lib::error::Error::NoTransportFound {
-            bluetooth_searched, ..
-        } = err
-        {
-            return Self::DeviceNotFound {
-                bluetooth_searched: *bluetooth_searched,
-            };
+    }
+
+    /// `error` as it arrives from a session with nothing picked and no
+    /// `--adapter`.
+    #[cfg(test)]
+    pub(super) fn of(error: dmm_lib::error::Error) -> Self {
+        Self::from_error(error, None, None)
+    }
+
+    /// Which help a library failure gets; `None` for the GUI's own issues.
+    #[cfg(test)]
+    pub(super) fn diagnosis(&self) -> Option<&Diagnosis> {
+        match self {
+            Self::Lib { diagnosis, .. } => Some(diagnosis),
+            _ => None,
         }
-        // Also a `Timeout` kind — retrying does help once transmission is on —
-        // so it is matched by variant, ahead of the kind test below.
-        if let dmm_lib::error::Error::DeviceNotIdentified {
-            bridge,
-            built_in_radio,
-        } = err
-        {
-            return Self::NotIdentified {
-                help: not_identified_help(l10n, bridge, *built_in_radio),
-            };
-        }
-        if let dmm_lib::error::Error::Bluetooth(_) = err
-            && let Some(address) = adapter.filter(|a| dmm_lib::is_bluetooth_selector(a))
-        {
-            return Self::BluetoothUnreachable {
-                address: address.to_string(),
-                error: l10n.error(err),
-            };
-        }
-        if let dmm_lib::error::Error::Bluetooth(_) = err
-            && let Some(picked) = selected.filter(|l| l.device.bluetooth_only())
-        {
-            return Self::BluetoothOnlyUnreachable {
-                model: picked.display_name(),
-                activation: picked.device.activation_instructions,
-                error: l10n.error(err),
-            };
-        }
-        if let dmm_lib::error::Error::BluetoothOnly {
-            model,
-            activation,
-            miss,
-        } = err
-        {
-            return match miss {
-                // By the name it was picked by, when it was.
-                dmm_lib::error::BluetoothOnlyMiss::NotInRange => Self::BluetoothOnlyNotFound {
-                    model: selected.map_or(*model, |l| l.display_name()),
-                    activation,
-                },
-                // The remedy is the GUI's own switch; the library's sentence
-                // names none.
-                dmm_lib::error::BluetoothOnlyMiss::SwitchedOff => Self::BluetoothNotSearched {
-                    message: tr!(
-                        l10n,
-                        "connection-bluetooth-not-searched-off",
-                        error = l10n.error(err),
-                        hint = l10n.help().gui_bluetooth_off_hint()
-                    )
-                    .into_owned(),
-                },
-                _ => Self::BluetoothNotSearched {
-                    message: tr!(
-                        l10n,
-                        "connection-bluetooth-not-searched-why",
-                        error = l10n.error(err)
-                    )
-                    .into_owned(),
-                },
-            };
-        }
-        if let dmm_lib::error::Error::Timeout = err {
-            return Self::NoResponse;
-        }
-        if err.kind() == dmm_lib::error::ErrorKind::Protocol {
-            return Self::BadData(l10n.error(err));
-        }
-        Self::Other(l10n.error(err))
     }
 }
 
-/// Build the "adapter not found" help, listing what is actually on the bus.
-///
-/// Called once when the error arrives, not from the render path:
-/// `connected_adapters()` constructs a fresh `HidApi` and walks every HID device
-/// on the system, and this help stays on screen across every repaint until
-/// the user reconnects. The list is a snapshot either way — the user has to
-/// restart with a different `--adapter` to act on it.
-fn adapter_not_found_help(l10n: &Localizer, selector: &str) -> String {
-    let adapters = connected_adapters();
+/// Build the "adapter not found" help: what `--adapter` named, and what the
+/// bus held when the error arrived. The list is a snapshot either way — the
+/// user has to restart with a different `--adapter` to act on it.
+fn adapter_not_found_help(
+    l10n: &Localizer,
+    selector: &str,
+    adapters: &ConnectedAdapters,
+) -> String {
     let mut msg = tr!(l10n, "connection-adapter-not-matched", selector = selector).into_owned();
     msg.push_str("\n\n");
-    msg.push_str(&l10n.help().adapter_lines(&adapters).join("\n"));
+    msg.push_str(&l10n.help().adapter_lines(adapters).join("\n"));
     if adapters.offers_choice() {
         msg.push_str("\n\n");
         msg.push_str(&tr!(l10n, "connection-adapter-restart"));
@@ -401,7 +282,57 @@ impl App {
         let l10n = self.l10n.as_ref();
         let notice = ConnectionNotice::plain;
         match issue {
-            ConnectionIssue::DeviceNotFound { bluetooth_searched } => {
+            ConnectionIssue::Lib {
+                diagnosis,
+                error,
+                adapters,
+            } => self.lib_notice(diagnosis, error, adapters.as_ref()),
+            ConnectionIssue::SeveralCables(several) => notice(
+                NoticeKind::SeveralCables,
+                tr!(l10n, "connection-several-cables").into_owned(),
+                format!(
+                    "{} {}",
+                    l10n.help().several_cables(*several),
+                    tr!(l10n, "connection-several-cables-action")
+                ),
+            ),
+            ConnectionIssue::Stopped => notice(
+                NoticeKind::Failed,
+                tr!(l10n, "connection-failed").into_owned(),
+                format!(
+                    "{}\n\n{}",
+                    tr!(l10n, "connection-acquisition-stopped"),
+                    tr!(l10n, "connection-click-connect")
+                ),
+            ),
+            ConnectionIssue::Internal(detail) => notice(
+                NoticeKind::Failed,
+                tr!(l10n, "connection-failed").into_owned(),
+                format!(
+                    "{}\n\n{}",
+                    tr!(
+                        l10n,
+                        "connection-internal-error",
+                        detail = escape_controls(detail).into_owned()
+                    ),
+                    tr!(l10n, "connection-click-connect")
+                ),
+            ),
+        }
+    }
+
+    /// The notice for a library failure, one arm per [`Diagnosis`], worded
+    /// from `error` where the error has the words.
+    fn lib_notice(
+        &self,
+        diagnosis: &Diagnosis,
+        error: &dmm_lib::error::Error,
+        adapters: Option<&ConnectedAdapters>,
+    ) -> ConnectionNotice {
+        let l10n = self.l10n.as_ref();
+        let notice = ConnectionNotice::plain;
+        match diagnosis {
+            Diagnosis::NotFound { bluetooth_searched } => {
                 // Nothing answered on the links the open path searched. The
                 // sections come from the library so the CLI's help and this panel
                 // stay the same advice; only the closing line is the GUI's, since
@@ -413,86 +344,100 @@ impl App {
                     } else {
                         NoticeKind::UsbNotFound
                     },
-                    title: self.l10n.help().not_found_title(&links),
-                    sections: self.l10n.help().sections(&links),
+                    title: l10n.help().not_found_title(&links),
+                    sections: l10n.help().sections(&links),
                     body: tr!(l10n, "connection-click-connect").into_owned(),
                     feedback_link: self.feedback_link(),
                 }
             }
-            ConnectionIssue::BluetoothOnlyNotFound { model, activation } => {
+            Diagnosis::BluetoothOnlyNotFound { model, activation } => {
                 // The same notice, on the radio alone and with the meter's own
                 // steps: it has no cable, and no adapter to wake.
                 let links = LinksSearched::BluetoothOnly { model, activation };
                 ConnectionNotice {
                     kind: NoticeKind::BluetoothOnlyNotFound,
-                    title: self.l10n.help().not_found_title(&links),
-                    sections: self.l10n.help().sections(&links),
+                    title: l10n.help().not_found_title(&links),
+                    sections: l10n.help().sections(&links),
                     body: tr!(l10n, "connection-click-connect").into_owned(),
                     feedback_link: self.feedback_link(),
                 }
             }
-            ConnectionIssue::BluetoothOnlyUnreachable {
-                model,
-                activation,
-                error,
-            } => ConnectionNotice {
+            Diagnosis::BluetoothOnlyUnreachable { model, activation } => ConnectionNotice {
                 kind: NoticeKind::BluetoothUnreachable,
-                title: error.clone(),
-                sections: self
-                    .l10n
+                title: l10n.error(error),
+                sections: l10n
                     .help()
                     .sections(&LinksSearched::BluetoothOnly { model, activation }),
                 body: tr!(l10n, "connection-click-connect").into_owned(),
                 feedback_link: None,
             },
-            ConnectionIssue::BluetoothNotSearched { message } => notice(
-                NoticeKind::BluetoothNotSearched,
-                tr!(l10n, "connection-bluetooth-not-searched").into_owned(),
-                message.clone(),
-            ),
-            ConnectionIssue::BluetoothNotFound { address } => {
+            Diagnosis::BluetoothNotSearched(miss) => {
+                let message = match miss {
+                    // The remedy is the GUI's own switch; the library's
+                    // sentence names none.
+                    dmm_lib::error::BluetoothOnlyMiss::SwitchedOff => tr!(
+                        l10n,
+                        "connection-bluetooth-not-searched-off",
+                        error = l10n.error(error),
+                        hint = l10n.help().gui_bluetooth_off_hint()
+                    ),
+                    _ => tr!(
+                        l10n,
+                        "connection-bluetooth-not-searched-why",
+                        error = l10n.error(error)
+                    ),
+                };
+                notice(
+                    NoticeKind::BluetoothNotSearched,
+                    tr!(l10n, "connection-bluetooth-not-searched").into_owned(),
+                    message.into_owned(),
+                )
+            }
+            Diagnosis::NothingAtAddress { address } => {
                 let links = LinksSearched::BluetoothAt(address);
                 ConnectionNotice {
                     kind: NoticeKind::BluetoothNotFound,
-                    title: self.l10n.help().not_found_title(&links),
-                    sections: self.l10n.help().sections(&links),
+                    title: l10n.help().not_found_title(&links),
+                    sections: l10n.help().sections(&links),
                     // The GUI cannot scan, so the way back in is a restart with
                     // the address the scan printed.
                     body: tr!(l10n, "connection-restart-with-address").into_owned(),
                     feedback_link: None,
                 }
             }
-            ConnectionIssue::BluetoothUnreachable { address, error } => {
-                // Found, or remembered, but the link would not come up: the
-                // stack's own words first, then the steps that wake an adapter.
-                ConnectionNotice {
-                    kind: NoticeKind::BluetoothUnreachable,
-                    title: error.clone(),
-                    sections: self
-                        .l10n
-                        .help()
-                        .sections(&LinksSearched::BluetoothAt(address)),
-                    body: tr!(l10n, "connection-click-connect").into_owned(),
-                    feedback_link: None,
-                }
-            }
-            ConnectionIssue::AdapterNotFound { help } => notice(
-                NoticeKind::AdapterNotFound,
-                tr!(l10n, "connection-adapter-not-found").into_owned(),
-                help.clone(),
-            ),
-            ConnectionIssue::NotIdentified { help } => {
-                // The link is fine and the probe ran; nothing on the far end
-                // spoke a protocol we know. Which link it was is in the body —
-                // the title stays one string per notice, which is what the big
-                // meter's fit cache keys on.
+            // Found, or remembered, but the link would not come up: the
+            // stack's own words first, then the steps that wake an adapter.
+            Diagnosis::AdapterUnreachable { address } => ConnectionNotice {
+                kind: NoticeKind::BluetoothUnreachable,
+                title: l10n.error(error),
+                sections: l10n.help().sections(&LinksSearched::BluetoothAt(address)),
+                body: tr!(l10n, "connection-click-connect").into_owned(),
+                feedback_link: None,
+            },
+            Diagnosis::AdapterNotFound => {
+                let selector = l10n.adapter_named(error).unwrap_or_default();
+                // `from_error` lists the bus for this diagnosis; only an
+                // issue built some other way could have no list.
+                let unlisted = ConnectedAdapters::Unavailable;
                 notice(
-                    NoticeKind::NotIdentified,
-                    self.l10n.help().no_meter_answered().into_owned(),
-                    help.clone(),
+                    NoticeKind::AdapterNotFound,
+                    tr!(l10n, "connection-adapter-not-found").into_owned(),
+                    adapter_not_found_help(l10n, &selector, adapters.unwrap_or(&unlisted)),
                 )
             }
-            ConnectionIssue::NoResponse => {
+            // The link is fine and the probe ran; nothing on the far end
+            // spoke a protocol we know. Which link it was is in the body —
+            // the title stays one string per notice, which is what the big
+            // meter's fit cache keys on.
+            Diagnosis::NotIdentified {
+                bridge,
+                built_in_radio,
+            } => notice(
+                NoticeKind::NotIdentified,
+                l10n.help().no_meter_answered().into_owned(),
+                not_identified_help(l10n, bridge, *built_in_radio),
+            ),
+            Diagnosis::NoResponse => {
                 // The link is up but the meter is not responding.
                 // The meter this session is talking about: the one picked, or the
                 // one detection found. Under Auto-detect, before anything answered,
@@ -515,7 +460,7 @@ impl App {
                 .into_owned();
                 notice(
                     NoticeKind::NoResponse,
-                    self.l10n.help().no_response().into_owned(),
+                    l10n.help().no_response().into_owned(),
                     instructions,
                 )
             }
@@ -524,13 +469,14 @@ impl App {
             // a meter or a file is escaped so a control byte cannot act. Mid-read
             // the worker keeps reading and the next good frame clears it; at the
             // open the session has ended, so the way back in is said too.
-            ConnectionIssue::BadData(error) => {
+            Diagnosis::BadData => {
+                let text = l10n.error(error);
                 let body = if self.connection.state.is_linked() {
-                    escape_controls(error).into_owned()
+                    escape_controls(&text).into_owned()
                 } else {
                     format!(
                         "{}\n\n{}",
-                        escape_controls(error),
+                        escape_controls(&text),
                         tr!(l10n, "connection-click-connect")
                     )
                 };
@@ -540,34 +486,15 @@ impl App {
                     body,
                 )
             }
-            ConnectionIssue::SeveralCables(several) => notice(
-                NoticeKind::SeveralCables,
-                tr!(l10n, "connection-several-cables").into_owned(),
-                format!(
-                    "{} {}",
-                    l10n.help().several_cables(*several),
-                    tr!(l10n, "connection-several-cables-action")
-                ),
-            ),
-            ConnectionIssue::Other(error) => notice(
+            // Anything else — a cable that cannot carry the meter, a
+            // permission error — with its text, which is all the user has to
+            // go on.
+            Diagnosis::Other => notice(
                 NoticeKind::Failed,
                 tr!(l10n, "connection-failed").into_owned(),
                 format!(
                     "{}\n\n{}",
-                    escape_controls(error),
-                    tr!(l10n, "connection-click-connect")
-                ),
-            ),
-            ConnectionIssue::Internal(detail) => notice(
-                NoticeKind::Failed,
-                tr!(l10n, "connection-failed").into_owned(),
-                format!(
-                    "{}\n\n{}",
-                    tr!(
-                        l10n,
-                        "connection-internal-error",
-                        detail = escape_controls(detail).into_owned()
-                    ),
+                    escape_controls(&l10n.error(error)),
                     tr!(l10n, "connection-click-connect")
                 ),
             ),
@@ -601,6 +528,7 @@ mod tests {
     use super::*;
     use crate::app::connection::ConnectedMeter;
     use crate::settings::Settings;
+    use dmm_lib::error::Error;
 
     /// An app whose settings name `family`.
     fn app(family: &str) -> App {
@@ -614,6 +542,30 @@ mod tests {
         app.connection.last_error = Some(issue);
         app.connection_notice()
             .expect("a failure is always a notice")
+    }
+
+    /// Nothing answered, on the USB bus alone or on both links.
+    fn not_found(bluetooth_searched: bool) -> ConnectionIssue {
+        ConnectionIssue::of(Error::NoTransportFound {
+            cables: Vec::new(),
+            bluetooth_searched,
+        })
+    }
+
+    /// A CP2110 cable that nothing on answered the probe.
+    fn cp2110_silent() -> ConnectionIssue {
+        ConnectionIssue::of(Error::DeviceNotIdentified {
+            bridge: "CP2110",
+            built_in_radio: false,
+        })
+    }
+
+    /// A frame whose checksum did not match.
+    fn checksum_mismatch() -> ConnectionIssue {
+        ConnectionIssue::of(Error::ChecksumMismatch {
+            expected: 0x01a3,
+            actual: 0x0003,
+        })
     }
 
     /// Under Auto-detect the probe says so while it runs; a picked meter
@@ -656,37 +608,29 @@ mod tests {
     fn each_connection_issue_gets_its_own_notice() {
         let mut app = app("ut61eplus");
 
-        let n = notice_for(
-            &mut app,
-            ConnectionIssue::DeviceNotFound {
-                bluetooth_searched: false,
-            },
-        );
+        let n = notice_for(&mut app, not_found(false));
         assert_eq!(n.kind, NoticeKind::UsbNotFound);
         assert_eq!(n.title, "No USB cable found");
         assert!(n.body.contains("Connect"), "got {:?}", n.body);
 
         let n = notice_for(
             &mut app,
-            ConnectionIssue::AdapterNotFound {
-                help: "no adapter matched".to_string(),
-            },
+            ConnectionIssue::of(Error::AdapterNotFound("ABC123".to_string())),
         );
         assert_eq!(n.kind, NoticeKind::AdapterNotFound);
         assert_eq!(n.title, "Adapter not found");
-        assert_eq!(n.body, "no adapter matched");
+        assert!(n.body.contains("ABC123"), "{}", n.body);
 
-        let n = notice_for(
-            &mut app,
-            ConnectionIssue::NotIdentified {
-                help: "switch USB mode on".to_string(),
-            },
-        );
+        let n = notice_for(&mut app, cp2110_silent());
         assert_eq!(n.kind, NoticeKind::NotIdentified);
         assert_eq!(n.title, "No meter answered");
-        assert_eq!(n.body, "switch USB mode on");
+        assert!(
+            n.body.contains("Long press the USB/Hz button"),
+            "{}",
+            n.body
+        );
 
-        let n = notice_for(&mut app, ConnectionIssue::NoResponse);
+        let n = notice_for(&mut app, ConnectionIssue::of(Error::Timeout));
         assert_eq!(n.kind, NoticeKind::NoResponse);
         assert_eq!(n.title, "No response from meter");
         assert!(
@@ -703,12 +647,7 @@ mod tests {
     fn the_not_found_notice_is_grouped_by_link() {
         let mut app = app("ut61eplus");
 
-        let n = notice_for(
-            &mut app,
-            ConnectionIssue::DeviceNotFound {
-                bluetooth_searched: true,
-            },
-        );
+        let n = notice_for(&mut app, not_found(true));
         assert_eq!(n.kind, NoticeKind::NoMeterFound);
         assert_eq!(n.title, "No meter found over USB or Bluetooth");
         let links: Vec<&str> = n.sections.iter().map(|s| s.link.as_str()).collect();
@@ -726,12 +665,12 @@ mod tests {
     #[test]
     fn a_bluetooth_address_is_answered_on_its_own_link() {
         let mut app = app("ut61eplus");
-        let n = notice_for(
-            &mut app,
-            ConnectionIssue::BluetoothNotFound {
-                address: "12:34:56:78:9A:BC".to_string(),
-            },
-        );
+        let issue = ConnectionIssue::of(Error::AdapterNotFound("12:34:56:78:9A:BC".to_string()));
+        if !dmm_lib::is_bluetooth_selector("12:34:56:78:9A:BC") {
+            // A build without the radio has no link that value could name.
+            return;
+        }
+        let n = notice_for(&mut app, issue);
         assert_eq!(n.kind, NoticeKind::BluetoothNotFound);
         assert_eq!(n.title, "No Bluetooth device found at 12:34:56:78:9A:BC");
         let links: Vec<&str> = n.sections.iter().map(|s| s.link.as_str()).collect();
@@ -753,18 +692,15 @@ mod tests {
     /// address nothing answered, not a silent-meter notice.
     #[test]
     fn an_unreachable_named_adapter_gets_the_bluetooth_steps() {
-        let err = dmm_lib::error::Error::Bluetooth(dmm_lib::error::BluetoothIssue::Stack(
-            "Timed out after 10s".to_string(),
-        ));
-        let issue = ConnectionIssue::from_error(
-            &crate::l10n::english(),
-            &err,
-            Some("12:34:56:78:9A:BC"),
-            None,
-        );
+        let stack = || {
+            Error::Bluetooth(dmm_lib::error::BluetoothIssue::Stack(
+                "Timed out after 10s".to_string(),
+            ))
+        };
+        let issue = ConnectionIssue::from_error(stack(), Some("12:34:56:78:9A:BC"), None);
         if !dmm_lib::is_bluetooth_selector("12:34:56:78:9A:BC") {
             // A build without the radio has no address to explain it by.
-            assert!(matches!(issue, ConnectionIssue::Other(_)));
+            assert_eq!(issue.diagnosis(), Some(&Diagnosis::Other));
             return;
         }
         let mut app = app("ut61eplus");
@@ -780,25 +716,20 @@ mod tests {
         assert_eq!(n.body, "Click \"Connect\" after resolving the issue.");
 
         // Without an address, or with a USB one, it stays the bare error.
-        assert!(matches!(
-            ConnectionIssue::from_error(&crate::l10n::english(), &err, None, None),
-            ConnectionIssue::Other(_)
-        ));
-        assert!(matches!(
-            ConnectionIssue::from_error(&crate::l10n::english(), &err, Some("00C5B27A"), None),
-            ConnectionIssue::Other(_)
-        ));
+        for adapter in [None, Some("00C5B27A")] {
+            let issue = ConnectionIssue::from_error(stack(), adapter, None);
+            assert_eq!(issue.diagnosis(), Some(&Diagnosis::Other), "{adapter:?}");
+        }
     }
 
     /// The search names the meter asked for, not the maker's entry it opens as.
     #[test]
     fn a_bluetooth_only_notice_names_the_picked_meter() {
-        use dmm_lib::error::{BluetoothOnlyMiss, Error};
+        use dmm_lib::error::BluetoothOnlyMiss;
         let cms061 = registry::find_device("cms061").expect("registry entry");
         let pick = registry::resolve_listing("ut217a").expect("a sold-as row");
         let issue = ConnectionIssue::from_error(
-            &crate::l10n::english(),
-            &Error::BluetoothOnly {
+            Error::BluetoothOnly {
                 model: cms061.display_name(),
                 activation: cms061.activation_instructions,
                 miss: BluetoothOnlyMiss::NotInRange,
@@ -815,7 +746,7 @@ mod tests {
     /// help. A meter behind an adapter keeps the bare stack error.
     #[test]
     fn a_bluetooth_only_meter_gets_its_own_notice() {
-        use dmm_lib::error::{BluetoothOnlyMiss, Error};
+        use dmm_lib::error::BluetoothOnlyMiss;
         let ut60bt = registry::find_device("ut60bt").expect("registry entry");
         let own_steps = LinksSearched::BluetoothOnly {
             model: ut60bt.display_name(),
@@ -828,12 +759,7 @@ mod tests {
         };
         let mut app = app("ut60bt");
 
-        let issue = ConnectionIssue::from_error(
-            &crate::l10n::english(),
-            &missed(BluetoothOnlyMiss::NotInRange),
-            None,
-            None,
-        );
+        let issue = ConnectionIssue::of(missed(BluetoothOnlyMiss::NotInRange));
         let n = notice_for(&mut app, issue);
         assert_eq!(n.kind, NoticeKind::BluetoothOnlyNotFound);
         assert_eq!(n.title, "No UNI-T UT60BT found over Bluetooth");
@@ -849,15 +775,10 @@ mod tests {
         );
         assert!(n.feedback_link.is_some());
 
-        let stack = Error::Bluetooth(dmm_lib::error::BluetoothIssue::PoweredOff);
+        let stack = || Error::Bluetooth(dmm_lib::error::BluetoothIssue::PoweredOff);
         let n = notice_for(
             &mut app,
-            ConnectionIssue::from_error(
-                &crate::l10n::english(),
-                &stack,
-                None,
-                Some(ut60bt.listing()),
-            ),
+            ConnectionIssue::from_error(stack(), None, Some(ut60bt.listing())),
         );
         assert_eq!(n.kind, NoticeKind::BluetoothUnreachable);
         assert_eq!(n.title, "Bluetooth: turned off on this computer");
@@ -866,12 +787,7 @@ mod tests {
             crate::l10n::english().help().sections(&own_steps)
         );
 
-        let issue = ConnectionIssue::from_error(
-            &crate::l10n::english(),
-            &missed(BluetoothOnlyMiss::SwitchedOff),
-            None,
-            None,
-        );
+        let issue = ConnectionIssue::of(missed(BluetoothOnlyMiss::SwitchedOff));
         let n = notice_for(&mut app, issue);
         assert_eq!(n.kind, NoticeKind::BluetoothNotSearched);
         assert_eq!(n.title, "Bluetooth not searched");
@@ -883,15 +799,45 @@ mod tests {
         assert!(n.sections.is_empty());
 
         let ut61eplus = registry::find_device("ut61eplus").expect("registry entry");
-        assert!(matches!(
-            ConnectionIssue::from_error(
-                &crate::l10n::english(),
-                &stack,
-                None,
-                Some(ut61eplus.listing())
-            ),
-            ConnectionIssue::Other(_)
+        let issue = ConnectionIssue::from_error(stack(), None, Some(ut61eplus.listing()));
+        assert_eq!(issue.diagnosis(), Some(&Diagnosis::Other));
+    }
+
+    /// A failure on record is worded on every frame, so a language switch
+    /// reaches the notice's body and the reconnect hover, not only the parts
+    /// around them.
+    #[test]
+    fn a_notice_follows_a_language_switch() {
+        let options = dmm_shared::l10n::Options {
+            pseudo: true,
+            ..Default::default()
+        };
+        let pseudo = std::sync::Arc::new(Localizer::new(
+            &dmm_shared::l10n::EN_US,
+            &crate::l10n::resources(),
+            &options,
         ));
+        let mut app = app("ut61eplus");
+        for issue in [cp2110_silent, || {
+            ConnectionIssue::of(Error::AdapterNotFound("ABC123".to_string()))
+        }] {
+            app.l10n = crate::l10n::english();
+            let english = notice_for(&mut app, issue()).body;
+            assert!(!english.starts_with('['), "{english}");
+            app.l10n = pseudo.clone();
+            let body = app.connection_notice().expect("still on record").body;
+            assert!(body.starts_with('['), "{body}");
+        }
+
+        app.l10n = crate::l10n::english();
+        app.connection.reconnect_last_error = Some(Error::LinkLost);
+        let english = app.reconnecting_hover();
+        app.l10n = pseudo;
+        let hover = app.reconnecting_hover();
+        assert_ne!(hover, english);
+        // The error itself is worded again too, not only the sentence around it.
+        let quoted = crate::l10n::english().error(&Error::LinkLost);
+        assert!(!hover.contains(&quoted), "{hover}");
     }
 
     /// The waiting notice is measured to fit the big meter's window, so its
@@ -930,30 +876,42 @@ mod tests {
     /// travelled as the sentinel string "__device_not_found__".
     #[test]
     fn adapter_error_is_classified_with_its_selector() {
-        let issue = ConnectionIssue::from_error(
-            &crate::l10n::english(),
-            &dmm_lib::error::Error::AdapterNotFound("ABC123".to_string()),
-            None,
-            None,
+        let mut app = app("ut61eplus");
+        let n = notice_for(
+            &mut app,
+            ConnectionIssue::of(Error::AdapterNotFound("ABC123".to_string())),
         );
-        let ConnectionIssue::AdapterNotFound { help } = issue else {
-            panic!("expected AdapterNotFound, got {issue:?}");
-        };
-        assert!(help.contains("ABC123"), "got {help}");
+        assert_eq!(n.kind, NoticeKind::AdapterNotFound);
+        assert!(n.body.contains("ABC123"), "got {}", n.body);
         // A USB device that is no cable gets the same help, quoting why.
-        let issue = ConnectionIssue::from_error(
-            &crate::l10n::english(),
-            &dmm_lib::error::Error::NotAnAdapter("/dev/hidraw3".to_string()),
-            None,
-            None,
+        let n = notice_for(
+            &mut app,
+            ConnectionIssue::of(Error::NotAnAdapter("/dev/hidraw3".to_string())),
         );
-        let ConnectionIssue::AdapterNotFound { help } = issue else {
-            panic!("expected AdapterNotFound, got {issue:?}");
-        };
+        assert_eq!(n.kind, NoticeKind::AdapterNotFound);
         assert!(
-            help.contains("'/dev/hidraw3 (device exists but is not a supported USB adapter)'"),
-            "got {help}"
+            n.body
+                .contains("'/dev/hidraw3 (device exists but is not a supported USB adapter)'"),
+            "got {}",
+            n.body
         );
+    }
+
+    /// Only a real list of what the bus held is worth the hint to restart
+    /// with another selector; "nothing connected" and "couldn't look" are
+    /// complete on their own.
+    #[test]
+    fn only_a_listed_bus_gets_the_restart_hint() {
+        let l10n = crate::l10n::english();
+        let restart = tr!(l10n, "connection-adapter-restart").into_owned();
+        let listed = ConnectedAdapters::Listed(vec!["  [0] a cable".to_string()]);
+        let help = adapter_not_found_help(&l10n, "ABC123", &listed);
+        assert!(help.contains("[0] a cable"), "{help}");
+        assert!(help.contains(&restart), "{help}");
+        for adapters in [ConnectedAdapters::None, ConnectedAdapters::Unavailable] {
+            let help = adapter_not_found_help(&l10n, "ABC123", &adapters);
+            assert!(!help.contains(&restart), "{adapters:?}: {help}");
+        }
     }
 
     /// `DeviceNotIdentified` is an `ErrorKind::Timeout`, which would land it
@@ -961,18 +919,13 @@ mod tests {
     /// device nobody selected. It is matched by variant for that reason.
     #[test]
     fn nothing_answering_the_probe_is_its_own_case() {
-        let issue = ConnectionIssue::from_error(
-            &crate::l10n::english(),
-            &dmm_lib::error::Error::DeviceNotIdentified {
-                bridge: "CP2110",
-                built_in_radio: false,
-            },
-            None,
-            None,
-        );
-        let ConnectionIssue::NotIdentified { help } = issue else {
-            panic!("expected NotIdentified, got {issue:?}");
-        };
+        let issue = ConnectionIssue::of(Error::DeviceNotIdentified {
+            bridge: "CP2110",
+            built_in_radio: false,
+        });
+        let n = notice_for(&mut app("ut61eplus"), issue);
+        assert_eq!(n.kind, NoticeKind::NotIdentified);
+        let help = n.body;
         assert!(help.contains("UT61E+"), "got {help}");
         assert!(help.contains("Long press the USB/Hz button"), "got {help}");
         // gui.md: user-facing text names the cable, never the bridge chip.
@@ -987,18 +940,13 @@ mod tests {
     /// the cable's own name, which its steps use.
     #[test]
     fn nothing_answering_on_the_bu86x_offers_the_brymen_meters() {
-        let issue = ConnectionIssue::from_error(
-            &crate::l10n::english(),
-            &dmm_lib::error::Error::DeviceNotIdentified {
-                bridge: "BU-86X",
-                built_in_radio: false,
-            },
-            None,
-            None,
-        );
-        let ConnectionIssue::NotIdentified { help } = issue else {
-            panic!("expected NotIdentified, got {issue:?}");
-        };
+        let issue = ConnectionIssue::of(Error::DeviceNotIdentified {
+            bridge: "BU-86X",
+            built_in_radio: false,
+        });
+        let n = notice_for(&mut app("ut61eplus"), issue);
+        assert_eq!(n.kind, NoticeKind::NotIdentified);
+        let help = n.body;
         for model in ["BM869s", "BM829s", "BM525s"] {
             assert!(help.contains(model), "{model}: got {help}");
         }
@@ -1043,7 +991,7 @@ mod tests {
                 link: Some(dmm_lib::transport::Link::Bluetooth),
                 ..ConnectedMeter::test_fixture(None)
             });
-            let n = notice_for(&mut app, ConnectionIssue::NoResponse);
+            let n = notice_for(&mut app, ConnectionIssue::of(Error::Timeout));
             assert_eq!(n.kind, NoticeKind::NoResponse);
             assert!(
                 n.body
@@ -1086,16 +1034,8 @@ mod tests {
     fn a_missing_adapter_is_the_device_not_found_case() {
         for bluetooth_searched in [false, true] {
             assert_eq!(
-                ConnectionIssue::from_error(
-                    &crate::l10n::english(),
-                    &dmm_lib::error::Error::NoTransportFound {
-                        cables: Vec::new(),
-                        bluetooth_searched
-                    },
-                    None,
-                    None,
-                ),
-                ConnectionIssue::DeviceNotFound { bluetooth_searched }
+                not_found(bluetooth_searched).diagnosis(),
+                Some(&Diagnosis::NotFound { bluetooth_searched })
             );
         }
     }
@@ -1105,35 +1045,34 @@ mod tests {
     /// could not contain the address anyway.
     #[test]
     fn an_unanswered_address_is_classified_as_a_bluetooth_failure() {
-        let issue = ConnectionIssue::from_error(
-            &crate::l10n::english(),
-            &dmm_lib::error::Error::AdapterNotFound("12:34:56:78:9A:BC".to_string()),
-            None,
-            None,
-        );
-        let expected = if dmm_lib::is_bluetooth_selector("12:34:56:78:9A:BC") {
-            ConnectionIssue::BluetoothNotFound {
-                address: "12:34:56:78:9A:BC".to_string(),
-            }
+        let issue = ConnectionIssue::of(Error::AdapterNotFound("12:34:56:78:9A:BC".to_string()));
+        let ConnectionIssue::Lib {
+            diagnosis,
+            adapters,
+            ..
+        } = issue
+        else {
+            panic!("a library failure");
+        };
+        if dmm_lib::is_bluetooth_selector("12:34:56:78:9A:BC") {
+            assert_eq!(
+                diagnosis,
+                Diagnosis::NothingAtAddress {
+                    address: "12:34:56:78:9A:BC".to_string()
+                }
+            );
+            assert!(adapters.is_none(), "the bus was walked for an address");
         } else {
             // A build without the radio has no link that value could name.
-            ConnectionIssue::AdapterNotFound {
-                help: adapter_not_found_help(&crate::l10n::english(), "12:34:56:78:9A:BC"),
-            }
-        };
-        assert_eq!(issue, expected);
+            assert_eq!(diagnosis, Diagnosis::AdapterNotFound);
+        }
     }
 
     /// A timeout is the quiet meter, whatever reported it.
     #[test]
     fn a_timeout_is_no_response() {
-        let issue = ConnectionIssue::from_error(
-            &crate::l10n::english(),
-            &dmm_lib::error::Error::Timeout,
-            None,
-            None,
-        );
-        assert_eq!(issue, ConnectionIssue::NoResponse);
+        let issue = ConnectionIssue::of(Error::Timeout);
+        assert_eq!(issue.diagnosis(), Some(&Diagnosis::NoResponse));
     }
 
     /// Any other failure shows its own words under a fixed title, never the
@@ -1144,20 +1083,15 @@ mod tests {
         let mut app = app("ut61eplus");
         let ut61eplus = registry::find_device("ut61eplus").expect("registry entry");
         for err in [
-            dmm_lib::error::Error::WrongCable {
+            Error::WrongCable {
                 cable: "BU-86X",
                 model: "UNI-T UT61E+",
             },
-            dmm_lib::error::Error::Bluetooth(dmm_lib::error::BluetoothIssue::PoweredOff),
+            Error::Bluetooth(dmm_lib::error::BluetoothIssue::PoweredOff),
         ] {
             let text = crate::l10n::english().error(&err);
-            let issue = ConnectionIssue::from_error(
-                &crate::l10n::english(),
-                &err,
-                None,
-                Some(ut61eplus.listing()),
-            );
-            assert_eq!(issue, ConnectionIssue::Other(text.clone()));
+            let issue = ConnectionIssue::from_error(err, None, Some(ut61eplus.listing()));
+            assert_eq!(issue.diagnosis(), Some(&Diagnosis::Other));
             let n = notice_for(&mut app, issue);
             assert_eq!(n.kind, NoticeKind::Failed);
             assert_eq!(n.title, "Connection failed");
@@ -1175,19 +1109,8 @@ mod tests {
     #[test]
     fn unreadable_data_is_not_a_quiet_meter() {
         let mut app = app("ut61eplus");
-        let issue = ConnectionIssue::from_error(
-            &crate::l10n::english(),
-            &dmm_lib::error::Error::ChecksumMismatch {
-                expected: 0x01a3,
-                actual: 0x0003,
-            },
-            None,
-            None,
-        );
-        assert_eq!(
-            issue,
-            ConnectionIssue::BadData("checksum mismatch: expected 0x01a3, got 0x0003".to_string())
-        );
+        let issue = checksum_mismatch();
+        assert_eq!(issue.diagnosis(), Some(&Diagnosis::BadData));
         app.connection.state = ConnectionState::Connected;
         let n = notice_for(&mut app, issue);
         assert_eq!(n.kind, NoticeKind::BadData);
@@ -1202,10 +1125,7 @@ mod tests {
     fn unreadable_data_at_the_open_says_to_click_connect() {
         let mut app = app("ut61eplus");
         app.connection.state = ConnectionState::Disconnected;
-        let n = notice_for(
-            &mut app,
-            ConnectionIssue::BadData("checksum mismatch: expected 0x01a3, got 0x0003".to_string()),
-        );
+        let n = notice_for(&mut app, checksum_mismatch());
         assert_eq!(n.kind, NoticeKind::BadData);
         assert_eq!(
             n.body,
@@ -1221,7 +1141,10 @@ mod tests {
         app.connection.state = ConnectionState::Connected;
         let n = notice_for(
             &mut app,
-            ConnectionIssue::BadData("invalid response: \u{1b}[2J".to_string()),
+            ConnectionIssue::of(Error::InvalidResponse {
+                message: "\u{1b}[2J".to_string(),
+                raw: Vec::new(),
+            }),
         );
         assert_eq!(n.body, "invalid response: \\u{1b}[2J");
     }
@@ -1232,14 +1155,9 @@ mod tests {
     /// text arriving with an "adapter not found: " prefix from elsewhere.
     #[test]
     fn a_mention_of_the_phrase_is_not_the_adapter_case() {
-        let issue = ConnectionIssue::from_error(
-            &crate::l10n::english(),
-            &dmm_lib::error::Error::UnknownDevice(
-                "meter reports adapter not found somewhere".to_string(),
-            ),
-            None,
-            None,
-        );
-        assert!(matches!(issue, ConnectionIssue::Other(_)));
+        let issue = ConnectionIssue::of(Error::UnknownDevice(
+            "meter reports adapter not found somewhere".to_string(),
+        ));
+        assert_eq!(issue.diagnosis(), Some(&Diagnosis::Other));
     }
 }

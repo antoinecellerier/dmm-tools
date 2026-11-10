@@ -811,9 +811,12 @@ timestamp,mode,value,unit,range,flags,marker,note
     #[test]
     fn an_import_drops_the_connection_notice() {
         let mut app = test_app();
-        app.connection.last_error = Some(ConnectionIssue::DeviceNotFound {
-            bluetooth_searched: true,
-        });
+        app.connection.last_error = Some(ConnectionIssue::of(
+            dmm_lib::error::Error::NoTransportFound {
+                cables: Vec::new(),
+                bluetooth_searched: true,
+            },
+        ));
         assert!(app.connection_notice().is_some());
         let path = file("after-failure.csv", CSV);
         import(&mut app, path.clone());
