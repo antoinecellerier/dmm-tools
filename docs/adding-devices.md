@@ -164,7 +164,7 @@ The protocol code lives in `crates/dmm-lib/src/protocol/<family>/`. The CLI and 
 **A new UT61+ model** (the same protocol, its own dial and ranges):
 
 1. Add `protocol/ut61eplus/tables/<model>.rs` with its `static` `ModelTable`: its model name, an `entry` function matching each mode to its range rows, and whatever it does differently from `BASE` (dial, Peak modes, commands). Declare it in `tables/mod.rs`.
-2. In `ut61eplus/devices.rs`, add its `SelectableDevice` entry and a function that builds its protocol with `Ut61PlusProtocol::model`: the entry, its table, its `Stability`, its `SpecModel` (`SpecModel::Untranscribed` until its spec tables exist) and its verification issue. The entry's `new_protocol` calls that function. List the entry in `DEVICES`, and in `MODELS` in the same order.
+2. In `ut61eplus/devices.rs`, add its `SelectableDevice` entry and a function that builds its protocol with `Ut61PlusProtocol::model`: the entry, its table, its `Stability`, its `SpecModel` (`SpecModel::Untranscribed` until its spec tables exist) and its verification issue. The entry's `new_protocol` calls that function. List the entry in `DEVICES` (`registry.rs`) and in `MODELS`, in the same order, and add its issue at the same place in the test in `ut61eplus/mod.rs` that lists each model's issue.
 
 `ModelTable` and `SpecModel` belong to the UT61+ family alone. Other families lay out their models their own way, such as `Vc8x0Model` in `vc8x0/` or the per-model parsers in `ut80x/`; a new model there follows its family's `mod.rs`.
 
@@ -267,10 +267,11 @@ Once verified:
 Update these in the same commit as the code:
 
 - The verification issue — the exception to "same commit": it is posted after the code and linked in a commit of its own (Phase 4). One issue per model name prefix: UT71A–E share one, a rebrand under another name gets its own, and a meter that reports only its packet layout gets one per layout entry, shared by the brands that send it. Its checklist is the `--list-steps --format md` output; `DeviceProfile.verification_issue`, the README row and the catalog's Status link it
-- `README.md` — hand-edit the supported-devices table: one row per verification issue, abbreviated model runs, a USB and a Bluetooth status. What its test checks is in [Generated doc tables](development.md#generated-doc-tables)
+- `README.md` — hand-edit the supported-devices table: one row per verification issue, abbreviated model runs, a USB and a Bluetooth status. What its test checks is in [Generated doc tables](development.md#generated-doc-tables). The translated `README.<lang>.md` copies take the row at the release step ([User documentation](localization-design.md#user-documentation))
 - `docs/cli-reference.md` — regenerate the `--device` table ([Generated doc tables](development.md#generated-doc-tables)), and hand-edit the surrounding prose and anything the device adds to the CLI
 - `docs/supported-devices.md` — add or update the device entry. Counts, form factor, cable and VID:PID live here; the generated `--device` table links here rather than repeating them
 - `docs/protocol.md` — index entry pointing at the new family's spec
+- `CLAUDE.md` — a new family in its list of protocol families
 - `docs/detection-design.md` — a row in the cascade table for the probe the family answers to, or in its unprompted line if the meter streams by itself
 - `docs/research/<family>/verification.md` — the open checks, in the shape `.claude/rules/verification-docs.md` gives; and a row in `docs/verification-backlog.md`'s family index and its "Device auto-detection" table, for what detection sends this family and what it expects back
 - `docs/gui-reference.md` — if the device adds new GUI behavior
