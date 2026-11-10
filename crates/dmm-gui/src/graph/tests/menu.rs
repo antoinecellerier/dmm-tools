@@ -426,7 +426,7 @@ fn the_menu_sets_and_removes_alarm_limits() {
     };
     let watched = crate::graph::WatchedLimits {
         limits: dmm_lib::alarm::Limits::check(None, Some(v)).unwrap(),
-        scaled: false,
+        unit: dmm_lib::alarm::LimitUnit::Base,
     };
     MENU_SCENE.set((crate::markers::Markers::default(), Some(watched), None));
     let ctx = open_menu(&mut g, |plot| plot.center() + egui::vec2(0.0, 2.0));

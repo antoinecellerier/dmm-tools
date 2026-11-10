@@ -774,7 +774,7 @@ timestamp,mode,value,unit,range,flags,marker,note
         import(&mut app, path.clone());
         // Nor does the alarm judge the file's readings, or draw its limits,
         // as scaled.
-        assert!(!app.alarm_scaled());
+        assert_eq!(app.alarm_limit_unit(), dmm_lib::alarm::LimitUnit::Base);
         let first = app
             .capture
             .recording

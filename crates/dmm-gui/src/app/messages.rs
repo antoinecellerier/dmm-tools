@@ -972,7 +972,7 @@ impl App {
         self.place_replay_marker(&m);
         // After the file's marker: a breach on the same reading adds its note
         // to that marker rather than pushing it on.
-        let breach = self.check_alarm(&m, self.alarm_scaled());
+        let breach = self.check_alarm(&m, self.alarm_limit_unit());
         self.apply_replay_view(&m);
         // Specs are attached to each measurement by `Dmm::request_measurement`;
         // last_measurement.spec / .mode_spec is what render code reads.

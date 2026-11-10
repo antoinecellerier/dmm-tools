@@ -6,7 +6,7 @@
 //! remove one at a height (`MenuAction::SetLimit`).
 
 use super::Graph;
-use dmm_lib::alarm::Limits;
+use dmm_lib::alarm::{LimitUnit, Limits};
 
 /// One of the alarm's two limits.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -19,11 +19,10 @@ pub(crate) enum LimitSide {
 /// each frame it draws.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub(crate) struct WatchedLimits {
-    /// In base units, or the scale's unit when `scaled`.
+    /// In base units, or in the scale's unit under [`LimitUnit::Shown`].
     pub(crate) limits: Limits,
-    /// Readings go through a software transform, so the limits are already
-    /// in the plotted unit.
-    pub(crate) scaled: bool,
+    /// The unit the limits are in for the plotted readings.
+    pub(crate) unit: LimitUnit,
 }
 
 impl Graph {
@@ -39,7 +38,7 @@ impl Graph {
         if self.current_series.is_some() || self.levels {
             return Vec::new();
         }
-        let limits = watched.limits.in_unit(&self.current_unit, watched.scaled);
+        let limits = watched.limits.in_unit(&self.current_unit, watched.unit);
         [(limits.high, LimitSide::High), (limits.low, LimitSide::Low)]
             .into_iter()
             .filter_map(|(v, side)| Some((v?, side)))
@@ -57,7 +56,7 @@ mod tests {
         g.current_unit = "mV".to_string();
         let watched = WatchedLimits {
             limits: Limits::check(None, Some(5.0)).unwrap(),
-            scaled: false,
+            unit: LimitUnit::Base,
         };
         assert!(g.limit_lines(None).is_empty());
         assert_eq!(
