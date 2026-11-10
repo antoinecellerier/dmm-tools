@@ -375,6 +375,29 @@ pub(crate) fn warn_other_model(dmm: &BoxedDmm, device: &'static SelectableDevice
     );
 }
 
+/// Say, once a run, that the meter's packets are another model's than the
+/// one opened, and what to pass instead. After a reading: the packets say it.
+pub(crate) fn warn_other_data<T: dmm_lib::transport::Transport>(dmm: &dmm_lib::Dmm<T>) {
+    static TOLD: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+    let Some(named) = dmm.sends_other_model() else {
+        return;
+    };
+    if TOLD.swap(true, std::sync::atomic::Ordering::Relaxed) {
+        return;
+    }
+    let l = crate::l10n::get();
+    let help = l.help();
+    let pick = picked_row();
+    // Both halves by the names the pick's brand sells them under.
+    let shown = registry::named_under_pick(pick, named).display_name();
+    eprintln!(
+        "{} {} {}",
+        warning_label(),
+        help.other_data(&prose_name(shown), &prose_name(profile_name(dmm.profile()))),
+        help.cli_choose_meter(MeterChoice::Entry(named), pick)
+    );
+}
+
 /// Ask for a report, once per run, when a meter sent data no parser knows:
 /// what it sent, where to report it and the command whose output to
 /// attach, which names the entry with `--device`, not left to detection —

@@ -36,7 +36,7 @@ use crate::protocol::{
 use crate::specs::{ModeSpecInfo, ModeSpecs, SpecInfo, SpecSheetTable};
 use crate::transport::Transport;
 use layout::{Layout, Showing};
-use log::{debug, warn};
+use log::{debug, info};
 
 /// The packet being decoded, for reporting what in it no spec section
 /// covers, under the registry id of the layout it was decoded with.
@@ -61,9 +61,9 @@ pub(crate) struct ZotekProtocol {
     /// The layout the entry is named for.
     layout: &'static Layout,
     profile: DeviceProfile,
-    /// Whether this connection has already said the meter sends another
-    /// layout than the entry's.
-    warned_layout: bool,
+    /// The other layout the meter was seen sending on this connection, the
+    /// first time a packet showed one.
+    other: Option<&'static Layout>,
     /// The type byte of the last packet decoded on this connection, and
     /// what it showed, which the key codes follow; `None` before the first.
     showing: Option<(u8, Showing)>,
@@ -86,7 +86,7 @@ impl ZotekProtocol {
                 verification_issue: Some(issue),
                 meter_keys: keys::meter_keys(layout),
             },
-            warned_layout: false,
+            other: None,
             showing: None,
             specs: &[],
         }
@@ -125,11 +125,11 @@ impl ZotekProtocol {
     /// The layout a packet of `type_byte` is in, the first time it is not
     /// the entry's on this connection; `None` every other time.
     fn other_layout(&mut self, type_byte: u8) -> Option<&'static Layout> {
-        if self.warned_layout || type_byte == self.layout.type_byte {
+        if self.other.is_some() || type_byte == self.layout.type_byte {
             return None;
         }
         let other = layout::for_type(type_byte)?;
-        self.warned_layout = true;
+        self.other = Some(other);
         Some(other)
     }
 }
@@ -166,7 +166,9 @@ impl Protocol for ZotekProtocol {
             LOG,
         )?;
         if let Some(other) = self.other_layout(packet[frame::TYPE_AT]) {
-            warn!(
+            // A fact for the log: the apps say it, with what to pick
+            // (`Protocol::sends_other_entry`).
+            info!(
                 "zotek: the meter sends the {} layout (entry {}), not the {} it was opened as",
                 other.entry.model, other.entry.id, self.layout.entry.model
             );
@@ -180,6 +182,10 @@ impl Protocol for ZotekProtocol {
     /// and a replay file stores it; it is decoded by its own type byte.
     fn parse_payload(&self, payload: &[u8]) -> Result<Measurement> {
         layout::decode(payload)
+    }
+
+    fn sends_other_entry(&self) -> Option<&'static crate::protocol::registry::SelectableDevice> {
+        self.other.map(|layout| layout.entry)
     }
 
     /// Press a remote key, one of those the entry's profile lists. The codes
@@ -315,8 +321,9 @@ mod tests {
         let m = proto.request_measurement(&mock).unwrap();
         assert_eq!(m.raw_payload, plain);
         assert_eq!(m.aux_values.len(), 1, "decoded as type 4");
-        assert!(proto.warned_layout);
-        assert!(proto.other_layout(4).is_none(), "warned once");
+        // The apps learn which entry to offer from the handle.
+        assert_eq!(proto.sends_other_entry().map(|e| e.id), Some("zt5566se"));
+        assert!(proto.other_layout(4).is_none(), "said once");
         mock.push_response(raw.to_vec());
         assert!(proto.request_measurement(&mock).is_ok());
 

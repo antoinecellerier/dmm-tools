@@ -292,6 +292,13 @@ impl<T: Transport> Dmm<T> {
         (named.id != self.protocol.profile().id).then_some(named)
     }
 
+    /// The entry whose data the meter sends, once its packets showed it is
+    /// another model than the one this session was opened as
+    /// ([`Protocol::sends_other_entry`]).
+    pub fn sends_other_model(&self) -> Option<&'static SelectableDevice> {
+        self.protocol.sends_other_entry()
+    }
+
     /// The name the meter already gave on this link, without asking it: for
     /// a caller that shows the name only when it costs nothing.
     pub fn known_name(&self) -> Option<&str> {

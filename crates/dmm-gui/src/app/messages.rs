@@ -725,6 +725,20 @@ impl App {
                 DmmMessage::LateReadings(notice) => {
                     self.connection.late_readings = Some(notice);
                 }
+                DmmMessage::OtherData { named, opened } => {
+                    // Both by the names the pick's brand sells them under.
+                    let pick = self.picked_listing();
+                    let shown = registry::named_under_pick(pick, named).display_name();
+                    let opened = registry::connected_listing(pick, opened).display_name();
+                    let label = |name| self.l10n.label(dmm_lib::text::TextKind::Model, name);
+                    let help = self.l10n.help();
+                    let message = format!(
+                        "{} {}",
+                        help.other_data(&label(shown), &label(opened)),
+                        help.gui_choose_meter(MeterChoice::Entry(named), pick)
+                    );
+                    self.toast = Some(Toast::error(message));
+                }
             }
         }
 
@@ -1865,6 +1879,34 @@ mod tests {
         assert_eq!(
             detected_device_to_save("ut61eplus", true, false, Some("ut161e")),
             Some("ut161e")
+        );
+    }
+
+    /// A meter whose packets are another model's says so, with that model
+    /// to pick, by the names the app shows.
+    #[test]
+    fn another_models_data_names_the_one_to_pick() {
+        let mut app = app("zt300ab", false);
+        app.connection.state = ConnectionState::Connected;
+        let named = dmm_lib::protocol::registry::find_device("zt5566se").expect("an entry");
+        let opened = dmm_lib::protocol::registry::find_device("zt300ab").expect("an entry");
+        app.deliver(DmmMessage::OtherData { named, opened });
+        let toast = app.toast.take().expect("a toast");
+        assert!(
+            toast.message.starts_with(&format!(
+                "The meter sends {} data, not the ",
+                named.display_name()
+            )),
+            "{}",
+            toast.message
+        );
+        assert!(
+            toast.message.ends_with(&format!(
+                "Pick {} or Auto-detect in Settings (\u{2699}).",
+                named.display_name()
+            )),
+            "{}",
+            toast.message
         );
     }
 

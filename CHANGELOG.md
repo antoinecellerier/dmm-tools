@@ -8,6 +8,7 @@
 - **"No USB cable found" says when Bluetooth wasn't searched** — and how to switch the search on.
 - **A refused mode or range switch says to check the dial**
 - **Data the meter sends that this tool doesn't know asks for a report** — the request only reached the log.
+- **A ZOTEK meter sending another model's data names the model to pick** — the notice only reached the log.
 
 ### CLI
 

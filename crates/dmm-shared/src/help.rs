@@ -256,6 +256,12 @@ impl<'a> Help<'a> {
         tr!(self.0, "other-model", reported = reported, picked = picked)
     }
 
+    /// That the meter's packets are `named`'s, not `opened`'s; each app
+    /// follows it with what to pick.
+    pub fn other_data(self, named: &str, opened: &str) -> Cow<'a, str> {
+        tr!(self.0, "other-data", named = named, opened = opened)
+    }
+
     /// That the meter sent data no parser knows, as `report` has it; each
     /// app follows it with how to report it.
     pub fn unrecognised_data(self, report: &dmm_lib::protocol::Unrecognised) -> Cow<'a, str> {

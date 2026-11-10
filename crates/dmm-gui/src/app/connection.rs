@@ -325,6 +325,13 @@ pub(crate) enum DmmMessage {
     /// The link hands readings over two at a time: what to tell the user,
     /// once per connection.
     LateReadings(dmm_lib::transport::LateReadings),
+    /// The meter's packets are `named`'s, not those of `opened`, the entry
+    /// it was opened as: once per Connect, as a reconnect reopens the same
+    /// pick.
+    OtherData {
+        named: &'static registry::SelectableDevice,
+        opened: &'static registry::SelectableDevice,
+    },
 }
 
 /// Extract profile info from a newly opened device, optionally query its name,
@@ -599,6 +606,7 @@ where
     }
     let mut stream = new_stream(&mut dmm, tick, simulated, &stop_flag, &wake);
     let mut protocol_errors: u32 = 0;
+    let mut told_other_data = false;
     let mut paused = false;
     let mut last_keys: ListedKeys = Default::default();
     loop {
@@ -654,6 +662,13 @@ where
                 }
                 if let Some(notice) = stream.take_late_readings() {
                     let _ = msg_tx.send(DmmMessage::LateReadings(notice));
+                }
+                if !told_other_data
+                    && let Some(named) = stream.dmm().sends_other_model()
+                    && let Some(opened) = registry::find_device(stream.dmm().profile().id)
+                {
+                    told_other_data = true;
+                    let _ = msg_tx.send(DmmMessage::OtherData { named, opened });
                 }
                 // A new mode or range can change the reading's width, the one
                 // layout change that arrives without input: give it egui's

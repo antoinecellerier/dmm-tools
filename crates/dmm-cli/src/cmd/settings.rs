@@ -159,6 +159,7 @@ fn run_get<T: dmm_lib::transport::Transport>(
 ) -> Result<(), crate::l10n::Failure> {
     let model_name = crate::open::profile_name(dmm.profile());
     let reading = dmm.request_measurement()?;
+    crate::open::warn_other_data(dmm);
 
     let Some(setting) = setting else {
         let offered = offered_settings(dmm, &reading);
@@ -215,6 +216,7 @@ fn run_set_within<T: dmm_lib::transport::Transport>(
 ) -> Result<(), crate::l10n::Failure> {
     let model_name = crate::open::profile_name(dmm.profile());
     let reading = dmm.request_measurement()?;
+    crate::open::warn_other_data(dmm);
     let choices = dmm.choices(setting, &reading);
 
     if !offers_a_switch(&choices) {

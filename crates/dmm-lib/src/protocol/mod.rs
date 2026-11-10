@@ -888,6 +888,14 @@ pub trait Protocol: Send {
         None
     }
 
+    /// The registry entry whose data the meter sends, once a packet showed
+    /// it is another model than this entry's, for the apps to say which to
+    /// pick. Default `None`: a family whose packets don't tell its models
+    /// apart.
+    fn sends_other_entry(&self) -> Option<&'static registry::SelectableDevice> {
+        None
+    }
+
     /// Whether the meter wants [`Protocol::get_name`] answered before `init`
     /// starts it on `transport`. [`crate::Dmm`] asks, or uses the name it
     /// already has, then runs `init`; the protocol keeps no name of its own.

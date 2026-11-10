@@ -116,6 +116,10 @@ other-model = The meter reports "{ $reported }", not the { $picked } selected.
 # The same when detection opened the meter, without hearing its name in
 # time, as $picked; $reported as above.
 other-model-detected = The meter reports "{ $reported }"; detection opened it as the { $picked }.
+# The meter's packets are another model's than the one it was opened as:
+# $named is that model, e.g. ZOYI / ZOTEK ZT-5566SE; $opened the one opened,
+# e.g. ZOYI / ZOTEK ZT-300AB. Each app follows it with what to pick.
+other-data = The meter sends { $named } data, not the { $opened } it was opened as.
 # The meter sent data this tool doesn't read yet, said once per run. $meter
 # is the meter, e.g. UNI-T UT61E+; $detail what it sent, in English, e.g.
 # mode byte: 0x7f. Each app follows it with how to report it.

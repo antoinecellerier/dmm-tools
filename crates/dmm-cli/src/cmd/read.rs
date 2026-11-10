@@ -1112,6 +1112,7 @@ fn run_read_loop<T: dmm_lib::transport::Transport>(
         crate::open::warn_unrecognised();
         match event {
             Ok(StreamEvent::Measurement(m)) => {
+                crate::open::warn_other_data(stream.dmm());
                 let due = markers.front().zip(start).is_some_and(|(next, start)| {
                     start
                         .checked_add(next.offset)
