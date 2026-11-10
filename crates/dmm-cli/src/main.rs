@@ -20,7 +20,7 @@ use cmd::read::ReadPlan;
 use cmd::settings::{cmd_get, cmd_set};
 use console::style;
 use dmm_lib::protocol::registry::{self, SelectableDevice, Selection};
-use dmm_shared::help::LinksSearched;
+use dmm_shared::help::{Diagnosis, LinksSearched};
 use dmm_shared::l10n::{Localizer, arg_errors, help_layout};
 use dmm_shared::tr;
 use l10n::{Localized, error_label};
@@ -250,86 +250,74 @@ fn report_failure(
 ) -> ! {
     error!("{e}");
     let msg = l10n::error_text(l, e);
-    // The activation instructions belong to one meter, so they are only
-    // printed once one is settled on: the one named, or the one detection
-    // found before the meter went quiet.
-    if meter_went_quiet(e)
-        && let Some(device) = opened_device(selection)
-    {
+    let extra = extra_help(e, selection, adapter);
+    if let Extra::NoResponse(device) = extra {
         print_no_response_help(device);
-    } else {
-        eprintln!("{} {msg}", error_label());
-        if let Some(address) = unreachable_adapter(e, adapter) {
-            print_setup_sections(LinksSearched::BluetoothAt(address));
-        } else if let Some(device) = unreachable_bluetooth_only(e, selection) {
-            print_setup_sections(LinksSearched::BluetoothOnly {
-                model: &open::prose_name(open::meter_name(device)),
-                activation: device.activation_instructions,
-            });
-        } else if bluetooth_switched_off(e) {
-            eprintln!(
-                "{}",
-                style(l.help().cli_bluetooth_off_hint(no_bluetooth)).yellow()
-            );
+        std::process::exit(1);
+    }
+    eprintln!("{} {msg}", error_label());
+    match extra {
+        Extra::BluetoothAt(address) => {
+            print_setup_sections(LinksSearched::BluetoothAt(&address));
         }
+        Extra::BluetoothOnly { model, activation } => {
+            print_setup_sections(LinksSearched::BluetoothOnly {
+                model: &open::prose_name(model),
+                activation,
+            });
+        }
+        Extra::OffHint => eprintln!(
+            "{}",
+            style(l.help().cli_bluetooth_off_hint(no_bluetooth)).yellow()
+        ),
+        Extra::NoResponse(_) | Extra::None => {}
     }
     std::process::exit(1);
 }
 
-/// Whether `error` is the meter going quiet, which its activation steps
-/// answer. Matched on the variant rather than the message: hidapi names its
-/// `hid_read_timeout` call in the error a pulled cable raises, and some
-/// errors quote the user's own arguments back. Not `ErrorKind::Timeout`
-/// either: detection finding no meter is that kind too, and prints help of
-/// its own.
-fn meter_went_quiet(error: &(dyn std::error::Error + 'static)) -> bool {
-    matches!(
-        error.downcast_ref::<dmm_lib::error::Error>(),
-        Some(dmm_lib::error::Error::Timeout)
-    )
+/// What [`report_failure`] prints besides the error, or in its place.
+#[derive(Debug, PartialEq)]
+enum Extra {
+    /// The meter went quiet: its activation steps, in place of the error.
+    NoResponse(&'static SelectableDevice),
+    /// The stack could not reach the Bluetooth adapter at this address.
+    BluetoothAt(String),
+    /// The stack could not search for this meter with the radio built in.
+    BluetoothOnly {
+        model: &'static str,
+        activation: &'static str,
+    },
+    /// A meter with the radio built in, not looked for because the search
+    /// was switched off: the switch is ours to name.
+    OffHint,
+    None,
 }
 
-/// The Bluetooth address `--adapter` named, when `error` is the stack failing
-/// to reach it — most often a paired adapter that is asleep, which wants the
-/// same steps as an address nothing answered.
-fn unreachable_adapter<'a>(
-    error: &(dyn std::error::Error + 'static),
-    adapter: Option<&'a str>,
-) -> Option<&'a str> {
-    let stack_failed = matches!(
-        error.downcast_ref::<dmm_lib::error::Error>(),
-        Some(dmm_lib::error::Error::Bluetooth(_))
-    );
-    adapter.filter(|a| stack_failed && dmm_lib::is_bluetooth_selector(a))
-}
-
-/// The meter with the radio built in that `selection` named, when `error` is
-/// the stack failing to reach it: the steps that switch its radio on follow
-/// the stack's own words.
-fn unreachable_bluetooth_only(
+/// The help `error` gets from a run on `selection`, given `adapter`.
+///
+/// The activation steps belong to one meter, so they are only printed once
+/// one is settled on: the one named, or the one detection found before the
+/// meter went quiet. A failure the open's own help answered never comes
+/// here: it arrives as [`open::OpenFailed`].
+fn extra_help(
     error: &(dyn std::error::Error + 'static),
     selection: Selection,
-) -> Option<&'static SelectableDevice> {
-    let stack_failed = matches!(
-        error.downcast_ref::<dmm_lib::error::Error>(),
-        Some(dmm_lib::error::Error::Bluetooth(_))
-    );
-    match selection {
-        Selection::Device(device) if stack_failed && device.bluetooth_only() => Some(device),
-        _ => None,
+    adapter: Option<&str>,
+) -> Extra {
+    let Some(error) = error.downcast_ref::<dmm_lib::error::Error>() else {
+        return Extra::None;
+    };
+    match Diagnosis::of(error, adapter, open::picked(selection)) {
+        Diagnosis::NoResponse => opened_device(selection).map_or(Extra::None, Extra::NoResponse),
+        Diagnosis::AdapterUnreachable { address } => Extra::BluetoothAt(address),
+        Diagnosis::BluetoothOnlyUnreachable { model, activation } => {
+            Extra::BluetoothOnly { model, activation }
+        }
+        Diagnosis::BluetoothNotSearched(dmm_lib::error::BluetoothOnlyMiss::SwitchedOff) => {
+            Extra::OffHint
+        }
+        _ => Extra::None,
     }
-}
-
-/// Whether `error` is a meter with the radio built in that was not looked
-/// for because the search was switched off: the switch is ours to name.
-fn bluetooth_switched_off(error: &(dyn std::error::Error + 'static)) -> bool {
-    matches!(
-        error.downcast_ref::<dmm_lib::error::Error>(),
-        Some(dmm_lib::error::Error::BluetoothOnly {
-            miss: dmm_lib::error::BluetoothOnlyMiss::SwitchedOff,
-            ..
-        })
-    )
 }
 
 /// Whether this run may look for a Bluetooth adapter.
@@ -399,38 +387,55 @@ mod tests {
     #[test]
     fn only_a_switched_off_search_gets_the_switch() {
         use dmm_lib::error::{BluetoothOnlyMiss, Error};
-        let err = |miss| -> Box<dyn std::error::Error> {
-            Box::new(Error::BluetoothOnly {
-                model: "UT60BT",
-                activation: "",
-                miss,
-            })
+        let err = |miss| Error::BluetoothOnly {
+            model: "UT60BT",
+            activation: "",
+            miss,
         };
-        assert!(bluetooth_switched_off(&*err(
-            BluetoothOnlyMiss::SwitchedOff
-        )));
+        let ut60bt = selection("ut60bt");
+        assert_eq!(
+            extra_help(&err(BluetoothOnlyMiss::SwitchedOff), ut60bt, None),
+            Extra::OffHint
+        );
         for miss in [
             BluetoothOnlyMiss::NotInRange,
             BluetoothOnlyMiss::NotBuilt,
             BluetoothOnlyMiss::UsbAdapter,
         ] {
-            assert!(!bluetooth_switched_off(&*err(miss)), "{miss:?}");
+            assert_eq!(
+                extra_help(&err(miss), ut60bt, None),
+                Extra::None,
+                "{miss:?}"
+            );
         }
     }
 
-    /// Only a meter that went quiet gets its activation steps: a pulled cable
-    /// and an argument that happens to say "timeout" keep the plain error.
+    /// Only a meter that went quiet gets its activation steps, and only once
+    /// there is a meter to name: under Auto-detect, before detection found
+    /// one, the error stands alone (no test here runs a detection, so none
+    /// is on record). A pulled cable and an argument that happens to say
+    /// "timeout" keep the plain error.
     #[test]
     fn only_a_quiet_meter_gets_the_activation_help() {
         use dmm_lib::error::Error;
-        let boxed = |e: Error| -> Box<dyn std::error::Error> { Box::new(e) };
-        assert!(meter_went_quiet(&*boxed(Error::Timeout)));
-        // Its text names a timeout, which the variant match has to see past.
-        let pulled = Error::cable_pulled();
-        assert!(pulled.to_string().contains("timeout"), "{pulled}");
-        assert!(!meter_went_quiet(&*boxed(pulled)));
+        let ut61eplus = selection("ut61eplus");
+        let Selection::Device(device) = ut61eplus else {
+            panic!("a named meter");
+        };
+        assert_eq!(
+            extra_help(&Error::Timeout, ut61eplus, None),
+            Extra::NoResponse(device)
+        );
+        assert_eq!(
+            extra_help(&Error::Timeout, Selection::Auto, None),
+            Extra::None
+        );
+        assert_eq!(
+            extra_help(&Error::cable_pulled(), ut61eplus, None),
+            Extra::None
+        );
         let echoed: Box<dyn std::error::Error> = "unknown range: timeout".into();
-        assert!(!meter_went_quiet(&*echoed));
+        assert_eq!(extra_help(&*echoed, ut61eplus, None), Extra::None);
     }
 
     /// A named adapter the stack could not reach is explained by its link;
@@ -441,25 +446,45 @@ mod tests {
         use dmm_lib::error::{BluetoothIssue, Error};
         let address = "12:34:56:78:9A:BC";
         let stack = Error::Bluetooth(BluetoothIssue::Stack("Timed out after 10s".to_string()));
-        let expected = dmm_lib::is_bluetooth_selector(address).then_some(address);
-        assert_eq!(unreachable_adapter(&stack, Some(address)), expected);
-        assert_eq!(unreachable_adapter(&stack, None), None);
-        assert_eq!(unreachable_adapter(&stack, Some("00C5B27A")), None);
-        assert_eq!(unreachable_adapter(&Error::LinkLost, Some(address)), None);
+        let auto = Selection::Auto;
+        assert_eq!(
+            extra_help(&stack, auto, Some(address)),
+            Extra::BluetoothAt(address.to_string())
+        );
+        assert_eq!(extra_help(&stack, auto, None), Extra::None);
+        assert_eq!(extra_help(&stack, auto, Some("00C5B27A")), Extra::None);
+        assert_eq!(
+            extra_help(&Error::LinkLost, auto, Some(address)),
+            Extra::None
+        );
     }
 
     /// A meter with the radio built in that the stack could not reach gets
-    /// its own steps; a meter behind an adapter keeps the bare error, as it
-    /// always has.
+    /// its own steps; a meter behind an adapter, or none named, keeps the
+    /// bare error, as it always has.
     #[test]
     fn an_unreachable_bluetooth_only_meter_gets_its_own_steps() {
         use dmm_lib::error::{BluetoothIssue, Error};
         let stack = Error::Bluetooth(BluetoothIssue::PoweredOff);
-        let device = |id| Selection::Device(registry::find_device(id).expect("registry entry"));
-        let found = unreachable_bluetooth_only(&stack, device("ut60bt")).map(|d| d.id);
-        assert_eq!(found, Some("ut60bt"));
-        assert!(unreachable_bluetooth_only(&stack, device("ut61eplus")).is_none());
-        assert!(unreachable_bluetooth_only(&stack, Selection::Auto).is_none());
-        assert!(unreachable_bluetooth_only(&Error::LinkLost, device("ut60bt")).is_none());
+        let ut60bt = selection("ut60bt");
+        let Selection::Device(device) = ut60bt else {
+            panic!("a named meter");
+        };
+        assert_eq!(
+            extra_help(&stack, ut60bt, None),
+            Extra::BluetoothOnly {
+                model: open::meter_name(device),
+                activation: device.activation_instructions,
+            }
+        );
+        assert_eq!(
+            extra_help(&stack, selection("ut61eplus"), None),
+            Extra::None
+        );
+        assert_eq!(extra_help(&stack, Selection::Auto, None), Extra::None);
+        assert_eq!(
+            extra_help(&Error::LinkLost, selection("ut60bt"), None),
+            Extra::None
+        );
     }
 }

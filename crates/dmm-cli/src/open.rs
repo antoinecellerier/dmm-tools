@@ -12,7 +12,7 @@ use console::style;
 use dmm_lib::mock::MockMode;
 use dmm_lib::protocol::registry::{self, SelectableDevice, Selection};
 use dmm_lib::text::TextKind;
-use dmm_shared::help::LinksSearched;
+use dmm_shared::help::{Diagnosis, LinksSearched};
 use dmm_shared::l10n::Localizer;
 use dmm_shared::tr;
 use std::borrow::Cow;
@@ -276,13 +276,13 @@ pub(crate) fn open_with_help(
     let (dmm, device) = match selection {
         Selection::Auto => {
             let (dmm, detected) = unless_stopped(dmm_lib::open_auto(opts), opts.stop)
-                .map_err(|e| open_error_help(selection, e))?;
+                .map_err(|e| open_error_help(selection, opts.adapter, e))?;
             note_detected(&detected);
             (dmm, detected.device)
         }
         Selection::Device(device) => (
             unless_stopped(dmm_lib::open_device(device, opts), opts.stop)
-                .map_err(|e| open_error_help(selection, e))?,
+                .map_err(|e| open_error_help(selection, opts.adapter, e))?,
             device,
         ),
     };
@@ -334,15 +334,15 @@ pub(crate) fn open_recording_with_help(
         // the first bytes on the wire, and a report that starts after them
         // hides how the meter was picked.
         Selection::Auto => {
-            let (transport, bridge) =
-                dmm_lib::open_transport(&[], opts).map_err(|e| open_error_help(selection, e))?;
+            let (transport, bridge) = dmm_lib::open_transport(&[], opts)
+                .map_err(|e| open_error_help(selection, opts.adapter, e))?;
             let (transport, recorder) = recording::RecordingTransport::new(transport);
             let transport = Box::new(transport) as Boxed;
             let detected = dmm_lib::detect::detect_device(&*transport, bridge)
-                .map_err(|e| open_error_help(selection, e))?;
+                .map_err(|e| open_error_help(selection, opts.adapter, e))?;
             note_detected(&detected);
             let dmm = dmm_lib::Dmm::from_detected(transport, &detected)
-                .map_err(|e| open_error_help(selection, e))?;
+                .map_err(|e| open_error_help(selection, opts.adapter, e))?;
             (dmm, recorder, detected.device, Some(detected))
         }
         Selection::Device(device) => {
@@ -350,13 +350,13 @@ pub(crate) fn open_recording_with_help(
             // goes through the same recorder so `capture` has one code path.
             let transport: Boxed = if device.requires_hardware {
                 dmm_lib::open_device_transport(device, opts)
-                    .map_err(|e| open_error_help(selection, e))?
+                    .map_err(|e| open_error_help(selection, opts.adapter, e))?
             } else {
                 Box::new(dmm_lib::transport::NullTransport)
             };
             let (transport, recorder) = recording::RecordingTransport::new(transport);
             let dmm = dmm_lib::Dmm::new(Box::new(transport) as Boxed, (device.new_protocol)())
-                .map_err(|e| open_error_help(selection, e))?;
+                .map_err(|e| open_error_help(selection, opts.adapter, e))?;
             (dmm, recorder, device, None)
         }
     };
@@ -369,10 +369,10 @@ pub(crate) fn open_recording_with_help(
 fn detect_only(
     opts: dmm_lib::OpenOptions<'_>,
 ) -> Result<&'static SelectableDevice, Box<dyn std::error::Error>> {
-    let (transport, bridge) =
-        dmm_lib::open_transport(&[], opts).map_err(|e| open_error_help(Selection::Auto, e))?;
+    let (transport, bridge) = dmm_lib::open_transport(&[], opts)
+        .map_err(|e| open_error_help(Selection::Auto, opts.adapter, e))?;
     let detected = dmm_lib::detect::detect_device(&*transport, bridge)
-        .map_err(|e| open_error_help(Selection::Auto, e))?;
+        .map_err(|e| open_error_help(Selection::Auto, opts.adapter, e))?;
     note_detected(&detected);
     Ok(detected.device)
 }
@@ -483,36 +483,38 @@ impl crate::l10n::Localized for OpenFailed {
 
 crate::l10n::localized_error!(OpenFailed);
 
+/// The meter the user picked, for [`Diagnosis::of`]: the one named, as this
+/// run calls it. `None` under Auto-detect, which names none.
+pub(crate) fn picked(selection: Selection) -> Option<registry::Listing> {
+    match selection {
+        Selection::Auto => None,
+        Selection::Device(device) => Some(meter_listing(device)),
+    }
+}
+
 /// Print setup help for the failures a user can act on, and return the error
-/// to report.
+/// to report. The rest go back as they came, for [`crate::report_failure`].
 fn open_error_help(
     selection: Selection,
+    adapter: Option<&str>,
     error: dmm_lib::error::Error,
 ) -> Box<dyn std::error::Error> {
-    match error {
-        dmm_lib::error::Error::NoTransportFound {
-            bluetooth_searched, ..
-        } => {
+    match Diagnosis::of(&error, adapter, picked(selection)) {
+        Diagnosis::NotFound { bluetooth_searched } => {
             print_not_found_help(LinksSearched::from_usb_failure(bluetooth_searched));
             print_experimental_note(selection);
             OpenFailed::NotFound.into()
         }
         // A meter with the radio built in, out of range or asleep: its own
         // steps, not a cable's.
-        dmm_lib::error::Error::BluetoothOnly {
-            model,
-            activation,
-            miss: dmm_lib::error::BluetoothOnlyMiss::NotInRange,
-        } => {
-            // The error names the maker's entry; the user asked for the pick.
-            let model = opened_device(selection).map_or(model, meter_name);
+        Diagnosis::BluetoothOnlyNotFound { model, activation } => {
             print_not_found_help(LinksSearched::BluetoothOnly { model, activation });
             print_experimental_note(selection);
             OpenFailed::NotFound.into()
         }
         // The cable is there and nothing on it spoke. Every meter it could
         // carry has something the user has to switch on, so list them.
-        dmm_lib::error::Error::DeviceNotIdentified {
+        Diagnosis::NotIdentified {
             bridge,
             built_in_radio,
         } => {
@@ -549,13 +551,11 @@ fn open_error_help(
         // An address nothing answered: the bus listing would be beside the
         // point, and the only thing that says which addresses are live is a
         // scan, which the open has just run.
-        dmm_lib::error::Error::AdapterNotFound(ref selector)
-            if dmm_lib::is_bluetooth_selector(selector) =>
-        {
-            print_not_found_help(LinksSearched::BluetoothAt(selector));
+        Diagnosis::NothingAtAddress { address } => {
+            print_not_found_help(LinksSearched::BluetoothAt(&address));
             OpenFailed::AdapterNotFound.into()
         }
-        dmm_lib::error::Error::AdapterNotFound(_) | dmm_lib::error::Error::NotAnAdapter(_) => {
+        Diagnosis::AdapterNotFound => {
             let l = crate::l10n::get();
             let detail = l.adapter_named(&error).unwrap_or_default();
             eprintln!("{} {}", error_label(), l.error(&error));
@@ -577,7 +577,7 @@ fn open_error_help(
             }
             OpenFailed::AdapterNotFound.into()
         }
-        e => e.into(),
+        _ => error.into(),
     }
 }
 
@@ -673,7 +673,7 @@ mod tests {
             Err(Error::Timeout)
         ));
         // Reaches its caller boxed as it left, so the command can tell.
-        let boxed = open_error_help(Selection::Auto, Error::Cancelled);
+        let boxed = open_error_help(Selection::Auto, None, Error::Cancelled);
         assert!(matches!(
             boxed.downcast_ref::<Error>(),
             Some(Error::Cancelled)
