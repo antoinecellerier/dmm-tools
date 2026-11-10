@@ -130,7 +130,9 @@ impl<'a> MarkCursor<'a> {
 /// `link` is what the samples arrived over, so a session played back from the
 /// file is on the link the meter was. `marked` are the markers on buffered
 /// samples, oldest first, as for [`render_csv`]; each is written after its
-/// sample. `view` is the graph's view, saved in a `# view:` line.
+/// sample. `view` is the graph's view, saved in a `# view:` line. `model` is
+/// the name the meter gave for itself, as `dmm-cli` writes it; `None` writes
+/// no `# model:` line.
 ///
 /// `None` when any sample has an empty payload: the mock synthesises its
 /// readings, so there is no frame to hand a parser.
@@ -1776,7 +1778,7 @@ mod tests {
             samples.iter(),
             &[],
             "ut61eplus",
-            Some("UNI-T UT61E+"),
+            Some("UT61E+"),
             Some(dmm_lib::transport::Link::Bluetooth),
             None,
         )
@@ -1784,7 +1786,7 @@ mod tests {
 
         let replay = dmm_lib::replay::Replay::parse(&text).expect("a well-formed recording");
         assert_eq!(replay.device.id, "ut61eplus");
-        assert_eq!(replay.model.as_deref(), Some("UNI-T UT61E+"));
+        assert_eq!(replay.model.as_deref(), Some("UT61E+"));
         // The link the session was on, so playing the file back says so too.
         assert_eq!(replay.link, Some(dmm_lib::transport::Link::Bluetooth));
         assert_eq!(replay.duration(), Duration::from_millis(500));

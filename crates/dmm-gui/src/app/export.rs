@@ -163,6 +163,9 @@ pub(super) struct ExportRequest {
     /// which nothing asks about before dropping.
     mark: Option<SavedMark>,
     device_model: std::borrow::Cow<'static, str>,
+    /// The name the meter gave for itself, for a replay file's `# model:`
+    /// line; `None` writes no line. Not `device_model`, the menu's name.
+    reported_model: Option<String>,
     /// The CSV's columns, marker ones included when there are markers.
     csv_layout: CsvLayout,
     experimental: bool,
@@ -203,7 +206,7 @@ impl ExportRequest {
                         samples,
                         &marked,
                         id,
-                        Some(&self.device_model),
+                        self.reported_model.as_deref(),
                         link,
                         self.view.as_deref(),
                     )
@@ -365,6 +368,7 @@ impl App {
                 markers: Recording::marker_keys(&marked),
             }),
             device_model,
+            reported_model: self.export_layout().model.clone(),
             csv_layout: CsvLayout {
                 markers: !marked.is_empty(),
                 ..self.csv_layout()
@@ -1140,6 +1144,52 @@ mod tests {
         assert!(app.export.is_none());
         assert!(app.toast.take().is_some_and(|t| t.is_error()));
         assert!(begin(&mut app, ExportFormat::Csv).is_ok());
+    }
+
+    /// A replay file's `# model:` is the name the meter gave, as `dmm-cli`
+    /// writes it, and no line when it gave none; an imported replay keeps
+    /// its line when exported again.
+    #[test]
+    fn a_replay_file_names_the_meter_as_it_named_itself() {
+        use crate::app::connection::DmmMessage;
+        let replay_of = |name: Option<&str>| {
+            let mut settings = Settings::default();
+            settings.shared.device_family = "ut61eplus".to_string();
+            let mut app = App::from_settings(settings, dmm_lib::Clock::real());
+            app.deliver(DmmMessage::Connected(ConnectedMeter {
+                name: name.map(str::to_string),
+                ..ConnectedMeter::test_fixture(Some("ut61eplus"))
+            }));
+            app.deliver(DmmMessage::Measurement(measurement(0)));
+            let prepared = app.prepare_export(ExportFormat::Replay).expect("frames");
+            String::from_utf8(
+                prepared
+                    .render(app.capture.recording.export_samples())
+                    .expect("a replay"),
+            )
+            .expect("text")
+        };
+        let named = replay_of(Some("UT61E+"));
+        let model = |text: &str| {
+            dmm_lib::replay::Replay::parse(text)
+                .expect("a replay")
+                .model
+        };
+        assert_eq!(model(&named).as_deref(), Some("UT61E+"));
+        assert_eq!(model(&replay_of(None)), None);
+
+        let path = super::super::import::tests_support::file("model.replay", &named);
+        let mut app = crate::app::test_support::test_app();
+        super::super::import::tests_support::import(&mut app, path.clone());
+        let again = app.prepare_export(ExportFormat::Replay).expect("frames");
+        let text = String::from_utf8(
+            again
+                .render(app.capture.recording.export_samples())
+                .expect("a replay"),
+        )
+        .expect("text");
+        assert_eq!(model(&text).as_deref(), Some("UT61E+"));
+        let _ = std::fs::remove_file(path);
     }
 
     /// A replay of samples with no meter frame is refused at the click, not

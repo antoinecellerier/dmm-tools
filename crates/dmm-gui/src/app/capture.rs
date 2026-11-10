@@ -3,7 +3,6 @@
 //! and the recording — in that order, and the stores it is kept in.
 
 use dmm_lib::measurement::Measurement;
-use dmm_lib::protocol::registry;
 use dmm_lib::stats::SeriesStats;
 use dmm_lib::transform::Transform;
 use dmm_lib::transport::Link;
@@ -32,6 +31,9 @@ pub(super) struct CaptureLayout {
     /// `None` for the mock, whose readings are synthesised rather than decoded
     /// from frames — there is nothing to play back.
     pub(super) device_id: Option<&'static str>,
+    /// The name that meter gave for itself, for a replay file's `# model:`
+    /// line, which holds what the meter reported. `None` when it gave none.
+    pub(super) model: Option<String>,
     /// Whether that meter's protocol was short of verified, for the JSON
     /// export's `experimental` field. Taken alongside `device` and for the
     /// same reason: disconnecting clears the connection's stability, so read
@@ -63,30 +65,16 @@ impl CaptureLayout {
     /// connection, so its stability and link are the meter's rather than the
     /// defaults a disconnect leaves behind.
     fn from_connection(connection: &Connection, aux_slots: usize, extra_slots: usize) -> Self {
-        Self::new(
-            connection.listing(),
-            !connection.stability().is_verified(),
-            connection.link(),
-            aux_slots,
-            extra_slots,
-        )
-    }
-
-    fn new(
-        meter: Option<registry::Listing>,
-        experimental: bool,
-        link: Option<Link>,
-        aux_slots: usize,
-        extra_slots: usize,
-    ) -> Self {
+        let meter = connection.listing();
         Self {
             device: meter.map(|l| l.display_name().into()),
             // Only a meter's frames can be replayed, so the mock names no
             // device here and the export offers no replay file for it. A
             // replay file keeps the name the meter was picked by.
             device_id: meter.filter(|l| l.device.requires_hardware).map(|l| l.id()),
-            experimental,
-            link,
+            model: connection.meter.as_ref().and_then(|m| m.name.clone()),
+            experimental: !connection.stability().is_verified(),
+            link: connection.link(),
             aux_slots,
             extra_slots,
         }

@@ -101,6 +101,8 @@ pub(super) struct Loaded {
     /// Registry id of that meter, when the file holds its frames (a replay)
     /// and so can be exported as a replay again.
     device_id: Option<&'static str>,
+    /// The name the meter gave for itself, kept by a replay file.
+    model: Option<String>,
     link: Option<Link>,
     experimental: bool,
     /// Stamped `base + offset`, in file order, time never going back, each
@@ -282,6 +284,7 @@ fn from_export(imported: dmm_shared::export::Imported, base: Instant) -> Loaded 
         path: PathBuf::new(),
         device: imported.device,
         device_id: None,
+        model: None,
         link: None,
         experimental,
         readings,
@@ -361,6 +364,7 @@ fn load_replay(text: &str, base: Instant, limit: usize) -> Result<Loaded, Unread
         path: PathBuf::new(),
         device: Some(replay.listing.display_name().to_string()),
         device_id: Some(replay.listing.id()),
+        model: replay.model.clone(),
         link: replay.link,
         experimental,
         readings,
@@ -509,6 +513,7 @@ impl App {
             path,
             device,
             device_id,
+            model,
             link,
             experimental,
             readings,
@@ -528,6 +533,7 @@ impl App {
         self.capture.recording_layout = CaptureLayout {
             device: device.map(Into::into),
             device_id,
+            model,
             experimental,
             link,
             aux_slots: family_slots,

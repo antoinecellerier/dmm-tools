@@ -6,6 +6,7 @@
 
 - **dmm-gui starts afresh and stops a recording when a different meter answers** — the new meter's readings joined the first one's graph, statistics and recording.
 - **dmm-gui names the meter of a played-back recording** — with **Show device name on connect (beeps)** off, it showed none.
+- **dmm-gui's replay files name the meter as dmm-cli's do** — they gave the menu's name, such as "UNI-T UT61E+".
 - **"Waiting for meter…" no longer stays frozen while dmm-gui reconnects**
 - **dmm-gui's remote buttons, dropdown picks, Pause and Sample interval act at once** — they waited for the next sample.
 - **dmm-gui's mode and range readouts switch only a connected meter** — a pick made while reconnecting went to whichever meter answered next.
