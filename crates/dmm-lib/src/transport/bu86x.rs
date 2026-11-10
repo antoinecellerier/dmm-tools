@@ -120,11 +120,11 @@ impl Transport for Bu86x {
     }
 
     /// No serial number: this text goes into capture reports.
-    fn transport_info(&self) -> Result<String> {
-        Ok(match self.release {
+    fn transport_info(&self) -> Result<Option<String>> {
+        Ok(Some(match self.release {
             Some(release) => format!("{NAME} cable, firmware {}", firmware(release)),
             None => format!("{NAME} cable"),
-        })
+        }))
     }
 
     fn transport_name(&self) -> &'static str {

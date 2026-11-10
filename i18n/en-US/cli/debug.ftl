@@ -1,7 +1,7 @@
 ### What 'dmm-cli debug' prints about the link before the raw frames. The
 ### frame lines on the standard output are for protocol work and stay as
 ### they are; so does the link detail after each label, which the library
-### gives in English.
+### gives in English (common-unavailable says when it could not be read).
 
 ## Labels opening a dim line on the terminal's error stream, the link detail
 ## following after a space. Keep the colon, or your language's equivalent.

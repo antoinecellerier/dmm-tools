@@ -12,3 +12,9 @@ common-error-label = Error:
 common-warning-label = Warning:
 # Yellow: something worth knowing about how the command runs.
 common-note-label = Note:
+
+## A link detail ('dmm-cli info' and 'dmm-cli debug') the cable or Bluetooth
+## device failed to give, in place of the detail after its label.
+
+# $error is why, e.g. "HID error: …".
+common-unavailable = unavailable ({ $error })

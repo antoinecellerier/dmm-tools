@@ -29,10 +29,16 @@ pub(crate) fn cmd_info(
 
     let transport = dmm.transport().transport_name();
     println!("{}", tr!(l, "info-transport", transport = transport));
-    if let Ok(info) = dmm.transport().transport_info() {
-        println!("  {info}");
+    match dmm.transport().transport_info() {
+        Ok(Some(info)) => println!("  {info}"),
+        Ok(None) => {}
+        // The chip's identity has no label of its own; a failure needs one.
+        Err(e) => println!(
+            "  {}",
+            tr!(l, "info-bridge", bridge = super::unavailable(l, &e))
+        ),
     }
-    if let Ok(status) = dmm.transport().transport_status() {
+    if let Some(status) = super::link_detail(l, dmm.transport().transport_status()) {
         println!("  {}", tr!(l, "info-status", status = status));
     }
 

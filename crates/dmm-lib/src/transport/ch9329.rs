@@ -136,8 +136,8 @@ impl Transport for Ch9329 {
         Ok(actual)
     }
 
-    fn transport_info(&self) -> Result<String> {
-        Ok(format!("{NAME} HID-to-UART bridge (WCH)"))
+    fn transport_info(&self) -> Result<Option<String>> {
+        Ok(Some(format!("{NAME} HID-to-UART bridge (WCH)")))
     }
 
     fn transport_name(&self) -> &'static str {

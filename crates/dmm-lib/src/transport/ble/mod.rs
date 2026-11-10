@@ -910,7 +910,7 @@ impl Transport for Ble {
         Ok(())
     }
 
-    fn transport_info(&self) -> Result<String> {
+    fn transport_info(&self) -> Result<Option<String>> {
         // The peer's own name and identity. An adapter cannot say which
         // meter is behind it — its Device Information strings are empty
         // (research doc §1) — so this is all there is to report.
@@ -923,10 +923,10 @@ impl Transport for Ble {
             .map(|n| printable(&n))
             .unwrap_or_else(|| "unnamed device".to_string());
         let info = info_note(&self.profile.bring_up, self.info_characteristic.as_deref());
-        Ok(format!("{name} ({}){info}", self.selector))
+        Ok(Some(format!("{name} ({}){info}", self.selector)))
     }
 
-    fn transport_status(&self) -> Result<String> {
+    fn transport_status(&self) -> Result<Option<String>> {
         let mut status = format!("MTU: {} bytes", self.mtu);
         // Only a profile an adapter can sit on has heartbeats to count.
         if self.profile.strips_adapter_heartbeat {
@@ -950,7 +950,7 @@ impl Transport for Ble {
                 Err(e) => debug!("Bluetooth: RSSI unavailable: {e}"),
             }
         });
-        Ok(status)
+        Ok(Some(status))
     }
 
     fn transport_name(&self) -> &'static str {

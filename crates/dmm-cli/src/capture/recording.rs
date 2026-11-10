@@ -176,11 +176,11 @@ impl Transport for RecordingTransport {
         Ok(())
     }
 
-    fn transport_info(&self) -> Result<String> {
+    fn transport_info(&self) -> Result<Option<String>> {
         self.inner.transport_info()
     }
 
-    fn transport_status(&self) -> Result<String> {
+    fn transport_status(&self) -> Result<Option<String>> {
         self.inner.transport_status()
     }
 

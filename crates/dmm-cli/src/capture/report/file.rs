@@ -243,8 +243,12 @@ pub(in crate::capture) fn populate_report_metadata(
     report.tool_version = tool_version();
     report.device_name = device_name;
     report.transport_name = Some(dmm.transport().transport_name().to_string());
-    if let Ok(info) = dmm.transport().transport_info() {
-        report.transport_info = Some(info);
+    // A report is one meter's: a run whose link has nothing to say, or
+    // whose query failed, keeps what an earlier session of it wrote.
+    match dmm.transport().transport_info() {
+        Ok(Some(info)) => report.transport_info = Some(info),
+        Ok(None) => {}
+        Err(e) => log::debug!("capture: no transport info for the report: {e}"),
     }
     // The bytes are the meter's, and a report is one meter's: a run whose
     // link reads none keeps what an earlier session of it wrote.
@@ -348,6 +352,44 @@ mod tests {
         assert_eq!(
             resumed.device_information.as_deref(),
             Some("3D 00 01 04 00 00")
+        );
+    }
+
+    /// A bridge whose identity query fails, as a CP2110's feature report can.
+    struct Unanswering;
+
+    impl dmm_lib::transport::Transport for Unanswering {
+        fn write(&self, _data: &[u8]) -> dmm_lib::error::Result<()> {
+            Ok(())
+        }
+        fn read_timeout(&self, _buf: &mut [u8], _timeout_ms: i32) -> dmm_lib::error::Result<usize> {
+            Ok(0)
+        }
+        fn link(&self) -> Option<dmm_lib::transport::Link> {
+            Some(dmm_lib::transport::Link::UsbCable)
+        }
+        fn transport_info(&self) -> dmm_lib::error::Result<Option<String>> {
+            Err(dmm_lib::error::Error::Timeout)
+        }
+    }
+
+    /// A query that failed, or a link with nothing to say, keeps what an
+    /// earlier session wrote.
+    #[test]
+    fn a_failed_bridge_query_keeps_the_transport_info_written() {
+        let earlier = || CaptureReport {
+            transport_info: Some("CP2110 part=0x0a firmware=1".to_string()),
+            ..CaptureReport::default()
+        };
+        let resumed = populated(Box::new(Unanswering), earlier());
+        assert_eq!(
+            resumed.transport_info.as_deref(),
+            Some("CP2110 part=0x0a firmware=1")
+        );
+        let other = populated(Box::new(dmm_lib::transport::NullTransport), earlier());
+        assert_eq!(
+            other.transport_info.as_deref(),
+            Some("CP2110 part=0x0a firmware=1")
         );
     }
 

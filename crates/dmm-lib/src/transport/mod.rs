@@ -38,20 +38,18 @@ pub trait Transport: Send {
         .into())
     }
 
-    /// Query transport-specific version/identification info.
-    /// Returns a human-readable string. Default: not supported.
-    fn transport_info(&self) -> Result<String> {
-        Err(crate::error::Error::invalid_response_msg(
-            "not supported by this transport",
-        ))
+    /// Transport-specific version/identification info, human-readable.
+    /// `Ok(None)` — the default — when the transport has none to give; an
+    /// error only when asking for it failed.
+    fn transport_info(&self) -> Result<Option<String>> {
+        Ok(None)
     }
 
-    /// Query transport-specific diagnostic status.
-    /// Returns a human-readable string. Default: not supported.
-    fn transport_status(&self) -> Result<String> {
-        Err(crate::error::Error::invalid_response_msg(
-            "not supported by this transport",
-        ))
+    /// Transport-specific diagnostic status, human-readable. `Ok(None)` —
+    /// the default — when the transport has none to give; an error only
+    /// when asking for it failed.
+    fn transport_status(&self) -> Result<Option<String>> {
+        Ok(None)
     }
 
     /// The bridge's name, for display and logs (e.g. "CP2110", "CH9329").
@@ -250,11 +248,11 @@ impl Transport for Box<dyn Transport> {
         (**self).set_baud(baud)
     }
 
-    fn transport_info(&self) -> Result<String> {
+    fn transport_info(&self) -> Result<Option<String>> {
         (**self).transport_info()
     }
 
-    fn transport_status(&self) -> Result<String> {
+    fn transport_status(&self) -> Result<Option<String>> {
         (**self).transport_status()
     }
 
@@ -403,6 +401,36 @@ mod tests {
         }
         let t: Box<dyn Transport> = Box::new(Radio);
         assert_eq!(t.link(), Some(Link::Bluetooth));
+    }
+
+    /// A link with nothing to report says so with `Ok(None)`, leaving errors
+    /// for a query that failed; a box passes on the transport's own answer,
+    /// failure included.
+    #[test]
+    fn a_boxed_transport_forwards_its_info_and_status() {
+        assert_eq!(NullTransport.transport_info().unwrap(), None);
+        assert_eq!(NullTransport.transport_status().unwrap(), None);
+        struct Bridge;
+        impl Transport for Bridge {
+            fn write(&self, _data: &[u8]) -> Result<()> {
+                Ok(())
+            }
+            fn read_timeout(&self, _buf: &mut [u8], _timeout_ms: i32) -> Result<usize> {
+                Ok(0)
+            }
+            fn transport_info(&self) -> Result<Option<String>> {
+                Ok(Some("bridge v1".to_string()))
+            }
+            fn transport_status(&self) -> Result<Option<String>> {
+                Err(crate::error::Error::Timeout)
+            }
+            fn link(&self) -> Option<Link> {
+                Some(Link::UsbCable)
+            }
+        }
+        let t: Box<dyn Transport> = Box::new(Bridge);
+        assert_eq!(t.transport_info().unwrap().as_deref(), Some("bridge v1"));
+        assert!(t.transport_status().is_err());
     }
 
     /// Both binaries read a boxed transport: a box that fell back on the

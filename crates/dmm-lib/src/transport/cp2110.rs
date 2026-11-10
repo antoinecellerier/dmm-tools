@@ -225,20 +225,20 @@ impl Transport for Cp2110 {
         Ok(actual)
     }
 
-    fn transport_info(&self) -> Result<String> {
+    fn transport_info(&self) -> Result<Option<String>> {
         let ver = self.version_info()?;
-        Ok(format!(
+        Ok(Some(format!(
             "{NAME} part={:#04x} firmware={}",
             ver.part_number, ver.device_version
-        ))
+        )))
     }
 
-    fn transport_status(&self) -> Result<String> {
+    fn transport_status(&self) -> Result<Option<String>> {
         let st = self.uart_status()?;
-        Ok(format!(
+        Ok(Some(format!(
             "TX FIFO: {} bytes, RX FIFO: {} bytes, parity_err={}, overrun_err={}, line_break={}",
             st.tx_fifo, st.rx_fifo, st.parity_error, st.overrun_error, st.line_break
-        ))
+        )))
     }
 
     fn transport_name(&self) -> &'static str {

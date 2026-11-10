@@ -36,10 +36,10 @@ pub(crate) fn cmd_debug(
         style(tr!(l, "debug-transport-label")).dim(),
         dmm.transport().transport_name()
     );
-    if let Ok(info) = dmm.transport().transport_info() {
+    if let Some(info) = super::link_detail(l, dmm.transport().transport_info()) {
         eprintln!("{} {info}", style(tr!(l, "debug-bridge-label")).dim());
     }
-    if let Ok(status) = dmm.transport().transport_status() {
+    if let Some(status) = super::link_detail(l, dmm.transport().transport_status()) {
         eprintln!("{} {status}", style(tr!(l, "debug-status-label")).dim());
     }
 

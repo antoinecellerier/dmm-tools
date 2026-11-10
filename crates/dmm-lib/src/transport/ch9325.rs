@@ -267,11 +267,11 @@ impl Transport for Ch9325 {
         Ok(())
     }
 
-    fn transport_info(&self) -> Result<String> {
-        Ok(format!(
+    fn transport_info(&self) -> Result<Option<String>> {
+        Ok(Some(format!(
             "{BRIDGE}, {}",
             self.startup.describe(self.baud.get())
-        ))
+        )))
     }
 
     fn transport_name(&self) -> &'static str {

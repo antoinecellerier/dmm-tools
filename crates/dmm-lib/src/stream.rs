@@ -353,10 +353,11 @@ impl<'a, T: Transport> MeasurementStream<'a, T> {
         match self.dmm.transport().late_readings() {
             Some(notice) => {
                 warn!("{notice}");
-                debug!(
-                    "stream: readings in pairs, frame period {period:?}; link: {:?}",
-                    self.dmm.transport().transport_status()
-                );
+                let link = match self.dmm.transport().transport_status() {
+                    Ok(status) => status.unwrap_or_else(|| "no status".to_string()),
+                    Err(e) => format!("status unavailable ({e})"),
+                };
+                debug!("stream: readings in pairs, frame period {period:?}; link: {link}");
                 self.pairs.notice = Some(notice);
             }
             None => debug!("stream: readings in pairs, frame period {period:?}"),
