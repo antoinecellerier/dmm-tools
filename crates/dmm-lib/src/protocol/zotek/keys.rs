@@ -414,7 +414,7 @@ mod tests {
                 2 => &[&"minmax", &"volts", &"millivolts", &"ohms", &"current"],
                 _ => &[],
             };
-            assert_eq!(missing, expected, "{}", layout.id);
+            assert_eq!(missing, expected, "{}", layout.entry.id);
         }
     }
 
@@ -503,8 +503,8 @@ mod tests {
                 .collect();
             listed.sort_unstable();
             offered.sort_unstable();
-            assert_eq!(listed, offered, "{}", layout.id);
-            assert_eq!(keys.context, [ZERO], "{}", layout.id);
+            assert_eq!(listed, offered, "{}", layout.entry.id);
+            assert_eq!(keys.context, [ZERO], "{}", layout.entry.id);
         }
         let labels = |layout| -> Vec<&str> {
             meter_keys(layout)

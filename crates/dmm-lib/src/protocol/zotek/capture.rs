@@ -856,12 +856,12 @@ mod tests {
     fn every_layout_has_steps_in_its_own_modes() {
         for layout in LAYOUTS {
             let steps = steps(layout);
-            assert!(steps.iter().any(|s| s.gate), "{}", layout.id);
+            assert!(steps.iter().any(|s| s.gate), "{}", layout.entry.id);
             let verified: Vec<_> = steps.iter().filter(|s| s.verified).map(|s| s.id).collect();
-            if layout.id == "zt5b" {
+            if layout.entry.id == "zt5b" {
                 assert_eq!(verified.len(), 24, "{verified:?}");
             } else {
-                assert!(verified.is_empty(), "{}: {verified:?}", layout.id);
+                assert!(verified.is_empty(), "{}: {verified:?}", layout.entry.id);
             }
         }
     }
@@ -876,14 +876,19 @@ mod tests {
             let steps = steps(layout);
             for step in &steps {
                 if let Some(command) = step.command {
-                    assert!(offered.contains(&command), "{} {}", layout.id, step.id);
+                    assert!(
+                        offered.contains(&command),
+                        "{} {}",
+                        layout.entry.id,
+                        step.id
+                    );
                 }
             }
             for command in offered {
                 assert!(
                     steps.iter().any(|s| s.command == Some(*command)),
                     "{} {command}",
-                    layout.id
+                    layout.entry.id
                 );
             }
         }

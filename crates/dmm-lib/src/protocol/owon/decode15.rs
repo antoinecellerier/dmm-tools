@@ -263,14 +263,14 @@ pub(super) fn decode(p: &[u8], model: &Model) -> Result<Measurement> {
         return Err(Error::invalid_response(
             format!(
                 "{} payload is {} bytes, expected {FRAME_LEN}",
-                model.id,
+                model.entry.id,
                 p.len()
             ),
             p,
         ));
     }
     let report =
-        |what: &'static str| report_unknown(model.id, what, format_args!("frame {p:02X?}"));
+        |what: &'static str| report_unknown(model.entry.id, what, format_args!("frame {p:02X?}"));
 
     // Main function/range word (spec §10.3).
     let word = u24(&p[0..3]);
@@ -447,7 +447,7 @@ fn sub_value(
 pub(super) fn all_labels(model: &Model, out: &mut crate::text::Labels) {
     use crate::text::TextKind;
     use std::cell::Cell;
-    let by = model.id;
+    let by = model.entry.id;
     out.add(TextKind::Qualifier, LPF_MODE, by);
     out.add(TextKind::Qualifier, PEAK_MODE, by);
     let bits = [OSC, INRUSH, USB, DC, AC, LPF, PEAK];
@@ -1016,12 +1016,12 @@ pub(crate) mod tests {
         let all = crate::text::listed();
         crate::text::assert_golden_listed(all, "cms061");
         let protocol = |model: &Model| {
-            let entry = crate::protocol::registry::find_device(model.id).unwrap();
+            let entry = model.entry;
             (entry.new_protocol)()
         };
         for v in VECTORS {
             let m = quiet(&v, &VC871);
-            crate::text::assert_listed(all, protocol(&VC871).as_ref(), &m, VC871.id);
+            crate::text::assert_listed(all, protocol(&VC871).as_ref(), &m, VC871.entry.id);
         }
         let bits = [OSC, INRUSH, USB, DC, AC, LPF, PEAK];
         for model in [&VC871, &OW69B] {
@@ -1030,7 +1030,7 @@ pub(crate) mod tests {
             let mut take = |p: [u8; 15]| {
                 let (m, reports) = reported(&p, model);
                 if reports.is_empty() {
-                    crate::text::assert_listed(all, protocol.as_ref(), &m, model.id);
+                    crate::text::assert_listed(all, protocol.as_ref(), &m, model.entry.id);
                     read.insert((TextKind::Mode, m.mode.to_string()));
                     for aux in &m.aux_values {
                         read.insert((TextKind::Aux, aux.label.to_string()));
@@ -1060,7 +1060,12 @@ pub(crate) mod tests {
                 }
             }
             let kinds = [TextKind::Mode, TextKind::Range, TextKind::Aux];
-            assert_eq!(all.of_device(model.id, &kinds), read, "{}", model.id);
+            assert_eq!(
+                all.of_device(model.entry.id, &kinds),
+                read,
+                "{}",
+                model.entry.id
+            );
         }
     }
 }

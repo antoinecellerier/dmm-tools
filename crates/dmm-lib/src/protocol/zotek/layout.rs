@@ -12,6 +12,7 @@ use super::glyph::{self, Cell, Glyph, Shown};
 use crate::error::{Error, Result};
 use crate::flags::StatusFlags;
 use crate::measurement::{AuxValue, MeasuredValue, Measurement};
+use crate::protocol::registry::SelectableDevice;
 use crate::protocol::unknown_mode;
 use crate::text::qualify;
 use log::debug;
@@ -286,10 +287,9 @@ const LEADING_ONE: u8 = 0x0C;
 /// One packet layout: a type byte, and what its bytes carry.
 pub(crate) struct Layout {
     pub(super) type_byte: u8,
-    /// The registry entry for this layout, which reports name.
-    pub(crate) id: &'static str,
-    /// The entry's display name, and the profile's model name.
-    pub(crate) name: &'static str,
+    /// The registry entry for this layout: its id is what reports name, and
+    /// its model the layout's name.
+    pub(crate) entry: &'static SelectableDevice,
     digits: Digits,
     bits: &'static [Bit],
     /// Whether a prefix picks the reading's mode, as on a meter whose mV,
@@ -311,8 +311,7 @@ pub(crate) struct Layout {
 /// Type 3, named for the ZT-300AB (spec §7.1).
 pub(crate) static ZT300AB: Layout = Layout {
     type_byte: 3,
-    id: "zt300ab",
-    name: "ZT-300AB",
+    entry: &super::devices::ZT300AB,
     digits: Digits::Split,
     bits: &[
         bit(3, 3, Meaning::Continuity),
@@ -358,8 +357,7 @@ pub(crate) static ZT300AB: Layout = Layout {
 /// Type 4, named for the ZT-5566 family (spec §7.4).
 pub(crate) static ZT5566SE: Layout = Layout {
     type_byte: 4,
-    id: "zt5566se",
-    name: "ZT-5566SE",
+    entry: &super::devices::ZT5566SE,
     digits: Digits::Wide,
     bits: &[
         // `vfc`, never set in the community log (§11.4).
@@ -412,8 +410,7 @@ pub(crate) static ZT5566SE: Layout = Layout {
 /// Type 1, named for the ZT-5BQ clamp (spec §7.2).
 pub(crate) static ZT5BQ: Layout = Layout {
     type_byte: 1,
-    id: "zt5bq",
-    name: "ZT-5BQ",
+    entry: &super::devices::ZT5BQ,
     digits: Digits::Split,
     bits: &[
         bit(3, 3, Meaning::Continuity),
@@ -453,8 +450,7 @@ pub(crate) static ZT5BQ: Layout = Layout {
 /// Type 2, named for the ZT-5B (spec §7.3).
 pub(crate) static ZT5B: Layout = Layout {
     type_byte: 2,
-    id: "zt5b",
-    name: "ZT-5B",
+    entry: &super::devices::ZT5B,
     digits: Digits::Split,
     bits: &[
         bit(3, 3, Meaning::Continuity),
@@ -1035,7 +1031,7 @@ fn report_blank(layout: &Layout, packet: &[u8]) {
         debug!("zotek: blank main display, skipped: {packet:02X?}");
     } else {
         Unrecognised {
-            id: layout.id,
+            id: layout.entry.id,
             packet,
         }
         .report(BLANK_MAIN);
@@ -1046,7 +1042,7 @@ fn report_blank(layout: &Layout, packet: &[u8]) {
 pub(super) fn decode_showing(packet: &[u8]) -> Result<(Measurement, Showing)> {
     let layout = layout_of(packet)?;
     let unrecognised = Unrecognised {
-        id: layout.id,
+        id: layout.entry.id,
         packet,
     };
     // A main display with no digit lit, every glyph a blank (`00`, spec
@@ -2032,7 +2028,7 @@ mod tests {
         for type_byte in 1..=4 {
             let layout = for_type(type_byte).expect("a layout");
             assert!(frame::packet_len(type_byte).is_some());
-            assert!(crate::protocol::registry::find_device(layout.id).is_some());
+            assert!(crate::protocol::registry::DEVICES.contains(&layout.entry));
         }
         assert!(for_type(0).is_none() && for_type(5).is_none());
     }
@@ -2179,7 +2175,7 @@ mod tests {
             dp: false,
         });
         for layout in LAYOUTS.iter().filter(|l| l.digits == Digits::Split) {
-            let entry = crate::protocol::registry::find_device(layout.id).unwrap();
+            let entry = layout.entry;
             let protocol = (entry.new_protocol)();
             let meanings: Vec<Meaning> = layout.bits.iter().map(|b| b.meaning).collect();
             let functions = meanings.iter().filter(|m| {
@@ -2210,14 +2206,19 @@ mod tests {
                             };
                             let (m, reports) = reported(&packet);
                             if reports.is_empty() {
-                                crate::text::assert_listed(all, protocol.as_ref(), &m, layout.id);
+                                crate::text::assert_listed(
+                                    all,
+                                    protocol.as_ref(),
+                                    &m,
+                                    layout.entry.id,
+                                );
                                 decoded += 1;
                             }
                         }
                     }
                 }
             }
-            assert!(decoded > 10, "{}: {decoded}", layout.id);
+            assert!(decoded > 10, "{}: {decoded}", layout.entry.id);
         }
     }
 }

@@ -87,6 +87,24 @@ pub struct SelectableDevice {
     pub(crate) bluetooth_names: &'static [&'static str],
 }
 
+/// An entry prints as its id: it is a table of function pointers, and the id
+/// is what identifies it in a failed assertion.
+impl std::fmt::Debug for SelectableDevice {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self.id)
+    }
+}
+
+/// Two references are equal when they are the same entry: every entry is a
+/// `static`, so its address is its identity.
+impl PartialEq for SelectableDevice {
+    fn eq(&self, other: &Self) -> bool {
+        std::ptr::eq(self, other)
+    }
+}
+
+impl Eq for SelectableDevice {}
+
 impl SelectableDevice {
     /// Brand and model, as the app names the meter: "UNI-T UT61E+".
     pub fn display_name(&self) -> &'static str {
@@ -413,23 +431,12 @@ pub static DEVICES: &[&SelectableDevice] = &[
 pub const AUTO_DEVICE_ID: &str = "auto";
 
 /// What a user-supplied device string resolved to.
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub enum Selection {
     /// Identify the meter from the bytes it sends.
     Auto,
     /// A meter the user named.
     Device(&'static SelectableDevice),
-}
-
-impl std::fmt::Debug for Selection {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        // SelectableDevice is a table of function pointers with no Debug of
-        // its own; the id is what identifies it in a failed assertion.
-        match self {
-            Self::Auto => f.write_str("Auto"),
-            Self::Device(d) => write!(f, "Device({:?})", d.id),
-        }
-    }
 }
 
 /// Find a device by exact ID match.

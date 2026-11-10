@@ -5,6 +5,7 @@
 use super::keys::{self, Key};
 use crate::error::Unread;
 use crate::protocol::MeterKeys;
+use crate::protocol::registry::SelectableDevice;
 use std::fmt;
 
 /// Which frame a model sends (spec §10.1): OWON's app picks its parser by
@@ -55,10 +56,8 @@ pub(super) struct Model {
     /// FFF2 byte 0 (spec §1).
     pub(super) code: u8,
     pub(super) frame: FrameKind,
-    /// The registry id.
-    pub(super) id: &'static str,
-    /// The registry display name, and the profile's model name.
-    pub(super) name: &'static str,
+    /// The registry entry this model opens as.
+    pub(super) entry: &'static SelectableDevice,
     pub(super) function13: Function13,
     /// Whether status bit 7, RMR, is the model's own: "only B41 model" in
     /// the manual's app table (spec §6.6), so silent there.
@@ -85,8 +84,7 @@ pub(super) struct Model {
 /// link to the OW16B, which neither program lists (spec §1).
 pub(super) static OW18B: Model = Model {
     code: 18,
-    id: "ow18b",
-    name: "OW18B/OW16B",
+    entry: &super::devices::OW18B,
     frame: FrameKind::Six,
     function13: Function13::Ncv,
     rmr: false,
@@ -100,8 +98,7 @@ pub(super) static OW18B: Model = Model {
 
 pub(super) static OW18E: Model = Model {
     code: 20,
-    id: "ow18e",
-    name: "OW18E",
+    entry: &super::devices::OW18E,
     frame: FrameKind::Six,
     function13: Function13::Ncv,
     rmr: false,
@@ -115,8 +112,7 @@ pub(super) static OW18E: Model = Model {
 
 pub(super) static B33: Model = Model {
     code: 33,
-    id: "b33",
-    name: "B33",
+    entry: &super::devices::B33,
     frame: FrameKind::Six,
     function13: Function13::Open,
     rmr: false,
@@ -130,8 +126,7 @@ pub(super) static B33: Model = Model {
 
 pub(super) static B35: Model = Model {
     code: 35,
-    id: "b35t+",
-    name: "B35T+",
+    entry: &super::devices::B35T_PLUS,
     frame: FrameKind::Six,
     function13: Function13::Open,
     rmr: false,
@@ -145,8 +140,7 @@ pub(super) static B35: Model = Model {
 
 pub(super) static B41: Model = Model {
     code: 41,
-    id: "b41t+",
-    name: "B41T+",
+    entry: &super::devices::B41T_PLUS,
     frame: FrameKind::Six,
     function13: Function13::Open,
     rmr: true,
@@ -161,8 +155,7 @@ pub(super) static B41: Model = Model {
 /// Code 21 is in OWON's app only (spec §1).
 pub(super) static CM2100B: Model = Model {
     code: 21,
-    id: "cm2100b",
-    name: "CM2100B",
+    entry: &super::devices::CM2100B,
     frame: FrameKind::Six,
     function13: Function13::Ncv,
     rmr: false,
@@ -178,8 +171,7 @@ pub(super) static CM2100B: Model = Model {
 /// (spec §9.4), share the app's key list (spec §10.8).
 pub(super) static CMS101: Model = Model {
     code: 101,
-    id: "cms101",
-    name: "CMS101",
+    entry: &super::devices::CMS101,
     frame: FrameKind::Fifteen,
     function13: Function13::Ncv,
     rmr: false,
@@ -193,8 +185,7 @@ pub(super) static CMS101: Model = Model {
 
 pub(super) static CMS061: Model = Model {
     code: 61,
-    id: "cms061",
-    name: "CMS061",
+    entry: &super::devices::CMS061,
     frame: FrameKind::Fifteen,
     function13: Function13::Ncv,
     rmr: false,
@@ -208,8 +199,7 @@ pub(super) static CMS061: Model = Model {
 
 pub(super) static OW65B: Model = Model {
     code: 65,
-    id: "ow65b",
-    name: "OW65B",
+    entry: &super::devices::OW65B,
     frame: FrameKind::Fifteen,
     function13: Function13::Open,
     rmr: false,
@@ -225,8 +215,7 @@ pub(super) static OW65B: Model = Model {
 /// reads it with the ordinary parser (spec §10.7).
 pub(super) static OW67B: Model = Model {
     code: 67,
-    id: "ow67b",
-    name: "OW67B",
+    entry: &super::devices::OW67B,
     frame: FrameKind::Fifteen,
     function13: Function13::Open,
     rmr: false,
@@ -240,8 +229,7 @@ pub(super) static OW67B: Model = Model {
 
 pub(super) static OW69B: Model = Model {
     code: 69,
-    id: "ow69b",
-    name: "OW69B",
+    entry: &super::devices::OW69B,
     frame: FrameKind::Fifteen,
     function13: Function13::Open,
     rmr: false,
@@ -255,8 +243,7 @@ pub(super) static OW69B: Model = Model {
 
 pub(super) static VC871: Model = Model {
     code: 87,
-    id: "vc871",
-    name: "VC871",
+    entry: &super::devices::VC871,
     frame: FrameKind::Fifteen,
     function13: Function13::Open,
     rmr: false,
@@ -270,8 +257,7 @@ pub(super) static VC871: Model = Model {
 
 pub(super) static VC891: Model = Model {
     code: 89,
-    id: "vc891",
-    name: "VC891",
+    entry: &super::devices::VC891,
     frame: FrameKind::Fifteen,
     function13: Function13::Open,
     rmr: false,
@@ -285,8 +271,7 @@ pub(super) static VC891: Model = Model {
 
 pub(super) static VC915: Model = Model {
     code: 91,
-    id: "vc915",
-    name: "VC915",
+    entry: &super::devices::VC915,
     frame: FrameKind::Fifteen,
     function13: Function13::Open,
     rmr: false,
@@ -300,8 +285,7 @@ pub(super) static VC915: Model = Model {
 
 pub(super) static VC925PV: Model = Model {
     code: 92,
-    id: "vc925pv",
-    name: "VC925 PV",
+    entry: &super::devices::VC925PV,
     frame: FrameKind::Fifteen,
     function13: Function13::Open,
     rmr: false,
@@ -333,7 +317,7 @@ impl Model {
     /// Brand and model, as the registry names this model's entry: what
     /// messages call the meter.
     pub(super) fn display_name(&self) -> &'static str {
-        crate::protocol::registry::find_device(self.id).map_or(self.name, |d| d.display_name())
+        self.entry.display_name()
     }
 
     /// The model whose name this is, as `get_name` gives it; `None` for the
@@ -342,7 +326,7 @@ impl Model {
         // A recording made before the names dropped their brand reports
         // "OWON CMS101".
         let name = crate::protocol::registry::without_brand(name);
-        MODELS.iter().copied().find(|m| m.name == name)
+        MODELS.iter().copied().find(|m| m.entry.model == name)
     }
 }
 
@@ -442,7 +426,10 @@ mod tests {
                 record: Some(Record::Idle),
             }
         );
-        assert_eq!(Model::for_code(info.code).map(|m| m.id), Some("ow18b"));
+        assert_eq!(
+            Model::for_code(info.code).map(|m| m.entry.id),
+            Some("ow18b")
+        );
         assert_eq!(
             info.to_string(),
             "model code 18, firmware 4.0.9, battery 99%"
@@ -455,7 +442,7 @@ mod tests {
         let info = Fff2::parse(&[0x29, 0xFF, 0x00, 0x01, 0x02, 0x00]).unwrap();
         assert_eq!(info.code, 41);
         assert_eq!(info.firmware, Some([0, 1, 2]));
-        assert_eq!(Model::for_code(41).map(|m| m.id), Some("b41t+"));
+        assert_eq!(Model::for_code(41).map(|m| m.entry.id), Some("b41t+"));
         assert_eq!(
             info.to_string(),
             "model code 41, firmware 0.1.2, battery not reported"
@@ -492,7 +479,11 @@ mod tests {
         }
         for model in MODELS {
             assert!(std::ptr::eq(Model::for_code(model.code).unwrap(), model));
-            assert!(unsupported_format(model.code).is_none(), "{}", model.id);
+            assert!(
+                unsupported_format(model.code).is_none(),
+                "{}",
+                model.entry.id
+            );
         }
     }
 
@@ -515,7 +506,7 @@ mod tests {
         let fifteen: Vec<(u8, &str)> = MODELS
             .iter()
             .filter(|m| m.frame == FrameKind::Fifteen)
-            .map(|m| (m.code, m.id))
+            .map(|m| (m.code, m.entry.id))
             .collect();
         assert_eq!(
             fifteen,
@@ -533,20 +524,25 @@ mod tests {
         );
         for model in MODELS {
             let fifteen = model.frame == FrameKind::Fifteen;
-            assert_eq!(model.bluetooth_key.is_none(), fifteen, "{}", model.id);
+            assert_eq!(model.bluetooth_key.is_none(), fifteen, "{}", model.entry.id);
             assert_eq!(model.frame.max_aux_values(), usize::from(fifteen));
-            assert_eq!(model.sub_follows_main, model.code == 87, "{}", model.id);
+            assert_eq!(
+                model.sub_follows_main,
+                model.code == 87,
+                "{}",
+                model.entry.id
+            );
             assert_eq!(
                 model.cms_readings,
                 matches!(model.code, 61 | 101),
                 "{}",
-                model.id
+                model.entry.id
             );
         }
         let ncv: Vec<&str> = MODELS
             .iter()
             .filter(|m| m.function13 == Function13::Ncv)
-            .map(|m| m.id)
+            .map(|m| m.entry.id)
             .collect();
         assert_eq!(ncv, ["ow18b", "ow18e", "cm2100b", "cms101", "cms061"]);
     }

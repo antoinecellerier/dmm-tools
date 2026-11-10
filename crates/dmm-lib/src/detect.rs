@@ -24,24 +24,13 @@ use log::{debug, info, warn};
 use std::time::{Duration, Instant};
 
 /// What the probe cascade concluded.
-///
-/// [`SelectableDevice`] is a table entry with function pointers in it and
-/// derives no `Debug`, so this one prints the registry id instead.
+#[derive(Debug)]
 pub struct Detected {
     /// The registry entry to open the meter with.
     pub device: &'static SelectableDevice,
     /// The model name the meter reported, when it sent one. Kept even when it
     /// resolves to no registry entry, so the user can be told what answered.
     pub reported_name: Option<String>,
-}
-
-impl std::fmt::Debug for Detected {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("Detected")
-            .field("device", &self.device.id)
-            .field("reported_name", &self.reported_name)
-            .finish()
-    }
 }
 
 /// How long each probe step listens.

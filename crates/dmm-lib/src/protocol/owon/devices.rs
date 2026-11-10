@@ -134,8 +134,8 @@ const VC915_MANUAL: &str = "https://asset.conrad.com/media10/add/160267/c1/-/gl/
 const VC925_MANUAL: &str = "https://asset.conrad.com/media10/add/160267/c1/-/gl/003072348ML00";
 
 pub(crate) static OW18B: SelectableDevice = SelectableDevice {
-    id: model::OW18B.id,
-    model: model::OW18B.name,
+    id: "ow18b",
+    model: "OW18B/OW16B",
     brand: Brand::Owon,
     sold_as: &[],
     aliases: &["ow16b", "owon-ow18b", "owon-ow16b"],
@@ -151,8 +151,8 @@ pub(crate) static OW18B: SelectableDevice = SelectableDevice {
 };
 
 pub(crate) static OW18E: SelectableDevice = SelectableDevice {
-    id: model::OW18E.id,
-    model: model::OW18E.name,
+    id: "ow18e",
+    model: "OW18E",
     brand: Brand::Owon,
     sold_as: &[],
     aliases: &["owon-ow18e"],
@@ -168,8 +168,8 @@ pub(crate) static OW18E: SelectableDevice = SelectableDevice {
 };
 
 pub(crate) static B33: SelectableDevice = SelectableDevice {
-    id: model::B33.id,
-    model: model::B33.name,
+    id: "b33",
+    model: "B33",
     brand: Brand::Owon,
     sold_as: &[],
     // Which code a T or "+" variant sends is open (spec §1).
@@ -186,8 +186,8 @@ pub(crate) static B33: SelectableDevice = SelectableDevice {
 };
 
 pub(crate) static B35T_PLUS: SelectableDevice = SelectableDevice {
-    id: model::B35.id,
-    model: model::B35.name,
+    id: "b35t+",
+    model: "B35T+",
     brand: Brand::Owon,
     sold_as: &[],
     aliases: &["b35+", "owon-b35t+"],
@@ -203,8 +203,8 @@ pub(crate) static B35T_PLUS: SelectableDevice = SelectableDevice {
 };
 
 pub(crate) static B41T_PLUS: SelectableDevice = SelectableDevice {
-    id: model::B41.id,
-    model: model::B41.name,
+    id: "b41t+",
+    model: "B41T+",
     brand: Brand::Owon,
     sold_as: &[],
     aliases: &["b41t", "owon-b41t+"],
@@ -220,8 +220,8 @@ pub(crate) static B41T_PLUS: SelectableDevice = SelectableDevice {
 };
 
 pub(crate) static CM2100B: SelectableDevice = SelectableDevice {
-    id: model::CM2100B.id,
-    model: model::CM2100B.name,
+    id: "cm2100b",
+    model: "CM2100B",
     brand: Brand::Owon,
     sold_as: &[],
     aliases: &["owon-cm2100b"],
@@ -237,8 +237,8 @@ pub(crate) static CM2100B: SelectableDevice = SelectableDevice {
 };
 
 pub(crate) static CMS101: SelectableDevice = SelectableDevice {
-    id: model::CMS101.id,
-    model: model::CMS101.name,
+    id: "cms101",
+    model: "CMS101",
     brand: Brand::Owon,
     // UNI-T's UT217 manual is the CMS's (spec §9.4).
     sold_as: &[SoldAs {
@@ -260,8 +260,8 @@ pub(crate) static CMS101: SelectableDevice = SelectableDevice {
 };
 
 pub(crate) static CMS061: SelectableDevice = SelectableDevice {
-    id: model::CMS061.id,
-    model: model::CMS061.name,
+    id: "cms061",
+    model: "CMS061",
     brand: Brand::Owon,
     sold_as: &[SoldAs {
         brand: Brand::UniT,
@@ -283,8 +283,8 @@ pub(crate) static CMS061: SelectableDevice = SelectableDevice {
 };
 
 pub(crate) static OW65B: SelectableDevice = SelectableDevice {
-    id: model::OW65B.id,
-    model: model::OW65B.name,
+    id: "ow65b",
+    model: "OW65B",
     brand: Brand::Owon,
     sold_as: &[],
     aliases: &["owon-ow65b"],
@@ -300,8 +300,8 @@ pub(crate) static OW65B: SelectableDevice = SelectableDevice {
 };
 
 pub(crate) static OW67B: SelectableDevice = SelectableDevice {
-    id: model::OW67B.id,
-    model: model::OW67B.name,
+    id: "ow67b",
+    model: "OW67B",
     brand: Brand::Owon,
     sold_as: &[],
     aliases: &["owon-ow67b"],
@@ -317,8 +317,8 @@ pub(crate) static OW67B: SelectableDevice = SelectableDevice {
 };
 
 pub(crate) static OW69B: SelectableDevice = SelectableDevice {
-    id: model::OW69B.id,
-    model: model::OW69B.name,
+    id: "ow69b",
+    model: "OW69B",
     brand: Brand::Owon,
     sold_as: &[],
     aliases: &["owon-ow69b"],
@@ -334,8 +334,8 @@ pub(crate) static OW69B: SelectableDevice = SelectableDevice {
 };
 
 pub(crate) static VC871: SelectableDevice = SelectableDevice {
-    id: model::VC871.id,
-    model: model::VC871.name,
+    id: "vc871",
+    model: "VC871",
     brand: Brand::Voltcraft,
     sold_as: &[],
     aliases: &["vc-871"],
@@ -351,8 +351,8 @@ pub(crate) static VC871: SelectableDevice = SelectableDevice {
 };
 
 pub(crate) static VC891: SelectableDevice = SelectableDevice {
-    id: model::VC891.id,
-    model: model::VC891.name,
+    id: "vc891",
+    model: "VC891",
     brand: Brand::Voltcraft,
     sold_as: &[],
     aliases: &["vc-891"],
@@ -368,8 +368,8 @@ pub(crate) static VC891: SelectableDevice = SelectableDevice {
 };
 
 pub(crate) static VC915: SelectableDevice = SelectableDevice {
-    id: model::VC915.id,
-    model: model::VC915.name,
+    id: "vc915",
+    model: "VC915",
     brand: Brand::Voltcraft,
     sold_as: &[],
     aliases: &["vc-915"],
@@ -385,8 +385,8 @@ pub(crate) static VC915: SelectableDevice = SelectableDevice {
 };
 
 pub(crate) static VC925PV: SelectableDevice = SelectableDevice {
-    id: model::VC925PV.id,
-    model: model::VC925PV.name,
+    id: "vc925pv",
+    model: "VC925 PV",
     brand: Brand::Voltcraft,
     sold_as: &[],
     aliases: &["vc-925pv"],

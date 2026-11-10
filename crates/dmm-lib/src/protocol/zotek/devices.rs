@@ -7,7 +7,7 @@
 //!
 //! [`DEVICES`]: crate::protocol::registry::DEVICES
 
-use super::{FINGERPRINT, ZotekProtocol, layout};
+use super::{FINGERPRINT, ZotekProtocol};
 use crate::protocol::DeviceFamily;
 use crate::protocol::registry::{Brand, SelectableDevice, SoldAs};
 
@@ -46,8 +46,8 @@ const ACTIVATION_ZT5B: &str = "\
 Note: the meter switches off after 15 minutes idle; press NCV before turning it on to disable that.";
 
 pub(crate) static ZT300AB: SelectableDevice = SelectableDevice {
-    id: layout::ZT300AB.id,
-    model: layout::ZT300AB.name,
+    id: "zt300ab",
+    model: "ZT-300AB",
     brand: Brand::Zotek,
     sold_as: &[
         SoldAs {
@@ -76,8 +76,8 @@ pub(crate) static ZT300AB: SelectableDevice = SelectableDevice {
 };
 
 pub(crate) static ZT5566SE: SelectableDevice = SelectableDevice {
-    id: layout::ZT5566SE.id,
-    model: layout::ZT5566SE.name,
+    id: "zt5566se",
+    model: "ZT-5566SE",
     brand: Brand::Zotek,
     // ANENG's AN999S matches the S and SE (spec §1). BSIDE sells the plain
     // ZT-5566, not listed: its manual documents Bluetooth only as a speaker.
@@ -102,8 +102,8 @@ pub(crate) static ZT5566SE: SelectableDevice = SelectableDevice {
 };
 
 pub(crate) static ZT5BQ: SelectableDevice = SelectableDevice {
-    id: layout::ZT5BQ.id,
-    model: layout::ZT5BQ.name,
+    id: "zt5bq",
+    model: "ZT-5BQ",
     brand: Brand::Zotek,
     sold_as: &[
         SoldAs {
@@ -132,8 +132,8 @@ pub(crate) static ZT5BQ: SelectableDevice = SelectableDevice {
 };
 
 pub(crate) static ZT5B: SelectableDevice = SelectableDevice {
-    id: layout::ZT5B.id,
-    model: layout::ZT5B.name,
+    id: "zt5b",
+    model: "ZT-5B",
     brand: Brand::Zotek,
     sold_as: &[
         SoldAs {

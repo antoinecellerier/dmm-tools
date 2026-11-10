@@ -31,7 +31,7 @@ mod model;
 use crate::error::{Error, FrameRemedy, Rejected, Result, Unsupported, WrongMeter};
 use crate::measurement::Measurement;
 use crate::protocol::framing::{self, FrameErrorRecovery};
-use crate::protocol::registry::{self, SelectableDevice};
+use crate::protocol::registry::SelectableDevice;
 use crate::protocol::unrecognised::report_unknown;
 use crate::protocol::{
     CaptureStep, DeviceFamily, DeviceProfile, Evidence, Fingerprint, Probing, Protocol, Stability,
@@ -71,7 +71,7 @@ enum Confirmation {
 /// The name a model code gives the meter: its entry's, or the bare code.
 fn name_for(code: u8) -> String {
     match Model::for_code(code) {
-        Some(model) => model.name.to_string(),
+        Some(model) => model.entry.model.to_string(),
         None => format!("OWON model code {code}"),
     }
 }
@@ -85,7 +85,7 @@ fn keys_off(opened: &Model, confirmed: Confirmation) -> Option<Rejected> {
             code: model.code,
             model: model.display_name(),
             opened: opened.display_name(),
-            id: model.id,
+            id: model.entry.id,
         }),
         Confirmation::Unknown(code) => Some(Rejected::UnknownModel { code }),
     }
@@ -180,7 +180,7 @@ impl OwonProtocol {
             model,
             profile: DeviceProfile {
                 family_name: "OWON",
-                id: model.id,
+                id: model.entry.id,
                 stability: stability(model),
                 supported_commands: model.commands,
                 max_aux_values: model.frame.max_aux_values(),
@@ -207,7 +207,11 @@ impl OwonProtocol {
     /// reports beyond the code.
     fn confirm(&self, value: &[u8]) -> Result<Confirmation> {
         let Some(info) = Fff2::parse(value) else {
-            report_unknown(self.model.id, "device information", format_args!("empty"));
+            report_unknown(
+                self.model.entry.id,
+                "device information",
+                format_args!("empty"),
+            );
             return Ok(Confirmation::NoInfo);
         };
         debug!("owon: device information: {info}");
@@ -228,7 +232,7 @@ impl OwonProtocol {
                  OWON's app); stop the recording there if no readings arrive"
             ),
             Some(Record::Other(_)) => report_unknown(
-                self.model.id,
+                self.model.entry.id,
                 "offline record state",
                 format_args!("{value:02X?}"),
             ),
@@ -244,7 +248,7 @@ impl OwonProtocol {
                         model: model.display_name(),
                         frame: model.frame.len(),
                         opened: self.model.display_name(),
-                        id: model.id,
+                        id: model.entry.id,
                     },
                     value,
                 ));
@@ -252,7 +256,7 @@ impl OwonProtocol {
             Some(model) => Confirmation::Other(model),
             None => {
                 report_unknown(
-                    self.model.id,
+                    self.model.entry.id,
                     "model code",
                     format_args!("{} in {value:02X?}", info.code),
                 );
@@ -369,7 +373,7 @@ impl Protocol for OwonProtocol {
                 } else {
                     ("frames of neither kind", WrongMeter::UntoldFrameKind)
                 };
-                report_unknown(self.model.id, what, format_args!("{shown:02X?}"));
+                report_unknown(self.model.entry.id, what, format_args!("{shown:02X?}"));
                 let err = Error::wrong_meter(reason, shown);
                 self.rx_buf.clear();
                 Err(err)
@@ -419,7 +423,7 @@ impl Protocol for OwonProtocol {
     fn entry_named(&self, name: &str) -> Option<&'static SelectableDevice> {
         Model::named(name)
             .filter(|model| model.frame == self.model.frame)
-            .and_then(|model| registry::find_device(model.id))
+            .map(|model| model.entry)
     }
 
     fn name_before_init(&self, transport: &dyn Transport) -> bool {
@@ -471,14 +475,14 @@ fn recognise(buf: &[u8], probing: &Probing) -> Option<Evidence> {
             if model::unsupported_format(info.code).is_none() && !whole {
                 return None;
             }
-            let id = model.unwrap_or(FALLBACK).id;
+            let id = model.unwrap_or(FALLBACK).entry.id;
             Some(Evidence::Model {
                 id,
                 reported_name: Some(name_for(info.code)),
             })
         }
         None => frame::tiles(buf).then_some(Evidence::Model {
-            id: FALLBACK.id,
+            id: FALLBACK.entry.id,
             reported_name: None,
         }),
     }
@@ -666,9 +670,9 @@ mod tests {
                     assert_eq!(reason, other_frame(opened, sent));
                     // Three 6-byte frames, two 15-byte ones.
                     let frames = if sent == FrameKind::Six { 3 } else { 2 };
-                    assert_eq!(raw.len(), frames * size, "{}", opened.id);
+                    assert_eq!(raw.len(), frames * size, "{}", opened.entry.id);
                 }
-                other => panic!("{}: {other:?}", opened.id),
+                other => panic!("{}: {other:?}", opened.entry.id),
             }
             assert!(proto.rx_buf.is_empty());
         }
@@ -751,12 +755,12 @@ mod tests {
             proto.init(&meter).unwrap();
             let shown = |m: Measurement| format!("{} {:?}", m.mode, m.aux_values);
             let (read, reports) = capture_reports(|| proto.parse_payload(&payload));
-            assert!(reports.is_empty(), "{}: {reports:?}", opened.id);
+            assert!(reports.is_empty(), "{}: {reports:?}", opened.entry.id);
             let read = shown(read.unwrap());
             let named = shown(decode15::decode(&payload, named).unwrap());
             let (as_opened, _) = capture_reports(|| decode15::decode(&payload, opened));
-            assert_eq!(read, named, "{}", opened.id);
-            assert_ne!(read, shown(as_opened.unwrap()), "{}", opened.id);
+            assert_eq!(read, named, "{}", opened.entry.id);
+            assert_ne!(read, shown(as_opened.unwrap()), "{}", opened.entry.id);
         }
     }
 
@@ -839,7 +843,11 @@ mod tests {
         assert_eq!(named(&model::B35), Some("b41t+"));
         assert_eq!(named(&model::B41), None);
         // The other frame: init refuses it, so no warning goes first.
-        assert!(proto(&model::CMS101).entry_named(model::B41.name).is_none());
+        assert!(
+            proto(&model::CMS101)
+                .entry_named(model::B41.entry.model)
+                .is_none()
+        );
         // A replay from before the names dropped their brand.
         assert_eq!(
             proto(&model::CMS101)
@@ -1007,7 +1015,7 @@ mod tests {
                     let message = reason.to_string();
                     assert!(message.contains(says), "{code}: {message}");
                     assert!(message.contains(&format!("model code {code}")), "{message}");
-                    assert!(message.contains(opened.name), "{message}");
+                    assert!(message.contains(opened.entry.model), "{message}");
                 }
                 other => panic!("{code}: {other:?}"),
             }
@@ -1115,8 +1123,8 @@ mod tests {
     fn every_registry_entry_is_its_models() {
         let mut issues = Vec::new();
         for m in model::MODELS {
-            let entry = registry::find_device(m.id).expect("registry entry");
-            assert_eq!(entry.model, m.name);
+            let entry = m.entry;
+            assert!(registry::DEVICES.contains(&entry), "{}", entry.id);
             assert_eq!(entry.family, DeviceFamily::Owon);
             assert_eq!(entry.links, [crate::BLUETOOTH]);
             let names: &[&str] = match m.frame {
@@ -1126,16 +1134,16 @@ mod tests {
                 }
                 FrameKind::Fifteen => &["BDM"],
             };
-            assert_eq!(entry.bluetooth_names, names, "{}", m.id);
+            assert_eq!(entry.bluetooth_names, names, "{}", m.entry.id);
             assert!(std::ptr::eq(entry.fingerprint.unwrap(), &FINGERPRINT));
             assert!(
                 entry
                     .activation_instructions
                     .starts_with("1. Disconnect the meter from any phone app\n"),
                 "{}",
-                m.id
+                m.entry.id
             );
-            let manual = match m.id {
+            let manual = match m.entry.id {
                 "ow65b" | "ow67b" | "ow69b" => "http://owon.co.jp/products_info.asp?ProductID=",
                 "vc871" | "vc891" | "vc915" | "vc925pv" => {
                     "https://asset.conrad.com/media10/add/160267/c1/-/gl/"
@@ -1145,7 +1153,7 @@ mod tests {
             assert!(
                 entry.manual_url.is_some_and(|u| u.starts_with(manual)),
                 "{}",
-                m.id
+                m.entry.id
             );
             let proto = (entry.new_protocol)();
             let profile = proto.profile();
@@ -1156,7 +1164,7 @@ mod tests {
             } else {
                 Stability::Experimental
             };
-            assert_eq!(profile.stability, stability, "{}", m.id);
+            assert_eq!(profile.stability, stability, "{}", m.entry.id);
             assert_eq!(profile.supported_commands, m.commands);
             assert_eq!(profile.max_aux_values, m.frame.max_aux_values());
             issues.push(profile.verification_issue);
@@ -1167,7 +1175,7 @@ mod tests {
             issues,
             [39, 40, 41, 42, 43, 44, 45, 45, 46, 47, 48, 47, 48, 49, 49]
         );
-        let ids: Vec<&str> = model::MODELS.iter().map(|m| m.id).collect();
+        let ids: Vec<&str> = model::MODELS.iter().map(|m| m.entry.id).collect();
         assert_eq!(
             ids,
             [
@@ -1175,7 +1183,7 @@ mod tests {
                 "ow67b", "ow69b", "vc871", "vc891", "vc915", "vc925pv"
             ]
         );
-        let names: Vec<&str> = model::MODELS[6..].iter().map(|m| m.name).collect();
+        let names: Vec<&str> = model::MODELS[6..].iter().map(|m| m.entry.model).collect();
         assert_eq!(
             names,
             [
@@ -1235,11 +1243,11 @@ mod tests {
             assert_eq!(
                 found,
                 Some(Evidence::Model {
-                    id: m.id,
-                    reported_name: Some(m.name.to_string()),
+                    id: m.entry.id,
+                    reported_name: Some(m.entry.model.to_string()),
                 }),
                 "{}",
-                m.id
+                m.entry.id
             );
         }
     }

@@ -110,7 +110,7 @@ pub(super) fn all_labels(model: &Model, out: &mut crate::text::Labels) {
     // The function code is bits 6-9 of the function/range word (spec §6.1).
     for code in 0..=0x0F {
         if let Some((mode, _)) = function_of(code, model) {
-            out.add(crate::text::TextKind::Mode, mode, model.id);
+            out.add(crate::text::TextKind::Mode, mode, model.entry.id);
         }
     }
 }
@@ -143,14 +143,14 @@ pub(super) fn decode(p: &[u8], model: &Model) -> Result<Measurement> {
         return Err(Error::invalid_response(
             format!(
                 "{} payload is {} bytes, expected {FRAME_LEN}",
-                model.id,
+                model.entry.id,
                 p.len()
             ),
             p,
         ));
     }
     let report =
-        |what: &'static str| report_unknown(model.id, what, format_args!("frame {p:02X?}"));
+        |what: &'static str| report_unknown(model.entry.id, what, format_args!("frame {p:02X?}"));
 
     // Function/range word (spec §6.1).
     let gear = u16::from_le_bytes([p[0], p[1]]);
@@ -640,7 +640,12 @@ mod tests {
         for model in MODELS {
             let (m, reports) = reported(&p, model);
             assert!(m.flags.auto_range);
-            assert_eq!(reports.is_empty(), model.id == "b41t+", "{}", model.id);
+            assert_eq!(
+                reports.is_empty(),
+                model.entry.id == "b41t+",
+                "{}",
+                model.entry.id
+            );
         }
         // Another high bit still reports on the B41T+.
         let (_, reports) = reported(&[0x24, 0xF0, 0x84, 0x01, 0x03, 0x00], &B41);
@@ -666,7 +671,7 @@ mod tests {
         use crate::text::TextKind;
         let all = crate::text::listed();
         for model in MODELS.iter().filter(|m| m.frame == FrameKind::Six) {
-            let entry = crate::protocol::registry::find_device(model.id).unwrap();
+            let entry = model.entry;
             let protocol = (entry.new_protocol)();
             let mut read = std::collections::BTreeSet::new();
             for code in 0..=0x0F_u16 {
@@ -674,12 +679,17 @@ mod tests {
                 let [lo, hi] = gear.to_le_bytes();
                 let (m, reports) = reported(&[lo, hi, 0x00, 0x00, 1, 0x00], model);
                 if reports.is_empty() {
-                    crate::text::assert_listed(all, protocol.as_ref(), &m, model.id);
+                    crate::text::assert_listed(all, protocol.as_ref(), &m, model.entry.id);
                     read.insert((TextKind::Mode, m.mode.into_owned()));
                 }
             }
             let kinds = [TextKind::Mode, TextKind::Range, TextKind::Aux];
-            assert_eq!(all.of_device(model.id, &kinds), read, "{}", model.id);
+            assert_eq!(
+                all.of_device(model.entry.id, &kinds),
+                read,
+                "{}",
+                model.entry.id
+            );
         }
     }
 }

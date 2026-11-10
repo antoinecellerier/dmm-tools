@@ -80,7 +80,7 @@ impl ZotekProtocol {
             layout,
             profile: DeviceProfile {
                 family_name: "ZOTEK",
-                id: layout.id,
+                id: layout.entry.id,
                 stability: Stability::Experimental,
                 supported_commands: keys::commands(layout),
                 max_aux_values: layout.max_aux_values,
@@ -169,7 +169,7 @@ impl Protocol for ZotekProtocol {
         if let Some(other) = self.other_layout(packet[frame::TYPE_AT]) {
             warn!(
                 "zotek: the meter sends the {} layout; choose Auto-detect or --device {}",
-                other.name, other.id
+                other.entry.model, other.entry.id
             );
         }
         let (reading, showing) = layout::decode_showing(&packet)?;
@@ -254,7 +254,7 @@ fn recognise(buf: &[u8], _probing: &Probing) -> Option<Evidence> {
         .filter_map(|start| frame::packet_at(buf, start))
         .find_map(|packet| layout::plausible(&packet))
         .map(|layout| Evidence::Model {
-            id: layout.id,
+            id: layout.entry.id,
             reported_name: None,
         })
 }
@@ -264,7 +264,7 @@ fn recognise(buf: &[u8], _probing: &Probing) -> Option<Evidence> {
 #[cfg(any(test, feature = "test-support"))]
 pub(crate) fn all_labels(out: &mut crate::text::Labels) {
     for layout in layout::LAYOUTS {
-        layout::all_labels(layout, layout.id, out);
+        layout::all_labels(layout, layout.entry.id, out);
     }
 }
 
@@ -317,7 +317,7 @@ mod tests {
         assert!(proto.request_measurement(&mock).is_ok());
 
         let mut fresh = ZotekProtocol::new_zt300ab();
-        assert_eq!(fresh.other_layout(4).map(|l| l.id), Some("zt5566se"));
+        assert_eq!(fresh.other_layout(4).map(|l| l.entry.id), Some("zt5566se"));
         assert!(fresh.other_layout(4).is_none());
     }
 
@@ -345,8 +345,8 @@ mod tests {
     #[test]
     fn every_layout_id_is_its_registry_entrys() {
         for layout in layout::LAYOUTS {
-            let entry = registry::find_device(layout.id).expect("registry entry");
-            assert_eq!(entry.model, layout.name);
+            let entry = layout.entry;
+            assert!(registry::DEVICES.contains(&entry), "{}", entry.id);
             assert_eq!(entry.family, DeviceFamily::Zotek);
             let proto = (entry.new_protocol)();
             assert_eq!(proto.profile().id, entry.id);

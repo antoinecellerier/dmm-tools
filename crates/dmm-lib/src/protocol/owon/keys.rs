@@ -583,7 +583,7 @@ mod tests {
                     !(bluetooth_keys.contains(&key.code) && key.press == LONG)
                         || key.needs_confirmed,
                     "{} sends {:02X?}",
-                    model.id,
+                    model.entry.id,
                     frame(key)
                 );
             }
@@ -716,7 +716,7 @@ mod tests {
             ("vc925pv", &vc925),
         ];
         for (model, (id, commands)) in MODELS.iter().zip(expected) {
-            assert_eq!(model.id, id);
+            assert_eq!(model.entry.id, id);
             assert_eq!(model.commands, commands, "{id}");
             let names: Vec<&str> = model.keys.iter().map(|k| k.command).collect();
             assert_eq!(names, commands, "{id}");
@@ -816,19 +816,19 @@ mod tests {
             &entry::VC915,
             &entry::VC925PV,
         ] {
-            assert!(has(model, 2, 3), "{} DC mA", model.id);
-            assert!(has(model, 17, 4), "{} loop", model.id);
-            assert!(!has(model, 2, 2), "{} DC µA", model.id);
-            assert!(!has(model, 2, 4), "{} DC A", model.id);
+            assert!(has(model, 2, 3), "{} DC mA", model.entry.id);
+            assert!(has(model, 17, 4), "{} loop", model.entry.id);
+            assert!(!has(model, 2, 2), "{} DC µA", model.entry.id);
+            assert!(!has(model, 2, 4), "{} DC A", model.entry.id);
             assert_eq!(
                 has(model, 3, 3),
-                matches!(model.id, "ow67b" | "ow69b"),
+                matches!(model.entry.id, "ow67b" | "ow69b"),
                 "{} AC mA",
-                model.id
+                model.entry.id
             );
         }
         for model in [&entry::OW65B, &entry::CMS061, &entry::CMS101] {
-            assert!(!has(model, 2, 3), "{}", model.id);
+            assert!(!has(model, 2, 3), "{}", model.entry.id);
         }
     }
 
@@ -838,10 +838,10 @@ mod tests {
         let has = |model, function| offered(model, function, 4).contains(&"Display");
         for model in [&entry::OW67B, &entry::VC871] {
             for function in [14, 15, 16, 18, 19, 20, 21, 22] {
-                assert!(has(model, function), "{} {function}", model.id);
+                assert!(has(model, function), "{} {function}", model.entry.id);
             }
             for function in [0, 1, 2, 3, 4, 6, 17] {
-                assert!(!has(model, function), "{} {function}", model.id);
+                assert!(!has(model, function), "{} {function}", model.entry.id);
             }
         }
         for function in [1, 6, 7] {
@@ -855,7 +855,7 @@ mod tests {
         }
         for model in [&entry::OW65B, &entry::OW69B, &entry::VC891, &entry::CMS061] {
             for function in [1, 14] {
-                assert!(!has(model, function), "{} {function}", model.id);
+                assert!(!has(model, function), "{} {function}", model.entry.id);
             }
         }
     }
@@ -877,7 +877,11 @@ mod tests {
             (&entry::VC915, "LPF"),
         ] {
             for function in [0, 2, 3, 6] {
-                assert!(!has(model, label, function), "{} {function}", model.id);
+                assert!(
+                    !has(model, label, function),
+                    "{} {function}",
+                    model.entry.id
+                );
             }
         }
         assert!(offered(&entry::OW69B, 1, 3).contains(&"Lo"));
