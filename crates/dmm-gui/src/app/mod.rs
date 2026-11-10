@@ -1350,6 +1350,9 @@ mod tests {
     ) -> std::collections::BTreeSet<String> {
         let mut settings = Settings {
             auto_connect: false,
+            // On a release version, What's New would open over the scene
+            // and take its clicks.
+            last_seen_version: Some(env!("CARGO_PKG_VERSION").to_string()),
             ..Settings::default()
         };
         settings.shared.device_family = "ut61eplus".to_string();
