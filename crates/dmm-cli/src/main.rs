@@ -249,12 +249,16 @@ fn report_failure(
     no_bluetooth: bool,
 ) -> ! {
     error!("{e}");
-    let msg = l10n::error_text(l, e);
     let extra = extra_help(e, selection, adapter);
     if let Extra::NoResponse(device) = extra {
         print_no_response_help(device);
         std::process::exit(1);
     }
+    let msg = match extra {
+        // By the name it was picked by, which the error doesn't carry.
+        Extra::NotSearched { model, miss } => l.bluetooth_only(model, miss),
+        _ => l10n::error_text(l, e),
+    };
     eprintln!("{} {msg}", error_label());
     match extra {
         Extra::BluetoothAt(address) => {
@@ -266,11 +270,15 @@ fn report_failure(
                 activation,
             });
         }
-        Extra::OffHint => eprintln!(
+        // The switch is ours to name.
+        Extra::NotSearched {
+            miss: dmm_lib::error::BluetoothOnlyMiss::SwitchedOff,
+            ..
+        } => eprintln!(
             "{}",
             style(l.help().cli_bluetooth_off_hint(no_bluetooth)).yellow()
         ),
-        Extra::NoResponse(_) | Extra::None => {}
+        Extra::NotSearched { .. } | Extra::NoResponse(_) | Extra::None => {}
     }
     std::process::exit(1);
 }
@@ -287,9 +295,12 @@ enum Extra {
         model: &'static str,
         activation: &'static str,
     },
-    /// A meter with the radio built in, not looked for because the search
-    /// was switched off: the switch is ours to name.
-    OffHint,
+    /// A meter with the radio built in, not looked for: the name it was
+    /// picked by, and why.
+    NotSearched {
+        model: &'static str,
+        miss: dmm_lib::error::BluetoothOnlyMiss,
+    },
     None,
 }
 
@@ -313,9 +324,7 @@ fn extra_help(
         Diagnosis::BluetoothOnlyUnreachable { model, activation } => {
             Extra::BluetoothOnly { model, activation }
         }
-        Diagnosis::BluetoothNotSearched(dmm_lib::error::BluetoothOnlyMiss::SwitchedOff) => {
-            Extra::OffHint
-        }
+        Diagnosis::BluetoothNotSearched { model, miss } => Extra::NotSearched { model, miss },
         _ => Extra::None,
     }
 }
@@ -382,32 +391,40 @@ mod tests {
         assert!(!bluetooth_probing(true, Some(&saved(false))));
     }
 
-    /// Only a search switched off gets the CLI's switch after the error; a
-    /// meter out of range or a build without the radio has nothing to tick.
+    /// A meter with the radio built in that was not looked for is named as
+    /// this run calls it, whatever the error names; only the switch decides
+    /// whether the CLI's own hint follows ([`report_failure`]). Out of range
+    /// is the open's own help, and never reaches here.
     #[test]
-    fn only_a_switched_off_search_gets_the_switch() {
+    fn a_radio_meter_not_looked_for_is_named_as_picked() {
         use dmm_lib::error::{BluetoothOnlyMiss, Error};
+        let ut60bt = selection("ut60bt");
+        let Selection::Device(device) = ut60bt else {
+            panic!("a named meter");
+        };
         let err = |miss| Error::BluetoothOnly {
-            model: "UT60BT",
+            model: device.display_name(),
             activation: "",
             miss,
         };
-        let ut60bt = selection("ut60bt");
-        assert_eq!(
-            extra_help(&err(BluetoothOnlyMiss::SwitchedOff), ut60bt, None),
-            Extra::OffHint
-        );
         for miss in [
-            BluetoothOnlyMiss::NotInRange,
+            BluetoothOnlyMiss::SwitchedOff,
             BluetoothOnlyMiss::NotBuilt,
             BluetoothOnlyMiss::UsbAdapter,
         ] {
             assert_eq!(
                 extra_help(&err(miss), ut60bt, None),
-                Extra::None,
+                Extra::NotSearched {
+                    model: open::meter_name(device),
+                    miss
+                },
                 "{miss:?}"
             );
         }
+        assert_eq!(
+            extra_help(&err(BluetoothOnlyMiss::NotInRange), ut60bt, None),
+            Extra::None
+        );
     }
 
     /// Only a meter that went quiet gets its activation steps, and only once

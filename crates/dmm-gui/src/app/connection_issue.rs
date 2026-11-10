@@ -371,20 +371,22 @@ impl App {
                 body: tr!(l10n, "connection-click-connect").into_owned(),
                 feedback_link: None,
             },
-            Diagnosis::BluetoothNotSearched(miss) => {
+            Diagnosis::BluetoothNotSearched { model, miss } => {
+                // By the name it was picked by, which the error doesn't carry.
+                let error = l10n.bluetooth_only(model, *miss);
                 let message = match miss {
                     // The remedy is the GUI's own switch; the library's
                     // sentence names none.
                     dmm_lib::error::BluetoothOnlyMiss::SwitchedOff => tr!(
                         l10n,
                         "connection-bluetooth-not-searched-off",
-                        error = l10n.error(error),
+                        error = error.as_str(),
                         hint = l10n.help().gui_bluetooth_off_hint()
                     ),
                     _ => tr!(
                         l10n,
                         "connection-bluetooth-not-searched-why",
-                        error = l10n.error(error)
+                        error = error.as_str()
                     ),
                 };
                 notice(
@@ -722,7 +724,7 @@ mod tests {
         }
     }
 
-    /// The search names the meter asked for, not the maker's entry it opens as.
+    /// The help names the meter asked for, not the maker's entry it opens as.
     #[test]
     fn a_bluetooth_only_notice_names_the_picked_meter() {
         use dmm_lib::error::BluetoothOnlyMiss;
@@ -739,6 +741,25 @@ mod tests {
         );
         let n = notice_for(&mut app("ut217a"), issue);
         assert_eq!(n.title, "No UNI-T UT217A found over Bluetooth");
+
+        // Not looked for, the same: the error's sentence names the pick.
+        let issue = ConnectionIssue::from_error(
+            Error::BluetoothOnly {
+                model: cms061.display_name(),
+                activation: cms061.activation_instructions,
+                miss: BluetoothOnlyMiss::SwitchedOff,
+            },
+            None,
+            Some(pick),
+        );
+        let n = notice_for(&mut app("ut217a"), issue);
+        assert_eq!(n.kind, NoticeKind::BluetoothNotSearched);
+        assert!(
+            n.body
+                .starts_with("UNI-T UT217A connects over Bluetooth only"),
+            "{}",
+            n.body
+        );
     }
 
     /// A meter with the radio built in is answered on the radio alone, with

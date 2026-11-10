@@ -774,9 +774,13 @@ pub enum Diagnosis {
         model: &'static str,
         activation: &'static str,
     },
-    /// A meter with the radio built in, and the radio was not searched; why.
+    /// A meter with the radio built in, and the radio was not searched: the
+    /// name it was picked by, and why ([`Localizer::bluetooth_only`]).
     /// Never [`BluetoothOnlyMiss::NotInRange`].
-    BluetoothNotSearched(BluetoothOnlyMiss),
+    BluetoothNotSearched {
+        model: &'static str,
+        miss: BluetoothOnlyMiss,
+    },
     /// The meter stopped answering.
     NoResponse,
     /// The meter answered with data that could not be read.
@@ -793,6 +797,13 @@ impl Diagnosis {
     /// each one carries, and the coarse kind carries none of it. Only
     /// unreadable data, which needs no more than its text, goes by kind.
     pub fn of(err: &Error, adapter: Option<&str>, picked: Option<registry::Listing>) -> Self {
+        // A meter with the radio built in, by the name it was picked by when
+        // the pick is that entry; the error names the maker's.
+        let named = |model: &'static str| {
+            picked
+                .filter(|l| l.device.display_name() == model)
+                .map_or(model, |l| l.display_name())
+        };
         match err {
             // An address is explained by the link it named, not by the USB
             // bus: nothing on the bus could have answered it.
@@ -834,11 +845,13 @@ impl Diagnosis {
                 activation,
                 miss: BluetoothOnlyMiss::NotInRange,
             } => Self::BluetoothOnlyNotFound {
-                // By the name it was picked by, when it was.
-                model: picked.map_or(*model, |l| l.display_name()),
+                model: named(model),
                 activation,
             },
-            Error::BluetoothOnly { miss, .. } => Self::BluetoothNotSearched(*miss),
+            Error::BluetoothOnly { model, miss, .. } => Self::BluetoothNotSearched {
+                model: named(model),
+                miss: *miss,
+            },
             // The variant, not the kind: a pulled cable's HID error names a
             // timeout too, and detection finding nothing is that kind.
             Error::Timeout => Self::NoResponse,
@@ -1389,11 +1402,11 @@ mod tests {
         assert_eq!(Diagnosis::of(&stack, None, None), Diagnosis::Other);
     }
 
-    /// A meter with the radio built in that nothing in range carried goes by
-    /// the name it was picked by, a sold-as name included; with no pick, by
-    /// the error's.
+    /// A meter with the radio built in, not found or not looked for, goes by
+    /// the name it was picked by, a sold-as name included; with no pick, or
+    /// a pick of another meter since, by the error's.
     #[test]
-    fn a_radio_meter_not_in_range_goes_by_its_pick() {
+    fn a_radio_meter_goes_by_its_pick() {
         let missed = |miss| Error::BluetoothOnly {
             model: "OWON CMS061",
             activation: "steps",
@@ -1422,8 +1435,30 @@ mod tests {
         ] {
             assert_eq!(
                 Diagnosis::of(&missed(miss), None, Some(sold_as)),
-                Diagnosis::BluetoothNotSearched(miss)
+                Diagnosis::BluetoothNotSearched {
+                    model: sold_as.display_name(),
+                    miss
+                }
+            );
+            assert_eq!(
+                Diagnosis::of(&missed(miss), None, None),
+                Diagnosis::BluetoothNotSearched {
+                    model: "OWON CMS061",
+                    miss
+                }
             );
         }
+        // Settings now naming another meter does not rename this one.
+        assert_eq!(
+            Diagnosis::of(
+                &missed(BluetoothOnlyMiss::SwitchedOff),
+                None,
+                pick("ut60bt")
+            ),
+            Diagnosis::BluetoothNotSearched {
+                model: "OWON CMS061",
+                miss: BluetoothOnlyMiss::SwitchedOff
+            }
+        );
     }
 }

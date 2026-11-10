@@ -119,21 +119,7 @@ impl Localizer {
                 }
             }
             Error::BluetoothOnly { model, miss, .. } => {
-                let model = *model;
-                match miss {
-                    BluetoothOnlyMiss::NotInRange => {
-                        tr!(self, "error-bluetooth-only-not-in-range", model = model)
-                    }
-                    BluetoothOnlyMiss::SwitchedOff => {
-                        tr!(self, "error-bluetooth-only-switched-off", model = model)
-                    }
-                    BluetoothOnlyMiss::NotBuilt => {
-                        tr!(self, "error-bluetooth-only-not-built", model = model)
-                    }
-                    BluetoothOnlyMiss::UsbAdapter => {
-                        tr!(self, "error-bluetooth-only-usb-adapter", model = model)
-                    }
-                }
+                return self.bluetooth_only(model, *miss);
             }
             Error::Cancelled => tr!(self, "error-cancelled"),
         }
@@ -149,6 +135,27 @@ impl Localizer {
             Error::NotAnAdapter(path) => Some(tr!(self, "error-not-an-adapter", path = path)),
             _ => None,
         }
+    }
+
+    /// [`Error::BluetoothOnly`]'s sentence for `miss`, naming the meter as
+    /// `model`: the name it was picked by, where the error carries the
+    /// maker's entry.
+    pub fn bluetooth_only(&self, model: &str, miss: BluetoothOnlyMiss) -> String {
+        match miss {
+            BluetoothOnlyMiss::NotInRange => {
+                tr!(self, "error-bluetooth-only-not-in-range", model = model)
+            }
+            BluetoothOnlyMiss::SwitchedOff => {
+                tr!(self, "error-bluetooth-only-switched-off", model = model)
+            }
+            BluetoothOnlyMiss::NotBuilt => {
+                tr!(self, "error-bluetooth-only-not-built", model = model)
+            }
+            BluetoothOnlyMiss::UsbAdapter => {
+                tr!(self, "error-bluetooth-only-usb-adapter", model = model)
+            }
+        }
+        .into_owned()
     }
 
     /// Why the meter on the link is not one the meter chosen can read, as
