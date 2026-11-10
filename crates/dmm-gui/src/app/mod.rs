@@ -280,6 +280,9 @@ pub(super) struct Connection {
     pub(super) last_error: Option<ConnectionIssue>,
     /// Consecutive timeout count (0 = not waiting).
     pub(super) waiting_timeouts: u32,
+    /// A reading came in since the link came up: frames that won't read
+    /// are then a noisy moment, not a wrong meter picked.
+    pub(super) has_read: bool,
     /// Reconnect attempt count (0 = not reconnecting). Populated from the
     /// background thread while the state is `Reconnecting`.
     pub(super) reconnect_attempt: u32,
@@ -406,6 +409,7 @@ impl Connection {
         self.state = ConnectionState::Connected;
         self.choices.clear();
         self.waiting_timeouts = 0;
+        self.has_read = false;
         self.late_readings = None;
         self.last_error = None;
         self.reconnect_attempt = 0;

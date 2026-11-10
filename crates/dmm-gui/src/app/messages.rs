@@ -886,6 +886,7 @@ impl App {
     fn on_measurement(&mut self, m: dmm_lib::measurement::Measurement) -> Option<PendingBreach> {
         self.connection.last_error = None;
         self.connection.waiting_timeouts = 0;
+        self.connection.has_read = true;
         if self.connection.paused {
             return None;
         }
@@ -1087,6 +1088,25 @@ mod tests {
 
     fn toast_text(app: &App) -> Option<&str> {
         app.toast.as_ref().map(|t| t.message.as_str())
+    }
+
+    /// A reading says the link reads, so a frame that won't read after it is
+    /// a noisy moment, not a wrong pick; a new link, first or again, starts
+    /// over.
+    #[test]
+    fn a_reading_marks_the_link_as_read_until_the_next_link() {
+        let mut app = app("ut61eplus", false);
+        app.connection.state = ConnectionState::Connected;
+        assert!(!app.connection.has_read);
+        let reading = Measurement::test_fixture(
+            MeasuredValue::Normal(1.0),
+            "V",
+            dmm_lib::flags::StatusFlags::default(),
+        );
+        app.deliver(DmmMessage::Measurement(reading));
+        assert!(app.connection.has_read);
+        app.connection.link_up();
+        assert!(!app.connection.has_read);
     }
 
     /// A link nothing can reopen ends the session with its reason on screen,

@@ -27,6 +27,12 @@ connection-waiting-switch-on = Switch on the meter's data transmission, or pick 
 ## A failed connection: a title naming the problem, the steps to try, and a
 ## closing line.
 
+# Under a failed connection's steps when a meter is picked in Settings,
+# which a detected connect may have saved. $model is that meter, e.g.
+# UNI-T UT61E+.
+connection-selected-meter = { $model } is selected in Settings (⚙). If your meter is another, pick it there, or pick Auto-detect.
+# The same when the title above already names the meter picked.
+connection-selected-meter-named = If your meter is another, pick it in Settings (⚙), or pick Auto-detect there.
 # The closing line under the steps. "Connect" is the top bar's button.
 connection-click-connect = Click "Connect" after resolving the issue.
 # The closing line after the Bluetooth steps when nothing answered at the

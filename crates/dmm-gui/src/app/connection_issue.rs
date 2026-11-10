@@ -346,7 +346,7 @@ impl App {
                     },
                     title: l10n.help().not_found_title(&links),
                     sections: l10n.help().sections(&links),
-                    body: tr!(l10n, "connection-click-connect").into_owned(),
+                    body: self.then_click_connect(self.selected_meter_line(false)),
                     feedback_link: self.feedback_link(),
                 }
             }
@@ -358,7 +358,7 @@ impl App {
                     kind: NoticeKind::BluetoothOnlyNotFound,
                     title: l10n.help().not_found_title(&links),
                     sections: l10n.help().sections(&links),
-                    body: tr!(l10n, "connection-click-connect").into_owned(),
+                    body: self.then_click_connect(self.selected_meter_line(true)),
                     feedback_link: self.feedback_link(),
                 }
             }
@@ -471,36 +471,30 @@ impl App {
             // a meter or a file is escaped so a control byte cannot act. Mid-read
             // the worker keeps reading and the next good frame clears it; at the
             // open the session has ended, so the way back in is said too.
-            Diagnosis::BadData => {
-                let text = l10n.error(error);
-                let body = if self.connection.state.is_linked() {
-                    escape_controls(&text).into_owned()
-                } else {
-                    format!(
-                        "{}\n\n{}",
-                        escape_controls(&text),
-                        tr!(l10n, "connection-click-connect")
-                    )
+            Diagnosis::BadData | Diagnosis::OtherMeter(_) => {
+                let mut body = escape_controls(&l10n.error(error)).into_owned();
+                // The way out a wrong pick explains: the meter to pick, when
+                // the meter names one; else, before any reading came in, the
+                // line naming the pick, as the frames are most often another
+                // meter's.
+                // A replay's file chose the meter, so there is nothing to pick;
+                // a meter detection just picked has nothing to blame.
+                let hint = match diagnosis {
+                    _ if self.source.replay.is_some() => None,
+                    Diagnosis::OtherMeter(choice) => {
+                        Some(l10n.help().gui_choose_meter(*choice, self.picked_listing()))
+                    }
+                    _ if self.connection.has_read || self.connection.detecting => None,
+                    _ => self.selected_meter_line(false),
                 };
-                notice(
-                    NoticeKind::BadData,
-                    tr!(l10n, "connection-bad-data").into_owned(),
-                    body,
-                )
-            }
-            // Data that could not be read, from a meter that says which it
-            // is: the way out is picking that one.
-            Diagnosis::OtherMeter(choice) => {
-                let text = escape_controls(&l10n.error(error)).into_owned();
-                let remedy = l10n.help().gui_choose_meter(*choice, self.picked_listing());
-                let body = if self.connection.state.is_linked() {
-                    format!("{text}\n\n{remedy}")
-                } else {
-                    format!(
-                        "{text}\n\n{remedy}\n\n{}",
-                        tr!(l10n, "connection-click-connect")
-                    )
-                };
+                if let Some(hint) = hint {
+                    body.push_str("\n\n");
+                    body.push_str(&hint);
+                }
+                if !self.connection.state.is_linked() {
+                    body.push_str("\n\n");
+                    body.push_str(&tr!(l10n, "connection-click-connect"));
+                }
                 notice(
                     NoticeKind::BadData,
                     tr!(l10n, "connection-bad-data").into_owned(),
@@ -519,6 +513,34 @@ impl App {
                     tr!(l10n, "connection-click-connect")
                 ),
             ),
+        }
+    }
+
+    /// The line under a failed connection's steps naming the meter picked
+    /// in Settings, which a detected connect may have saved, and the way
+    /// out; `named` when the title already names it. `None` under
+    /// Auto-detect.
+    fn selected_meter_line(&self, named: bool) -> Option<String> {
+        let l10n = self.l10n.as_ref();
+        let picked = self.picked_listing()?;
+        Some(if named {
+            tr!(l10n, "connection-selected-meter-named").into_owned()
+        } else {
+            tr!(
+                l10n,
+                "connection-selected-meter",
+                model = l10n.label(TextKind::Model, picked.display_name())
+            )
+            .into_owned()
+        })
+    }
+
+    /// `line`, when there is one, then the closing "Click Connect" line.
+    fn then_click_connect(&self, line: Option<String>) -> String {
+        let click = tr!(self.l10n, "connection-click-connect");
+        match line {
+            Some(line) => format!("{line}\n\n{click}"),
+            None => click.into_owned(),
         }
     }
 
@@ -911,6 +933,51 @@ mod tests {
             n.body
                 .ends_with("Click \"Connect\" after resolving the issue.")
         );
+        // The meter named the way out: no second line about the pick.
+        assert!(!n.body.contains("selected in Settings"), "{}", n.body);
+    }
+
+    /// A meter picked in Settings, which a detected connect may have saved,
+    /// is named under a "not found" notice and under data that wouldn't read
+    /// before any reading, with the way out; under Auto-detect, or once
+    /// readings came in, there is no pick to blame.
+    #[test]
+    fn a_failure_a_wrong_pick_explains_names_the_pick() {
+        let selected = "UNI-T UT61E+ is selected in Settings (\u{2699}).";
+        let mut picked = app("ut61eplus");
+        let n = notice_for(&mut picked, not_found(false));
+        assert!(n.body.starts_with(selected), "{}", n.body);
+        assert!(
+            n.body
+                .ends_with("Click \"Connect\" after resolving the issue.")
+        );
+        picked.connection.state = ConnectionState::Connected;
+        let n = notice_for(&mut picked, checksum_mismatch());
+        assert!(n.body.contains(selected), "{}", n.body);
+        picked.connection.has_read = true;
+        let n = notice_for(&mut picked, checksum_mismatch());
+        assert!(!n.body.contains("selected"), "{}", n.body);
+
+        let mut auto = app(registry::AUTO_DEVICE_ID);
+        let n = notice_for(&mut auto, not_found(false));
+        assert_eq!(n.body, "Click \"Connect\" after resolving the issue.");
+
+        // The title names a radio meter already: only the way out follows.
+        let ut60bt = registry::find_device("ut60bt").expect("registry entry");
+        let n = notice_for(
+            &mut app("ut60bt"),
+            ConnectionIssue::of(Error::BluetoothOnly {
+                model: ut60bt.display_name(),
+                activation: ut60bt.activation_instructions,
+                miss: dmm_lib::error::BluetoothOnlyMiss::NotInRange,
+            }),
+        );
+        assert!(
+            n.body
+                .starts_with("If your meter is another, pick it in Settings (\u{2699})"),
+            "{}",
+            n.body
+        );
     }
 
     /// The waiting notice is measured to fit the big meter's window, so its
@@ -1185,6 +1252,7 @@ mod tests {
         let issue = checksum_mismatch();
         assert_eq!(issue.diagnosis(), Some(&Diagnosis::BadData));
         app.connection.state = ConnectionState::Connected;
+        app.connection.has_read = true;
         let n = notice_for(&mut app, issue);
         assert_eq!(n.kind, NoticeKind::BadData);
         assert_eq!(n.title, "Meter sent data that could not be read");
@@ -1202,7 +1270,9 @@ mod tests {
         assert_eq!(n.kind, NoticeKind::BadData);
         assert_eq!(
             n.body,
-            "checksum mismatch: expected 0x01a3, got 0x0003\n\nClick \"Connect\" after resolving the issue."
+            "checksum mismatch: expected 0x01a3, got 0x0003\n\nUNI-T UT61E+ is selected in Settings \
+             (\u{2699}). If your meter is another, pick it there, or pick Auto-detect.\n\nClick \
+             \"Connect\" after resolving the issue."
         );
     }
 
@@ -1212,6 +1282,7 @@ mod tests {
     fn a_control_character_in_the_text_is_escaped() {
         let mut app = app("ut61eplus");
         app.connection.state = ConnectionState::Connected;
+        app.connection.has_read = true;
         let n = notice_for(
             &mut app,
             ConnectionIssue::of(Error::InvalidResponse {
