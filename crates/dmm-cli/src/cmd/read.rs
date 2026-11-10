@@ -12,6 +12,7 @@ use crate::open::{
 use crate::output;
 use console::style;
 use dmm_lib::alarm::{Alarm, Hysteresis, Limits};
+use dmm_lib::clock::ClockFlagError;
 use dmm_lib::error::ErrorKind;
 use dmm_lib::protocol::registry::{SelectableDevice, Selection};
 use dmm_lib::stats::SeriesChange;
@@ -119,10 +120,7 @@ impl ReadPlan {
             Some(path) if import_replay => (Some(path), None, Some(ClockScale::Max)),
             other => (replay, other, mock_clock_scale),
         };
-        // `from_flags` names the offending value, not the flag it came from,
-        // so that both binaries can reuse the sentence.
-        let clock = session_clock(l, mock_clock_scale, mock_clock_preseed, replay.is_some())
-            .map_err(Refused::Clock)?;
+        let clock = session_clock(l, mock_clock_scale, mock_clock_preseed, replay.is_some())?;
         // A replay file names its own meter, so a `--device` alongside it
         // would either be ignored or contradict the file. Only a typed flag is
         // refused: the settings file names a meter for every run, and a replay
@@ -462,8 +460,9 @@ fn refuse_replay_format(
 pub(crate) enum Refused {
     /// The `--alarm-*` flags, as they word it.
     Alarm(String),
-    /// The `--mock-clock-*` flags; the value they could not take, worded.
-    Clock(String),
+    /// A `--mock-clock-*` flag as typed, and why its value can't be used,
+    /// worded.
+    Clock(&'static str, String),
     /// A bent session clock on a meter paced by its cable.
     ClockNeedsMock,
     /// `--device` alongside a `--replay`.
@@ -484,10 +483,10 @@ impl crate::l10n::Localized for Refused {
     fn text<'a>(&'a self, l: &'a Localizer) -> Cow<'a, str> {
         match self {
             Self::Alarm(message) => Cow::Borrowed(message),
-            Self::Clock(reason) => tr!(
+            Self::Clock(flag, reason) => tr!(
                 l,
                 "read-flag-refused",
-                flags = "--mock-clock-scale/--mock-clock-preseed",
+                flags = *flag,
                 reason = reason.as_str()
             ),
             Self::ClockNeedsMock => l.help().mock_clock_mock_only(),
@@ -615,27 +614,40 @@ fn read_replay(
 }
 
 /// The session clock the `--mock-clock-*` flags ask for, or why they can't
-/// be honoured, naming the value rather than the flag.
+/// be honoured, naming the flag the refusal is about.
 fn session_clock(
     l: &Localizer,
     scale: Option<ClockScale>,
     preseed: Option<f64>,
     replay: bool,
-) -> Result<dmm_lib::Clock, String> {
-    match scale {
+) -> Result<dmm_lib::Clock, Refused> {
+    const SCALE: &str = "--mock-clock-scale";
+    const PRESEED: &str = "--mock-clock-preseed";
+    const BOTH: &str = "--mock-clock-scale, --mock-clock-preseed";
+    let refused = |flag, reason: Cow<'_, str>| Err(Refused::Clock(flag, reason.into_owned()));
+    let factor = match scale {
         // A manual clock moves only when the run sleeps on it: a replay's
         // waits and the stream's pacing advance it by exactly the recorded
         // gaps, so every reading keeps its timestamp and nothing waits.
         Some(ClockScale::Max) if preseed.is_some() => {
-            Err(tr!(l, "read-clock-max-no-preseed").into_owned())
+            return refused(BOTH, tr!(l, "read-clock-max-no-preseed"));
         }
         // Only a replay ends: a live mock at `max` would print readings as
         // fast as the CPU goes until Ctrl+C, and grow a file without limit.
-        Some(ClockScale::Max) if !replay => Err(tr!(l, "read-clock-max-needs-replay").into_owned()),
-        Some(ClockScale::Max) => Ok(dmm_lib::Clock::manual()),
-        Some(ClockScale::Factor(f)) => dmm_lib::Clock::from_flags(Some(f), preseed),
-        None => dmm_lib::Clock::from_flags(None, preseed),
-    }
+        Some(ClockScale::Max) if !replay => {
+            return refused(SCALE, tr!(l, "read-clock-max-needs-replay"));
+        }
+        Some(ClockScale::Max) => return Ok(dmm_lib::Clock::manual()),
+        Some(ClockScale::Factor(f)) => Some(f),
+        None => None,
+    };
+    dmm_lib::Clock::from_flags(factor, preseed).map_err(|e| {
+        let flag = match e {
+            ClockFlagError::ScaleNotPositive(_) => SCALE,
+            ClockFlagError::PreseedOutOfRange(_) => PRESEED,
+        };
+        Refused::Clock(flag, l.clock_flag(&e))
+    })
 }
 
 /// Refuse a bent session clock on a device that is paced by USB.
@@ -1423,18 +1435,40 @@ mod tests {
         clock.sleep(Duration::from_secs(3600));
         assert_eq!(clock.now(), before + Duration::from_secs(3600));
         assert!(!clock.is_real(), "refused on hardware like the other flags");
-        let err =
-            session_clock(l(), Some(ClockScale::Max), Some(10.0), true).expect_err("no burst");
-        assert!(err.contains("preseed"), "{err}");
+        let err = session_clock(l(), Some(ClockScale::Max), Some(10.0), true)
+            .expect_err("no burst")
+            .to_string();
+        assert!(
+            err.starts_with("--mock-clock-scale, --mock-clock-preseed: "),
+            "{err}"
+        );
     }
 
     /// A live mock never ends, so at `max` it would print as fast as the CPU
     /// goes until Ctrl+C: `max` takes a replay, and a factor does not need one.
     #[test]
     fn the_max_scale_needs_a_replay() {
-        let err = session_clock(l(), Some(ClockScale::Max), None, false).expect_err("no replay");
+        let err = session_clock(l(), Some(ClockScale::Max), None, false)
+            .expect_err("no replay")
+            .to_string();
         assert!(err.contains("'max'") && err.contains("--replay"), "{err}");
         assert!(session_clock(l(), Some(ClockScale::Factor(20.0)), None, false).is_ok());
+    }
+
+    /// A refused value names the flag it was typed after, not both.
+    #[test]
+    fn a_bad_clock_value_names_its_flag() {
+        let scale = session_clock(l(), Some(ClockScale::Factor(0.0)), Some(5.0), false)
+            .expect_err("zero scale")
+            .to_string();
+        assert_eq!(
+            scale,
+            "--mock-clock-scale: clock scale must be a positive number, got '0'"
+        );
+        let preseed = session_clock(l(), None, Some(-1.0), false)
+            .expect_err("negative preseed")
+            .to_string();
+        assert!(preseed.starts_with("--mock-clock-preseed: "), "{preseed}");
     }
 
     /// A bent clock on a USB-paced meter would stamp readings with instants

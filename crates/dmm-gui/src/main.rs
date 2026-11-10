@@ -15,6 +15,7 @@ mod theme;
 
 use clap::builder::{PossibleValue, ValueParser};
 use clap::{CommandFactory, FromArgMatches, Parser, ValueEnum};
+use dmm_lib::clock::ClockFlagError;
 use dmm_lib::protocol::registry;
 use dmm_lib::replay::Replay;
 use dmm_shared::l10n::{Localizer, arg_errors, clap_help, help_layout};
@@ -215,7 +216,7 @@ fn not_one_of(cmd: &clap::Command, id: &str, value: &str, values: Vec<String>) -
 }
 
 /// An option's value refused after parsing: the option's id, and why in
-/// the user's language, but for the hidden clock flags' reasons.
+/// the user's language.
 #[derive(Debug, PartialEq)]
 struct Refusal {
     id: &'static str,
@@ -334,7 +335,7 @@ fn load_replay(path: PathBuf, draws_keys: bool, l: &Localizer) -> Result<ReplayS
 /// `device` is the canonical id `--device` resolved to, `None` when the flag
 /// was not given. `replay_device` is the meter a `--replay` file names, which
 /// clap has already refused `--device` alongside. A refusal is worded in
-/// `l`'s language, but for the clock flags' own reasons.
+/// `l`'s language.
 fn resolve_device_and_clock(
     l: &Localizer,
     device: Option<String>,
@@ -343,14 +344,12 @@ fn resolve_device_and_clock(
     scale: Option<f64>,
     preseed: Option<f64>,
 ) -> Result<(Option<String>, dmm_lib::Clock), Refusal> {
-    // The scale alone first, so a refusal names the flag it is about.
-    dmm_lib::Clock::from_flags(scale, None).map_err(|reason| Refusal {
-        id: "mock_clock_scale",
-        reason,
-    })?;
-    let clock = dmm_lib::Clock::from_flags(scale, preseed).map_err(|reason| Refusal {
-        id: "mock_clock_preseed",
-        reason,
+    let clock = dmm_lib::Clock::from_flags(scale, preseed).map_err(|e| Refusal {
+        id: match e {
+            ClockFlagError::ScaleNotPositive(_) => "mock_clock_scale",
+            ClockFlagError::PreseedOutOfRange(_) => "mock_clock_preseed",
+        },
+        reason: l.clock_flag(&e),
     })?;
 
     // Auto counts as hardware: it names no meter, but the meter it finds is a

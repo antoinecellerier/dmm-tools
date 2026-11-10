@@ -29,6 +29,23 @@ use std::time::{Duration, Instant, SystemTime};
 /// burst at all, so the run silently paces at real time instead.
 const MAX_PRESEED_SECS: f64 = 86_400.0;
 
+/// A `--mock-clock-*` value [`Clock::from_flags`] can't take: the value, so
+/// each binary names its own flag and words the reason in its language.
+#[derive(Debug, Clone, Copy, PartialEq, thiserror::Error)]
+pub enum ClockFlagError {
+    /// A scale that is zero, negative or not finite.
+    #[error("clock scale must be a positive number, got '{0}'")]
+    ScaleNotPositive(f64),
+    /// A preseed outside `0..=`[`ClockFlagError::MAX_PRESEED_SECS`].
+    #[error("clock preseed must be between 0 and {MAX_PRESEED_SECS} seconds, got '{0}'")]
+    PreseedOutOfRange(f64),
+}
+
+impl ClockFlagError {
+    /// The longest preseed accepted, in seconds, for the message to name.
+    pub const MAX_PRESEED_SECS: f64 = MAX_PRESEED_SECS;
+}
+
 /// The time base of one session. Clone it to share it.
 #[derive(Clone, Debug)]
 pub struct Clock {
@@ -183,16 +200,16 @@ impl Clock {
     /// Build the session clock from the `--mock-clock-*` flag values.
     ///
     /// `None` for both is a real clock, so a binary can call this
-    /// unconditionally. The messages are what the caller prints verbatim, so
-    /// they name the offending value rather than the flag: each binary spells
-    /// its own flag name in the error it wraps this in.
-    pub fn from_flags(scale: Option<f64>, preseed: Option<f64>) -> Result<Self, String> {
+    /// unconditionally. A refusal names the offending value rather than the
+    /// flag, and a bad scale is reported before a bad preseed: each binary
+    /// spells its own flag name in the error it wraps this in.
+    pub fn from_flags(scale: Option<f64>, preseed: Option<f64>) -> Result<Self, ClockFlagError> {
         if scale.is_none() && preseed.is_none() {
             return Ok(Self::real());
         }
         let clock = match scale {
             Some(f) if f.is_finite() && f > 0.0 => Self::scaled(f),
-            Some(f) => return Err(format!("clock scale must be a positive number, got '{f}'")),
+            Some(f) => return Err(ClockFlagError::ScaleNotPositive(f)),
             // A burst on its own: start further in, then run at real speed.
             None => Self::scaled(1.0),
         };
@@ -200,9 +217,7 @@ impl Clock {
             Some(s) if s.is_finite() && (0.0..=MAX_PRESEED_SECS).contains(&s) => {
                 Ok(clock.with_preseed(s))
             }
-            Some(s) => Err(format!(
-                "clock preseed must be between 0 and {MAX_PRESEED_SECS} seconds, got '{s}'"
-            )),
+            Some(s) => Err(ClockFlagError::PreseedOutOfRange(s)),
             None => Ok(clock),
         }
     }
@@ -584,16 +599,30 @@ mod tests {
             Duration::from_secs(90)
         );
         assert_eq!(
-            Clock::from_flags(Some(0.0), None).unwrap_err(),
+            Clock::from_flags(Some(0.0), None).unwrap_err().to_string(),
             "clock scale must be a positive number, got '0'"
         );
         assert_eq!(
-            Clock::from_flags(Some(f64::INFINITY), None).unwrap_err(),
+            Clock::from_flags(Some(f64::INFINITY), None)
+                .unwrap_err()
+                .to_string(),
             "clock scale must be a positive number, got 'inf'"
         );
         assert_eq!(
-            Clock::from_flags(None, Some(-1.0)).unwrap_err(),
+            Clock::from_flags(None, Some(-1.0)).unwrap_err().to_string(),
             "clock preseed must be between 0 and 86400 seconds, got '-1'"
+        );
+    }
+
+    #[test]
+    fn from_flags_reports_the_scale_before_the_preseed() {
+        assert_eq!(
+            Clock::from_flags(Some(-2.0), Some(-1.0)).unwrap_err(),
+            ClockFlagError::ScaleNotPositive(-2.0)
+        );
+        assert_eq!(
+            Clock::from_flags(Some(2.0), Some(-1.0)).unwrap_err(),
+            ClockFlagError::PreseedOutOfRange(-1.0)
         );
     }
 

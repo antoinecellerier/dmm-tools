@@ -255,6 +255,14 @@ error-bluetooth-login-refused =
        *[other] the meter refused the login: unknown error (code { $code })
     }
 
+## The session clock's contributor options, --mock-clock-scale and
+## --mock-clock-preseed, refused a value. Each app puts the option before
+## the sentence. $value is the number as read, e.g. -2 or inf.
+
+clock-scale-not-positive = clock scale must be a positive number, got '{ $value }'
+# $max is the longest preseed, in seconds: 86400.
+clock-preseed-out-of-range = clock preseed must be between 0 and { $max } seconds, got '{ $value }'
+
 ## Not an error: the notice under the reading in the GUI when a Bluetooth
 ## adapter hands over a reading late, together with the next one.
 

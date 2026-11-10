@@ -17,6 +17,7 @@
 use super::Localizer;
 use crate::export::escape_controls;
 use crate::tr;
+use dmm_lib::clock::ClockFlagError;
 use dmm_lib::error::{
     BluetoothIssue, BluetoothOnlyMiss, CharacteristicRole, Error, Rejected, Sent, Unread,
     Unsupported, WrongMeter,
@@ -497,6 +498,23 @@ impl Localizer {
 }
 
 impl Localizer {
+    /// Why a `--mock-clock-*` value was refused, naming the value; the
+    /// caller puts its own option before it.
+    pub fn clock_flag(&self, e: &ClockFlagError) -> String {
+        match e {
+            ClockFlagError::ScaleNotPositive(value) => {
+                tr!(self, "clock-scale-not-positive", value = value.to_string())
+            }
+            ClockFlagError::PreseedOutOfRange(value) => tr!(
+                self,
+                "clock-preseed-out-of-range",
+                max = ClockFlagError::MAX_PRESEED_SECS.to_string(),
+                value = value.to_string()
+            ),
+        }
+        .into_owned()
+    }
+
     /// The title of the notice for a link that hands over readings two at
     /// a time ([`LateReadings::TITLE`]).
     pub fn late_readings_title(&self) -> Cow<'_, str> {
@@ -888,6 +906,19 @@ mod tests {
             !message.contains('\u{1b}') && message.contains("`\\u{1b}[2J` is not a hex byte"),
             "{message}"
         );
+    }
+
+    /// A refused clock value reads as the library's.
+    #[test]
+    fn english_clock_refusals_read_as_the_librarys() {
+        let l = Localizer::en_us(LIB_RESOURCES);
+        for e in [
+            ClockFlagError::ScaleNotPositive(-2.0),
+            ClockFlagError::ScaleNotPositive(f64::INFINITY),
+            ClockFlagError::PreseedOutOfRange(1e30),
+        ] {
+            assert_eq!(l.clock_flag(&e), e.to_string());
+        }
     }
 
     /// The late-readings notice reads as the library's, with and without
