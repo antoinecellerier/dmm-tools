@@ -24,7 +24,7 @@ use dmm_shared::help::{Diagnosis, LinksSearched};
 use dmm_shared::l10n::{Localizer, arg_errors, help_layout};
 use dmm_shared::tr;
 use l10n::{Localized, error_label};
-use log::error;
+use log::debug;
 use open::{
     device_for_listing, open_recording_with_help, opened_device, pinned_mock_mode,
     print_no_response_help, print_setup_sections, requires_hardware, selection_id,
@@ -258,7 +258,9 @@ fn report_failure(
     selection: Selection,
     adapter: Option<&str>,
 ) -> ! {
-    error!("{e}");
+    // The terminal gets the error below, in the run's language; the log
+    // keeps the English for a trace, without printing it twice by default.
+    debug!("{e}");
     let extra = extra_help(e, selection, adapter);
     if let Extra::NoResponse(device) = extra {
         print_no_response_help(device);
