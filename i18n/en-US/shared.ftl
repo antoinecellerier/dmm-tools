@@ -128,6 +128,14 @@ bluetooth-setting = Look for Bluetooth devices
 bluetooth-off-cli-instead = Pass --bluetooth in place of --no-bluetooth.
 bluetooth-off-cli-saved = Pass --bluetooth, or tick "{ bluetooth-setting }" in dmm-gui's settings, which dmm-cli reads too.
 bluetooth-off-gui = Tick "{ bluetooth-setting }" in Settings (⚙).
+# What to check after the meter refused a mode or range switch, or did not
+# take it. $setting is range (the input must be within the range too) or
+# another setting.
+switch-check-dial =
+    { $setting ->
+        [range] Check the dial position and that the input is within the range.
+       *[other] Check the dial position.
+    }
 # How to open the meter as the model it is, after a message saying it is
 # another, in dmm-gui. $choice is entry ($model the meter to pick, e.g.
 # OWON CMS061), entry-only (the same, when Auto-detect is what opened it),

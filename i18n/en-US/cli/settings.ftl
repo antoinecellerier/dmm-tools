@@ -101,27 +101,19 @@ settings-ambiguous = ambiguous { $setting }: { $input } matches { $choices }
 # No choice matches $input, the choice as typed; the listing is printed above.
 settings-unknown = unknown { $setting }: { $input }
 # The meter answered that it wouldn't switch. $choice is the choice, e.g.
-# 22V; $reason the meter's reason (lib-errors.ftl). A range is also refused
-# when the input is past its end.
-settings-refused =
-    { $setting ->
-        [range] the meter refused { $choice }: { $reason } — check the dial position and that the input is within the range
-       *[other] the meter refused { $choice }: { $reason } — check the dial position
-    }
+# 22V; $reason the meter's reason (lib-errors.ftl); $remedy what to check, a
+# sentence of its own (shared.ftl's switch-check-dial).
+settings-refused-check = the meter refused { $choice }: { $reason }. { $remedy }
+# The same when the reason says what to do itself, e.g. "leave MIN/MAX
+# first": $choice and $reason as above.
+settings-refused-because = the meter refused { $choice }: { $reason }
 # The meter refused because it is another model than the one chosen: $choice
 # and $reason as above; $remedy says what to pick, a sentence of its own
 # (shared.ftl's choose-meter-cli).
 settings-refused-other-model = the meter refused { $choice }: { $reason }. { $remedy }
 # The meter took the command, but its readings never showed the choice.
-settings-not-switched =
-    { $setting ->
-        [range] Meter did not switch — check the dial position and that the input is within the range
-       *[other] Meter did not switch — check the dial position
-    }
-# As settings-not-switched, naming $live, the choice the meter is still on,
-# e.g. off.
-settings-not-switched-still =
-    { $setting ->
-        [range] Meter did not switch (still { $live }) — check the dial position and that the input is within the range
-       *[other] Meter did not switch (still { $live }) — check the dial position
-    }
+# $remedy is what to check, as above.
+settings-not-taken = Meter did not switch. { $remedy }
+# As settings-not-taken, naming $live, the choice the meter is still on,
+# e.g. off; $remedy as there.
+settings-not-taken-still = Meter did not switch (still { $live }). { $remedy }

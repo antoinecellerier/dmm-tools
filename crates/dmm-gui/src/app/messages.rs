@@ -148,8 +148,16 @@ fn command_failed_toast(
     error: &dmm_lib::error::Error,
     picked: Option<registry::Listing>,
 ) -> String {
-    let remedy = match Diagnosis::of(error, None, picked) {
-        Diagnosis::OtherMeter(choice) => Some(l10n.help().gui_choose_meter(choice, picked)),
+    let remedy = match (Diagnosis::of(error, None, picked), command) {
+        (Diagnosis::OtherMeter(choice), _) => Some(l10n.help().gui_choose_meter(choice, picked)),
+        // A switch the meter refused or didn't take: the dial is the usual
+        // reason, as dmm-cli's `set` says.
+        (_, RemoteCommand::Select(setting, _))
+            if matches!(error, dmm_lib::error::Error::CommandRejected(reason)
+                if dmm_shared::help::dial_explains(reason)) =>
+        {
+            Some(l10n.help().switch_check_dial(setting.name()).into_owned())
+        }
         _ => None,
     };
     let error = l10n.error(error);
@@ -1861,6 +1869,37 @@ mod tests {
             command_failed_toast(&l10n, &hold, &Error::LinkLost, None),
             format!("Command 'hold' failed: {}", l10n.error(&Error::LinkLost))
         );
+    }
+
+    /// A switch the meter refused says what to check, as dmm-cli's `set`
+    /// does; a range names the input too.
+    #[test]
+    fn a_refused_switch_says_to_check_the_dial() {
+        use crate::app::connection::RemoteCommand;
+        use dmm_lib::error::{Error, Rejected};
+        use dmm_lib::protocol::Setting;
+        let l10n = crate::l10n::english();
+        let refused = Error::CommandRejected(Rejected::NeverAppeared {
+            target: "22V".into(),
+            now: "220V".into(),
+            kind: dmm_lib::text::TextKind::Range,
+        });
+        let range = RemoteCommand::Select(Setting::Range, 2);
+        assert!(
+            command_failed_toast(&l10n, &range, &refused, None)
+                .ends_with(". Check the dial position and that the input is within the range.")
+        );
+        let mode = RemoteCommand::Select(Setting::Mode, 2);
+        assert!(
+            command_failed_toast(&l10n, &mode, &refused, None)
+                .ends_with(". Check the dial position.")
+        );
+        // A button press is no switch: its words stand alone.
+        let hold = RemoteCommand::Named("hold".to_string());
+        assert!(!command_failed_toast(&l10n, &hold, &refused, None).contains("dial"));
+        // A reason that says what to do gets no dial advice beside it.
+        let locked = Error::CommandRejected(Rejected::MinMaxLocksRange);
+        assert!(!command_failed_toast(&l10n, &range, &locked, None).contains("dial"));
     }
 
     /// The saved case tells the user what changed and how to undo it; a

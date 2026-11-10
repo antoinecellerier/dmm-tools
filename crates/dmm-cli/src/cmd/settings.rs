@@ -392,30 +392,45 @@ impl crate::l10n::Localized for SetFailed {
                     remedy = l.help().cli_choose_meter(pick, crate::open::picked_row()),
                 )
             }
+            // The reason says what to do itself, or no dial cures it.
+            Self::Refused {
+                setting,
+                choice,
+                reason,
+            } if !dmm_shared::help::dial_explains(reason) => tr!(
+                l,
+                "settings-refused-because",
+                choice = choice_text(l, *setting, choice),
+                reason = l.rejected(reason),
+            ),
             Self::Refused {
                 setting,
                 choice,
                 reason,
             } => tr!(
                 l,
-                "settings-refused",
-                setting = setting.name(),
+                "settings-refused-check",
                 choice = choice_text(l, *setting, choice),
                 reason = l.rejected(reason),
+                remedy = l.help().switch_check_dial(setting.name()),
             ),
             Self::NotSwitched {
                 setting,
                 still: Some(live),
             } => tr!(
                 l,
-                "settings-not-switched-still",
-                setting = setting.name(),
+                "settings-not-taken-still",
                 live = choice_text(l, *setting, live),
+                remedy = l.help().switch_check_dial(setting.name()),
             ),
             Self::NotSwitched {
                 setting,
                 still: None,
-            } => tr!(l, "settings-not-switched", setting = setting.name()),
+            } => tr!(
+                l,
+                "settings-not-taken",
+                remedy = l.help().switch_check_dial(setting.name())
+            ),
         }
     }
 }
@@ -889,7 +904,24 @@ mod tests {
             .to_string();
         assert!(err.contains("the meter refused on"), "{err}");
         assert!(err.contains("HOLD did nothing in off"), "{err}");
-        assert!(err.contains("check the dial position"), "{err}");
+        assert!(err.contains("Check the dial position"), "{err}");
+    }
+
+    /// A reason that says what to do gets no dial advice beside it.
+    #[test]
+    fn a_refusal_that_names_its_fix_stands_alone() {
+        let (mut dmm, _) = fake_meter_with(
+            &a_full_meter(),
+            Quirks {
+                refusal: Some(Rejected::MinMaxLocksRange),
+                ..Default::default()
+            },
+        );
+        let err = run_set(&mut dmm, Setting::Hold, Some("on".to_string()))
+            .expect_err("the meter refused")
+            .to_string();
+        assert!(err.contains("leave MIN/MAX"), "{err}");
+        assert!(!err.contains("dial"), "{err}");
     }
 
     /// A meter that refuses because it is another model says which to pass,
@@ -938,7 +970,7 @@ mod tests {
         .expect_err("never confirmed")
         .to_string();
         assert!(err.contains("Meter did not switch (still off)"), "{err}");
-        assert!(err.contains("check the dial position"), "{err}");
+        assert!(err.contains("Check the dial position"), "{err}");
         assert_eq!(*selected.lock().expect("poisoned"), [(Setting::Hold, 1)]);
     }
 

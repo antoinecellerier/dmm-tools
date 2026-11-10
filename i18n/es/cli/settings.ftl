@@ -100,24 +100,3 @@ settings-already =
 settings-ambiguous = valor ambiguo para { $setting }: { $input } coincide con { $choices }
 # No choice matches $input, the choice as typed; the listing is printed above.
 settings-unknown = valor desconocido para { $setting }: { $input }
-# The meter answered that it wouldn't switch. $choice is the choice, e.g.
-# 22V; $reason the meter's reason (lib-errors.ftl). A range is also refused
-# when the input is past its end.
-settings-refused =
-    { $setting ->
-        [range] el multímetro rechazó { $choice }: { $reason }. Comprueba la posición del selector y que la entrada esté dentro del rango
-       *[other] el multímetro rechazó { $choice }: { $reason }. Comprueba la posición del selector
-    }
-# The meter took the command, but its readings never showed the choice.
-settings-not-switched =
-    { $setting ->
-        [range] El multímetro no cambió. Comprueba la posición del selector y que la entrada esté dentro del rango
-       *[other] El multímetro no cambió. Comprueba la posición del selector
-    }
-# As settings-not-switched, naming $live, the choice the meter is still on,
-# e.g. off.
-settings-not-switched-still =
-    { $setting ->
-        [range] El multímetro no cambió (sigue en { $live }). Comprueba la posición del selector y que la entrada esté dentro del rango
-       *[other] El multímetro no cambió (sigue en { $live }). Comprueba la posición del selector
-    }

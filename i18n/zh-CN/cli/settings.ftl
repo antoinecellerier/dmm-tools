@@ -100,24 +100,3 @@ settings-already =
 settings-ambiguous = { $setting } 不明确: { $input } 匹配 { $choices }
 # No choice matches $input, the choice as typed; the listing is printed above.
 settings-unknown = 未知的 { $setting }: { $input }
-# The meter answered that it wouldn't switch. $choice is the choice, e.g.
-# 22V; $reason the meter's reason (lib-errors.ftl). A range is also refused
-# when the input is past its end.
-settings-refused =
-    { $setting ->
-        [range] 万用表拒绝了 { $choice }: { $reason }，请检查旋钮位置，并确认输入在该量程内
-       *[other] 万用表拒绝了 { $choice }: { $reason }，请检查旋钮位置
-    }
-# The meter took the command, but its readings never showed the choice.
-settings-not-switched =
-    { $setting ->
-        [range] 万用表未切换，请检查旋钮位置，并确认输入在该量程内
-       *[other] 万用表未切换，请检查旋钮位置
-    }
-# As settings-not-switched, naming $live, the choice the meter is still on,
-# e.g. off.
-settings-not-switched-still =
-    { $setting ->
-        [range] 万用表未切换 (仍为 { $live })，请检查旋钮位置，并确认输入在该量程内
-       *[other] 万用表未切换 (仍为 { $live })，请检查旋钮位置
-    }

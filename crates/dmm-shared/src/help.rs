@@ -250,6 +250,13 @@ impl<'a> Help<'a> {
         }
     }
 
+    /// What to check after the meter refused a switch of `setting` (its
+    /// name as the command line takes it: `mode`, `range`, `hold`), or did
+    /// not take it.
+    pub fn switch_check_dial(self, setting: &str) -> Cow<'a, str> {
+        tr!(self.0, "switch-check-dial", setting = setting)
+    }
+
     /// Why a `--device` value was refused: no meter has that name. For
     /// [`crate::l10n::arg_errors::refused`].
     pub fn unknown_device(self) -> Cow<'a, str> {
@@ -756,6 +763,33 @@ impl LinksSearched<'_> {
         } else {
             Self::Usb
         }
+    }
+}
+
+/// Whether the dial position (and, for a range, the input) is the likely
+/// reason for a switch the meter refused, so the help says to check it
+/// ([`Help::switch_check_dial`]). Not for a reason that names its own way out
+/// (leave MIN/MAX, leave REL), nor one no dial cures (a replay, another
+/// model, a model this tool doesn't read).
+pub fn dial_explains(reason: &Rejected) -> bool {
+    match reason {
+        Rejected::DidNothing { .. }
+        | Rejected::NeverAppeared { .. }
+        | Rejected::GaveUp { .. }
+        | Rejected::ModeChanged { .. }
+        | Rejected::AutoDidNothing { .. }
+        | Rejected::ExitDidNothing { .. }
+        | Rejected::SwitchDidNothing { .. }
+        | Rejected::ByMeter(_) => true,
+        Rejected::StartedIn { reason, .. } => dial_explains(reason),
+        Rejected::ZeroNeedsCapacitance
+        | Rejected::RelNeedsReading
+        | Rejected::RelIsOn
+        | Rejected::OtherModel { .. }
+        | Rejected::UnknownModel { .. }
+        | Rejected::ModelUnread { .. }
+        | Rejected::MinMaxLocksRange
+        | Rejected::Replay(_) => false,
     }
 }
 
@@ -1646,6 +1680,29 @@ mod tests {
             })),
             Diagnosis::OtherMeter(entry("cms061"))
         );
+    }
+
+    /// A switch the meter didn't take is the dial's to explain, wrapped in
+    /// where the walk started or not; a reason that names its own way out
+    /// is not.
+    #[test]
+    fn the_dial_explains_a_switch_not_taken() {
+        let not_taken = Rejected::NeverAppeared {
+            target: "22V".into(),
+            now: "220V".into(),
+            kind: TextKind::Range,
+        };
+        assert!(dial_explains(&not_taken));
+        assert!(dial_explains(&Rejected::StartedIn {
+            reason: Box::new(not_taken),
+            mode: "DC V".into(),
+        }));
+        assert!(!dial_explains(&Rejected::MinMaxLocksRange));
+        assert!(!dial_explains(&Rejected::StartedIn {
+            reason: Box::new(Rejected::RelIsOn),
+            mode: "DC V".into(),
+        }));
+        assert!(!dial_explains(&Rejected::Replay("range".into())));
     }
 
     /// Each app says what to pick in its own terms, by the name the pick's

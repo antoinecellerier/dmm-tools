@@ -100,24 +100,3 @@ settings-already =
 settings-ambiguous = { $setting } の値があいまいです: { $input } は { $choices } のいずれにも一致します
 # No choice matches $input, the choice as typed; the listing is printed above.
 settings-unknown = { $setting } の値が不明です: { $input }
-# The meter answered that it wouldn't switch. $choice is the choice, e.g.
-# 22V; $reason the meter's reason (lib-errors.ftl). A range is also refused
-# when the input is past its end.
-settings-refused =
-    { $setting ->
-        [range] マルチメーターが { $choice } を拒否しました: { $reason }。ファンクションスイッチの位置と、入力がレンジ内であることをご確認ください。
-       *[other] マルチメーターが { $choice } を拒否しました: { $reason }。ファンクションスイッチの位置をご確認ください。
-    }
-# The meter took the command, but its readings never showed the choice.
-settings-not-switched =
-    { $setting ->
-        [range] マルチメーターが切り替わりませんでした。ファンクションスイッチの位置と、入力がレンジ内であることをご確認ください。
-       *[other] マルチメーターが切り替わりませんでした。ファンクションスイッチの位置をご確認ください。
-    }
-# As settings-not-switched, naming $live, the choice the meter is still on,
-# e.g. off.
-settings-not-switched-still =
-    { $setting ->
-        [range] マルチメーターが切り替わりませんでした (現在も { $live })。ファンクションスイッチの位置と、入力がレンジ内であることをご確認ください。
-       *[other] マルチメーターが切り替わりませんでした (現在も { $live })。ファンクションスイッチの位置をご確認ください。
-    }
