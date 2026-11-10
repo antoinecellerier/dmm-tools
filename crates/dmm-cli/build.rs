@@ -1,6 +1,6 @@
 use std::process::Command;
 
-fn main() {
+fn main() -> std::io::Result<()> {
     // Embed the git commit hash only in release builds. Debug builds use a
     // constant placeholder so the binary's compile-time identity stays fixed
     // across commits — otherwise each new commit's hash mints a fresh
@@ -22,4 +22,14 @@ fn main() {
     println!("cargo:rustc-env=GIT_HASH={hash}");
     // Re-run when HEAD moves (affects release stamping).
     println!("cargo:rerun-if-changed=../../.git/HEAD");
+
+    // The icon Explorer shows for dmm-cli.exe, and the version in Properties:
+    // the same as dmm-gui's (crates/dmm-gui/build.rs).
+    if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("windows") {
+        println!("cargo:rerun-if-changed=../../assets/icon.ico");
+        winresource::WindowsResource::new()
+            .set_icon("../../assets/icon.ico")
+            .compile()?;
+    }
+    Ok(())
 }

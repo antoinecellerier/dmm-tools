@@ -1,6 +1,6 @@
 use std::process::Command;
 
-fn main() {
+fn main() -> std::io::Result<()> {
     // Embed the git commit hash only in release builds. Debug builds use a
     // constant placeholder so the binary's compile-time identity stays fixed
     // across commits — otherwise each new commit's hash mints a fresh
@@ -22,4 +22,16 @@ fn main() {
     println!("cargo:rustc-env=GIT_HASH={hash}");
     // Re-run when HEAD moves (affects release stamping).
     println!("cargo:rerun-if-changed=../../.git/HEAD");
+
+    // Explorer, the Start menu and shortcuts read an exe's icon from its
+    // embedded resources; the runtime window icon (main.rs) never reaches
+    // them. The resource also carries the version shown in Properties.
+    // icon.ico is icon-256.png at 16 to 256 px: rebuild it with the PNG.
+    if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("windows") {
+        println!("cargo:rerun-if-changed=../../assets/icon.ico");
+        winresource::WindowsResource::new()
+            .set_icon("../../assets/icon.ico")
+            .compile()?;
+    }
+    Ok(())
 }

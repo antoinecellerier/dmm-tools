@@ -27,6 +27,7 @@
 - **A meter picked by another brand's name keeps that name** — a UT217A shows as the UNI-T UT217A, in the top bar, messages and exports.
 - **Default export file names carry the model alone** — such as `measurements-B41T+-…`, without `OWON`.
 - **dmm-gui says when it took the first of several USB cables** — unless `--adapter` named it.
+- **dmm-gui.exe shows its icon in Windows Explorer and shortcuts**
 
 ### CLI
 
@@ -46,6 +47,7 @@
 - **`capture` asks a UT803 only for positions its dial has, hFE included** — it asked for tachometer, duty, 4-20 mA and ADP.
 - **`capture` shows a live status line while it reads the meter** — slow modes went quiet for many seconds.
 - **`capture` warns when its output is piped or redirected** — such a run can't confirm readings, and it didn't say so.
+- **dmm-cli.exe shows its icon in Windows Explorer**
 
 ### Bug fixes
 

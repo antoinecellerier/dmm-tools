@@ -42,6 +42,11 @@ rustls = { version = "0.23", default-features = false, features = ["ring", "std"
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61", features = ["Win32_System_Console"] }
 
+# Embeds the icon Explorer shows for dmm-gui.exe (build.rs). Without the
+# default toml feature it pulls in nothing but version_check.
+[build-dependencies]
+winresource = { version = "0.1", default-features = false }
+
 [features]
 default = ["update-check"]
 # The daily request for a newer release, the GUI's only network access. Without

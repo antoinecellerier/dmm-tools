@@ -25,6 +25,10 @@ serde-saphyr.workspace = true
 csv.workspace = true
 fluent-syntax = "0.12.0" # the capture instruction files; already in the tree for fluent-bundle
 
+# Embeds the icon Explorer shows for dmm-cli.exe (build.rs).
+[build-dependencies]
+winresource = { version = "0.1", default-features = false }
+
 [dev-dependencies]
 dmm-shared = { path = "../dmm-shared", features = ["test-support"] }
 dmm-lib = { path = "../dmm-lib", features = ["test-support"] }
