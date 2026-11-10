@@ -661,6 +661,7 @@ impl Protocol for MockZt5b {
 mod tests {
     use super::*;
     use crate::measurement::MeasuredValue;
+    use crate::protocol::Setting;
     use crate::protocol::capture_reports;
     use crate::transport::NullTransport;
 
@@ -677,6 +678,83 @@ mod tests {
         let (m, reports) = capture_reports(|| mock.request_measurement());
         assert!(reports.is_empty(), "{reports:?}");
         m.unwrap()
+    }
+
+    /// The simulated meter answers as the ZT-5B's driver does wherever it
+    /// does not drive the simulation itself: a method the driver comes to
+    /// override, and the mock does not forward, shows here.
+    #[test]
+    fn the_mock_answers_as_the_zt5b_driver_does() {
+        let transport = NullTransport;
+        let mut driver = ZotekProtocol::new_zt5b();
+        let mut mock = MockZt5b::new(Clock::manual());
+        assert_eq!(mock.delivery(), driver.delivery());
+        assert_eq!(mock.ended(), driver.ended());
+        assert_eq!(
+            mock.name_before_init(&transport),
+            driver.name_before_init(&transport)
+        );
+        assert_eq!(
+            mock.get_name(&transport).unwrap(),
+            driver.get_name(&transport).unwrap()
+        );
+        for name in ["ZT-5B", "ZOYI ZT-5B"] {
+            assert_eq!(
+                mock.entry_named(name).map(|d| d.id),
+                driver.entry_named(name).map(|d| d.id),
+                "{name}"
+            );
+        }
+        assert_eq!(
+            format!("{:?}", mock.spec_sheet()),
+            format!("{:?}", driver.spec_sheet())
+        );
+        // A reading in each function the simulation reaches: AUTO, the DC V
+        // it settles on, and the ones its keys pick.
+        let mut modes = Vec::new();
+        for (key, wait) in [
+            (None, 0.0),
+            (None, 8.0),
+            (Some("capacitance"), 6.0),
+            (Some("hz"), 6.0),
+            (Some("diode_continuity"), 6.0),
+            (Some("temp_unit"), 6.0),
+            (Some("ncv"), 0.0),
+        ] {
+            let clock = Clock::manual();
+            let mut mock = MockZt5b::new(clock.clone());
+            if let Some(key) = key {
+                mock.send_command(&transport, key).unwrap();
+            }
+            clock.advance(secs(wait));
+            mock.discard_input(&transport).unwrap();
+            let m = mock.request_measurement(&transport).unwrap();
+            modes.push(m.mode.to_string());
+            for setting in Setting::ALL {
+                assert_eq!(
+                    mock.choices(setting, &m),
+                    driver.choices(setting, &m),
+                    "{} {setting:?}",
+                    m.mode
+                );
+            }
+            assert_eq!(
+                format!("{:?}", mock.spec_info(&m)),
+                format!("{:?}", driver.spec_info(&m)),
+                "{}",
+                m.mode
+            );
+            assert_eq!(
+                format!("{:?}", mock.mode_spec_info(&m)),
+                format!("{:?}", driver.mode_spec_info(&m)),
+                "{}",
+                m.mode
+            );
+        }
+        assert_eq!(
+            modes,
+            ["Auto", "DC V", "Capacitance", "Hz", "Diode", "°C", "NCV"]
+        );
     }
 
     #[test]
