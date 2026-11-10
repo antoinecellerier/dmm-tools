@@ -78,12 +78,13 @@ fn print_not_found_help(links: LinksSearched<'_>) {
 /// at runtime.
 pub(crate) type BoxedDmm = dmm_lib::Dmm<Box<dyn dmm_lib::transport::Transport>>;
 
-/// What detection settled on, once a [`Selection::Auto`] open has run.
+/// The entry detection settled on, once a [`Selection::Auto`] open has run.
 ///
-/// The two sites that need it afterwards — the `info` listing and the timeout
-/// help `main` prints once a command has already returned — are past the point
-/// where the opener could hand it to them, and a run only ever opens one meter.
-pub(crate) static AUTO_DETECTED: OnceLock<dmm_lib::detect::Detected> = OnceLock::new();
+/// For [`opened_device`]: the help a failed open or command prints, past the
+/// point where the opener could hand the entry over. A run detects once:
+/// [`note_detected`] asserts it, as a second detection would leave this
+/// naming the first meter.
+static DETECTED_DEVICE: OnceLock<&'static SelectableDevice> = OnceLock::new();
 
 /// Where the meter a run opens was named.
 #[derive(Clone, Copy)]
@@ -220,7 +221,7 @@ pub(crate) fn selection_id(selection: Selection) -> &'static str {
 /// `None` only when Auto never got as far as identifying a meter.
 pub(crate) fn opened_device(selection: Selection) -> Option<&'static SelectableDevice> {
     match selection {
-        Selection::Auto => AUTO_DETECTED.get().map(|d| d.device),
+        Selection::Auto => DETECTED_DEVICE.get().copied(),
         Selection::Device(device) => Some(device),
     }
 }
@@ -230,9 +231,10 @@ pub(crate) fn opened_device(selection: Selection) -> Option<&'static SelectableD
 /// The meter was picked for the user, so the name it was picked by belongs on
 /// screen — dim and on stderr, like every other notice, so a redirected CSV or
 /// JSON stream stays machine-readable.
-fn note_detected(detected: dmm_lib::detect::Detected) -> &'static dmm_lib::detect::Detected {
-    let detected = AUTO_DETECTED.get_or_init(|| detected);
+fn note_detected(detected: &dmm_lib::detect::Detected) {
     let device = detected.device;
+    let first = DETECTED_DEVICE.set(device).is_ok();
+    debug_assert!(first, "a run detects its meter once");
     let l = crate::l10n::get();
     let meter = prose_name(device.display_name());
     // A name the registry doesn't carry still identifies the family, and the
@@ -255,7 +257,6 @@ fn note_detected(detected: dmm_lib::detect::Detected) -> &'static dmm_lib::detec
         ),
     };
     eprintln!("{}", style(line).dim());
-    detected
 }
 
 /// `text` escaped as `{:?}` writes it, without the quotes, which the
@@ -276,7 +277,8 @@ pub(crate) fn open_with_help(
         Selection::Auto => {
             let (dmm, detected) = unless_stopped(dmm_lib::open_auto(opts), opts.stop)
                 .map_err(|e| open_error_help(selection, e))?;
-            (dmm, note_detected(detected).device)
+            note_detected(&detected);
+            (dmm, detected.device)
         }
         Selection::Device(device) => (
             unless_stopped(dmm_lib::open_device(device, opts), opts.stop)
@@ -317,7 +319,7 @@ pub(crate) type RecordingOpen = (
     BoxedDmm,
     recording::SharedRecorder,
     &'static SelectableDevice,
-    Option<&'static dmm_lib::detect::Detected>,
+    Option<dmm_lib::detect::Detected>,
 );
 
 /// Open the meter with every wire byte recorded, the init handshake included,
@@ -338,8 +340,8 @@ pub(crate) fn open_recording_with_help(
             let transport = Box::new(transport) as Boxed;
             let detected = dmm_lib::detect::detect_device(&*transport, bridge)
                 .map_err(|e| open_error_help(selection, e))?;
-            let detected = note_detected(detected);
-            let dmm = dmm_lib::Dmm::from_detected(transport, detected)
+            note_detected(&detected);
+            let dmm = dmm_lib::Dmm::from_detected(transport, &detected)
                 .map_err(|e| open_error_help(selection, e))?;
             (dmm, recorder, detected.device, Some(detected))
         }
@@ -371,7 +373,8 @@ fn detect_only(
         dmm_lib::open_transport(&[], opts).map_err(|e| open_error_help(Selection::Auto, e))?;
     let detected = dmm_lib::detect::detect_device(&*transport, bridge)
         .map_err(|e| open_error_help(Selection::Auto, e))?;
-    Ok(note_detected(detected).device)
+    note_detected(&detected);
+    Ok(detected.device)
 }
 
 /// The entry a listing describes. Nothing is read from the meter, but with

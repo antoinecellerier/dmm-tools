@@ -234,7 +234,7 @@ fn run_capture(
             // cable, or USB before a meter's radio.
             let reopen: capture::Reopen<'_> =
                 Box::new(move |bridge| dmm_lib::open_transport(&[bridge], opts));
-            capture::cmd_capture(args, dmm, recorder, device, detected, reopen)
+            capture::cmd_capture(args, dmm, recorder, device, detected.as_ref(), reopen)
         })
     }
 }

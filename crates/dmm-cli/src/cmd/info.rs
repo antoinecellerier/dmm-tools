@@ -3,7 +3,7 @@
 //! The labels are in the run's language (`cli/info.ftl`); the link details
 //! after them are the library's, in English.
 
-use crate::open::{AUTO_DETECTED, open_with_help, picked_line, print_reported_name, prose_name};
+use crate::open::{open_with_help, picked_line, print_reported_name, prose_name};
 use console::style;
 use dmm_lib::protocol::registry::Selection;
 use dmm_shared::tr;
@@ -13,7 +13,7 @@ pub(crate) fn cmd_info(
     opts: dmm_lib::OpenOptions<'_>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let l = crate::l10n::get();
-    let (mut dmm, _device) = open_with_help(selection, opts)?;
+    let (mut dmm, device) = open_with_help(selection, opts)?;
     // The name detection got, if it ran: the session keeps it.
     let reported = dmm.get_name()?;
     // Which meter the readings are decoded as: the one picked, and where,
@@ -21,8 +21,8 @@ pub(crate) fn cmd_info(
     // when the two disagree.
     if let Some(line) = picked_line(l) {
         println!("{line}");
-    } else if let Some(detected) = AUTO_DETECTED.get() {
-        let meter = style(prose_name(detected.device.display_name())).bold();
+    } else if matches!(selection, Selection::Auto) {
+        let meter = style(prose_name(device.display_name())).bold();
         println!("{}", tr!(l, "info-detected", meter = meter.to_string()));
     }
     print_reported_name(l, reported.as_deref(), |line| println!("{line}"));
