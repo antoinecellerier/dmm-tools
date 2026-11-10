@@ -39,9 +39,10 @@ logic or knows a device by name, except the mock: both get their devices from th
 - **Units.** A reading's unit is a string and its value is in the prefix the meter showed, so a
   meter auto-ranging moves one quantity from mV to V. `transform.rs` holds the grammar that splits a
   unit into base and prefix, which is how its consumers tell a range step from a new quantity.
-  Scaling and alarm limits work in base units; statistics and the graph hold values in the latest
-  prefix and re-express them at a step. A test walks every unit each family's tables can produce
-  against the grammar.
+  Scaling and alarm limits work in base units, or in the unit a scaled reading shows, which its Raw
+  sub-value marks, in a file as live; statistics and the graph hold values in the latest prefix and
+  re-express them at a step. A test walks every unit each family's tables can produce against the
+  grammar.
 - **Registry entry.** A `SelectableDevice`: one selectable model with its id, names, activation
   help, links, protocol factory and fingerprint. Each family keeps its entries in its `devices.rs`,
   and `DEVICES` orders them.

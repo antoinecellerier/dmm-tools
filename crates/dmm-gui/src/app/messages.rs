@@ -972,7 +972,7 @@ impl App {
         self.place_replay_marker(&m);
         // After the file's marker: a breach on the same reading adds its note
         // to that marker rather than pushing it on.
-        let breach = self.check_alarm(&m, self.alarm_limit_unit());
+        let breach = self.check_alarm(&m);
         self.apply_replay_view(&m);
         // Specs are attached to each measurement by `Dmm::request_measurement`;
         // last_measurement.spec / .mode_spec is what render code reads.
@@ -2796,10 +2796,10 @@ mod tests {
         let limits = dmm_lib::alarm::Limits::check(None, Some(5.0)).expect("a limit");
         app.alarm = Some(dmm_lib::alarm::Alarm::new(limits, Default::default()));
         deliver_readings(&mut app, &[DC]);
-        assert!(app.alarm.as_ref().and_then(|a| a.quantity()).is_some());
+        assert!(app.alarm.as_ref().and_then(|a| a.bound_unit()).is_some());
         app.deliver(connected("ut181a", Stability::Experimental, 4));
         let alarm = app.alarm.as_ref().expect("the limits stay");
-        assert_eq!(alarm.quantity(), None);
+        assert_eq!(alarm.bound_unit(), None);
         assert_eq!(alarm.limits(), limits);
     }
 

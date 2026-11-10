@@ -11,7 +11,7 @@ use crate::open::{
 };
 use crate::output;
 use console::style;
-use dmm_lib::alarm::{Alarm, Hysteresis, LimitUnit, Limits};
+use dmm_lib::alarm::{Alarm, Hysteresis, Limits};
 use dmm_lib::clock::ClockFlagError;
 use dmm_lib::error::ErrorKind;
 use dmm_lib::protocol::registry::{SelectableDevice, Selection};
@@ -789,16 +789,11 @@ impl Run {
             return marker;
         };
         let l = crate::l10n::get();
-        let unit = if self.transform.is_identity() {
-            LimitUnit::Base
-        } else {
-            LimitUnit::Shown
-        };
-        let breach = alarm.check(m, unit);
+        let breach = alarm.check(m);
         // Said on every change of what the readings are in, so an unattended
         // log follows each dial turn, not only the first away.
         if alarm.idle() != self.noted_idle.as_deref() {
-            match (alarm.idle(), alarm.quantity()) {
+            match (alarm.idle(), alarm.bound_unit()) {
                 (Some(now), Some(watched)) => eprintln!(
                     "{} {}",
                     note_label(),

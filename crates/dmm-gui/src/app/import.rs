@@ -579,8 +579,8 @@ impl App {
                         .insert(m.timestamp, number, note, m.wall_time.into(), reading);
                 }
             }
-            // After the file's marker, as for a live reading. Unscaled: the
-            // file holds the readings as they were shown.
+            // After the file's marker, as for a live reading, in the unit it
+            // shows if it was scaled when written (`LimitUnit::of`).
             breaches.extend(self.check_imported(&m));
             ingest.taken += 1;
             self.last_measurement = Some(m);
@@ -758,6 +758,30 @@ timestamp,mode,value,unit,range,flags,marker,note
             (marker.number, marker.note.as_str()),
             (3, "load on, 2.2 ohm; Above high limit 1.61095 V")
         );
+        assert_eq!(app.alarm.as_ref().map(|a| a.high_count), Some(1));
+        let _ = std::fs::remove_file(path);
+    }
+
+    /// A file written under a ×1000 kV scale: its readings carry the meter's
+    /// volts as Raw, so limits typed in kV mean kV, as they did live.
+    #[test]
+    fn a_scaled_files_readings_are_judged_in_the_unit_they_show() {
+        let mut app = test_app();
+        let limits = dmm_lib::alarm::Limits::check(None, Some(4500.0)).unwrap();
+        app.set_limits(limits, dmm_lib::alarm::Hysteresis::Auto);
+        let path = file(
+            "kv.csv",
+            "\
+# device: UNI-T UT61E+
+timestamp,mode,value,unit,range,flags,aux1_label,aux1_value,aux1_unit
+2026-09-17T12:42:50.783+02:00,DC V,4000,kV,22V,AUTO,Raw,4.000,V
+2026-09-17T12:42:50.879+02:00,DC V,5500,kV,22V,AUTO,Raw,5.500,V
+",
+        );
+        import(&mut app, path.clone());
+        assert_eq!(app.alarm_limit_unit(), dmm_lib::alarm::LimitUnit::Shown);
+        let marker = app.markers.iter().next().expect("the breach's marker");
+        assert_eq!(marker.note, "Above high limit 4500 kV");
         assert_eq!(app.alarm.as_ref().map(|a| a.high_count), Some(1));
         let _ = std::fs::remove_file(path);
     }

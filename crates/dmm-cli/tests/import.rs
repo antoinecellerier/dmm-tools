@@ -267,3 +267,25 @@ fn an_auto_range_step_carries_the_statistics_and_integral_on() {
         "{out}"
     );
 }
+
+/// Written under `--scale 1000 --unit kV`: the meter's volts ride along as
+/// `Raw`.
+const KV_CSV: &str = "\
+# device: UNI-T UT61E+
+timestamp,mode,value,unit,range,flags,aux1_label,aux1_value,aux1_unit
+2026-09-17T12:42:50.783+02:00,DC V,4000,kV,22V,AUTO,Raw,4.000,V
+2026-09-17T12:42:50.879+02:00,DC V,5500,kV,22V,AUTO,Raw,5.500,V
+";
+
+/// A scaled file's limits are in the unit its readings show, as they were
+/// live, with or without a scale on the import.
+#[test]
+fn a_scaled_files_alarm_is_in_the_unit_it_shows() {
+    let dir = TestDir::new("kv-alarm");
+    let csv = dir.path("kv.csv");
+    std::fs::write(&csv, KV_CSV).expect("write the CSV");
+    let (_, err, ok) = run(&["read", "--import", p(&csv), "--alarm-high", "4500"]);
+    assert!(ok, "imports: {err}");
+    assert!(err.contains("Above high limit 4500 kV"), "{err}");
+    assert!(!err.contains("Already above"), "4000 kV is inside: {err}");
+}

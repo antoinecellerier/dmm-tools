@@ -133,14 +133,21 @@ impl PendingBreach {
 }
 
 impl App {
-    /// The unit the alarm's limits are in for the readings it judges: shown
-    /// when they went through the scale. A file's never do, it holds them as
-    /// they were shown.
+    /// The unit the alarm's limits are in for the readings on screen: shown
+    /// when they went through a scale, live or when a file was written (see
+    /// [`LimitUnit::of`]). Not the alarm's own binding while a reading is
+    /// on screen: an idle alarm holds it for readings no longer there.
+    /// Without one (a Clear), the binding's, else the scale's: a file's
+    /// readings say for themselves.
     pub(super) fn alarm_limit_unit(&self) -> LimitUnit {
-        if !self.transform.is_identity() && !self.source.is_import() {
-            LimitUnit::Shown
-        } else {
-            LimitUnit::Base
+        let bound = self.alarm.as_ref().and_then(|a| a.binding());
+        match (&self.last_measurement, bound) {
+            (Some(m), _) => LimitUnit::of(m),
+            (None, Some(b)) => b.limit_unit(),
+            (None, None) if !self.transform.is_identity() && !self.source.is_import() => {
+                LimitUnit::Shown
+            }
+            (None, None) => LimitUnit::Base,
         }
     }
 
@@ -226,7 +233,8 @@ impl App {
             .transform
             .unit
             .as_deref()
-            .filter(|_| self.alarm_limit_unit() == LimitUnit::Shown);
+            // A file's readings are not scaled again.
+            .filter(|_| !self.source.is_import());
         let idle = alarm.and_then(|a| a.idle());
         let unit = alarm.and_then(|a| a.limits_unit(relabel));
         let l10n = &self.l10n;
@@ -238,7 +246,7 @@ impl App {
                     l10n,
                     "alarm-idle.hover",
                     unit = idle,
-                    limits = alarm.and_then(|a| a.quantity()).unwrap_or_default(),
+                    limits = alarm.and_then(|a| a.bound_unit()).unwrap_or_default(),
                 ),
             )),
             (None, Some(unit)) => Some((
@@ -252,7 +260,7 @@ impl App {
             (None, None) => self
                 .last_measurement
                 .as_ref()
-                .and_then(|m| dmm_lib::alarm::limit_unit(m, self.alarm_limit_unit()))
+                .and_then(|m| dmm_lib::alarm::limit_unit(m))
                 .map(|unit| {
                     (
                         unit.to_string(),
@@ -382,15 +390,9 @@ impl App {
         self.alarm_editor.band = band.describe().unwrap_or_default();
     }
 
-    /// Judge one reading, as shown, against the limits; `unit` says
-    /// whether it went through a software transform — the live session's,
-    /// or none for a reading imported as the file holds it.
-    pub(super) fn check_alarm(
-        &mut self,
-        m: &Measurement,
-        unit: LimitUnit,
-    ) -> Option<PendingBreach> {
-        let breach = self.alarm.as_mut()?.check(m, unit)?;
+    /// Judge one reading, as shown, against the limits.
+    pub(super) fn check_alarm(&mut self, m: &Measurement) -> Option<PendingBreach> {
+        let breach = self.alarm.as_mut()?.check(m)?;
         if !breach.crossing {
             // Out before the alarm saw it cross: said, not marked. In the
             // error style all the same, as the badge and the reading are:
@@ -405,7 +407,7 @@ impl App {
     /// [`check_alarm`](Self::check_alarm), but a first reading found out
     /// goes unsaid — the import's progress and result toasts hold the slot.
     pub(super) fn check_imported(&mut self, m: &Measurement) -> Option<PendingBreach> {
-        let breach = self.alarm.as_mut()?.check(m, LimitUnit::Base)?;
+        let breach = self.alarm.as_mut()?.check(m)?;
         breach
             .crossing
             .then(|| PendingBreach::new(&self.l10n, m, &breach))
@@ -440,7 +442,7 @@ mod tests {
     use crate::graph::LimitSide;
     use crate::l10n::english;
     use crate::settings::Settings;
-    use dmm_lib::alarm::{Hysteresis, LimitUnit, Limits};
+    use dmm_lib::alarm::{Hysteresis, Limits};
     use dmm_lib::flags::StatusFlags;
     use dmm_lib::measurement::{MeasuredValue, Measurement};
 
@@ -464,13 +466,13 @@ mod tests {
         let mut app = app_with_high_limit(5.0);
         assert!(app.alarm.is_some());
         let inside = reading(&app, 4900.0, "mV");
-        assert!(app.check_alarm(&inside, LimitUnit::Base).is_none());
+        assert!(app.check_alarm(&inside).is_none());
 
         app.toast = None;
         let m = reading(&app, 5100.0, "mV");
         app.capture
             .ingest(m.clone(), &app.transform, &mut app.graph, &app.connection);
-        let breach = app.check_alarm(&m, LimitUnit::Base);
+        let breach = app.check_alarm(&m);
         assert!(breach.is_some());
         app.mark_breaches(breach.into_iter().collect());
         let marker = app.markers.iter().next().expect("a marker");
@@ -481,7 +483,7 @@ mod tests {
 
         assert!(app.watched_limits().is_some());
         let ohms = reading(&app, 12.0, "kΩ");
-        assert!(app.check_alarm(&ohms, LimitUnit::Base).is_none());
+        assert!(app.check_alarm(&ohms).is_none());
         assert!(app.watched_limits().is_none(), "idle on ohms: no lines");
 
         app.clear_session();
@@ -519,7 +521,7 @@ mod tests {
     fn a_reading_already_out_is_said_not_marked() {
         let mut app = app_with_high_limit(5.0);
         let m = reading(&app, 6.0, "V");
-        assert!(app.check_alarm(&m, LimitUnit::Base).is_none());
+        assert!(app.check_alarm(&m).is_none());
         let toast = app.toast.as_ref().expect("a toast");
         assert!(toast.is_error(), "past a limit, like the badge");
         assert!(
@@ -537,20 +539,11 @@ mod tests {
     #[test]
     fn a_clear_keeps_a_reading_that_is_out_quiet() {
         let mut app = app_with_high_limit(5.0);
-        assert!(
-            app.check_alarm(&reading(&app, 4.0, "V"), LimitUnit::Base)
-                .is_none()
-        );
-        assert!(
-            app.check_alarm(&reading(&app, 6.0, "V"), LimitUnit::Base)
-                .is_some()
-        );
+        assert!(app.check_alarm(&reading(&app, 4.0, "V")).is_none());
+        assert!(app.check_alarm(&reading(&app, 6.0, "V")).is_some());
         app.clear_session();
         app.toast = None;
-        assert!(
-            app.check_alarm(&reading(&app, 6.0, "V"), LimitUnit::Base)
-                .is_none()
-        );
+        assert!(app.check_alarm(&reading(&app, 6.0, "V")).is_none());
         assert!(app.toast.is_none());
         assert_eq!(app.alarm.as_ref().unwrap().high_count, 0);
     }
@@ -561,13 +554,10 @@ mod tests {
     #[test]
     fn an_import_judges_the_file_afresh() {
         let mut app = app_with_high_limit(5.0);
-        assert!(
-            app.check_alarm(&reading(&app, 4.0, "V"), LimitUnit::Base)
-                .is_none()
-        );
+        assert!(app.check_alarm(&reading(&app, 4.0, "V")).is_none());
         app.reset_session_for_import();
         let alarm = app.alarm.as_ref().expect("still set");
-        assert_eq!(alarm.quantity(), None);
+        assert_eq!(alarm.bound_unit(), None);
         assert_eq!(alarm.limits().high, Some(5.0));
         app.toast = None;
         assert!(app.check_imported(&reading(&app, 6.0, "V")).is_none());
@@ -655,14 +645,8 @@ mod tests {
     #[test]
     fn the_graph_starts_afresh_over_an_idle_alarm() {
         let mut app = app_with_high_limit(5.0);
-        assert!(
-            app.check_alarm(&reading(&app, 4.0, "V"), LimitUnit::Base)
-                .is_none()
-        );
-        assert!(
-            app.check_alarm(&reading(&app, 12.0, "kΩ"), LimitUnit::Base)
-                .is_none()
-        );
+        assert!(app.check_alarm(&reading(&app, 4.0, "V")).is_none());
+        assert!(app.check_alarm(&reading(&app, 12.0, "kΩ")).is_none());
         app.alarm_editor.band = "5%".to_string();
         app.set_limit_from_graph(LimitSide::Low, Some(2.0));
         let alarm = app.alarm.as_ref().expect("an alarm");
@@ -680,10 +664,7 @@ mod tests {
             Some(Some(5.0)),
             "drawn before a reading binds it"
         );
-        assert!(
-            app.check_alarm(&reading(&app, 4.0, "V"), LimitUnit::Base)
-                .is_none()
-        );
+        assert!(app.check_alarm(&reading(&app, 4.0, "V")).is_none());
         assert_eq!(app.watched_limits().map(|w| w.limits.high), Some(Some(5.0)));
         app.set_limits(Limits::default(), Hysteresis::Auto);
         assert!(app.alarm.is_none());

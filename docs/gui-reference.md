@@ -462,9 +462,10 @@ the reading is out it turns the error colour with a **HI LIMIT** or
 keeps a reading hovering at a limit to one alarm; overloads don't count.
 
 Limits are in the base unit (V, A, Ω, …), as the [scale](#scale)'s factor
-is, or in the scale's unit while one is applied. They watch the quantity of
-the first reading after they are set: after a dial turn to another quantity
-the row reads **idle** until the dial comes back. They last for the session.
+is, or in the scale's unit while one is applied or a scaled file is imported.
+They watch the quantity and unit of the first reading after they are set:
+after a dial turn to another quantity, or on a file's rows in another unit,
+the row reads **idle** until they come back. They last for the session.
 Without a recording, a marker leaves with its reading when the graph clears;
 the count stays. `dmm-cli read` offers the same alarm as `--alarm-high`,
 `--alarm-low` and `--alarm-hysteresis`.

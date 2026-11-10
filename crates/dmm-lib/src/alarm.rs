@@ -5,13 +5,16 @@
 //! (see [`crate::transform`]): a high limit of 5 means 5 V whether the meter
 //! shows 4980 mV or 5.02 V, so an auto-range step cannot move it a decade.
 //! With a software transform on, the reading is already in its output unit
-//! (the base unit or the user's label), and the limit is in that unit.
+//! (the base unit or the user's label), and the limit is in that unit. So is
+//! a file's reading that was scaled when written: its Raw sub-value says so
+//! ([`LimitUnit::of`]), and the same limits mean the same on import as live.
 //!
 //! An alarm binds to the quantity of the first reading it sees — the meter's
 //! own base unit, read before any transform, so a `--unit` relabel that pins
-//! the label cannot hide a dial turn — and stays idle while readings are of
-//! another quantity. It never rebinds: limits typed for volts must not start
-//! judging ohms.
+//! the label cannot hide a dial turn — and to the unit its limits are in. It
+//! stays idle while readings are of another quantity, or in another limit
+//! unit (a file recorded across a scale change), and never rebinds: limits
+//! typed for volts must not start judging ohms.
 //!
 //! A breach is over once the reading comes back inside by a [`Hysteresis`]
 //! band: a noisy reading hovering at a limit crosses it on every other
@@ -21,7 +24,7 @@
 //! Shared by the CLI read loop and the GUI message drain, so the two agree on
 //! what is a breach and on the note that marks one.
 
-use crate::measurement::{MeasuredValue, Measurement};
+use crate::measurement::{AuxValue, MeasuredValue, Measurement};
 use crate::transform::{RAW_LABEL, si_prefix};
 
 /// The band [`Hysteresis::Auto`] takes, in counts of the reading's last
@@ -148,6 +151,22 @@ pub enum LimitUnit {
 }
 
 impl LimitUnit {
+    /// The unit limits are in for `m`: [`LimitUnit::Shown`] when it went
+    /// through a software transform, which keeps the meter's own reading as
+    /// a [`RAW_LABEL`] sub-value. That holds for a file's reading too: one
+    /// written scaled carries its Raw column, and is judged as it was live.
+    pub fn of(m: &Measurement) -> Self {
+        Self::of_raw(raw_reading(m))
+    }
+
+    /// Shown when the reading carries a Raw sub-value, `raw`.
+    fn of_raw(raw: Option<&AuxValue>) -> Self {
+        match raw {
+            Some(_) => Self::Shown,
+            None => Self::Base,
+        }
+    }
+
     /// The multiplier taking a reading in `unit` into the limits' unit.
     fn mult(self, unit: &str) -> f64 {
         match self {
@@ -155,6 +174,14 @@ impl LimitUnit {
             Self::Shown => 1.0,
         }
     }
+}
+
+/// The reading as the meter sent it, which a software transform keeps as a
+/// [`RAW_LABEL`] sub-value. A file scaled when written and scaled again on
+/// import carries two; the last is the file's reading, which the second
+/// scale was taken from.
+fn raw_reading(m: &Measurement) -> Option<&AuxValue> {
+    m.aux_values.iter().rfind(|a| a.label == RAW_LABEL)
 }
 
 /// A high and a low limit, either of them optional, in base units.
@@ -237,15 +264,15 @@ impl Limits {
 }
 
 /// The unit a limit typed now would be in for readings like `m`: its base
-/// unit, or under [`LimitUnit::Shown`] the transform's output unit, which is
-/// already the base or the user's label. `None` for a reading with no unit
+/// unit, or for a scaled reading ([`LimitUnit::of`]) the transform's output
+/// unit, which is already the base or the user's label. `None` for a reading with no unit
 /// to go by: a word shown instead of a reading, or a frame without a main
 /// reading.
-pub fn limit_unit(m: &Measurement, limit_unit: LimitUnit) -> Option<&str> {
+pub fn limit_unit(m: &Measurement) -> Option<&str> {
     if matches!(m.value, MeasuredValue::NoReading(_) | MeasuredValue::Absent) {
         return None;
     }
-    let unit = match limit_unit {
+    let unit = match LimitUnit::of(m) {
         LimitUnit::Shown => m.unit.as_ref(),
         LimitUnit::Base => si_prefix(&m.unit).0,
     };
@@ -301,13 +328,61 @@ impl Breach {
     }
 }
 
+/// What an alarm watches: the quantity the meter measures, and the unit the
+/// limits are in for it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Binding {
+    /// The meter's base unit, read before any transform, so a relabel that
+    /// pins the label cannot hide a dial turn.
+    quantity: String,
+    /// The unit the limits are in: the base unit, or a scaled reading's
+    /// shown unit. Two scales on one quantity (a file that spans a scale
+    /// change) are two of these, and limits typed for one mean nothing in
+    /// the other.
+    unit: String,
+    /// Whether `unit` is a scaled reading's: a scale with no label shows
+    /// the base unit, whose limits mean other values than the meter's own.
+    limit_unit: LimitUnit,
+}
+
+impl Binding {
+    /// The unit the limits are in.
+    pub fn unit(&self) -> &str {
+        &self.unit
+    }
+
+    /// Whether the limits are in a scaled reading's unit.
+    pub fn limit_unit(&self) -> LimitUnit {
+        self.limit_unit
+    }
+
+    /// What moved since `before`, named as the alarm's idle state names it
+    /// (see [`Alarm::idle`]); `None` when the two are one.
+    pub fn moved_from(&self, before: &Binding) -> Option<&str> {
+        before.moved_to(&self.quantity, &self.unit, self.limit_unit)
+    }
+
+    /// The meter's quantity when that moved, else the unit the readings
+    /// are shown in; `None` when nothing did.
+    fn moved_to<'a>(&self, quantity: &'a str, unit: &'a str, kind: LimitUnit) -> Option<&'a str> {
+        if self.quantity != quantity {
+            Some(quantity)
+        } else if self.unit != unit || self.limit_unit != kind {
+            Some(unit)
+        } else {
+            None
+        }
+    }
+}
+
 /// An alarm watching one run's main reading.
 #[derive(Debug, Clone)]
 pub struct Alarm {
     limits: Limits,
-    /// The meter's base unit the alarm watches; `None` until the first reading.
-    quantity: Option<String>,
-    /// The base unit of the last reading of another quantity, while there is one.
+    /// What the first reading bound the alarm to; `None` until one.
+    bound: Option<Binding>,
+    /// What the last reading of another quantity or limit unit was in,
+    /// while there is one.
     idle: Option<String>,
     /// How far back inside a breach ends.
     hysteresis: Hysteresis,
@@ -327,7 +402,7 @@ impl Alarm {
     pub fn new(limits: Limits, hysteresis: Hysteresis) -> Self {
         Self {
             limits,
-            quantity: None,
+            bound: None,
             idle: None,
             hysteresis,
             zone: None,
@@ -345,13 +420,21 @@ impl Alarm {
         self.hysteresis
     }
 
-    /// The base unit the alarm watches, once a reading has bound it.
-    pub fn quantity(&self) -> Option<&str> {
-        self.quantity.as_deref()
+    /// What the first reading bound the alarm to, once one has.
+    pub fn binding(&self) -> Option<&Binding> {
+        self.bound.as_ref()
     }
 
-    /// The base unit of the readings arriving while they are of another
-    /// quantity than the one the alarm watches: the alarm is idle.
+    /// The unit the limits are in, once a reading has bound the alarm: the
+    /// meter's base unit, or a scaled reading's shown unit.
+    pub fn bound_unit(&self) -> Option<&str> {
+        self.bound.as_ref().map(Binding::unit)
+    }
+
+    /// What the readings arriving are in while the alarm cannot judge them:
+    /// the meter's base unit after a dial turn to another quantity, else the
+    /// unit they show, scaled or not, when the limits are not in it (a file
+    /// recorded across a scale change). The alarm is idle.
     pub fn idle(&self) -> Option<&str> {
         self.idle.as_deref()
     }
@@ -369,24 +452,25 @@ impl Alarm {
         self.low_count = 0;
     }
 
-    /// The unit the limits are in: a scaled reading's label, `relabel`, or
-    /// the base unit of the quantity watched. `None` before a reading binds.
+    /// The unit the limits are in: the one a reading bound
+    /// ([`Alarm::bound_unit`]), else the scale's label, `relabel`, which the
+    /// first scaled reading will bind. `None` before a reading binds
+    /// without one.
     pub fn limits_unit<'a>(&'a self, relabel: Option<&'a str>) -> Option<&'a str> {
-        relabel.or(self.quantity())
+        self.bound_unit().or(relabel)
     }
 
     /// Compare one reading, returning the breach it starts, if any: a
     /// crossing, counted, or the reading found already out, which is not.
     ///
-    /// `m` is the reading as shown, after any software transform;
-    /// `limit_unit` says whether one was applied, [`LimitUnit::Shown`]. Only a numeric main reading counts: an
-    /// overload says only that the reading is beyond the meter's range — the
-    /// resting state of resistance and diode modes, with no sign or size to
-    /// compare — and no-reading words, NCV levels and frames without a main
-    /// reading carry no number either, so all of them leave the alarm as it
-    /// was.
-    pub fn check(&mut self, m: &Measurement, limit_unit: LimitUnit) -> Option<Breach> {
-        let scaled = limit_unit == LimitUnit::Shown;
+    /// `m` is the reading as shown, after any software transform, which
+    /// [`LimitUnit::of`] tells from its Raw sub-value. Only a numeric main
+    /// reading counts: an overload says only that the reading is beyond the
+    /// meter's range — the resting state of resistance and diode modes, with
+    /// no sign or size to compare — and no-reading words, NCV levels and
+    /// frames without a main reading carry no number either, so all of them
+    /// leave the alarm as it was.
+    pub fn check(&mut self, m: &Measurement) -> Option<Breach> {
         let v = match m.value {
             MeasuredValue::Normal(v) => v,
             // Nothing to show past a limit while the meter shows no number.
@@ -399,34 +483,40 @@ impl Alarm {
         };
         // The meter's own unit: the main reading's, or under a transform the
         // Raw sub-value's, which carries the reading as the meter sent it.
-        let meter_unit = if scaled {
-            m.aux_values
-                .iter()
-                .rfind(|a| a.label == RAW_LABEL)
-                .map_or(m.unit.as_ref(), |a| a.unit.as_ref())
-        } else {
-            m.unit.as_ref()
-        };
+        let raw = raw_reading(m);
+        let limit_unit = LimitUnit::of_raw(raw);
+        let meter_unit = raw.map_or(m.unit.as_ref(), |a| a.unit.as_ref());
         let base = si_prefix(meter_unit).0;
-        match &self.quantity {
-            None => self.quantity = Some(base.to_string()),
-            Some(q) if q != base => {
-                if self.idle.as_deref() != Some(base) {
-                    self.idle = Some(base.to_string());
-                }
-                self.reading_zone = None;
-                return None;
+        // Into the limits' unit: as shown under a transform, else the base.
+        let unit = match limit_unit {
+            LimitUnit::Shown => m.unit.as_ref(),
+            LimitUnit::Base => base,
+        };
+        match &self.bound {
+            None => {
+                self.bound = Some(Binding {
+                    quantity: base.to_string(),
+                    unit: unit.to_string(),
+                    limit_unit,
+                });
             }
-            Some(_) => {}
+            Some(b) => {
+                if let Some(now) = b.moved_to(base, unit, limit_unit) {
+                    if self.idle.as_deref() != Some(now) {
+                        self.idle = Some(now.to_string());
+                    }
+                    self.reading_zone = None;
+                    return None;
+                }
+            }
         }
         if self.idle.take().is_some() {
             // Back from another quantity: whatever the reading did meanwhile
             // went unwatched, so it is judged afresh.
             self.zone = None;
         }
-        // Into the limits' unit: as shown under a transform, else the base.
         let mult = limit_unit.mult(&m.unit);
-        let (value, unit) = (v * mult, if scaled { m.unit.as_ref() } else { base });
+        let value = v * mult;
         let now = self.limits.zone_of(value);
         self.reading_zone = Some(now);
         // A breach ends once the reading is back inside by the band; short of
@@ -527,8 +617,8 @@ mod tests {
     fn limits_are_in_base_units_whatever_the_range() {
         let t = Instant::now();
         let mut a = alarm(None, Some(5.0));
-        assert_eq!(a.check(&reading(4980.0, "mV", t), LimitUnit::Base), None);
-        let breach = a.check(&reading(5.02, "V", t), LimitUnit::Base).unwrap();
+        assert_eq!(a.check(&reading(4980.0, "mV", t)), None);
+        let breach = a.check(&reading(5.02, "V", t)).unwrap();
         assert_eq!(breach.note(), "Above high limit 5 V");
         assert_eq!(a.high_count, 1);
     }
@@ -537,8 +627,8 @@ mod tests {
     fn the_limit_is_strict() {
         let t = Instant::now();
         let mut a = alarm(Some(3.0), Some(5.0));
-        assert_eq!(a.check(&reading(5.0, "V", t), LimitUnit::Base), None);
-        assert_eq!(a.check(&reading(3.0, "V", t), LimitUnit::Base), None);
+        assert_eq!(a.check(&reading(5.0, "V", t)), None);
+        assert_eq!(a.check(&reading(3.0, "V", t)), None);
         assert_eq!(a.reading_zone(), Some(Zone::Inside));
     }
 
@@ -546,17 +636,15 @@ mod tests {
     fn a_breach_counts_once_while_the_reading_stays_out() {
         let t = Instant::now();
         let mut a = alarm(Some(3.0), Some(5.0));
-        assert_eq!(a.check(&reading(4.0, "V", t), LimitUnit::Base), None);
+        assert_eq!(a.check(&reading(4.0, "V", t)), None);
         assert_eq!(
-            a.check(&reading(2.0, "V", t), LimitUnit::Base)
-                .unwrap()
-                .note(),
+            a.check(&reading(2.0, "V", t)).unwrap().note(),
             "Below low limit 3 V",
         );
-        assert_eq!(a.check(&reading(1.0, "V", t), LimitUnit::Base), None);
+        assert_eq!(a.check(&reading(1.0, "V", t)), None);
         assert_eq!((a.low_count, a.high_count), (1, 0));
         // A jump to the other side is a breach of its own.
-        assert!(a.check(&reading(6.0, "V", t), LimitUnit::Base).is_some());
+        assert!(a.check(&reading(6.0, "V", t)).is_some());
         assert_eq!((a.low_count, a.high_count), (1, 1));
     }
 
@@ -565,16 +653,16 @@ mod tests {
     #[test]
     fn a_breach_ends_once_the_reading_is_back_by_the_band() {
         let mut a = alarm(None, Some(7.2975));
-        assert_eq!(a.check(&shown(7.297, "7.297"), LimitUnit::Base), None);
-        assert!(a.check(&shown(7.298, "7.298"), LimitUnit::Base).is_some());
+        assert_eq!(a.check(&shown(7.297, "7.297")), None);
+        assert!(a.check(&shown(7.298, "7.298")).is_some());
         for v in [7.297, 7.298, 7.297, 7.293, 7.298] {
             let display = format!("{v:.3}");
-            assert_eq!(a.check(&shown(v, &display), LimitUnit::Base), None, "{v}");
+            assert_eq!(a.check(&shown(v, &display)), None, "{v}");
         }
         assert_eq!(a.high_count, 1);
         // 7.2975 - 5 × 0.001 = 7.2925: back past it, the breach is over.
-        assert_eq!(a.check(&shown(7.292, "7.292"), LimitUnit::Base), None);
-        assert!(a.check(&shown(7.298, "7.298"), LimitUnit::Base).is_some());
+        assert_eq!(a.check(&shown(7.292, "7.292")), None);
+        assert!(a.check(&shown(7.298, "7.298")).is_some());
         assert_eq!(a.high_count, 2);
     }
 
@@ -582,26 +670,20 @@ mod tests {
     fn a_typed_band_is_absolute_or_a_percentage_of_the_limit() {
         let limits = Limits::check(Some(100.0), None).unwrap();
         let mut a = Alarm::new(limits, Hysteresis::Absolute(2.0));
-        assert_eq!(a.check(&shown(103.0, "103.0"), LimitUnit::Base), None);
-        assert!(a.check(&shown(99.0, "99.0"), LimitUnit::Base).is_some());
-        assert_eq!(a.check(&shown(101.5, "101.5"), LimitUnit::Base), None);
-        assert!(
-            a.check(&shown(99.0, "99.0"), LimitUnit::Base).is_none(),
-            "not back by 2"
-        );
-        assert_eq!(a.check(&shown(102.0, "102.0"), LimitUnit::Base), None);
-        assert!(a.check(&shown(99.0, "99.0"), LimitUnit::Base).is_some());
+        assert_eq!(a.check(&shown(103.0, "103.0")), None);
+        assert!(a.check(&shown(99.0, "99.0")).is_some());
+        assert_eq!(a.check(&shown(101.5, "101.5")), None);
+        assert!(a.check(&shown(99.0, "99.0")).is_none(), "not back by 2");
+        assert_eq!(a.check(&shown(102.0, "102.0")), None);
+        assert!(a.check(&shown(99.0, "99.0")).is_some());
 
         let mut a = Alarm::new(limits, Hysteresis::Percent(5.0));
-        assert_eq!(a.check(&shown(106.0, "106.0"), LimitUnit::Base), None);
-        assert!(a.check(&shown(99.0, "99.0"), LimitUnit::Base).is_some());
-        assert_eq!(a.check(&shown(104.0, "104.0"), LimitUnit::Base), None);
-        assert!(
-            a.check(&shown(99.0, "99.0"), LimitUnit::Base).is_none(),
-            "5 % is 5"
-        );
-        assert_eq!(a.check(&shown(105.0, "105.0"), LimitUnit::Base), None);
-        assert!(a.check(&shown(99.0, "99.0"), LimitUnit::Base).is_some());
+        assert_eq!(a.check(&shown(106.0, "106.0")), None);
+        assert!(a.check(&shown(99.0, "99.0")).is_some());
+        assert_eq!(a.check(&shown(104.0, "104.0")), None);
+        assert!(a.check(&shown(99.0, "99.0")).is_none(), "5 % is 5");
+        assert_eq!(a.check(&shown(105.0, "105.0")), None);
+        assert!(a.check(&shown(99.0, "99.0")).is_some());
     }
 
     #[test]
@@ -621,13 +703,13 @@ mod tests {
     fn a_reading_without_a_number_shows_no_zone() {
         let t = Instant::now();
         let mut a = alarm(None, Some(5.0));
-        assert_eq!(a.check(&reading(4.0, "V", t), LimitUnit::Base), None);
-        assert!(a.check(&reading(6.0, "V", t), LimitUnit::Base).is_some());
+        assert_eq!(a.check(&reading(4.0, "V", t)), None);
+        assert!(a.check(&reading(6.0, "V", t)).is_some());
         let ol = Measurement::test_fixture(MeasuredValue::Overload, "V", StatusFlags::default());
-        assert_eq!(a.check(&ol, LimitUnit::Base), None);
+        assert_eq!(a.check(&ol), None);
         assert_eq!(a.reading_zone(), None);
         // Still the same breach once the number is back.
-        assert_eq!(a.check(&reading(6.0, "V", t), LimitUnit::Base), None);
+        assert_eq!(a.check(&reading(6.0, "V", t)), None);
         assert_eq!(a.reading_zone(), Some(Zone::Above));
     }
 
@@ -646,9 +728,7 @@ mod tests {
     #[test]
     fn a_limit_set_while_out_waits_for_a_crossing() {
         let mut a = alarm(None, Some(5.0));
-        let found = a
-            .check(&reading(9.0, "V", Instant::now()), LimitUnit::Base)
-            .unwrap();
+        let found = a.check(&reading(9.0, "V", Instant::now())).unwrap();
         assert!(!found.crossing);
         assert_eq!(
             found.note(),
@@ -656,17 +736,11 @@ mod tests {
         );
         assert_eq!(a.high_count, 0);
         assert_eq!(a.reading_zone(), Some(Zone::Above));
-        assert_eq!(
-            a.check(&reading(9.1, "V", Instant::now()), LimitUnit::Base),
-            None
-        );
+        assert_eq!(a.check(&reading(9.1, "V", Instant::now())), None);
         // Back by the band, then out: that is a crossing.
-        assert_eq!(
-            a.check(&reading(4.0, "V", Instant::now()), LimitUnit::Base),
-            None
-        );
+        assert_eq!(a.check(&reading(4.0, "V", Instant::now())), None);
         assert!(
-            a.check(&reading(9.0, "V", Instant::now()), LimitUnit::Base)
+            a.check(&reading(9.0, "V", Instant::now()))
                 .unwrap()
                 .crossing
         );
@@ -684,30 +758,23 @@ mod tests {
             MeasuredValue::NcvLevel(3),
             MeasuredValue::Absent,
         ] {
-            assert_eq!(
-                a.check(
-                    &Measurement::test_fixture(value, "V", flags),
-                    LimitUnit::Base
-                ),
-                None
-            );
+            assert_eq!(a.check(&Measurement::test_fixture(value, "V", flags)), None);
         }
-        assert_eq!(a.quantity(), None);
-        assert_eq!(a.check(&reading(4.0, "V", t), LimitUnit::Base), None);
-        assert_eq!(a.quantity(), Some("V"));
+        assert_eq!(a.bound_unit(), None);
+        assert_eq!(a.check(&reading(4.0, "V", t)), None);
+        assert_eq!(a.bound_unit(), Some("V"));
     }
 
     #[test]
     fn another_quantity_leaves_the_alarm_idle() {
         let t = Instant::now();
         let mut a = alarm(None, Some(5.0));
-        assert_eq!(a.check(&reading(4.0, "V", t), LimitUnit::Base), None);
-        assert_eq!(a.check(&reading(220.0, "kΩ", t), LimitUnit::Base), None);
+        assert_eq!(a.check(&reading(4.0, "V", t)), None);
+        assert_eq!(a.check(&reading(220.0, "kΩ", t)), None);
         assert_eq!(a.idle(), Some("Ω"));
         assert_eq!(a.reading_zone(), None);
         assert_eq!(
-            a.check(&reading(9.0, "V", t), LimitUnit::Base)
-                .map(|b| (b.zone, b.crossing)),
+            a.check(&reading(9.0, "V", t)).map(|b| (b.zone, b.crossing)),
             Some((Zone::Above, false)),
             "unwatched meanwhile: found out, not seen crossing"
         );
@@ -727,15 +794,11 @@ mod tests {
             ("m°", "°", "°"),
         ] {
             let mut a = alarm(None, Some(1.0));
+            assert_eq!(limit_unit(&reading(900.0, low, t)), Some(base));
+            assert_eq!(a.check(&reading(900.0, low, t)), None);
+            assert_eq!(a.bound_unit(), Some(base));
             assert_eq!(
-                limit_unit(&reading(900.0, low, t), LimitUnit::Base),
-                Some(base)
-            );
-            assert_eq!(a.check(&reading(900.0, low, t), LimitUnit::Base), None);
-            assert_eq!(a.quantity(), Some(base));
-            assert_eq!(
-                a.check(&reading(1.2, high, t), LimitUnit::Base)
-                    .map(|b| b.zone),
+                a.check(&reading(1.2, high, t)).map(|b| b.zone),
                 Some(Zone::Above),
                 "{low} to {high}"
             );
@@ -749,37 +812,33 @@ mod tests {
     fn a_ph_label_is_compared_as_shown() {
         let t = Instant::now();
         let mut a = alarm(None, Some(7.0));
+        assert_eq!(limit_unit(&reading(6.5, "pH", t)), Some("pH"));
+        assert_eq!(a.check(&reading(6.5, "pH", t)), None);
         assert_eq!(
-            limit_unit(&reading(6.5, "pH", t), LimitUnit::Base),
-            Some("pH")
-        );
-        assert_eq!(a.check(&reading(6.5, "pH", t), LimitUnit::Base), None);
-        assert_eq!(
-            a.check(&reading(7.5, "pH", t), LimitUnit::Base)
-                .map(|b| b.zone),
+            a.check(&reading(7.5, "pH", t)).map(|b| b.zone),
             Some(Zone::Above)
         );
     }
 
     #[test]
-    fn scaled_readings_compare_as_shown_and_bind_to_the_meters_unit() {
+    fn scaled_readings_compare_as_shown_and_bind_to_the_meters_quantity() {
         let t = Instant::now();
         // A 10 mV/A clamp: 12.3 mV is 1.23 A.
         let clamp = Transform::linear(100.0, 0.0, Some("A".into()));
         let mut a = alarm(None, Some(1.0));
         let mut m = reading(9.0, "mV", t);
         clamp.apply(&mut m);
-        assert_eq!(a.check(&m, LimitUnit::Shown), None, "0.9 A is inside");
+        assert_eq!(a.check(&m), None, "0.9 A is inside");
         let mut m = reading(12.3, "mV", t);
         clamp.apply(&mut m);
-        let breach = a.check(&m, LimitUnit::Shown).unwrap();
+        let breach = a.check(&m).unwrap();
         assert_eq!(breach.note(), "Above high limit 1 A");
-        assert_eq!(a.quantity(), Some("V"));
+        assert_eq!(a.bound_unit(), Some("A"));
         // A dial turn to Ω keeps the "A" label but not the meter's unit.
         let mut m = reading(0.5, "kΩ", t);
         clamp.apply(&mut m);
         assert_eq!(m.unit, "A");
-        assert_eq!(a.check(&m, LimitUnit::Shown), None);
+        assert_eq!(a.check(&m), None);
         assert_eq!(a.idle(), Some("Ω"));
     }
 
@@ -787,32 +846,93 @@ mod tests {
     fn clearing_the_counts_keeps_the_quantity() {
         let t = Instant::now();
         let mut a = alarm(None, Some(5.0));
-        assert_eq!(a.check(&reading(4.0, "V", t), LimitUnit::Base), None);
-        assert!(a.check(&reading(6.0, "V", t), LimitUnit::Base).is_some());
+        assert_eq!(a.check(&reading(4.0, "V", t)), None);
+        assert!(a.check(&reading(6.0, "V", t)).is_some());
         a.clear_counts();
         assert_eq!(a.high_count, 0);
-        assert_eq!(a.quantity(), Some("V"));
+        assert_eq!(a.bound_unit(), Some("V"));
         // The reading still out after a clear is the breach it already was.
-        assert_eq!(a.check(&reading(6.0, "V", t), LimitUnit::Base), None);
+        assert_eq!(a.check(&reading(6.0, "V", t)), None);
         assert_eq!(a.high_count, 0);
         assert_eq!(a.limits_unit(None), Some("V"));
-        assert_eq!(a.limits_unit(Some("A")), Some("A"));
+        // Bound: what the readings bound it to, not a label passed in.
+        assert_eq!(a.limits_unit(Some("A")), Some("V"));
+        assert_eq!(alarm(None, Some(5.0)).limits_unit(Some("A")), Some("A"));
+    }
+
+    /// A file written under `--scale 1000 --unit kV`: its readings carry the
+    /// meter's volts as Raw, and the limits are in kV, as they were live.
+    #[test]
+    fn a_files_scaled_reading_is_judged_as_shown() {
+        let t = Instant::now();
+        let kv = Transform::linear(1000.0, 0.0, Some("kV".into()));
+        let mut m = reading(4.0, "V", t);
+        kv.apply(&mut m);
+        // Read back from the file: the same reading, no transform applied.
+        assert_eq!(LimitUnit::of(&m), LimitUnit::Shown);
+        assert_eq!(limit_unit(&m), Some("kV"));
+        let mut a = alarm(None, Some(5000.0));
+        assert_eq!(a.check(&m), None, "4000 kV is inside 5000");
+        let mut m = reading(5.5, "V", t);
+        kv.apply(&mut m);
+        assert_eq!(a.check(&m).unwrap().note(), "Above high limit 5000 kV");
+        assert_eq!(a.limits_unit(None), Some("kV"));
+        // An unscaled file is judged in base units.
+        let plain = reading(5500.0, "mV", t);
+        assert_eq!(LimitUnit::of(&plain), LimitUnit::Base);
+        let mut a = alarm(None, Some(5.0));
+        assert_eq!(
+            a.check(&plain).unwrap().note(),
+            "Already above high limit 5 V; alarms start at the next crossing"
+        );
+    }
+
+    /// A recording that went on through a scale change: limits bound by its
+    /// plain volts mean nothing for its scaled amps, though the meter
+    /// measured volts throughout.
+    #[test]
+    fn a_reading_shown_in_another_limit_unit_leaves_the_alarm_idle() {
+        let t = Instant::now();
+        let clamp = Transform::linear(100.0, 0.0, Some("A".into()));
+        let mut a = alarm(None, Some(5.0));
+        assert_eq!(a.check(&reading(4.0, "V", t)), None);
+        let mut m = reading(60.0, "mV", t);
+        clamp.apply(&mut m);
+        assert_eq!(a.check(&m), None, "6 A against a limit in V");
+        assert_eq!((a.idle(), a.bound_unit()), (Some("A"), Some("V")));
+        assert_eq!(a.reading_zone(), None);
+        assert_eq!(a.check(&reading(4.0, "V", t)), None);
+        assert_eq!(a.idle(), None);
+    }
+
+    /// A scale with no label shows the base unit, but its limits mean other
+    /// values than the meter's own: the two still bind apart.
+    #[test]
+    fn an_unlabelled_scale_binds_apart_from_the_meters_unit() {
+        let t = Instant::now();
+        let thousand = Transform::linear(1000.0, 0.0, None);
+        let mut scaled = reading(4.0, "V", t);
+        thousand.apply(&mut scaled);
+        assert_eq!(scaled.unit, "V");
+        let mut a = alarm(None, Some(4500.0));
+        assert_eq!(a.check(&scaled), None);
+        assert_eq!(a.check(&reading(4.0, "V", t)), None);
+        assert_eq!(a.idle(), Some("V"), "plain volts against scaled limits");
+        let mut plain = alarm(None, Some(5.0));
+        plain.check(&reading(4.0, "V", t));
+        let (b, s) = (plain.binding().unwrap(), a.binding().unwrap());
+        assert_eq!(b.moved_from(s), Some("V"));
+        assert_eq!(b.moved_from(b), None);
     }
 
     #[test]
     fn a_limit_is_in_the_readings_base_unit() {
         let t = Instant::now();
-        assert_eq!(
-            limit_unit(&reading(4980.0, "mV", t), LimitUnit::Base),
-            Some("V")
-        );
-        assert_eq!(
-            limit_unit(&reading(12.3, "A", t), LimitUnit::Shown),
-            Some("A")
-        );
+        assert_eq!(limit_unit(&reading(4980.0, "mV", t)), Some("V"));
+        assert_eq!(limit_unit(&reading(12.3, "A", t)), Some("A"));
         let flags = StatusFlags::default();
         let auto = Measurement::test_fixture(MeasuredValue::NoReading("Auto"), "", flags);
-        assert_eq!(limit_unit(&auto, LimitUnit::Base), None);
+        assert_eq!(limit_unit(&auto), None);
     }
 
     #[test]
