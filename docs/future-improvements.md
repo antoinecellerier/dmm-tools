@@ -514,3 +514,11 @@ The GUI shows one toast at a time and a newer one replaces it, so two messages a
 A `capture` key step with no expectation passes only when the parse shows a new mode, range, flag, kind of value or sub-value. A key whose effect is a bit the decoder does not map (a backlight, a display toggle) is filed as "did nothing", with its frames but no samples, and the reporter is never asked. On that timeout the step could ask whether the meter did anything, and on a yes file the readings after the key as its samples with the answer beside them.
 
 Use cases: unverified families, where a key's effect is often in a byte the decoder does not read yet.
+
+### A macOS app bundle
+
+**Complexity:** Medium
+
+The macOS archive holds bare binaries, so Finder shows dmm-gui with the generic executable icon and opens a Terminal window before the GUI; the Dock icon only appears once it runs. Shipping `dmm-gui.app` (an `Info.plist`, an `.icns` built from `assets/icon.svg`, the whole bundle re-signed ad hoc so Apple Silicon will run it) would fix both, and the first-launch steps in [setup.md](setup.md#macos-wont-open-dmm-cli-or-dmm-gui) would change with it. dmm-cli stays a bare binary, as command-line tools are on macOS. Needs someone with a Mac to try a dev build before it ships.
+
+Use cases: launching dmm-gui from Finder, Launchpad or the Dock like any other Mac app.
