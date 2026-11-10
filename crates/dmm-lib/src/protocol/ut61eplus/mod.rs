@@ -668,6 +668,53 @@ const MINMAX_DEAD: &[Mode] = &[
     Mode::Ncv,
 ];
 
+/// Which states each flag command can be driven to in `mode` on a model with
+/// `table`: what [`cycle::CycleMeter::flag_states`] answers for this family.
+///
+/// We used to answer "every state in every mode", on the reading that the
+/// family's command matrix (research spec §6) lists no mode restriction on
+/// 0x4A, 0x48 or 0x41. Two meters have since contradicted that: a UT61E+
+/// (CP2110, 2026-09-07) and a UT61B+ (CH9329, 2026-09-10, issue #19)
+/// refused the same commands in the same modes, each press leaving the
+/// flag where it was. [`REL_DEAD`], [`MINMAX_DEAD`] and [`HOLD_DEAD`] are
+/// that list. Peak depends on the model as well, so it stays with the
+/// table.
+///
+/// The lists narrow `get`/`set` and the capture sweep alone: the GUI's
+/// buttons and `dmm-cli command` press through `send_command`, so a wrong
+/// entry cannot stop a press, only `set` reaching a state the meter has.
+pub(crate) fn flag_states_for(
+    table: &ModelTable,
+    setting: cycle::FlagSetting,
+    mode: u16,
+) -> &'static [u16] {
+    // A flag whose button the model does not have (family spec §6.5).
+    let command = match setting {
+        cycle::FlagSetting::Hold => cmd::HOLD,
+        cycle::FlagSetting::Rel => cmd::REL,
+        cycle::FlagSetting::MinMax => cmd::MINMAX,
+        cycle::FlagSetting::Peak => cmd::PEAK,
+    };
+    if !table.commands.contains(&command) {
+        return &[];
+    }
+    let named = u8::try_from(mode).ok().and_then(Mode::from_byte);
+    let dead = |modes: &[Mode]| named.is_some_and(|m| modes.contains(&m));
+    match setting {
+        cycle::FlagSetting::Hold if dead(HOLD_DEAD) => &[],
+        cycle::FlagSetting::Rel if dead(REL_DEAD) => &[],
+        cycle::FlagSetting::MinMax if dead(MINMAX_DEAD) => &[],
+        cycle::FlagSetting::Hold | cycle::FlagSetting::Rel => &[0, 1],
+        // MAX then MIN, the order the meter's own 2-state ring cycles in.
+        // No AVG: the UT61E+ reports none over USB.
+        cycle::FlagSetting::MinMax => &[0, 1, 2],
+        cycle::FlagSetting::Peak => match named {
+            Some(mode) if table.peak_modes.contains(&mode) => &[0, 1, 2],
+            _ => &[],
+        },
+    }
+}
+
 impl cycle::CycleMeter for Ut61PlusProtocol {
     fn dial_positions(&self) -> &'static [cycle::DialPosition] {
         self.table.dial
@@ -734,46 +781,8 @@ impl cycle::CycleMeter for Ut61PlusProtocol {
         self.press_command(transport, Command::Auto)
     }
 
-    /// Which states each flag command can be driven to in `mode`.
-    ///
-    /// We used to answer "every state in every mode", on the reading that the
-    /// family's command matrix (research spec §6) lists no mode restriction on
-    /// 0x4A, 0x48 or 0x41. Two meters have since contradicted that: a UT61E+
-    /// (CP2110, 2026-09-07) and a UT61B+ (CH9329, 2026-09-10, issue #19)
-    /// refused the same commands in the same modes, each press leaving the
-    /// flag where it was. [`REL_DEAD`], [`MINMAX_DEAD`] and [`HOLD_DEAD`] are
-    /// that list. Peak depends on the model as well, so it stays with the
-    /// table.
-    ///
-    /// The lists narrow `get`/`set` and the capture sweep alone: the GUI's
-    /// buttons and `dmm-cli command` press through `send_command`, so a wrong
-    /// entry cannot stop a press, only `set` reaching a state the meter has.
     fn flag_states(&self, setting: cycle::FlagSetting, mode: u16) -> &'static [u16] {
-        // A flag whose button the model does not have (family spec §6.5).
-        let command = match setting {
-            cycle::FlagSetting::Hold => cmd::HOLD,
-            cycle::FlagSetting::Rel => cmd::REL,
-            cycle::FlagSetting::MinMax => cmd::MINMAX,
-            cycle::FlagSetting::Peak => cmd::PEAK,
-        };
-        if !self.profile.supported_commands.contains(&command) {
-            return &[];
-        }
-        let named = u8::try_from(mode).ok().and_then(Mode::from_byte);
-        let dead = |modes: &[Mode]| named.is_some_and(|m| modes.contains(&m));
-        match setting {
-            cycle::FlagSetting::Hold if dead(HOLD_DEAD) => &[],
-            cycle::FlagSetting::Rel if dead(REL_DEAD) => &[],
-            cycle::FlagSetting::MinMax if dead(MINMAX_DEAD) => &[],
-            cycle::FlagSetting::Hold | cycle::FlagSetting::Rel => &[0, 1],
-            // MAX then MIN, the order the meter's own 2-state ring cycles in.
-            // No AVG: the UT61E+ reports none over USB.
-            cycle::FlagSetting::MinMax => &[0, 1, 2],
-            cycle::FlagSetting::Peak => match named {
-                Some(mode) if self.table.peak_modes.contains(&mode) => &[0, 1, 2],
-                _ => &[],
-            },
-        }
+        flag_states_for(self.table, setting, mode)
     }
 
     fn exit_flag(&mut self, transport: &dyn Transport, setting: cycle::FlagSetting) -> Result<()> {
