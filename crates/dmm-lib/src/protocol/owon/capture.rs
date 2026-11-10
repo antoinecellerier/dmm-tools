@@ -57,7 +57,7 @@ pub(super) fn steps(code: u8) -> Vec<CaptureStep> {
         _ => return Vec::new(),
     };
     steps.extend(keys);
-    if code == 61 {
+    if code == super::model::CMS061.code {
         for step in &mut steps {
             step.verified = CMS061_VERIFIED.contains(&step.id);
         }
@@ -2864,7 +2864,7 @@ fn vc925pv_keys() -> Vec<CaptureStep> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::protocol::owon::model::MODELS;
+    use crate::protocol::owon::model::{CMS061, MODELS};
 
     /// The CMS key steps' starting states, against frames a UT217A sent (#45):
     /// each state can be reached, and the state the step before leaves, or the
@@ -2872,7 +2872,6 @@ mod tests {
     #[test]
     fn the_cms_key_steps_start_from_states_the_meter_shows() {
         use crate::protocol::owon::decode15::decode;
-        use crate::protocol::owon::model::CMS061;
         let reading = |hex: &str| {
             let bytes: Vec<u8> = hex
                 .split(' ')
@@ -2888,7 +2887,7 @@ mod tests {
         let ac_a = reading("E2 00 F0 00 00 00 A2 01 F0 00 00 00 04 00 00");
         let scope = reading("E2 13 F0 00 00 00 E2 10 F0 00 00 00 00 00 04");
 
-        let steps = steps(61);
+        let steps = steps(CMS061.code);
         let starts = |id: &str, m: &crate::measurement::Measurement| {
             let step = steps.iter().find(|s| s.id == id).unwrap();
             step.starts_from.unwrap().check(m).is_ok()
@@ -2920,12 +2919,11 @@ mod tests {
     #[test]
     fn the_cms_scope_step_expects_no_reading() {
         use crate::protocol::owon::decode15::decode;
-        use crate::protocol::owon::model::CMS061;
         let frame = [
             0xE2, 0x03, 0xF0, 0, 0, 0, 0xA2, 0x01, 0xF0, 0, 0, 0, 0, 0, 0x04,
         ];
         let reading = decode(&frame, &CMS061).unwrap();
-        let steps = steps(61);
+        let steps = steps(CMS061.code);
         let scope = steps.iter().find(|s| s.id == "scope").unwrap();
         let expect = scope.expect.unwrap();
         assert_eq!(expect.value, Some(ValueExpect::NoReading));
@@ -3024,7 +3022,11 @@ mod tests {
             assert!(steps[..6].iter().all(|s| s.gate), "{code}");
             assert!(steps[6..].iter().all(|s| !s.gate), "{code}");
             let verified: Vec<&str> = steps.iter().filter(|s| s.verified).map(|s| s.id).collect();
-            let want: &[&str] = if code == 61 { CMS061_VERIFIED } else { &[] };
+            let want: &[&str] = if code == CMS061.code {
+                CMS061_VERIFIED
+            } else {
+                &[]
+            };
             assert_eq!(verified, want, "{code}");
             let mut ids: Vec<&str> = steps.iter().map(|s| s.id).collect();
             ids.sort_unstable();

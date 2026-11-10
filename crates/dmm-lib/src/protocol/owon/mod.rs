@@ -166,9 +166,10 @@ pub(crate) struct OwonProtocol {
 /// been detected after a restart (#45); MaxMin's sub-value against the LCD
 /// is open. No other OWON or Voltcraft meter has run the tool.
 const fn stability(model: &Model) -> Stability {
-    match model.code {
-        61 => Stability::Verified,
-        _ => Stability::Experimental,
+    if model.code == model::CMS061.code {
+        Stability::Verified
+    } else {
+        Stability::Experimental
     }
 }
 
@@ -1156,7 +1157,7 @@ mod tests {
             let proto = (entry.new_protocol)();
             let profile = proto.profile();
             assert_eq!(profile.id, entry.id);
-            let stability = if m.code == 61 {
+            let stability = if m.code == model::CMS061.code {
                 Stability::Verified
             } else {
                 Stability::Experimental
