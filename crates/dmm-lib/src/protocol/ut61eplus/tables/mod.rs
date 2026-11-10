@@ -346,8 +346,8 @@ mod tests {
         assert!(range_ladder(&SPARSE, Mode::DcV).is_empty());
     }
 
-    /// UT161B has no table of its own — `Ut61PlusProtocol::for_model` hands it
-    /// the UT61B+'s, so these are the ranges a UT161B reports.
+    /// UT161B has no table of its own — its `devices` function hands it the
+    /// UT61B+'s, so these are the ranges a UT161B reports.
     #[test]
     fn ut161b_uses_the_ut61b_plus_table() {
         let t = &ut61b_plus::UT61B_PLUS;

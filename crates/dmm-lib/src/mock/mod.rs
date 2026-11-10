@@ -927,7 +927,7 @@ mod tests {
                 (a, b) => a.is_none() && b.is_none(),
             }
         }
-        let ut61e = crate::protocol::ut61eplus::Ut61PlusProtocol::for_model("ut61eplus");
+        let ut61e = crate::protocol::ut61eplus::Ut61PlusProtocol::for_id("ut61eplus");
         for &mode in MockMode::ALL {
             let mut dmm = open_mock_mode(mode).unwrap();
             let m = dmm.request_measurement().unwrap();

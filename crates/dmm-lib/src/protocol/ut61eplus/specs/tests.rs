@@ -26,7 +26,7 @@ const UT161: &[(SpecModel, SpecModel)] = &[
 /// A reading of `mode` at range byte `range`, as the model's parser gives
 /// it, and whether the parser reported anything in it.
 fn parse(id: &str, mode: u8, range: u8) -> (Option<Measurement>, bool) {
-    let proto = Ut61PlusProtocol::for_model(id);
+    let proto = Ut61PlusProtocol::for_id(id);
     // "3" reads as a number; NCV draws its idle word instead.
     let display = if mode == Mode::Ncv as u8 {
         b"   EF  "
@@ -79,7 +79,7 @@ fn every_reading_has_a_spec_or_is_listed() {
     let lists = [MODE_SPEC_ONLY, NO_SPEC];
     let mut listed_reached = HashSet::new();
     for &(model, id) in MODELS {
-        let proto = Ut61PlusProtocol::for_model(id);
+        let proto = Ut61PlusProtocol::for_id(id);
         let mut rows_reached = HashSet::new();
         for m in accepted_readings(id) {
             let (mode, range) = (mode_of(&m), m.range_raw);

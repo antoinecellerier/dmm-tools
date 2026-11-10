@@ -2,9 +2,10 @@
 //!
 //! [`DEVICES`]: crate::protocol::registry::DEVICES
 
-use super::{FINGERPRINT, Ut61PlusProtocol};
-use crate::protocol::DeviceFamily;
+use super::specs::SpecModel;
+use super::{FINGERPRINT, Ut61PlusProtocol, tables};
 use crate::protocol::registry::{Brand, SelectableDevice};
+use crate::protocol::{DeviceFamily, Stability};
 use crate::transport::{ch9329, cp2110};
 
 /// The links the UT61+/UT161 meters are found on, most likely first. The
@@ -47,7 +48,7 @@ pub(crate) static UT61EPLUS: SelectableDevice = SelectableDevice {
     requires_hardware: true,
     activation_instructions: ACTIVATION_UT61EPLUS,
     family: DeviceFamily::Ut61EPlus,
-    new_protocol: || Box::new(Ut61PlusProtocol::for_model(UT61EPLUS.id)),
+    new_protocol: || Box::new(ut61e_plus()),
     fingerprint: Some(&FINGERPRINT),
     manual_url: Some("https://meters.uni-trend.com/product/ut61plus-series/"),
     links: LINKS,
@@ -65,7 +66,7 @@ pub(crate) static UT61BPLUS: SelectableDevice = SelectableDevice {
     requires_hardware: true,
     activation_instructions: ACTIVATION_UT61EPLUS,
     family: DeviceFamily::Ut61EPlus,
-    new_protocol: || Box::new(Ut61PlusProtocol::for_model(UT61BPLUS.id)),
+    new_protocol: || Box::new(ut61b_plus()),
     fingerprint: Some(&FINGERPRINT),
     manual_url: Some("https://meters.uni-trend.com/product/ut61plus-series/"),
     links: LINKS,
@@ -83,7 +84,7 @@ pub(crate) static UT61DPLUS: SelectableDevice = SelectableDevice {
     requires_hardware: true,
     activation_instructions: ACTIVATION_UT61EPLUS,
     family: DeviceFamily::Ut61EPlus,
-    new_protocol: || Box::new(Ut61PlusProtocol::for_model(UT61DPLUS.id)),
+    new_protocol: || Box::new(ut61d_plus()),
     fingerprint: Some(&FINGERPRINT),
     manual_url: Some("https://meters.uni-trend.com/product/ut61plus-series/"),
     links: LINKS,
@@ -100,7 +101,7 @@ pub(crate) static UT161B: SelectableDevice = SelectableDevice {
     requires_hardware: true,
     activation_instructions: ACTIVATION_UT61EPLUS,
     family: DeviceFamily::Ut61EPlus,
-    new_protocol: || Box::new(Ut61PlusProtocol::for_model(UT161B.id)), // same table as UT61B+
+    new_protocol: || Box::new(ut161b()),
     fingerprint: Some(&FINGERPRINT),
     manual_url: Some("https://meters.uni-trend.com/product/ut161-series/"),
     links: LINKS,
@@ -117,7 +118,7 @@ pub(crate) static UT161D: SelectableDevice = SelectableDevice {
     requires_hardware: true,
     activation_instructions: ACTIVATION_UT61EPLUS,
     family: DeviceFamily::Ut61EPlus,
-    new_protocol: || Box::new(Ut61PlusProtocol::for_model(UT161D.id)), // same table as UT61D+
+    new_protocol: || Box::new(ut161d()),
     fingerprint: Some(&FINGERPRINT),
     manual_url: Some("https://meters.uni-trend.com/product/ut161-series/"),
     links: LINKS,
@@ -134,7 +135,7 @@ pub(crate) static UT161E: SelectableDevice = SelectableDevice {
     requires_hardware: true,
     activation_instructions: ACTIVATION_UT61EPLUS,
     family: DeviceFamily::Ut61EPlus,
-    new_protocol: || Box::new(Ut61PlusProtocol::for_model(UT161E.id)), // same table as UT61E+
+    new_protocol: || Box::new(ut161e()),
     fingerprint: Some(&FINGERPRINT),
     manual_url: Some("https://meters.uni-trend.com/product/ut161-series/"),
     links: LINKS,
@@ -152,7 +153,7 @@ pub(crate) static UT60BT: SelectableDevice = SelectableDevice {
     requires_hardware: true,
     activation_instructions: ACTIVATION_UT60BT,
     family: DeviceFamily::Ut61EPlus,
-    new_protocol: || Box::new(Ut61PlusProtocol::for_model(UT60BT.id)),
+    new_protocol: || Box::new(ut60bt()),
     fingerprint: Some(&FINGERPRINT),
     manual_url: Some("https://meters.uni-trend.com.cn/content/1298.html"),
     // Bluetooth built in, no cable.
@@ -172,7 +173,7 @@ pub(crate) static UT202BT: SelectableDevice = SelectableDevice {
     requires_hardware: true,
     activation_instructions: ACTIVATION_UT202BT,
     family: DeviceFamily::Ut61EPlus,
-    new_protocol: || Box::new(Ut61PlusProtocol::for_model(UT202BT.id)),
+    new_protocol: || Box::new(ut202bt()),
     fingerprint: Some(&FINGERPRINT),
     manual_url: Some("https://meters.uni-trend.com.cn/content/1341.html"),
     // Bluetooth built in, no cable.
@@ -180,3 +181,121 @@ pub(crate) static UT202BT: SelectableDevice = SelectableDevice {
     detection_verified: &[],
     bluetooth_names: &["UT202BT"],
 };
+
+// Each model's protocol: its table, stability, spec tables and verification
+// issue. The family issue (#7) stays on every model but the UT61E+, verified
+// or not: the UT61B+ is decoded
+// correctly everywhere it was looked at, and its range rungs above the ones
+// auto-ranging reached are still open there. The UT60BT and UT202BT have
+// issues of their own.
+
+pub(super) fn ut61e_plus() -> Ut61PlusProtocol {
+    Ut61PlusProtocol::model(
+        &UT61EPLUS,
+        &tables::ut61e_plus::UT61E_PLUS,
+        Stability::Verified,
+        SpecModel::Ut61ePlus,
+        None,
+    )
+}
+
+/// Verified by three captures reported in issue #19, 2026-09-09 to
+/// 2026-09-11: every mode its dial reaches decoded correctly, every command
+/// moved the flag it should, the second run passed the gate outright and the
+/// third walked the Ω and DC V ladders. What is left open on this model is in
+/// `docs/research/ut61-family/verification.md`.
+pub(super) fn ut61b_plus() -> Ut61PlusProtocol {
+    Ut61PlusProtocol::model(
+        &UT61BPLUS,
+        &tables::ut61b_plus::UT61B_PLUS,
+        Stability::Verified,
+        SpecModel::Ut61bPlus,
+        Some(7),
+    )
+}
+
+pub(super) fn ut61d_plus() -> Ut61PlusProtocol {
+    Ut61PlusProtocol::model(
+        &UT61DPLUS,
+        &tables::ut61d_plus::UT61D_PLUS,
+        Stability::Experimental,
+        SpecModel::Ut61dPlus,
+        Some(7),
+    )
+}
+
+/// Same table as the UT61B+.
+pub(super) fn ut161b() -> Ut61PlusProtocol {
+    Ut61PlusProtocol::model(
+        &UT161B,
+        &tables::ut61b_plus::UT61B_PLUS,
+        Stability::Experimental,
+        SpecModel::Ut161b,
+        Some(7),
+    )
+}
+
+/// Same table as the UT61D+.
+pub(super) fn ut161d() -> Ut61PlusProtocol {
+    Ut61PlusProtocol::model(
+        &UT161D,
+        &tables::ut61d_plus::UT61D_PLUS,
+        Stability::Experimental,
+        SpecModel::Ut161d,
+        Some(7),
+    )
+}
+
+/// Same table as the UT61E+. Verified by two captures reported in issue #7
+/// (@frixit, CP2110), both 2026-10-21: its frames carried the UT61E+'s mode,
+/// range and flag bytes except after one AC+DC V range press (family spec
+/// §2.2), and the second run passed the gate and drove every command. What
+/// is left open on this model is in
+/// `docs/research/ut61-family/verification.md`.
+pub(super) fn ut161e() -> Ut61PlusProtocol {
+    Ut61PlusProtocol::model(
+        &UT161E,
+        &tables::ut61e_plus::UT61E_PLUS,
+        Stability::Verified,
+        SpecModel::Ut161e,
+        Some(7),
+    )
+}
+
+pub(super) fn ut60bt() -> Ut61PlusProtocol {
+    Ut61PlusProtocol::model(
+        &UT60BT,
+        &tables::ut60bt::UT60BT,
+        Stability::Experimental,
+        SpecModel::Untranscribed,
+        Some(26),
+    )
+}
+
+pub(super) fn ut202bt() -> Ut61PlusProtocol {
+    Ut61PlusProtocol::model(
+        &UT202BT,
+        &tables::ut202bt::UT202BT,
+        Stability::Experimental,
+        SpecModel::Untranscribed,
+        Some(27),
+    )
+}
+
+/// The function that builds a model's protocol.
+#[cfg(any(test, feature = "test-support"))]
+pub(super) type Build = fn() -> Ut61PlusProtocol;
+
+/// Every entry with the function that builds its protocol, in registry order,
+/// for what needs the protocol's own type rather than a `dyn Protocol`.
+#[cfg(any(test, feature = "test-support"))]
+pub(super) static MODELS: &[(&SelectableDevice, Build)] = &[
+    (&UT61EPLUS, ut61e_plus),
+    (&UT61BPLUS, ut61b_plus),
+    (&UT61DPLUS, ut61d_plus),
+    (&UT161B, ut161b),
+    (&UT161D, ut161d),
+    (&UT161E, ut161e),
+    (&UT60BT, ut60bt),
+    (&UT202BT, ut202bt),
+];
