@@ -199,6 +199,17 @@ fn an_unknown_saved_device_is_said_as_such() {
     assert_eq!(out.status.code(), Some(1));
 }
 
+/// A command name the meter doesn't have is answered with the ones it
+/// takes, on the error line.
+#[test]
+fn a_mistyped_command_lists_the_meters_commands() {
+    let (_, stderr) = run(&["--lang", "en", "--device", "mock", "command", "hlod"]);
+    assert!(
+        stderr.contains("has no 'hlod' command; it takes hold, "),
+        "{stderr}"
+    );
+}
+
 /// Naming the mock still picks it, rather than probing for a meter: the
 /// dispatch every command goes through now resolves `auto` too.
 #[test]
