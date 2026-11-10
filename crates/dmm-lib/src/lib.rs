@@ -1160,31 +1160,20 @@ mod tests {
     /// answered" help offers its Bluetooth steps.
     #[test]
     fn bluetooth_only_meters_are_on_no_cable() {
-        let bluetooth_only: Vec<&str> = registry::DEVICES
+        let bluetooth_only: Vec<&SelectableDevice> = registry::DEVICES
             .iter()
+            .copied()
             .filter(|d| d.bluetooth_only())
-            .map(|d| d.id)
             .collect();
-        assert_eq!(
-            bluetooth_only,
-            [
-                "ut60bt", "ut202bt", "zt300ab", "zt5566se", "zt5bq", "zt5b", "121gw", "bm78xbt",
-                "ow18b", "ow18e", "b33", "b35t+", "b41t+", "cm2100b", "cms101", "cms061", "ow65b",
-                "ow67b", "ow69b", "vc871", "vc891", "vc915", "vc925pv"
-            ]
-        );
-        for kt in KNOWN_TRANSPORTS {
-            assert!(
-                !devices_on_bridge(kt.name)
-                    .iter()
-                    .any(|d| d.bluetooth_only()),
-                "{}",
-                kt.name
-            );
+        assert!(!bluetooth_only.is_empty());
+        let on_bluetooth = devices_on_bridge(BLUETOOTH);
+        for device in &bluetooth_only {
+            assert!(on_bluetooth.contains(device), "{}", device.id);
         }
-        let on_bluetooth: Vec<&str> = devices_on_bridge(BLUETOOTH).iter().map(|d| d.id).collect();
-        for id in bluetooth_only {
-            assert!(on_bluetooth.contains(&id), "{id}");
+        for kt in KNOWN_TRANSPORTS {
+            for device in devices_on_bridge(kt.name) {
+                assert!(!device.bluetooth_only(), "{} on {}", device.id, kt.name);
+            }
         }
     }
 

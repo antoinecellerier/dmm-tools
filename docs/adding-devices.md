@@ -173,7 +173,7 @@ The protocol code lives in `crates/dmm-lib/src/protocol/<family>/`. The CLI and 
 1. Implement the `Protocol` trait in its `mod.rs`. The trait, in `crates/dmm-lib/src/protocol/mod.rs`, says which methods are required and which have a default.
 2. In `protocol/mod.rs`, declare the module and add a `DeviceFamily` variant, one per fingerprint, with its `name` arm.
 3. Add its `SelectableDevice` entries in `protocol/<family>/devices.rs` and list them in `DEVICES`. Their `links` name the links the family is seen on: its USB cables by their transport's `NAME` (the transports themselves are in `KNOWN_TRANSPORTS`), and `BLUETOOTH` if a UT-D07B carries it. A meter with the radio built in and no cable sets the `bluetooth_names` it advertises and `BLUETOOTH` alone. `detection_verified` stays empty until a report's detection check finds the meter after a restart (Phase 6 sign-off).
-4. For a family on Bluetooth, add it to the lists of Bluetooth families in the `lib.rs` and `detect.rs` tests.
+4. Add the family to the families the `detect.rs` and `lib.rs` tests expect on each link it is on, and any probe it sends to the probe lists in the `detect.rs` tests. A meter with the radio built in that advertises a name no entry has yet adds it to the peers test in `transport/open.rs`.
 5. Keep its research docs in `docs/research/<family>/` (Phase 2).
 
 **A new transport**, only when no existing link carries the meter: the [cable table](supported-devices.md#cables-and-adapters) lists the cables and adapters handled today. The protocol layer above is transport-agnostic.
