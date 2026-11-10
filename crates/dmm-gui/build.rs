@@ -1,6 +1,6 @@
 use std::process::Command;
 
-fn main() -> std::io::Result<()> {
+fn main() {
     // Embed the git commit hash only in release builds. Debug builds use a
     // constant placeholder so the binary's compile-time identity stays fixed
     // across commits — otherwise each new commit's hash mints a fresh
@@ -24,14 +24,19 @@ fn main() -> std::io::Result<()> {
     println!("cargo:rerun-if-changed=../../.git/HEAD");
 
     // Explorer, the Start menu and shortcuts read an exe's icon from its
-    // embedded resources; the runtime window icon (main.rs) never reaches
-    // them. The resource also carries the version shown in Properties.
-    // icon.ico is icon-256.png at 16 to 256 px: rebuild it with the PNG.
+    // embedded resources; the window icon main.rs sets at runtime never
+    // reaches them. The resource also carries the version shown in Properties.
+    // scripts/make-ico.ps1 builds icon.ico from icon.svg.
     if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("windows") {
         println!("cargo:rerun-if-changed=../../assets/icon.ico");
-        winresource::WindowsResource::new()
-            .set_icon("../../assets/icon.ico")
-            .compile()?;
+        let icon = concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets/icon.ico");
+        // Not worth failing the build over: a toolchain without a resource
+        // compiler (windres, llvm-rc) still builds, iconless, and says so.
+        if let Err(e) = winresource::WindowsResource::new()
+            .set_icon(icon)
+            .compile_for("dmm-gui")
+        {
+            println!("cargo:warning=dmm-gui.exe built without its icon: {e}");
+        }
     }
-    Ok(())
 }

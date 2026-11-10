@@ -1,6 +1,6 @@
 use std::process::Command;
 
-fn main() -> std::io::Result<()> {
+fn main() {
     // Embed the git commit hash only in release builds. Debug builds use a
     // constant placeholder so the binary's compile-time identity stays fixed
     // across commits — otherwise each new commit's hash mints a fresh
@@ -23,13 +23,19 @@ fn main() -> std::io::Result<()> {
     // Re-run when HEAD moves (affects release stamping).
     println!("cargo:rerun-if-changed=../../.git/HEAD");
 
-    // The icon Explorer shows for dmm-cli.exe, and the version in Properties:
-    // the same as dmm-gui's (crates/dmm-gui/build.rs).
+    // The icon Explorer and shortcuts show for dmm-cli.exe, and the version in
+    // Properties, as for dmm-gui (crates/dmm-gui/build.rs).
+    // scripts/make-ico.ps1 builds icon-cli.ico from icon-cli.svg.
     if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("windows") {
-        println!("cargo:rerun-if-changed=../../assets/icon.ico");
-        winresource::WindowsResource::new()
-            .set_icon("../../assets/icon.ico")
-            .compile()?;
+        println!("cargo:rerun-if-changed=../../assets/icon-cli.ico");
+        let icon = concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets/icon-cli.ico");
+        // Not worth failing the build over: a toolchain without a resource
+        // compiler (windres, llvm-rc) still builds, iconless, and says so.
+        if let Err(e) = winresource::WindowsResource::new()
+            .set_icon(icon)
+            .compile_for("dmm-cli")
+        {
+            println!("cargo:warning=dmm-cli.exe built without its icon: {e}");
+        }
     }
-    Ok(())
 }

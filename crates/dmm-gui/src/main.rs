@@ -653,9 +653,10 @@ fn main() -> eframe::Result<()> {
     #[cfg(target_os = "linux")]
     install_desktop_integration();
 
-    // Embedded icon for the window titlebar / taskbar. On Windows and macOS this
-    // is all that's needed. On Linux/Wayland the icon is looked up from the
-    // .desktop file instead — see install_desktop_integration().
+    // Embedded icon for the window titlebar / taskbar. On Linux/Wayland the icon
+    // is looked up from the .desktop file instead — see
+    // install_desktop_integration(). Explorer reads the exe's resource icon
+    // (build.rs), not this one.
     let icon = eframe::icon_data::from_png_bytes(include_bytes!("../../../assets/icon-256.png"))
         .expect("failed to load app icon");
 
