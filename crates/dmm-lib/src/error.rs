@@ -85,14 +85,14 @@ pub enum Error {
     },
 
     /// The Bluetooth link went away mid-session — out of range, meter powered
-    /// off, adapter asleep. The same shape as a pulled USB cable, so consumers
-    /// reconnect from it.
+    /// off, adapter asleep. The same shape as a pulled USB cable, and the same
+    /// kind.
     #[error("Bluetooth link lost")]
     LinkLost,
 
     /// The Bluetooth stack cannot do what was asked: no adapter, powered off,
-    /// permission denied, the device carries no UART. Retrying never helps —
-    /// the message carries what the user has to change.
+    /// permission denied, the device carries no UART. The message carries
+    /// what the user has to change.
     #[error("Bluetooth: {0}")]
     Bluetooth(BluetoothIssue),
 
@@ -287,21 +287,25 @@ pub type Result<T> = std::result::Result<T, Error>;
 /// on the failure category without matching every variant. Small and
 /// `Copy` so it can be sent across channels or stored in UI state without
 /// moving the underlying [`Error`](enum@Error).
+///
+/// Each kind says what went wrong, not what to do about it: that is each
+/// consumer's to decide.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ErrorKind {
-    /// USB adapter not found on the bus (unplugged, permissions, wrong VID/PID).
-    /// Reconnect is expected to succeed once the hardware comes back.
+    /// Nothing the open looked for was found: no cable on the bus, nothing
+    /// in Bluetooth range, or a Bluetooth-only meter out of range.
     DeviceNotFound,
-    /// I/O failure underneath the HID layer.
+    /// The link failed: an I/O error underneath the HID layer (a pulled
+    /// cable, a permission refused) or a Bluetooth link lost.
     Transport,
-    /// Meter didn't respond in time.
+    /// The meter didn't answer in time, or no meter answered the probes.
     Timeout,
-    /// Response arrived but couldn't be parsed (checksum, invalid response).
-    /// Reconnect alone won't help if the protocol is wrong.
+    /// A response arrived but couldn't be parsed (checksum, invalid response,
+    /// another meter's frames): one frame, not the link.
     Protocol,
-    /// Something only the user can fix (unknown device ID, bad adapter
-    /// selector, unsupported command, a command the meter refused).
-    /// Reconnect won't help — report it and carry on streaming.
+    /// Something only the user can change: an unknown device ID, an adapter
+    /// selector that names nothing found, an unsupported or refused command, a Bluetooth
+    /// stack that can't do what was asked, a bad replay file.
     Configuration,
     /// Interrupted system call — typically a Ctrl-C signal mid-read — or an
     /// open the caller called off.
@@ -353,10 +357,10 @@ mod tests {
         assert_eq!(Error::Timeout.kind(), ErrorKind::Timeout);
     }
 
-    /// The GUI reconnect loop keys off `Timeout`: a meter whose
-    /// transmission mode was still off answers the next probe, so this must
-    /// not land in `Configuration` (which stops retrying). The message must
-    /// stay chip-free — the user plugged in a cable, not a CH9329.
+    /// Nothing answering the probes is a timeout, as a silent meter is: the
+    /// cure is the same, transmission switched on, not a setting to change.
+    /// The message must stay chip-free — the user plugged in a cable, not a
+    /// CH9329.
     #[test]
     fn kind_maps_not_identified() {
         let err = Error::DeviceNotIdentified {
@@ -427,9 +431,10 @@ mod tests {
         );
     }
 
-    /// A lost link is what a pulled cable is: the GUI reconnects from both.
-    /// A stack that cannot do what was asked is not — retrying a powered-off
-    /// adapter forever would hide the one thing the user has to change.
+    /// A lost link is what a pulled cable is, a link fault. A stack that
+    /// cannot do what was asked is not: it is something the user has to
+    /// change, though the GUI's reconnect still retries it, as an adapter
+    /// switched back on comes back (`connection.rs`'s reconnect tests).
     #[test]
     fn kind_separates_a_lost_link_from_a_misconfigured_stack() {
         assert_eq!(Error::LinkLost.kind(), ErrorKind::Transport);
@@ -440,7 +445,8 @@ mod tests {
     }
 
     /// A meter with the radio built in says what kept it from the radio, and
-    /// only a meter out of range is the not-found the GUI waits out.
+    /// only a meter out of range is not found; the rest are the user's to
+    /// change.
     #[test]
     fn a_bluetooth_only_meter_says_why_it_was_not_opened() {
         let err = |miss| Error::BluetoothOnly {
@@ -581,8 +587,8 @@ mod tests {
             Error::Replay("line 3: `ZZ` is not a hex byte".into()).kind(),
             ErrorKind::Configuration
         );
-        // A refused command must not look like a transport fault: the GUI
-        // reconnects on those, and reconnecting can't move the meter's dial.
+        // A refused command is not a link fault: the meter answered, and
+        // only the user can move its dial.
         assert_eq!(
             Error::from(Rejected::MinMaxLocksRange).kind(),
             ErrorKind::Configuration

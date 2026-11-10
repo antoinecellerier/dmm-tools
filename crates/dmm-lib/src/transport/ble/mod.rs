@@ -793,14 +793,14 @@ fn not_found(selector: Option<&str>) -> Error {
     }
 }
 
-/// A failure of the Bluetooth stack itself: nothing the caller retries will
-/// fix it, so it carries the reason rather than looking like a silent meter.
+/// A failure of the Bluetooth stack itself, which carries the reason rather
+/// than looking like a silent meter.
 fn stack_error(e: btleplug::Error) -> Error {
     BluetoothIssue::Stack(e.to_string()).into()
 }
 
 /// A failure of this link. `NotConnected` and a vanished device are the
-/// out-of-range case, which the GUI reconnects from.
+/// out-of-range case: the link is lost.
 fn link_error(e: btleplug::Error) -> Error {
     match e {
         btleplug::Error::NotConnected | btleplug::Error::DeviceNotFound => Error::LinkLost,
