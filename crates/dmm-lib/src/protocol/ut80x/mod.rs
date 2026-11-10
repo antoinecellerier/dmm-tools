@@ -88,8 +88,8 @@ impl Model {
         }
     }
 
-    /// The registry id reports name the model by, so the hint they print
-    /// selects the same parser.
+    /// The model's registry id: the profile's, and the one reports name the
+    /// model by, so the hint they print selects the same parser.
     fn report_id(self) -> &'static str {
         match self {
             Model::Ut803 => devices::UT803.id,
@@ -937,13 +937,13 @@ pub(crate) struct Ut80xProtocol {
 }
 
 impl Ut80xProtocol {
-    fn new(model: Model, id: &'static str, stability: Stability, verification_issue: u16) -> Self {
+    fn new(model: Model, stability: Stability, verification_issue: u16) -> Self {
         Self {
             rx_buf: Vec::with_capacity(128),
             model,
             profile: DeviceProfile {
                 family_name: "UT803/UT804",
-                id,
+                id: model.report_id(),
                 stability,
                 supported_commands: COMMANDS,
                 max_aux_values: 0,
@@ -954,23 +954,23 @@ impl Ut80xProtocol {
     }
 
     pub(crate) fn new_ut803() -> Self {
-        Self::new(Model::Ut803, "ut803", Stability::Experimental, 15)
+        Self::new(Model::Ut803, Stability::Experimental, 15)
     }
 
     pub(crate) fn new_ut804() -> Self {
-        Self::new(Model::Ut804, "ut804", Stability::Verified, 16)
+        Self::new(Model::Ut804, Stability::Verified, 16)
     }
 
     pub(crate) fn new_ut71ab() -> Self {
-        Self::new(Model::Ut71Ab, "ut71ab", Stability::Experimental, 22)
+        Self::new(Model::Ut71Ab, Stability::Experimental, 22)
     }
 
     pub(crate) fn new_ut71cde() -> Self {
-        Self::new(Model::Ut71Cde, "ut71cde", Stability::Experimental, 22)
+        Self::new(Model::Ut71Cde, Stability::Experimental, 22)
     }
 
     pub(crate) fn new_vc920() -> Self {
-        Self::new(Model::Vc920, "vc920", Stability::Experimental, 23)
+        Self::new(Model::Vc920, Stability::Experimental, 23)
     }
 
     /// The manual table for reading `m`, decoded again from the payload:

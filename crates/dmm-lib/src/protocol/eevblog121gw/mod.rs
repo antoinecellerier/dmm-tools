@@ -29,12 +29,12 @@ use crate::protocol::{
 use crate::transport::Transport;
 use log::debug;
 
-/// The registry id, which the report hint names as `--device`.
 #[cfg(any(test, feature = "test-support"))]
 pub(crate) use decode::all_labels;
 #[cfg(test)]
 pub(crate) use decode::all_units;
 
+/// The registry id, which the report hint names as `--device`.
 pub(super) const ID: &str = "121gw";
 
 /// Log label for the read loop.
@@ -150,7 +150,7 @@ impl Eevblog121gwProtocol {
             rx_buf: Vec::with_capacity(64),
             profile: DeviceProfile {
                 family_name: "121GW",
-                id: "121gw",
+                id: ID,
                 stability: Stability::Experimental,
                 supported_commands: &COMMANDS,
                 // The secondary display, or in the VA modes its two

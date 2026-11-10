@@ -54,12 +54,12 @@ use crate::protocol::{
 use crate::transport::Transport;
 use log::debug;
 
-/// The registry id, which the report hint names as `--device`.
 #[cfg(any(test, feature = "test-support"))]
 pub(crate) use decode::all_labels;
 #[cfg(test)]
 pub(crate) use decode::all_units;
 
+/// The registry id, which the report hint names as `--device`.
 pub(crate) const ID: &str = "bm78xbt";
 
 /// Log label for the read loop.
@@ -83,7 +83,7 @@ impl Bm78xbtProtocol {
             rx_buf: Vec::with_capacity(512),
             profile: DeviceProfile {
                 family_name: "BM78xBT",
-                id: "bm78xbt",
+                id: ID,
                 stability: Stability::Experimental,
                 // r4 has no key or function command (spec §7.1).
                 supported_commands: &[],
