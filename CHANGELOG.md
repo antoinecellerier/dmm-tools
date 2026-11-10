@@ -38,6 +38,7 @@
 - **Alarms judge an imported scaled file in its own unit** — a limit of 5 on a kV file meant 5 V.
 - **dmm-gui turns an alarm off when an import or another meter is in another unit** — the same numbers judged the new unit.
 - **A Y bound or reference value you are typing survives an auto-range step** — the graph rewrote it under the caret.
+- **A right axis keeps its fixed range when the plotted reading auto-ranges**
 - **Markers start at 1 when dmm-gui connects after an import** — the first one took the number after the imported file's last marker.
 - **A cable pulled at `capture`'s meter check asks for no report** — it saved a no-response report and asked you to attach it.
 - **The mock ignores HOLD, REL, MIN/MAX and Peak where a UT61E+ does**

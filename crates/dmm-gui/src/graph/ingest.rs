@@ -196,6 +196,10 @@ impl Graph {
                 None => self.restart_trace(now, mode, unit, sample.series),
             }
         }
+        // The plotted axis is framed by the Y fields, never a pin: one a
+        // kept trace left under the unit now plotted would frame that trace
+        // again once another series is plotted.
+        self.y_axis.pins.remove(&self.current_unit);
         self.heard(now);
         self.register_overlays(sample.overlays);
         match value {
@@ -310,7 +314,17 @@ impl Graph {
         for p in &mut self.history {
             p.value = ratio.apply(p.value);
         }
-        self.current_unit = unit.to_string();
+        let old = std::mem::replace(&mut self.current_unit, unit.to_string());
+        // A trace left in the old prefix moves to a right axis of its own,
+        // framed as the plotted axis framed it, as a pin of a trace that
+        // steps keeps its range (`follow_unit`); one that stepped into the
+        // old prefix in this frame keeps the range it brought.
+        if (self.y_axis.fixed || self.y_axis.user_set)
+            && self.overlays.iter().any(|o| o.unit == old)
+        {
+            let range = (self.y_axis.min.value(), self.y_axis.max.value());
+            self.y_axis.pins.entry(old).or_insert(range);
+        }
         self.y_axis.min.rescale(ratio);
         self.y_axis.max.rescale(ratio);
         self.ref_lines.rescale(ratio);
@@ -356,8 +370,14 @@ impl Graph {
             return;
         }
         let old = std::mem::replace(&mut self.overlays[i].unit, unit.to_string());
-        // Another trace still on the old unit's axis keeps its range.
-        let pin = if self.overlays.iter().any(|o| o.unit == old) {
+        // A trace leaving the plotted axis takes the range the Y fields
+        // framed it with, as one the plotted trace leaves behind does
+        // (`rescale`); another trace still on the old unit's axis keeps its
+        // range.
+        let pin = if old == self.current_unit {
+            (self.y_axis.fixed || self.y_axis.user_set)
+                .then(|| (self.y_axis.min.value(), self.y_axis.max.value()))
+        } else if self.overlays.iter().any(|o| o.unit == old) {
             self.y_axis.pins.get(&old).copied()
         } else {
             self.y_axis.pins.remove(&old)
@@ -368,9 +388,9 @@ impl Graph {
                 for v in o.points.iter_mut().filter_map(|p| p.value.as_mut()) {
                     *v = ratio.apply(*v);
                 }
-                if let Some((lo, hi)) = pin
-                    && unit != self.current_unit
-                {
+                // Kept even under the plotted unit, which may be about to
+                // step away in this frame; `push_sample` drops it otherwise.
+                if let Some((lo, hi)) = pin {
                     self.y_axis
                         .pins
                         .entry(unit.to_string())

@@ -184,6 +184,106 @@ fn a_unit_step_drops_its_axis_pin() {
     assert!(g.y_axis.pins.contains_key("ms"), "the others keep theirs");
 }
 
+/// A decade step of the plotted series keeps no pin under its new unit,
+/// which its fields frame, and gives a trace left in the old prefix the
+/// range it was framed by.
+#[test]
+fn a_plotted_step_re_keys_the_pins() {
+    let mut g = Graph::new();
+    let t0 = Instant::now();
+    let push = |g: &mut Graph, s: u64, v: f64, unit: &'static str, overlays| {
+        g.push_sample(PlotSample {
+            value: Some(v),
+            timestamp: t0 + Duration::from_secs(s),
+            mode: "DC V",
+            unit,
+            display_raw: None,
+            series: None,
+            main_label: None,
+            levels: false,
+            overlays,
+        });
+    };
+    push(
+        &mut g,
+        0,
+        950.0,
+        "mV",
+        &[("AC", "V", Some(1.2)), ("Min", "mV", Some(940.0))],
+    );
+    g.y_axis.fixed = true;
+    g.y_axis.user_set = true;
+    g.y_axis.min.set(900.0);
+    g.y_axis.max.set(1000.0);
+    g.y_axis.pins.insert("V".into(), (1.0, 1.5));
+    push(
+        &mut g,
+        1,
+        1.01,
+        "V",
+        &[("AC", "V", Some(1.2)), ("Min", "mV", Some(940.0))],
+    );
+    assert_eq!(g.plotted_unit(), "V");
+    assert_eq!(
+        g.y_axis.pins.get("V"),
+        None,
+        "the plotted axis takes no pin"
+    );
+    assert_eq!(g.y_axis.pins.get("mV"), Some(&(900.0, 1000.0)));
+    assert_eq!((g.y_axis.min.value(), g.y_axis.max.value()), (0.9, 1.0));
+}
+
+/// The plotted series and a kept one stepping opposite ways in one frame:
+/// the kept trace keeps its own range, re-expressed, and no trace left in
+/// the old prefix means no pin there.
+#[test]
+fn opposite_steps_in_one_frame_keep_each_axis_framed() {
+    let mut g = Graph::new();
+    let t0 = Instant::now();
+    let push = |g: &mut Graph, s: u64, v: f64, unit: &'static str, overlays| {
+        g.push_sample(PlotSample {
+            value: Some(v),
+            timestamp: t0 + Duration::from_secs(s),
+            mode: "DC V",
+            unit,
+            display_raw: None,
+            series: None,
+            main_label: None,
+            levels: false,
+            overlays,
+        });
+    };
+    push(&mut g, 0, 950.0, "mV", &[("AC", "V", Some(1.2))]);
+    g.y_axis.fixed = true;
+    g.y_axis.user_set = true;
+    g.y_axis.min.set(900.0);
+    g.y_axis.max.set(1000.0);
+    g.y_axis.pins.insert("V".into(), (1.0, 1.5));
+    push(&mut g, 1, 1.01, "V", &[("AC", "mV", Some(1200.0))]);
+    assert_eq!(g.y_axis.pins.get("mV"), Some(&(1000.0, 1500.0)));
+    assert_eq!(g.y_axis.pins.get("V"), None);
+
+    // A kept trace stepping off the plotted axis alone takes the fields'
+    // range with it.
+    let mut g = Graph::new();
+    push(&mut g, 0, 950.0, "mV", &[("Min", "mV", Some(940.0))]);
+    g.y_axis.fixed = true;
+    g.y_axis.user_set = true;
+    g.y_axis.min.set(900.0);
+    g.y_axis.max.set(1000.0);
+    push(&mut g, 1, 960.0, "mV", &[("Min", "V", Some(1.01))]);
+    assert_eq!(g.y_axis.pins.get("V"), Some(&(0.9, 1.0)));
+
+    // Nothing left in mV: no pin is made for it.
+    let mut g = Graph::new();
+    push(&mut g, 0, 950.0, "mV", &[("AC", "V", Some(1.2))]);
+    g.y_axis.fixed = true;
+    g.y_axis.min.set(900.0);
+    g.y_axis.max.set(1000.0);
+    push(&mut g, 1, 1.01, "V", &[("AC", "V", Some(1.2))]);
+    assert!(g.y_axis.pins.is_empty(), "{:?}", g.y_axis.pins);
+}
+
 /// A box zoom pins each right axis to its share of the box, through the
 /// axis's map, and Reset Zoom lets them all fit their data again.
 #[test]
