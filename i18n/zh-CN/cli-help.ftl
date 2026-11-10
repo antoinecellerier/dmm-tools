@@ -19,12 +19,6 @@ dmm-cli =
 # dmm-cli --device
 dmm-cli--device =
     .help = 要连接的设备 [auto, ut61eplus, ut8803, ut171, ut181a, mock, ...]。省略时，依次采用 ~/.config/dmm-tools/settings.json 中的 `device_family` (由 dmm-gui 写入)，再采用 `auto`，即通过 USB 连接线检测万用表
-# dmm-cli --adapter
-dmm-cli--adapter =
-    .help = 有多个可用适配器时，选择指定的一个。使用 USB 连接线的序列号或 HID 路径，或蓝牙适配器或万用表的地址，写法同 'dmm-cli list' 的输出
-# dmm-cli --no-bluetooth
-dmm-cli--no-bluetooth =
-    .help = 本次运行关闭蓝牙扫描: 不扫描适配器和万用表，'list' 只显示连接线。覆盖已保存的 'bluetooth' 设置。仍会连接 --adapter 指定的地址
 # dmm-cli --lang
 dmm-cli--lang =
     .help = 消息和帮助的语言，或用 `system` 采用系统语言。省略时，依次采用设置文件中的 `language` (由 dmm-gui 的“语言”一行写入)，再采用系统语言
@@ -78,9 +72,6 @@ read--alarm-hysteresis =
 # dmm-cli read --alarm-bell
 read--alarm-bell =
     .help = 每次报警时让终端响铃
-# dmm-cli read --mock-mode
-read--mock-mode =
-    .help = 将仿真设备固定在指定模式 (仅适用于 --device mock)。未指定时，采用设置文件中的仿真模式，否则仿真设备会循环切换所有模式
 # dmm-cli read --replay
 read--replay =
     .help = 回放由 --format replay 写入的文件，不打开万用表，文件回放完即结束
@@ -102,9 +93,6 @@ get--setting =
 # dmm-cli get --format
 get--format =
     .help = 输出格式
-# dmm-cli get --mock-mode
-get--mock-mode =
-    .help = 将仿真设备固定在指定模式 (仅适用于 --device mock)。未指定时，采用设置文件中的仿真模式，否则仿真设备会循环切换所有模式
 # dmm-cli set
 set =
     .about = 直接切换万用表的某项设置，无需在万用表上操作。不指定 CHOICE 运行可列出该设置当前可切换的值
@@ -114,9 +102,6 @@ set--setting =
 # dmm-cli set <CHOICE>
 set--choice =
     .help = 列表中的值标签，或能唯一匹配的部分文字 (省略此参数运行可查看列表)
-# dmm-cli set --mock-mode
-set--mock-mode =
-    .help = 将仿真设备固定在指定模式 (仅适用于 --device mock)。未指定时，采用设置文件中的仿真模式，否则仿真设备会循环切换所有模式
 # dmm-cli debug
 debug =
     .about = 用于协议调试的原始十六进制转储模式

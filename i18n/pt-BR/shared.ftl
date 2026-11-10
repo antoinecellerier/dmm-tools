@@ -43,13 +43,21 @@ stability-warning =
        *[experimental] O suporte ao multímetro { $model } é experimental (não verificado em hardware real).
     }
 
-## The --mock-mode flag's long help, after the binary's own first line.
+## The help of options both binaries take, after the option in --help, as
+## clap shows it: no full stop. Command lines ('dmm-cli list') and options
+## (--adapter) stay as they are. Mock mode is the setting's name in
+## dmm-gui's Settings, mock_mode its name in the settings file.
+
+flag-adapter = Selecionar um adaptador específico quando houver mais de um ao alcance. Use o número de série ou o caminho HID de um cabo USB, ou o endereço de um adaptador ou multímetro Bluetooth, tal como aparecem em 'dmm-cli list'
+flag-no-bluetooth-gui = Desativar a procura por dispositivos Bluetooth nesta sessão. Tem prioridade sobre a configuração “{ bluetooth-setting }”. Um endereço informado em --adapter é aberto mesmo assim
+
+## The rest of --mock-mode's long help, after flag-mock-mode-cli or
+## flag-mock-mode-gui.
 
 # $modes lists the mock's modes, separated by commas.
 mock-mode-list = Modos: { $modes }
 # $example is a command line.
 mock-mode-example = Exemplo: { $example }
-mock-clock-mock-only = --mock-clock-scale e --mock-clock-preseed só se aplicam ao multímetro simulado e à reprodução. Execute de novo com --device mock ou --replay, ou sem as opções de relógio.
 
 ## A link's short name, where the meter is already named: the GUI's
 ## status line, the setup help's section labels.

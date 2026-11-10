@@ -52,7 +52,7 @@ struct Args {
     #[arg(long)]
     device: Option<String>,
 
-    /// Pin mock device to a specific mode (mock device only)
+    // Help from the shared catalog (`with_flag_help`): dmm-cli words it too.
     #[arg(long, value_parser = dmm_shared::help::MockModeParser)]
     mock_mode: Option<dmm_lib::mock::MockMode>,
 
@@ -64,15 +64,11 @@ struct Args {
     #[arg(long, value_enum)]
     renderer: Option<RendererFlag>,
 
-    /// Select a specific adapter when more than one is reachable.
-    /// Use the serial number or HID path of a USB cable, or the address of a
-    /// Bluetooth adapter or meter, as 'dmm-cli list' prints them.
+    // `--adapter` and `--no-bluetooth` take their help from the shared
+    // catalog at run time (`with_flag_help`): dmm-cli words them the same.
     #[arg(long, value_name = "SERIAL_PATH_OR_ADDRESS")]
     adapter: Option<String>,
 
-    /// Turn off Bluetooth scanning for this session.
-    /// Overrides the "Look for Bluetooth devices" setting. An address given
-    /// to --adapter is still opened.
     #[arg(long)]
     no_bluetooth: bool,
 
@@ -162,9 +158,9 @@ fn no_described_values(_: &str, _: Vec<PossibleValue>, _: bool) -> Option<ValueP
 /// mode lists, which come from the registry and the mock, the themes, and
 /// the project link after the options.
 fn with_run_time_help(cmd: clap::Command, l: &Localizer) -> clap::Command {
-    cmd.after_long_help(l.help().project_link_line())
+    with_flag_help(cmd, l)
+        .after_long_help(l.help().project_link_line())
         .mut_arg("device", |a| a.long_help(build_device_help(l)))
-        .mut_arg("mock_mode", |a| a.long_help(build_mock_mode_help(l)))
         .mut_arg("theme", with_theme_list)
 }
 
@@ -192,14 +188,6 @@ fn theme_values(user: &[theme::named::NamedTheme]) -> Vec<String> {
         .into_iter()
         .chain(named)
         .collect()
-}
-
-/// Build long help text for --mock-mode from the mock's own mode table.
-fn build_mock_mode_help(l: &Localizer) -> String {
-    l.help().mock_mode_help(
-        &tr!(l, "command-line-mock-mode-intro"),
-        "dmm-gui --device mock --mock-mode dcv",
-    )
 }
 
 /// `value` of the option `id`, refused after parsing as none of `values`:
@@ -396,7 +384,23 @@ fn unknown_saved_device(
 /// The command `--completions` writes a script for: the parsing one, with
 /// the device ids and mock modes a shell offers.
 fn completion_command() -> clap::Command {
-    dmm_shared::help::with_completion_values(Args::command()).mut_arg("theme", with_theme_list)
+    let cmd = with_flag_help(Args::command(), &crate::l10n::english());
+    dmm_shared::help::with_completion_values(cmd).mut_arg("theme", with_theme_list)
+}
+
+/// The help of the flags both binaries take, worded once in the shared
+/// catalog rather than from a doc comment each.
+fn with_flag_help(cmd: clap::Command, l: &Localizer) -> clap::Command {
+    let help = l.help();
+    let mock_mode = help.gui_mock_mode_flag();
+    let mock_mode_long = help.mock_mode_help(&mock_mode, "dmm-gui --device mock --mock-mode dcv");
+    cmd.mut_arg("mock_mode", |a| {
+        a.help(mock_mode.into_owned()).long_help(mock_mode_long)
+    })
+    .mut_arg("adapter", |a| a.help(help.adapter_flag().into_owned()))
+    .mut_arg("no_bluetooth", |a| {
+        a.help(help.gui_no_bluetooth_flag().into_owned())
+    })
 }
 
 /// The command line, worded in `l`'s language: its `--help`, and the

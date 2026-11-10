@@ -19,15 +19,6 @@ dmm-cli =
 # dmm-cli --device
 dmm-cli--device =
     .help = Device to connect to [auto, ut61eplus, ut8803, ut171, ut181a, mock, ...]. If omitted, falls back to `device_family` in ~/.config/dmm-tools/settings.json (written by dmm-gui), then to `auto`, which detects the meter over the USB cable
-# dmm-cli --adapter
-dmm-cli--adapter =
-    .help = Select a specific adapter when more than one is reachable. Use the serial number or HID path of a USB cable, or the address of a Bluetooth adapter or meter, as 'dmm-cli list' prints them
-# dmm-cli --no-bluetooth
-dmm-cli--no-bluetooth =
-    .help = Turn off Bluetooth scanning for this run: nothing scans for adapters or meters and 'list' shows cables only. Overrides the saved 'bluetooth' setting. An address given to --adapter is still opened
-# dmm-cli --bluetooth
-dmm-cli--bluetooth =
-    .help = Scan for Bluetooth adapters and meters on this run, whatever the saved 'bluetooth' setting says
 # dmm-cli --lang
 dmm-cli--lang =
     .help = Language of messages and help, or `system` for the system's. If omitted, falls back to `language` in the settings file (written by dmm-gui's Language row), then to the system's
@@ -81,9 +72,6 @@ read--alarm-hysteresis =
 # dmm-cli read --alarm-bell
 read--alarm-bell =
     .help = Ring the terminal bell on each alarm
-# dmm-cli read --mock-mode
-read--mock-mode =
-    .help = Pin mock device to a specific mode (only with --device mock). Without this, the settings file's mock mode applies, else the mock cycles through all modes
 # dmm-cli read --replay
 read--replay =
     .help = Play back a file written by --format replay instead of opening a meter; ends with the file
@@ -105,9 +93,6 @@ get--setting =
 # dmm-cli get --format
 get--format =
     .help = Output format
-# dmm-cli get --mock-mode
-get--mock-mode =
-    .help = Pin mock device to a specific mode (only with --device mock). Without this, the settings file's mock mode applies, else the mock cycles through all modes
 # dmm-cli set
 set =
     .about = Switch one of the meter's settings without touching the meter. Run without a choice to list what that setting reaches from here
@@ -117,9 +102,6 @@ set--setting =
 # dmm-cli set <CHOICE>
 set--choice =
     .help = Value label, or a unique fragment of one, from the listing (run without it to see them)
-# dmm-cli set --mock-mode
-set--mock-mode =
-    .help = Pin mock device to a specific mode (only with --device mock). Without this, the settings file's mock mode applies, else the mock cycles through all modes
 # dmm-cli debug
 debug =
     .about = Raw hex dump mode for protocol debugging

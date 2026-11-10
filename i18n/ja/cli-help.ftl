@@ -19,12 +19,6 @@ dmm-cli =
 # dmm-cli --device
 dmm-cli--device =
     .help = 接続するデバイス [auto, ut61eplus, ut8803, ut171, ut181a, mock, ...]。省略すると ~/.config/dmm-tools/settings.json (dmm-gui が書き込む) の `device_family`、次に USB ケーブル経由でマルチメーターを検出する `auto` を使用する
-# dmm-cli --adapter
-dmm-cli--adapter =
-    .help = 複数のアダプターに接続できるとき、特定のアダプターを選択する。'dmm-cli list' が表示する USB ケーブルのシリアル番号か HID パス、または Bluetooth アダプターかマルチメーターのアドレスを指定する
-# dmm-cli --no-bluetooth
-dmm-cli--no-bluetooth =
-    .help = 今回の実行に限り Bluetooth スキャンをオフにする。アダプターやマルチメーターを一切スキャンせず、'list' はケーブルのみを表示する。保存された 'bluetooth' 設定より優先される。--adapter に指定したアドレスはそのまま開かれる
 # dmm-cli --lang
 dmm-cli--lang =
     .help = メッセージとヘルプの言語。システムの言語を使うには `system` を指定する。省略すると設定ファイルの `language` (dmm-gui の [言語] 行で書き込まれる)、次にシステムの言語を使用する
@@ -78,9 +72,6 @@ read--alarm-hysteresis =
 # dmm-cli read --alarm-bell
 read--alarm-bell =
     .help = アラームのたびに端末のベルを鳴らす
-# dmm-cli read --mock-mode
-read--mock-mode =
-    .help = シミュレーション デバイスを特定のモードに固定する (--device mock のときのみ)。指定しない場合は設定ファイルのシミュレーション モードが適用され、それもなければすべてのモードを順に切り替える
 # dmm-cli read --replay
 read--replay =
     .help = マルチメーターを開く代わりに、--format replay で書き出したファイルを再生する。ファイルの終わりで終了する
@@ -102,9 +93,6 @@ get--setting =
 # dmm-cli get --format
 get--format =
     .help = 出力形式
-# dmm-cli get --mock-mode
-get--mock-mode =
-    .help = シミュレーション デバイスを特定のモードに固定する (--device mock のときのみ)。指定しない場合は設定ファイルのシミュレーション モードが適用され、それもなければすべてのモードを順に切り替える
 # dmm-cli set
 set =
     .about = マルチメーターに触れずに設定を 1 つ切り替える。値を指定せずに実行すると、その設定で現在の状態から選べる値を一覧表示する
@@ -114,9 +102,6 @@ set--setting =
 # dmm-cli set <CHOICE>
 set--choice =
     .help = 一覧に表示される値のラベル、またはそれを一意に特定できる一部 (指定せずに実行すると一覧を表示する)
-# dmm-cli set --mock-mode
-set--mock-mode =
-    .help = シミュレーション デバイスを特定のモードに固定する (--device mock のときのみ)。指定しない場合は設定ファイルのシミュレーション モードが適用され、それもなければすべてのモードを順に切り替える
 # dmm-cli debug
 debug =
     .about = プロトコルのデバッグ用に、生の 16 進ダンプを表示する

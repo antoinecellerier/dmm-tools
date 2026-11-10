@@ -25,12 +25,6 @@ dmm-gui--theme =
 # dmm-gui --renderer
 dmm-gui--renderer =
     .help = 使用するグラフィックス レンダラーを指定する
-# dmm-gui --adapter
-dmm-gui--adapter =
-    .help = 複数のアダプターに接続できるとき、特定のアダプターを選択する。'dmm-cli list' が表示する USB ケーブルのシリアル番号か HID パス、または Bluetooth アダプターかマルチメーターのアドレスを指定する
-# dmm-gui --no-bluetooth
-dmm-gui--no-bluetooth =
-    .help = 今回の実行に限り Bluetooth スキャンをオフにする。[Bluetooth デバイスを探す] 設定より優先される。--adapter に指定したアドレスには通常どおり接続する
 # dmm-gui --replay
 dmm-gui--replay =
     .help = マルチメーターに接続する代わりに、'dmm-cli read --format replay' または [エクスポート…] → [リプレイ…] で書き出したファイルを再生する

@@ -144,20 +144,14 @@ pub(crate) struct Cli {
     #[arg(long)]
     pub(crate) device: Option<String>,
 
-    /// Select a specific adapter when more than one is reachable.
-    /// Use the serial number or HID path of a USB cable, or the address of a
-    /// Bluetooth adapter or meter, as 'dmm-cli list' prints them.
+    // `--adapter`, `--no-bluetooth` and `--bluetooth` take their help from
+    // the shared catalog at run time (`with_flag_help`), as dmm-gui's do.
     #[arg(long, value_name = "SERIAL_PATH_OR_ADDRESS")]
     pub(crate) adapter: Option<String>,
 
-    /// Turn off Bluetooth scanning for this run: nothing scans for adapters or
-    /// meters and 'list' shows cables only. Overrides the saved 'bluetooth' setting.
-    /// An address given to --adapter is still opened.
     #[arg(long)]
     pub(crate) no_bluetooth: bool,
 
-    /// Scan for Bluetooth adapters and meters on this run, whatever the saved
-    /// 'bluetooth' setting says.
     #[arg(long, conflicts_with = "no_bluetooth")]
     pub(crate) bluetooth: bool,
 
@@ -201,9 +195,7 @@ pub(crate) enum Cmd {
         /// Output format
         #[arg(long, default_value = "text")]
         format: SettingsFormat,
-        /// Pin mock device to a specific mode (only with --device mock).
-        /// Without this, the settings file's mock mode applies, else the
-        /// mock cycles through all modes.
+        // Help from the shared catalog (`with_flag_help`), as on `read`.
         #[arg(long, value_parser = MockModeParser)]
         mock_mode: Option<MockMode>,
     },
@@ -215,9 +207,7 @@ pub(crate) enum Cmd {
         setting: SettingArg,
         /// Value label, or a unique fragment of one, from the listing (run without it to see them)
         choice: Option<String>,
-        /// Pin mock device to a specific mode (only with --device mock).
-        /// Without this, the settings file's mock mode applies, else the
-        /// mock cycles through all modes.
+        // Help from the shared catalog (`with_flag_help`), as on `read`.
         #[arg(long, value_parser = MockModeParser)]
         mock_mode: Option<MockMode>,
     },
@@ -270,9 +260,7 @@ pub(crate) struct ReadArgs {
     pub(crate) transform: TransformArgs,
     #[command(flatten)]
     pub(crate) alarm: AlarmArgs,
-    /// Pin mock device to a specific mode (only with --device mock).
-    /// Without this, the settings file's mock mode applies, else the
-    /// mock cycles through all modes.
+    // Help from the shared catalog (`with_flag_help`): dmm-gui words it too.
     #[arg(long, value_parser = MockModeParser)]
     pub(crate) mock_mode: Option<MockMode>,
     /// Play back a file written by --format replay instead of opening a meter; ends with the file
@@ -584,12 +572,10 @@ fn values_parser(id: &str, values: Vec<PossibleValue>, ignore_case: bool) -> Opt
 /// mode lists, which come from the registry and the mock, and the notes
 /// after the options, one of which names this platform's settings path.
 fn with_run_time_help(cmd: clap::Command, l: &Localizer) -> clap::Command {
-    cmd.after_help(build_after_help(l))
+    with_flag_help(cmd, l)
+        .after_help(build_after_help(l))
         .after_long_help(build_after_long_help(l))
         .mut_arg("device", |a| a.long_help(build_device_help(l)))
-        .mut_subcommand("read", |c| {
-            c.mut_arg("mock_mode", |a| a.long_help(build_mock_mode_help(l)))
-        })
         .mut_subcommand("completions", |c| {
             c.after_help(build_completions_after_help(l))
         })
@@ -604,15 +590,41 @@ fn build_device_help(l: &Localizer) -> String {
 /// device ids and mock modes a shell offers. English whatever the run
 /// speaks, as a script installed once serves every later run.
 pub(crate) fn completion_command() -> clap::Command {
-    dmm_shared::help::with_completion_values(<Cli as clap::CommandFactory>::command())
+    let cmd = with_flag_help(
+        <Cli as clap::CommandFactory>::command(),
+        crate::l10n::english(),
+    );
+    dmm_shared::help::with_completion_values(cmd)
 }
 
-/// Build long help text for --mock-mode from the mock's own mode table.
-fn build_mock_mode_help(l: &Localizer) -> String {
-    l.help().mock_mode_help(
-        &tr!(l, "help-mock-mode-intro"),
-        "--device mock read --mock-mode dcv",
-    )
+/// The help of the flags both binaries take, worded once in the shared
+/// catalog rather than from a doc comment each. `--mock-mode`'s long help
+/// lists the modes, with an example for each command that takes it.
+fn with_flag_help(mut cmd: clap::Command, l: &Localizer) -> clap::Command {
+    let help = l.help();
+    let takes_mock_mode: Vec<String> = cmd
+        .get_subcommands()
+        .filter(|c| c.get_arguments().any(|a| a.get_id() == "mock_mode"))
+        .map(|c| c.get_name().to_string())
+        .collect();
+    for subcommand in takes_mock_mode {
+        let example = match subcommand.as_str() {
+            "get" | "set" => format!("--device mock {subcommand} range --mock-mode ohm"),
+            _ => format!("--device mock {subcommand} --mock-mode dcv"),
+        };
+        let short = help.cli_mock_mode_flag();
+        let long = help.mock_mode_help(&short, &example);
+        cmd = cmd.mut_subcommand(subcommand, |c| {
+            c.mut_arg("mock_mode", |a| a.help(short.into_owned()).long_help(long))
+        });
+    }
+    cmd.mut_arg("adapter", |a| a.help(help.adapter_flag().into_owned()))
+        .mut_arg("no_bluetooth", |a| {
+            a.help(help.cli_no_bluetooth_flag().into_owned())
+        })
+        .mut_arg("bluetooth", |a| {
+            a.help(help.cli_bluetooth_flag().into_owned())
+        })
 }
 
 /// Resolve the shared settings file path for display in help text.
@@ -893,6 +905,50 @@ mod tests {
                 assert!(no_reconnect);
             }
             _ => panic!("expected Read"),
+        }
+    }
+
+    /// `MockModeParser` offers clap no values, so each `--mock-mode`'s
+    /// `--help` lists the modes itself, on `get` and `set` as on `read`.
+    #[test]
+    fn every_mock_mode_help_lists_the_modes() {
+        let modes = MockMode::label_list();
+        let mut cmd = command(crate::l10n::english());
+        let takes: Vec<String> = cmd
+            .get_subcommands()
+            .filter(|c| c.get_arguments().any(|a| a.get_id() == "mock_mode"))
+            .map(|c| c.get_name().to_string())
+            .collect();
+        assert_eq!(takes, ["read", "get", "set"]);
+        for subcommand in &takes {
+            let sub = cmd.find_subcommand_mut(subcommand).expect("listed above");
+            let help = sub.render_long_help().to_string();
+            assert!(help.contains(&modes), "{subcommand}: {help}");
+            assert!(
+                help.contains(&format!("--device mock {subcommand} ")),
+                "{subcommand}: {help}"
+            );
+        }
+    }
+
+    /// The shared flags' help, set at run time, reaches the completion
+    /// scripts too, which are built from the bare command.
+    #[test]
+    fn the_completion_scripts_keep_the_shared_help() {
+        let mut script = Vec::new();
+        clap_complete::generate(
+            clap_complete::Shell::Fish,
+            &mut completion_command(),
+            "dmm-cli",
+            &mut script,
+        );
+        let script = String::from_utf8(script).expect("utf-8 script");
+        for help in [
+            "Select a specific adapter",
+            "Pin the mock device",
+            "Scan for Bluetooth",
+        ] {
+            assert!(script.contains(help), "{help}: {script}");
         }
     }
 

@@ -19,12 +19,6 @@ dmm-cli =
 # dmm-cli --device
 dmm-cli--device =
     .help = Appareil auquel se connecter [auto, ut61eplus, ut8803, ut171, ut181a, mock, ...]. Sans cette option, `device_family` dans ~/.config/dmm-tools/settings.json (écrit par dmm-gui) s’applique, ou à défaut `auto`, qui détecte le multimètre via le câble USB
-# dmm-cli --adapter
-dmm-cli--adapter =
-    .help = Choisir un adaptateur précis quand plusieurs sont accessibles. Indiquez le numéro de série ou le chemin HID d’un câble USB, ou l’adresse d’un adaptateur ou d’un multimètre Bluetooth, tels que 'dmm-cli list' les affiche
-# dmm-cli --no-bluetooth
-dmm-cli--no-bluetooth =
-    .help = Désactiver la recherche Bluetooth pour cette exécution : aucun adaptateur ni multimètre n’est recherché et 'list' n’affiche que les câbles. Remplace le paramètre 'bluetooth' enregistré. Une adresse donnée à --adapter est tout de même ouverte
 # dmm-cli --lang
 dmm-cli--lang =
     .help = Langue des messages et de l’aide, ou `system` pour celle du système. Sans cette option, `language` dans le fichier de paramètres (défini par la ligne Langue de dmm-gui) s’applique, ou à défaut la langue du système
@@ -78,9 +72,6 @@ read--alarm-hysteresis =
 # dmm-cli read --alarm-bell
 read--alarm-bell =
     .help = Faire sonner le terminal à chaque alarme
-# dmm-cli read --mock-mode
-read--mock-mode =
-    .help = Fixer l’appareil simulé sur un mode précis (seulement avec --device mock). Sans cette option, le mode simulé du fichier de paramètres s’applique, ou à défaut l’appareil simulé parcourt tous les modes
 # dmm-cli read --replay
 read--replay =
     .help = Relire un fichier écrit par --format replay au lieu d’ouvrir un multimètre, jusqu’à la fin du fichier
@@ -102,9 +93,6 @@ get--setting =
 # dmm-cli get --format
 get--format =
     .help = Format de sortie
-# dmm-cli get --mock-mode
-get--mock-mode =
-    .help = Fixer l’appareil simulé sur un mode précis (seulement avec --device mock). Sans cette option, le mode simulé du fichier de paramètres s’applique, ou à défaut l’appareil simulé parcourt tous les modes
 # dmm-cli set
 set =
     .about = Changer un réglage du multimètre sans toucher à l’appareil. Lancez la commande sans choix pour lister ce que ce réglage permet d’atteindre depuis la position actuelle
@@ -114,9 +102,6 @@ set--setting =
 # dmm-cli set <CHOICE>
 set--choice =
     .help = Libellé d’une valeur de la liste, ou fragment de libellé qui n’en désigne qu’une seule (lancez la commande sans choix pour les voir)
-# dmm-cli set --mock-mode
-set--mock-mode =
-    .help = Fixer l’appareil simulé sur un mode précis (seulement avec --device mock). Sans cette option, le mode simulé du fichier de paramètres s’applique, ou à défaut l’appareil simulé parcourt tous les modes
 # dmm-cli debug
 debug =
     .about = Mode de vidage hexadécimal brut pour le débogage du protocole

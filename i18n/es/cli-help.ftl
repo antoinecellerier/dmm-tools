@@ -19,12 +19,6 @@ dmm-cli =
 # dmm-cli --device
 dmm-cli--device =
     .help = Dispositivo al que conectarse [auto, ut61eplus, ut8803, ut171, ut181a, mock, ...]. Si se omite, se usa `device_family` de ~/.config/dmm-tools/settings.json (escrito por dmm-gui) y, si no, `auto`, que detecta el multímetro por el cable USB
-# dmm-cli --adapter
-dmm-cli--adapter =
-    .help = Seleccionar un adaptador concreto cuando hay más de uno disponible. Indica el número de serie o la ruta HID de un cable USB, o la dirección de un adaptador o multímetro Bluetooth, tal como los muestra 'dmm-cli list'
-# dmm-cli --no-bluetooth
-dmm-cli--no-bluetooth =
-    .help = Desactivar la búsqueda por Bluetooth en esta ejecución: no se buscan adaptadores ni multímetros y 'list' solo muestra cables. Anula el ajuste 'bluetooth' guardado. Una dirección indicada con --adapter se abre igualmente
 # dmm-cli --lang
 dmm-cli--lang =
     .help = Idioma de los mensajes y de la ayuda, o `system` para el del sistema. Si se omite, se usa `language` del archivo de configuración (se define en la fila Idioma de dmm-gui) y, si no, el idioma del sistema
@@ -78,9 +72,6 @@ read--alarm-hysteresis =
 # dmm-cli read --alarm-bell
 read--alarm-bell =
     .help = Hacer sonar la campana de la consola en cada alarma
-# dmm-cli read --mock-mode
-read--mock-mode =
-    .help = Fijar el dispositivo simulado en un modo concreto (solo con --device mock). Sin esta opción, se aplica el modo simulado del archivo de configuración y, si no, el simulador recorre todos los modos
 # dmm-cli read --replay
 read--replay =
     .help = Reproducir un archivo escrito por --format replay en lugar de abrir un multímetro; termina al llegar al final del archivo
@@ -102,9 +93,6 @@ get--setting =
 # dmm-cli get --format
 get--format =
     .help = Formato de salida
-# dmm-cli get --mock-mode
-get--mock-mode =
-    .help = Fijar el dispositivo simulado en un modo concreto (solo con --device mock). Sin esta opción, se aplica el modo simulado del archivo de configuración y, si no, el simulador recorre todos los modos
 # dmm-cli set
 set =
     .about = Cambiar un ajuste del multímetro sin tocarlo. Si se omite el valor, muestra a cuáles se puede cambiar ese ajuste desde el estado actual
@@ -114,9 +102,6 @@ set--setting =
 # dmm-cli set <CHOICE>
 set--choice =
     .help = Etiqueta del valor, o un fragmento que la identifique sin ambigüedad, tal como aparece en la lista (omite el valor para verla)
-# dmm-cli set --mock-mode
-set--mock-mode =
-    .help = Fijar el dispositivo simulado en un modo concreto (solo con --device mock). Sin esta opción, se aplica el modo simulado del archivo de configuración y, si no, el simulador recorre todos los modos
 # dmm-cli debug
 debug =
     .about = Modo de volcado hexadecimal sin procesar para depurar protocolos

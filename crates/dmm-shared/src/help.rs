@@ -194,15 +194,48 @@ impl<'a> Help<'a> {
     ///
     /// The list is rendered from [`MockMode::ALL`] for the same reason the
     /// device list comes from the registry — the CLI's hardcoded copy had
-    /// fallen four modes behind the mock. `intro` and `example` differ
-    /// between the binaries: the CLI's flag sits on a subcommand, the GUI's
-    /// on the program.
+    /// fallen four modes behind the mock. `intro` is the flag's help
+    /// ([`Self::cli_mock_mode_flag`], [`Self::gui_mock_mode_flag`]), and
+    /// `example` a command line that uses it.
     pub fn mock_mode_help(self, intro: &str, example: &str) -> String {
         format!(
             "{intro}\n\n{}\n\n{}",
             tr!(self.0, "mock-mode-list", modes = MockMode::label_list()),
             tr!(self.0, "mock-mode-example", example = example)
         )
+    }
+
+    /// `--adapter`'s help, the same in both binaries.
+    pub fn adapter_flag(self) -> Cow<'a, str> {
+        tr!(self.0, "flag-adapter")
+    }
+
+    /// `--mock-mode`'s help in dmm-cli, on `read`, `get` and `set`; the long
+    /// help adds the modes ([`Self::mock_mode_help`]).
+    pub fn cli_mock_mode_flag(self) -> Cow<'a, str> {
+        tr!(self.0, "flag-mock-mode-cli")
+    }
+
+    /// `--mock-mode`'s help in dmm-gui.
+    pub fn gui_mock_mode_flag(self) -> Cow<'a, str> {
+        tr!(self.0, "flag-mock-mode-gui")
+    }
+
+    /// `--no-bluetooth`'s help in dmm-cli, which names the 'list' it
+    /// changes and dmm-gui's setting.
+    pub fn cli_no_bluetooth_flag(self) -> Cow<'a, str> {
+        tr!(self.0, "flag-no-bluetooth-cli")
+    }
+
+    /// `--bluetooth`'s help in dmm-cli, naming dmm-gui's setting as
+    /// `--no-bluetooth` does.
+    pub fn cli_bluetooth_flag(self) -> Cow<'a, str> {
+        tr!(self.0, "flag-bluetooth-cli")
+    }
+
+    /// `--no-bluetooth`'s help in dmm-gui.
+    pub fn gui_no_bluetooth_flag(self) -> Cow<'a, str> {
+        tr!(self.0, "flag-no-bluetooth-gui")
     }
 
     /// What both binaries answer when a mock-only flag meets a session

@@ -43,16 +43,37 @@ stability-warning =
        *[experimental] { $model } support is experimental (unverified against real hardware).
     }
 
-## The --mock-mode flag's long help, after the binary's own first line.
+## The help of options both binaries take, after the option in --help, as
+## clap shows it: no full stop. Command lines ('dmm-cli list') and options
+## (--adapter) stay as they are. Mock mode is the setting's name in
+## dmm-gui's Settings, mock_mode its name in the settings file.
+
+flag-adapter = Select a specific adapter when more than one is reachable. Use the serial number or HID path of a USB cable, or the address of a Bluetooth adapter or meter, as 'dmm-cli list' prints them
+# dmm-cli's, on read, get and set: the mock dmm-gui saved counts too.
+flag-mock-mode-cli = Pin the mock device to one measurement mode instead of cycling through them all, with --device mock or the mock saved by dmm-gui. Without it, the settings file's mock_mode (dmm-gui's Mock mode) pins it
+# dmm-gui's: the mock picked in Settings counts too.
+flag-mock-mode-gui = Pin the mock device to one measurement mode instead of cycling through them all, with --device mock or the mock picked in Settings. Overrides the saved Mock mode setting for this session
+# dmm-cli's: its 'list' command shows what is plugged in.
+flag-no-bluetooth-cli = Turn off Bluetooth scanning for this run: nothing scans for adapters or meters and 'list' shows cables only. Overrides dmm-gui's "{ bluetooth-setting }" setting. An address given to --adapter is still opened
+flag-no-bluetooth-gui = Turn off Bluetooth scanning for this session. Overrides the "{ bluetooth-setting }" setting. An address given to --adapter is still opened
+# dmm-cli's, beside --no-bluetooth.
+flag-bluetooth-cli = Scan for Bluetooth adapters and meters on this run, whatever dmm-gui's "{ bluetooth-setting }" setting says
+
+## The rest of --mock-mode's long help, after flag-mock-mode-cli or
+## flag-mock-mode-gui.
 
 # $modes lists the mock's modes, separated by commas.
 mock-mode-list = Modes: { $modes }
 # $example is a command line.
 mock-mode-example = Example: { $example }
-# Why --mock-mode was refused: the session's device, typed with --device or
-# saved by dmm-gui, is not the mock.
+
+## Why a mock-only option was refused, after the option and the value as
+## typed.
+
+# The session's device, typed with --device or saved by dmm-gui, is not the
+# mock.
 mock-mode-mock-only = --mock-mode only applies to the mock device. Re-run with --device mock, or without --mock-mode.
-mock-clock-mock-only = --mock-clock-scale and --mock-clock-preseed only apply to the mock device and to a replay. Re-run with --device mock or --replay, or without the clock flags.
+mock-clock-mock-only = --mock-clock-scale and --mock-clock-preseed only apply to a simulated meter and to a replay. Re-run with --device mock or --replay, or without the clock flags.
 
 ## A link's short name, where the meter is already named: the GUI's
 ## status line, the setup help's section labels.

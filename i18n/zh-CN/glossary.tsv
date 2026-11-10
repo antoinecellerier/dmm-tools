@@ -274,7 +274,7 @@ SI prefixes	皮, 纳, 微, 毫, 千, 兆, 吉	prefix	reading-unit-prefix-* (spok
 Screen reader updates	屏幕阅读器播报	n.	settings-announce	no approved source at hand	The settings-announce-* hovers keep the verb «播报». Every reading → «每个读数» (the Sample interval chip); Never → «从不».
 focus (keyboard)	焦点	n.	settings-announce-focused	MS-T focus => 焦点	«获得焦点».
 issue (GitHub)	议题	n.	lib-errors error-wrong-meter-*, cli-help list-steps format, connection feedback hover, README	GitHub Docs zh «创建议题» (docs.github.com/zh/issues), user ruling 2026-11-02	GitHub's own term; 问题 reads as "problem".
-session	会话	n.	several-cables, waiting-for-own-cable, cables-no-reconnect, command-line-*, dmm-gui--no-bluetooth, import and connect confirmations	no approved source found	
+session	会话	n.	several-cables, waiting-for-own-cable, cables-no-reconnect, command-line-*, flag-no-bluetooth-gui, import and connect confirmations	no approved source found	
 two-finger swipe	双指滑动	n.	shortcuts-mouse-swipe	no approved source found	
 second display	副显示屏	n.	key-hover-show-vac-or-vdc-on-the, key-hover-swap-the-main-and-second-displays	no approved source found	Pairs with «主显示屏» and «副读数». UT181A prints «辅助显示屏» (row sub-value).
 flashlight	手电筒	n.	key-hover-toggle-the-backlight-and-an-ow18	no approved source found	

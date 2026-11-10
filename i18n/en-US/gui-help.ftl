@@ -19,21 +19,12 @@ dmm-gui =
 # dmm-gui --device
 dmm-gui--device =
     .help = Device to connect to [auto, ut61eplus, ut8803, ut171, ut181a, mock, ...]
-# dmm-gui --mock-mode
-dmm-gui--mock-mode =
-    .help = Pin mock device to a specific mode (mock device only)
 # dmm-gui --theme
 dmm-gui--theme =
     .help = Theme override
 # dmm-gui --renderer
 dmm-gui--renderer =
     .help = Graphics renderer
-# dmm-gui --adapter
-dmm-gui--adapter =
-    .help = Select a specific adapter when more than one is reachable. Use the serial number or HID path of a USB cable, or the address of a Bluetooth adapter or meter, as 'dmm-cli list' prints them
-# dmm-gui --no-bluetooth
-dmm-gui--no-bluetooth =
-    .help = Turn off Bluetooth scanning for this session. Overrides the "Look for Bluetooth devices" setting. An address given to --adapter is still opened
 # dmm-gui --replay
 dmm-gui--replay =
     .help = Play back a file written by 'dmm-cli read --format replay' or by Export… → Replay…, instead of connecting to a meter

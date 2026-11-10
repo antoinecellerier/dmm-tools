@@ -43,13 +43,21 @@ stability-warning =
        *[experimental] 对万用表 { $model } 的支持尚处于实验阶段 (未在真实硬件上验证)。
     }
 
-## The --mock-mode flag's long help, after the binary's own first line.
+## The help of options both binaries take, after the option in --help, as
+## clap shows it: no full stop. Command lines ('dmm-cli list') and options
+## (--adapter) stay as they are. Mock mode is the setting's name in
+## dmm-gui's Settings, mock_mode its name in the settings file.
+
+flag-adapter = 有多个可用适配器时，选择指定的一个。使用 USB 连接线的序列号或 HID 路径，或蓝牙适配器或万用表的地址，写法同 'dmm-cli list' 的输出
+flag-no-bluetooth-gui = 在本次会话中关闭蓝牙扫描。覆盖“{ bluetooth-setting }”设置。仍会连接 --adapter 指定的地址
+
+## The rest of --mock-mode's long help, after flag-mock-mode-cli or
+## flag-mock-mode-gui.
 
 # $modes lists the mock's modes, separated by commas.
 mock-mode-list = 模式: { $modes }
 # $example is a command line.
 mock-mode-example = 示例: { $example }
-mock-clock-mock-only = --mock-clock-scale 和 --mock-clock-preseed 只适用于仿真设备和回放。请改用 --device mock 或 --replay 重新运行，或去掉这两个时钟选项。
 
 ## A link's short name, where the meter is already named: the GUI's
 ## status line, the setup help's section labels.

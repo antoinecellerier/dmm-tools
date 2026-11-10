@@ -1,14 +1,13 @@
-### The parts of dmm-cli's --help built as it runs: the first lines of the
-### help of --device and --mock-mode, which go on with lists made from the
-### meters, and the notes after the options. What each command and option
+### The parts of dmm-cli's --help built as it runs: the first line of the
+### help of --device, which goes on with a list made from the meters, and
+### the notes after the options. What each command and option
 ### does is in cli-help.ftl.
 ###
 ### Words in --flag form, setting names (device_family, mock_mode) and
 ### environment variables (RUST_LOG, LANG) are typed by the user and stay as
 ### they are. Command lines, file paths and values arrive as variables.
 
-## The first lines of two options' long help (dmm-cli --help, dmm-cli read
-## --help).
+## The first line of --device's long help (dmm-cli --help).
 
 # Before the list of devices.
 help-device-intro = 接続するデバイス。
