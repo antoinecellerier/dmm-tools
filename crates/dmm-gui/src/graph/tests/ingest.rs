@@ -123,9 +123,53 @@ fn a_decade_step_re_expresses_the_fixed_range_and_reference_lines() {
     g.push(1.05, Instant::now(), "\u{3a9}", "k\u{3a9}", None);
     assert!(g.y_axis.fixed && g.y_axis.user_set);
     assert_eq!((g.y_axis.min.value(), g.y_axis.max.value()), (0.1, 1.5));
-    assert_eq!((g.y_axis.min.text(), g.y_axis.max.text()), ("0.1", "1.5"));
     assert_eq!(g.ref_lines.values(), [0.2, 0.95]);
+    // The text follows once the toolbar draws the fields with no caret in
+    // them.
+    g.show_ref_line = true;
+    graph_frame(&mut g, &crate::app::styled_context(), Vec::new());
+    assert_eq!((g.y_axis.min.text(), g.y_axis.max.text()), ("0.1", "1.5"));
     assert_eq!(g.ref_lines.text_mut().as_str(), "0.2, 0.95, x");
+}
+
+/// A field hidden through a step shows its text in the new prefix the first
+/// time it is drawn again.
+#[test]
+fn a_field_hidden_through_a_step_shows_the_new_prefix() {
+    let mut g = Graph::new();
+    g.push(150.0, Instant::now(), "\u{3a9}", "\u{3a9}", None);
+    g.y_axis.min.set(100.0);
+    g.push(1.05, Instant::now(), "\u{3a9}", "k\u{3a9}", None);
+    assert_eq!(g.y_axis.min.text(), "100.0000", "not drawn: Y is Auto");
+    g.y_axis.fixed = true;
+    g.y_axis.user_set = true;
+    graph_frame(&mut g, &crate::app::styled_context(), Vec::new());
+    assert_eq!(g.y_axis.min.text(), "0.1");
+}
+
+/// A step while the user types a bound leaves the draft under the caret as
+/// typed, read in the prefix it was typed in, and rewrites it once the
+/// caret leaves.
+#[test]
+fn a_decade_step_leaves_a_field_being_typed_in_alone() {
+    let ctx = crate::app::styled_context();
+    let mut g = Graph::new();
+    g.push(12.0, Instant::now(), "DC V", "mV", None);
+    g.y_axis.fixed = true;
+    g.y_axis.min.text_mut().clear();
+    let id = egui::Id::unique(crate::graph::toolbar::Y_MIN_FIELD);
+    ctx.memory_mut(|m| m.request_focus(id));
+    graph_frame(&mut g, &ctx, Vec::new());
+    graph_frame(&mut g, &ctx, vec![egui::Event::Text("15".into())]);
+    assert_eq!((g.y_axis.min.text(), g.y_axis.min.value()), ("15", 15.0));
+    g.push(1.2, Instant::now(), "DC V", "V", None);
+    assert_eq!(g.y_axis.min.value(), 0.015);
+    graph_frame(&mut g, &ctx, vec![egui::Event::Text("0".into())]);
+    assert_eq!(g.y_axis.min.text(), "150", "the draft under the caret");
+    assert_eq!(g.y_axis.min.value(), 0.15, "read in mV, as typed");
+    ctx.memory_mut(|m| m.surrender_focus(id));
+    graph_frame(&mut g, &ctx, Vec::new());
+    assert_eq!(g.y_axis.min.text(), "0.15");
 }
 
 /// A change of quantity under one mode string is a new scale: the trace

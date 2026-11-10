@@ -80,6 +80,16 @@ pub(crate) fn si_prefix(unit: &str) -> (&str, f64) {
 pub struct PrefixRatio(i32);
 
 impl PrefixRatio {
+    /// This step and then `next`: mV → V then V → kV is mV → kV.
+    pub fn then(self, next: PrefixRatio) -> PrefixRatio {
+        PrefixRatio(self.0 + next.0)
+    }
+
+    /// Whether it leaves a figure as it is: V → V, or mV → V → mV.
+    pub fn is_identity(self) -> bool {
+        self.0 == 0
+    }
+
     /// The figure re-expressed: a downward step divides by the exact power
     /// of ten rather than multiplying by its inexact reciprocal.
     pub fn apply(self, x: f64) -> f64 {

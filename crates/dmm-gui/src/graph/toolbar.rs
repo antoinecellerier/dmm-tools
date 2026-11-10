@@ -137,11 +137,13 @@ fn toggle_chip(ui: &mut Ui, on: &mut bool, label: &str, hover: &str) -> bool {
 }
 
 /// One toolbar text entry: a fixed-width single-line edit with hint and hover
-/// text. Parsing stays at the call site — each field accepts a different
-/// shape of value — and so does the response, which the reference field also
-/// takes the focus from.
+/// text, under `id`, whose focus a field asks before it is drawn. Parsing
+/// stays at the call site — each field accepts a different shape of value —
+/// and so does the response, which the reference field also takes the focus
+/// from.
 fn text_field(
     ui: &mut Ui,
+    id: egui::Id,
     text: &mut String,
     width: f32,
     hint: &str,
@@ -149,6 +151,7 @@ fn text_field(
 ) -> egui::Response {
     let resp = ui.add(
         egui::TextEdit::singleline(text)
+            .id(id)
             .desired_width(width)
             // The buttons' padding rather than egui's 2 pt, so a field
             // showing up beside them doesn't make its row taller and shift
@@ -161,6 +164,13 @@ fn text_field(
     crate::a11y::paint_focus_ring(ui, &resp);
     resp.on_hover_text(hover)
 }
+
+/// The toolbar fields' ids. Those a decade step re-expresses say by their
+/// focus whether their text can be rewritten (see `field.rs`).
+pub(super) const Y_MIN_FIELD: &str = "graph-y-min-field";
+pub(super) const Y_MAX_FIELD: &str = "graph-y-max-field";
+pub(super) const REF_FIELD: &str = "graph-ref-field";
+const ENVELOPE_FIELD: &str = "graph-envelope-window-field";
 
 impl Graph {
     /// Whether the toolbar's series row has anything to show: a sub-value to
@@ -262,8 +272,18 @@ impl Graph {
         }
         if self.y_axis.fixed {
             let field_width = 50.0;
+            // A decade step rewrites a field's text only once it isn't being
+            // typed in.
+            let ids = (egui::Id::unique(Y_MIN_FIELD), egui::Id::unique(Y_MAX_FIELD));
+            if !ui.memory(|m| m.has_focus(ids.0)) {
+                self.y_axis.min.flush();
+            }
+            if !ui.memory(|m| m.has_focus(ids.1)) {
+                self.y_axis.max.flush();
+            }
             let changed_min = text_field(
                 ui,
+                ids.0,
                 self.y_axis.min.text_mut(),
                 field_width,
                 &tr!(l10n, "graph-y-min"),
@@ -277,6 +297,7 @@ impl Graph {
             );
             let changed_max = text_field(
                 ui,
+                ids.1,
                 self.y_axis.max.text_mut(),
                 field_width,
                 &tr!(l10n, "graph-y-max"),
@@ -324,6 +345,7 @@ impl Graph {
         if self.show_envelope {
             let changed = text_field(
                 ui,
+                egui::Id::unique(ENVELOPE_FIELD),
                 self.envelope_window.text_mut(),
                 30.0,
                 &tr!(l10n, "graph-envelope-window"),
@@ -353,8 +375,13 @@ impl Graph {
             self.toggle_ref_lines();
         }
         if self.show_ref_line {
+            let id = egui::Id::unique(REF_FIELD);
+            if !ui.memory(|m| m.has_focus(id)) {
+                self.ref_lines.flush();
+            }
             let resp = text_field(
                 ui,
+                id,
                 self.ref_lines.text_mut(),
                 80.0,
                 &tr!(l10n, "graph-ref-values"),

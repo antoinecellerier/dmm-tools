@@ -5,6 +5,13 @@
 //! stopped one being written without the other — the bbox zoom writes both,
 //! and did so through four assignments — and the rule that an unparseable
 //! draft leaves the last good value alone was restated at every edit site.
+//!
+//! A decade step re-expresses the value at once, but the text only once the
+//! field is not being typed in: rewriting a draft under the caret would
+//! change what the user is in the middle of typing. Until then a draft that
+//! reads as a number is read in the prefix it was typed in, `pending` taking
+//! it to the current one. A draft with no number in it (blank, a lone `-`)
+//! has no prefix yet: what is typed into it is in the one the axis shows.
 
 use dmm_lib::transform::PrefixRatio;
 
@@ -35,11 +42,26 @@ fn rescaled_text(text: &str, ratio: PrefixRatio) -> Option<String> {
     })
 }
 
+/// `pending` and then `ratio`: the step from the prefix a draft was typed in
+/// to the one after this step, `None` once the steps cancel out.
+fn compose(pending: Option<PrefixRatio>, ratio: PrefixRatio) -> Option<PrefixRatio> {
+    let ratio = pending.map_or(ratio, |p| p.then(ratio));
+    (!ratio.is_identity()).then_some(ratio)
+}
+
+/// Whether any entry of `text` reads as a number: a draft with a prefix.
+fn holds_a_number(text: &str) -> bool {
+    text.split(SEPARATORS)
+        .any(|s| s.trim().parse::<f64>().is_ok())
+}
+
 /// A number the user types, beside the value it last parsed to.
 #[derive(Debug)]
 pub(super) struct NumberField {
     text: String,
     value: f64,
+    /// The text is in an earlier prefix: this takes it to the value's.
+    pending: Option<PrefixRatio>,
 }
 
 impl NumberField {
@@ -49,6 +71,7 @@ impl NumberField {
         Self {
             text: text.to_string(),
             value,
+            pending: None,
         }
     }
 
@@ -77,8 +100,18 @@ impl NumberField {
 
     /// As [`parse`](Self::parse), but only takes values `accept` allows.
     pub(super) fn parse_if(&mut self, accept: impl Fn(f64) -> bool) -> bool {
-        match self.text.parse::<f64>() {
-            Ok(v) if accept(v) => {
+        let parsed = match self.pending {
+            // As the flushed text will read.
+            Some(ratio) => rescaled_text(&self.text, ratio).and_then(|t| t.parse().ok()),
+            None => self.text.parse::<f64>().ok(),
+        };
+        if parsed.is_none() {
+            // Nothing left in the draft's old prefix: what comes is typed
+            // against the axis as it is.
+            self.pending = None;
+        }
+        match parsed {
+            Some(v) if accept(v) => {
                 self.value = v;
                 true
             }
@@ -91,14 +124,28 @@ impl NumberField {
     pub(super) fn set(&mut self, value: f64) {
         self.value = value;
         self.text = format!("{value:.SET_PRECISION$}");
+        self.pending = None;
     }
 
     /// Re-express the number in another prefix of its unit: the trace it is
-    /// read against stepped a decade (Ω→kΩ). A draft that doesn't read as a
-    /// number is left as typed, and takes the new prefix once it does.
+    /// read against stepped a decade (Ω→kΩ). The text follows at
+    /// [`flush`](Self::flush).
     pub(super) fn rescale(&mut self, ratio: PrefixRatio) {
         self.value = ratio.apply(self.value);
-        if let Some(text) = rescaled_text(&self.text, ratio) {
+        self.pending = if holds_a_number(&self.text) {
+            compose(self.pending, ratio)
+        } else {
+            None
+        };
+    }
+
+    /// Bring the text to the value's prefix after a step, now that nobody is
+    /// typing in it. A draft that doesn't read as a number is left as typed:
+    /// it is read in the prefix it is shown against from now on.
+    pub(super) fn flush(&mut self) {
+        if let Some(ratio) = self.pending.take()
+            && let Some(text) = rescaled_text(&self.text, ratio)
+        {
             self.text = text;
         }
     }
@@ -108,6 +155,7 @@ impl NumberField {
     pub(super) fn restore(&mut self, value: f64) {
         self.value = value;
         self.text = value.to_string();
+        self.pending = None;
     }
 }
 
@@ -120,6 +168,8 @@ const SEPARATORS: [char; 3] = [',', ';', ' '];
 pub(super) struct NumberListField {
     text: String,
     values: Vec<f64>,
+    /// The text is in an earlier prefix: this takes it to the values'.
+    pending: Option<PrefixRatio>,
 }
 
 impl NumberListField {
@@ -135,6 +185,7 @@ impl NumberListField {
     /// Write `values` into both halves, as the graph shows them.
     pub(super) fn set(&mut self, values: &[f64]) {
         self.values = values.to_vec();
+        self.pending = None;
         self.text = values
             .iter()
             .map(|v| v.to_string())
@@ -145,6 +196,7 @@ impl NumberListField {
     /// Add `v` at the end of the draft, keeping what is typed there as it
     /// is typed.
     pub(super) fn push(&mut self, v: f64) {
+        self.flush();
         let kept = self.text.trim_end_matches(SEPARATORS);
         self.text = if kept.is_empty() {
             v.to_string()
@@ -157,6 +209,7 @@ impl NumberListField {
     /// Take every entry that reads `v` out of the draft, keeping the others
     /// as they are typed, unparsed ones included.
     pub(super) fn remove(&mut self, v: f64) {
+        self.flush();
         self.text = self
             .text
             .split(SEPARATORS)
@@ -167,10 +220,27 @@ impl NumberListField {
         self.parse();
     }
 
-    /// Re-express every number in the draft in another prefix of its unit,
-    /// keeping the entries that don't read as one as they are typed, as
-    /// [`push`](Self::push) and [`remove`](Self::remove) do.
+    /// Re-express every number in another prefix of its unit. The text
+    /// follows at [`flush`](Self::flush).
     pub(super) fn rescale(&mut self, ratio: PrefixRatio) {
+        self.pending = if holds_a_number(&self.text) {
+            compose(self.pending, ratio)
+        } else {
+            None
+        };
+        // From the text, as the flushed text will read, so that the menu
+        // finds each line by the number it shows.
+        self.parse();
+    }
+
+    /// Bring the text to the values' prefix after a step, now that nobody
+    /// is typing in it, keeping the entries that don't read as a number as
+    /// they are typed, as [`push`](Self::push) and [`remove`](Self::remove)
+    /// do.
+    pub(super) fn flush(&mut self) {
+        let Some(ratio) = self.pending.take() else {
+            return;
+        };
         self.text = self
             .text
             .split(SEPARATORS)
@@ -179,19 +249,25 @@ impl NumberListField {
             .map(|s| rescaled_text(s, ratio).unwrap_or_else(|| s.to_string()))
             .collect::<Vec<_>>()
             .join(", ");
-        // From the text, so that the menu finds each line by the number it
-        // shows.
         self.parse();
     }
 
     /// Re-read the draft after an edit. Entries that don't parse are dropped
     /// rather than held, so a trailing separator or a half-typed number just
-    /// doesn't draw a line yet.
+    /// doesn't draw a line yet. A draft typed before a step is read in its
+    /// prefix, each number as the flushed text will show it.
     pub(super) fn parse(&mut self) {
+        if !holds_a_number(&self.text) {
+            self.pending = None;
+        }
+        let pending = self.pending;
         self.values = self
             .text
             .split(SEPARATORS)
-            .filter_map(|s| s.trim().parse::<f64>().ok())
+            .filter_map(|s| match pending {
+                Some(ratio) => rescaled_text(s, ratio)?.parse().ok(),
+                None => s.trim().parse::<f64>().ok(),
+            })
             .collect();
     }
 }
@@ -264,21 +340,96 @@ mod tests {
         *f.text_mut() = "3.29; 0.1 x, -".to_string();
         f.parse();
         f.rescale(to_mv);
+        assert_eq!(f.values(), [3290.0, 100.0]);
+        f.flush();
         assert_eq!(f.text_mut().as_str(), "3290, 100, x, -");
         assert_eq!(f.values(), [3290.0, 100.0]);
         f.rescale(to_kohm);
+        f.flush();
         assert_eq!(f.text_mut().as_str(), "3.29, 0.1, x, -");
         assert_eq!(f.values(), [3.29, 0.1], "back to the numbers typed");
 
         let mut f = NumberField::new("-1", -1.0);
         f.set(219.87);
         f.rescale(to_kohm);
+        f.flush();
         assert_eq!(f.text(), "0.21987");
         assert!((f.value() - 0.21987).abs() < 1e-15);
         f.text_mut().clear();
         f.rescale(to_mv);
+        f.flush();
         assert_eq!(f.text(), "", "the draft stays as typed");
         assert!((f.value() - 219.87).abs() < 1e-12);
+    }
+
+    /// Until the text is flushed, it is read in the prefix it was typed in:
+    /// a step, then another keystroke, and the value is still what the
+    /// draft says. Two steps compose.
+    #[test]
+    fn a_draft_is_read_in_its_prefix_until_flushed() {
+        use dmm_lib::transform::prefix_ratio;
+        let to_v = prefix_ratio("mV", "V").expect("one base unit");
+        let to_kv = prefix_ratio("V", "kV").expect("one base unit");
+        let mut f = NumberField::new("15", 15.0);
+        f.rescale(to_v);
+        assert_eq!((f.text(), f.value()), ("15", 0.015));
+        f.text_mut().push('0');
+        assert!(f.parse());
+        assert_eq!(f.value(), 0.15);
+        f.rescale(to_kv);
+        f.flush();
+        assert_eq!(f.text(), "0.00015");
+
+        let mut f = NumberListField::default();
+        *f.text_mut() = "3.29, 12".to_string();
+        f.parse();
+        f.rescale(to_v);
+        f.text_mut().push_str(", 5");
+        f.parse();
+        assert_eq!(f.values(), [0.00329, 0.012, 0.005]);
+        // A line added from the menu, in the values' prefix, flushes first.
+        f.push(0.02);
+        assert_eq!(f.text_mut().as_str(), "0.00329, 0.012, 0.005, 0.02");
+        f.rescale(to_kv);
+        f.remove(0.000012);
+        assert_eq!(f.text_mut().as_str(), "0.00000329, 0.000005, 0.00002");
+    }
+
+    /// A draft with no number in it has no prefix: what is typed after a
+    /// step is in the one the axis shows, and clearing a draft drops its old
+    /// prefix too. Steps that cancel out leave the text as it was.
+    #[test]
+    fn a_draft_without_a_number_takes_the_new_prefix() {
+        use dmm_lib::transform::prefix_ratio;
+        let to_v = prefix_ratio("mV", "V").expect("one base unit");
+        let to_mv = prefix_ratio("V", "mV").expect("one base unit");
+        let mut f = NumberField::new("-", -1.0);
+        f.rescale(to_v);
+        f.text_mut().push('5');
+        assert!(f.parse());
+        assert_eq!(f.value(), -5.0, "typed against the axis in V");
+
+        let mut f = NumberField::new("15", 15.0);
+        f.rescale(to_v);
+        f.text_mut().clear();
+        assert!(!f.parse());
+        f.text_mut().push('5');
+        assert!(f.parse());
+        assert_eq!(f.value(), 5.0, "cleared, then typed in V");
+
+        let mut f = NumberField::new("219.8700", 219.87);
+        f.rescale(to_v);
+        f.rescale(to_mv);
+        f.flush();
+        assert_eq!(f.text(), "219.8700", "back where it was, untouched");
+
+        let mut f = NumberListField::default();
+        *f.text_mut() = "-".to_string();
+        f.parse();
+        f.rescale(to_v);
+        f.text_mut().push('5');
+        f.parse();
+        assert_eq!(f.values(), [-5.0]);
     }
 
     #[test]
