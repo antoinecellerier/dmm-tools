@@ -15,6 +15,7 @@
 use crate::l10n::{Localizer, Resource};
 use crate::reopen::SeveralCables;
 use crate::tr;
+use dmm_lib::error::{BluetoothOnlyMiss, Error, ErrorKind};
 use dmm_lib::list_devices;
 use dmm_lib::mock::MockMode;
 use dmm_lib::protocol::registry::SelectableDevice;
@@ -694,6 +695,7 @@ impl LinksSearched<'_> {
 /// Both binaries print the same lines ([`Help::adapter_lines`]), and attach
 /// their "pick another adapter" hint on [`Self::offers_choice`]. Naming the
 /// three answers keeps that decision off a line count.
+#[derive(Debug)]
 pub enum ConnectedAdapters {
     /// Nothing is plugged in.
     None,
@@ -732,9 +734,124 @@ pub fn connected_adapters() -> ConnectedAdapters {
     }
 }
 
+/// Which help a failed open or command gets: the one classification of a
+/// [`Error`] both binaries word, each in its own layout — the CLI as lines
+/// under its `Error:`, the GUI as a notice in the reading column.
+///
+/// Data only, so a notice can be worded again in another language: a
+/// renderer takes the error's own words (what the Bluetooth stack said, the
+/// selector that matched nothing) from the error beside it, and the rest
+/// from [`Help`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Diagnosis {
+    /// Nothing answered on the links the open searched.
+    NotFound { bluetooth_searched: bool },
+    /// `--adapter` named a Bluetooth address and nothing answered at it.
+    NothingAtAddress { address: String },
+    /// A meter with the radio built in, and nothing in range carried its
+    /// name: the name it was picked by, and its steps that switch the radio
+    /// on.
+    BluetoothOnlyNotFound {
+        model: &'static str,
+        activation: &'static str,
+    },
+    /// `--adapter` named a USB device that nothing matched, or a path that
+    /// is not one: the error says which ([`Localizer::adapter_named`]). What
+    /// the bus holds is for the caller to list ([`connected_adapters`]): it
+    /// walks every HID device.
+    AdapterNotFound,
+    /// The cable is there and nothing on it answered the detection probe.
+    NotIdentified {
+        bridge: &'static str,
+        built_in_radio: bool,
+    },
+    /// The stack could not reach the Bluetooth adapter `--adapter` named —
+    /// most often one paired but asleep.
+    AdapterUnreachable { address: String },
+    /// The stack could not search for the picked meter with the radio
+    /// built in: radio off, permission denied.
+    BluetoothOnlyUnreachable {
+        model: &'static str,
+        activation: &'static str,
+    },
+    /// A meter with the radio built in, and the radio was not searched; why.
+    /// Never [`BluetoothOnlyMiss::NotInRange`].
+    BluetoothNotSearched(BluetoothOnlyMiss),
+    /// The meter stopped answering.
+    NoResponse,
+    /// The meter answered with data that could not be read.
+    BadData,
+    /// Nothing to add to the error's own words.
+    Other,
+}
+
+impl Diagnosis {
+    /// Classify `err`, for a session given `adapter` on `--adapter` and with
+    /// `picked` the meter the user chose (`None` under Auto-detect).
+    ///
+    /// Matched by variant rather than by [`ErrorKind`]: the help needs what
+    /// each one carries, and the coarse kind carries none of it. Only
+    /// unreadable data, which needs no more than its text, goes by kind.
+    pub fn of(err: &Error, adapter: Option<&str>, picked: Option<registry::Listing>) -> Self {
+        match err {
+            // An address is explained by the link it named, not by the USB
+            // bus: nothing on the bus could have answered it.
+            Error::AdapterNotFound(selector) if dmm_lib::is_bluetooth_selector(selector) => {
+                Self::NothingAtAddress {
+                    address: selector.clone(),
+                }
+            }
+            Error::AdapterNotFound(_) | Error::NotAnAdapter(_) => Self::AdapterNotFound,
+            Error::NoTransportFound {
+                bluetooth_searched, ..
+            } => Self::NotFound {
+                bluetooth_searched: *bluetooth_searched,
+            },
+            // A `Timeout` kind too, but no quiet meter: no meter was found.
+            Error::DeviceNotIdentified {
+                bridge,
+                built_in_radio,
+            } => Self::NotIdentified {
+                bridge,
+                built_in_radio: *built_in_radio,
+            },
+            Error::Bluetooth(_) => {
+                if let Some(address) = adapter.filter(|a| dmm_lib::is_bluetooth_selector(a)) {
+                    Self::AdapterUnreachable {
+                        address: address.to_string(),
+                    }
+                } else if let Some(picked) = picked.filter(|l| l.device.bluetooth_only()) {
+                    Self::BluetoothOnlyUnreachable {
+                        model: picked.display_name(),
+                        activation: picked.device.activation_instructions,
+                    }
+                } else {
+                    Self::Other
+                }
+            }
+            Error::BluetoothOnly {
+                model,
+                activation,
+                miss: BluetoothOnlyMiss::NotInRange,
+            } => Self::BluetoothOnlyNotFound {
+                // By the name it was picked by, when it was.
+                model: picked.map_or(*model, |l| l.display_name()),
+                activation,
+            },
+            Error::BluetoothOnly { miss, .. } => Self::BluetoothNotSearched(*miss),
+            // The variant, not the kind: a pulled cable's HID error names a
+            // timeout too, and detection finding nothing is that kind.
+            Error::Timeout => Self::NoResponse,
+            _ if err.kind() == ErrorKind::Protocol => Self::BadData,
+            _ => Self::Other,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use dmm_lib::error::BluetoothIssue;
 
     /// Every message this crate looks up exists in en-US with the variables
     /// it is given, and every message in its hand-written files is used.
@@ -1161,5 +1278,152 @@ mod tests {
         assert!(mock_line.contains("(no hardware required)"), "{mock_line}");
         assert!(help.contains("(experimental)"));
         assert!(help.contains("(partly verified)"));
+    }
+
+    /// The row `id` names, as Settings or `--device` would pick it.
+    fn pick(id: &str) -> Option<registry::Listing> {
+        Some(registry::resolve_listing(id).expect("a registry row"))
+    }
+
+    const ADDRESS: &str = "12:34:56:78:9A:BC";
+
+    /// Each failure a user can act on gets its own help, and the selector
+    /// decides which link explains an adapter that matched nothing.
+    #[test]
+    fn each_open_failure_gets_its_own_diagnosis() {
+        let of = |e: &Error| Diagnosis::of(e, None, None);
+        assert_eq!(
+            of(&Error::NoTransportFound {
+                cables: vec![],
+                bluetooth_searched: true
+            }),
+            Diagnosis::NotFound {
+                bluetooth_searched: true
+            }
+        );
+        assert_eq!(
+            of(&Error::AdapterNotFound(ADDRESS.into())),
+            Diagnosis::NothingAtAddress {
+                address: ADDRESS.into()
+            }
+        );
+        assert_eq!(
+            of(&Error::AdapterNotFound("00C5B27A".into())),
+            Diagnosis::AdapterNotFound
+        );
+        // A path is never an address, whatever it reads like.
+        assert_eq!(
+            of(&Error::NotAnAdapter("/dev/hidraw3".into())),
+            Diagnosis::AdapterNotFound
+        );
+        assert_eq!(
+            of(&Error::DeviceNotIdentified {
+                bridge: "CP2110",
+                built_in_radio: false
+            }),
+            Diagnosis::NotIdentified {
+                bridge: "CP2110",
+                built_in_radio: false
+            }
+        );
+        assert_eq!(of(&Error::Timeout), Diagnosis::NoResponse);
+        assert_eq!(
+            of(&Error::InvalidResponse {
+                message: "bad frame".into(),
+                raw: vec![]
+            }),
+            Diagnosis::BadData
+        );
+        assert_eq!(
+            of(&Error::NoTransportFound {
+                cables: vec![],
+                bluetooth_searched: false
+            }),
+            Diagnosis::NotFound {
+                bluetooth_searched: false
+            }
+        );
+        assert_eq!(of(&Error::LinkLost), Diagnosis::Other);
+        // A read a signal cut short is the cable's error, not bad data.
+        assert_eq!(of(&Error::interrupted()), Diagnosis::Other);
+        // An address on `--adapter` explains only what the stack said.
+        assert_eq!(
+            Diagnosis::of(&Error::LinkLost, Some(ADDRESS), None),
+            Diagnosis::Other
+        );
+    }
+
+    /// Only the timeout variant is a quiet meter: a pulled cable's HID error
+    /// names a timeout in its text, and must keep its own words.
+    #[test]
+    fn a_pulled_cable_is_not_a_quiet_meter() {
+        let pulled = Error::cable_pulled();
+        assert!(pulled.to_string().contains("timeout"), "{pulled}");
+        assert_eq!(Diagnosis::of(&pulled, None, None), Diagnosis::Other);
+    }
+
+    /// A stack failure is explained by a Bluetooth address on `--adapter`
+    /// first, then by a picked meter with the radio built in; a meter behind
+    /// an adapter, or a USB selector, keeps the bare error.
+    #[test]
+    fn a_stack_failure_is_explained_by_what_it_was_reaching() {
+        let stack = Error::Bluetooth(BluetoothIssue::Stack("Timed out after 10s".into()));
+        assert_eq!(
+            Diagnosis::of(&stack, Some(ADDRESS), pick("ut60bt")),
+            Diagnosis::AdapterUnreachable {
+                address: ADDRESS.into()
+            }
+        );
+        let ut60bt = pick("ut60bt").expect("a row");
+        assert_eq!(
+            Diagnosis::of(&stack, Some("00C5B27A"), pick("ut60bt")),
+            Diagnosis::BluetoothOnlyUnreachable {
+                model: ut60bt.display_name(),
+                activation: ut60bt.device.activation_instructions,
+            }
+        );
+        assert_eq!(
+            Diagnosis::of(&stack, None, pick("ut61eplus")),
+            Diagnosis::Other
+        );
+        assert_eq!(Diagnosis::of(&stack, None, None), Diagnosis::Other);
+    }
+
+    /// A meter with the radio built in that nothing in range carried goes by
+    /// the name it was picked by, a sold-as name included; with no pick, by
+    /// the error's.
+    #[test]
+    fn a_radio_meter_not_in_range_goes_by_its_pick() {
+        let missed = |miss| Error::BluetoothOnly {
+            model: "OWON CMS061",
+            activation: "steps",
+            miss,
+        };
+        let sold_as = pick("ut217a").expect("a row");
+        assert_ne!(sold_as.display_name(), "OWON CMS061");
+        assert_eq!(
+            Diagnosis::of(&missed(BluetoothOnlyMiss::NotInRange), None, Some(sold_as)),
+            Diagnosis::BluetoothOnlyNotFound {
+                model: sold_as.display_name(),
+                activation: "steps",
+            }
+        );
+        assert_eq!(
+            Diagnosis::of(&missed(BluetoothOnlyMiss::NotInRange), None, None),
+            Diagnosis::BluetoothOnlyNotFound {
+                model: "OWON CMS061",
+                activation: "steps",
+            }
+        );
+        for miss in [
+            BluetoothOnlyMiss::SwitchedOff,
+            BluetoothOnlyMiss::NotBuilt,
+            BluetoothOnlyMiss::UsbAdapter,
+        ] {
+            assert_eq!(
+                Diagnosis::of(&missed(miss), None, Some(sold_as)),
+                Diagnosis::BluetoothNotSearched(miss)
+            );
+        }
     }
 }

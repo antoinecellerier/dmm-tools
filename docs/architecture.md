@@ -17,7 +17,7 @@ Protocol internals are `pub(crate)`: consumers use `Dmm`, the registry and the s
 
 **`dmm-shared`** holds what the two binaries must agree on and `dmm-lib` must not carry: the
 settings file, durable writes, what an export holds and is called, what `--replay` opens, the help
-text, the translations and the default log levels. Device, protocol and transport code stays in `dmm-lib`. Anything
+text and which help a failure gets, the translations and the default log levels. Device, protocol and transport code stays in `dmm-lib`. Anything
 one binary alone needs stays in that binary.
 
 **`dmm-cli`** is a `clap` binary, and **`dmm-gui`** an `eframe`/`egui` one. Neither holds protocol
@@ -389,7 +389,7 @@ Protocol families are in [protocol.md](protocol.md); each family's internals are
 | `export/read.rs` | Reading an export back |
 | `export/read_error.rs` | Why an export or a recording's header did not read |
 | `replay.rs` | What `--replay` opens |
-| `help.rs` | Help and version text both binaries print |
+| `help.rs` | Help and version text both binaries print; `Diagnosis`, which help a failed open or command gets |
 | `reopen.rs` | What a lost link may come back on |
 | `input.rs` | Why a typed number was refused, worded once for both binaries |
 | `l10n/` | `Localizer`, the `tr!` macro, which language to speak, the pseudo-locale, the library-text lookup and `lib.ftl`'s generator, the `--help` walker, clap's help layout and command-line errors in the user's language |
