@@ -363,13 +363,9 @@ impl App {
                 parse_limits(&self.l10n, &editor.low, &editor.high, &editor.band).unwrap_or(fresh)
             }
         };
-        let shown = Limits {
-            low: value,
-            high: None,
-        };
-        let value = shown
-            .from_unit(self.graph.plotted_unit(), self.alarm_limit_unit())
-            .low;
+        let unit = self.alarm_limit_unit();
+        let value =
+            value.map(|v| dmm_lib::alarm::limit_from_unit(v, self.graph.plotted_unit(), unit));
         let (low, high) = match side {
             LimitSide::Low => (value, current.high),
             LimitSide::High => (current.low, value),

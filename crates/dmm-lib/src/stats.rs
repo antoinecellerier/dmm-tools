@@ -73,15 +73,18 @@ impl RunningStats {
         })
     }
 
-    /// Re-express every figure in another prefix of the same unit, as when
-    /// the meter auto-ranges from mV to V: the sums scale with the values,
-    /// the sum of squares with their square, so the mean and spread carry on.
-    pub(crate) fn rescale(&mut self, ratio: PrefixRatio) {
-        self.min = self.min.map(|v| ratio.apply(v));
-        self.max = self.max.map(|v| ratio.apply(v));
-        self.shift = ratio.apply(self.shift);
-        self.shifted_sum = ratio.apply(self.shifted_sum);
-        self.shifted_squares = ratio.apply(ratio.apply(self.shifted_squares));
+    /// Every figure in another prefix of the same unit, as when the meter
+    /// auto-ranged from mV to V: the sums scale with the values, the sum of
+    /// squares with their square, so the mean and spread read the same.
+    pub(crate) fn re_expressed(&self, ratio: PrefixRatio) -> Self {
+        Self {
+            min: self.min.map(|v| ratio.apply(v)),
+            max: self.max.map(|v| ratio.apply(v)),
+            count: self.count,
+            shift: ratio.apply(self.shift),
+            shifted_sum: ratio.apply(self.shifted_sum),
+            shifted_squares: ratio.apply(ratio.apply(self.shifted_squares)),
+        }
     }
 
     /// Reset all statistics to the initial empty state.
@@ -209,8 +212,10 @@ impl Integrator {
         self.prev = None;
     }
 
-    /// Raw accumulated integral in unit·seconds (e.g. A·s or V·s).
-    pub fn value(&self) -> f64 {
+    /// Raw accumulated integral in unit·seconds (e.g. A·s or V·s). Within
+    /// the crate only: a series' integral is in its anchor's prefix, read
+    /// through [`SeriesStats::integral_display`].
+    pub(crate) fn value(&self) -> f64 {
         self.integral
     }
 
@@ -222,16 +227,6 @@ impl Integrator {
                 last.checked_duration_since(first).map(|d| d.as_secs_f64())
             }
             _ => None,
-        }
-    }
-
-    /// Re-express the integral and the reading it continues from in another
-    /// prefix of the same unit, so the trapezoid that straddles an
-    /// auto-range step joins two values in one unit.
-    pub(crate) fn rescale(&mut self, ratio: PrefixRatio) {
-        self.integral = ratio.apply(self.integral);
-        if let Some((value, _)) = &mut self.prev {
-            *value = ratio.apply(*value);
         }
     }
 
@@ -393,7 +388,7 @@ impl std::fmt::Display for SeriesChange {
 
 /// Session statistics of one comparable series of readings: min/max/avg and
 /// the time integral, reset together whenever the mode or the quantity
-/// changes, and re-expressed when the meter auto-ranges.
+/// changes, and carried on when the meter auto-ranges.
 ///
 /// Min/Max/Avg and an integral are only meaningful within a single mode and
 /// quantity. Turning the dial changes the mode — which `--unit` would
@@ -401,15 +396,21 @@ impl std::fmt::Display for SeriesChange {
 /// checks a run that spans a dial turn averages volts with ohms and prints
 /// bare numbers, so nothing on screen would reveal the mix. Auto-range moves
 /// the unit a decade without touching the mode string (the UT61E+ shows
-/// "219.0 Ω" then "0.2200 kΩ" in one mode); the figures held so far are then
-/// re-expressed in the new prefix, so the two decades never mix and the run
-/// carries on in the unit the meter shows.
+/// "219.0 Ω" then "0.2200 kΩ" in one mode). Every value is accumulated in
+/// the prefix the series' first reading had, its anchor, so the two decades
+/// never mix and a step changes nothing held; the figures are read in the
+/// unit the meter shows last. A run without a step is then summed exactly as
+/// it arrived, and one with steps depends on their order only by float
+/// rounding.
 ///
 /// Owned by the CLI read loop and the GUI message drain alike, so the two
 /// cannot drift apart on what starts a new series.
 #[derive(Debug, Clone)]
 pub struct SeriesStats {
-    pub stats: RunningStats,
+    /// In the anchor's prefix; read through [`SeriesStats::stats`].
+    stats: RunningStats,
+    /// Its integral is in the anchor's prefix; read it through
+    /// [`SeriesStats::integral_display`].
     pub integrator: Integrator,
     integrate: bool,
     /// `(mode, unit)` the current series accumulates in; `None` until the
@@ -421,6 +422,10 @@ pub struct SeriesStats {
     unit_unread: bool,
     /// The prefixes and decimals the meter showed the series in.
     shown: ShownDigits,
+    /// The unit the figures are accumulated in: the first value's since the
+    /// series began or was reset, so a series that began on an overload in a
+    /// decade the meter only names out of range takes its readings' own.
+    anchor: Option<String>,
 }
 
 impl SeriesStats {
@@ -437,6 +442,7 @@ impl SeriesStats {
             series: None,
             unit_unread: false,
             shown: ShownDigits::default(),
+            anchor: None,
         }
     }
 
@@ -448,8 +454,8 @@ impl SeriesStats {
     /// names the change the user made.
     ///
     /// A reading in another prefix of the same unit (mV → V, Ω → kΩ) is no
-    /// change: min/max/avg and the integral are re-expressed in its prefix
-    /// and carry on, and [`SeriesStats::unit`] follows it.
+    /// change: min/max/avg and the integral carry on, read in its prefix,
+    /// and [`SeriesStats::unit`] follows it.
     ///
     /// An overload's unit never moves the series: it may be a decade the
     /// meter only names while out of range ("OL MΩ" between kΩ readings).
@@ -499,9 +505,7 @@ impl SeriesStats {
             }
             Some((_, prev_unit)) if prev_unit.as_str() != m.unit.as_ref() => {
                 match prefix_ratio(prev_unit, &m.unit) {
-                    Some(ratio) => {
-                        self.stats.rescale(ratio);
-                        self.integrator.rescale(ratio);
+                    Some(_) => {
                         *prev_unit = m.unit.to_string();
                         None
                     }
@@ -517,6 +521,7 @@ impl SeriesStats {
             self.stats.reset();
             self.integrator.reset();
             self.shown.clear();
+            self.anchor = None;
             self.series = Some((m.mode.to_string(), m.unit.to_string()));
             self.unit_unread = overload;
         } else if !overload {
@@ -525,12 +530,21 @@ impl SeriesStats {
 
         match &m.value {
             MeasuredValue::Normal(v) => {
-                self.stats.push(*v);
+                let anchor = self.anchor.get_or_insert_with(|| m.unit.to_string());
+                // The series carried on, so the two are one unit's prefixes.
+                let held = if m.unit.as_ref() == anchor.as_str() {
+                    *v
+                } else {
+                    let ratio = prefix_ratio(&m.unit, anchor);
+                    debug_assert!(ratio.is_some(), "{} beside {anchor}", m.unit);
+                    ratio.map_or(*v, |r| r.apply(*v))
+                };
+                self.stats.push(held);
                 if let Some(display) = m.display_raw.as_deref() {
                     self.shown.record(*v, &m.unit, display);
                 }
                 if self.integrate {
-                    self.integrator.push(*v, m.timestamp);
+                    self.integrator.push(held, m.timestamp);
                 }
             }
             // Breaks the integration interval; contributes nothing to min/max.
@@ -554,6 +568,25 @@ impl SeriesStats {
         self.stats.reset();
         self.integrator.reset();
         self.shown.clear();
+        self.anchor = None;
+    }
+
+    /// Min/max/avg and the spread, in [`SeriesStats::unit`].
+    pub fn stats(&self) -> RunningStats {
+        match self.anchor_ratio() {
+            Some(ratio) => self.stats.re_expressed(ratio),
+            None => self.stats.clone(),
+        }
+    }
+
+    /// The ratio from the anchor to the unit the figures are read in, when
+    /// the meter has stepped away from it.
+    fn anchor_ratio(&self) -> Option<PrefixRatio> {
+        let anchor = self.anchor.as_deref()?;
+        let unit = self.unit()?;
+        (anchor != unit)
+            .then(|| prefix_ratio(anchor, unit))
+            .flatten()
     }
 
     /// The prefixes and decimals the meter showed the series in, which the
@@ -568,8 +601,8 @@ impl SeriesStats {
         self.series.as_ref().map(|(mode, _)| mode.as_str())
     }
 
-    /// Unit the accumulated figures are expressed in — the latest reading's
-    /// prefix, after an auto-range step — or `None` before the first reading.
+    /// Unit the figures are read in — the latest reading's prefix, after an
+    /// auto-range step — or `None` before the first reading.
     pub fn unit(&self) -> Option<&str> {
         self.series.as_ref().map(|(_, unit)| unit.as_str())
     }
@@ -581,7 +614,9 @@ impl SeriesStats {
         if !self.integrate {
             return None;
         }
-        integral_display(self.integrator.value(), self.unit()?)
+        let raw = self.integrator.value();
+        let raw = self.anchor_ratio().map_or(raw, |ratio| ratio.apply(raw));
+        integral_display(raw, self.unit()?)
     }
 }
 
@@ -662,13 +697,13 @@ mod tests {
     /// A run in mV re-expressed in V holds the figures a run read in V from
     /// the start would.
     #[test]
-    fn rescale_re_expresses_every_figure() {
+    fn re_expressed_figures_match_a_run_in_the_other_prefix() {
         let millivolts = [898.7, 901.2, 899.9, 900.4, 1100.3];
         let mut stepped = RunningStats::new();
         for v in millivolts {
             stepped.push(v);
         }
-        stepped.rescale(crate::transform::prefix_ratio("mV", "V").unwrap());
+        let mut stepped = stepped.re_expressed(crate::transform::prefix_ratio("mV", "V").unwrap());
         stepped.push(1.0996);
         let mut volts = RunningStats::new();
         for v in millivolts.iter().map(|v| v / 1000.0).chain([1.0996]) {
@@ -683,9 +718,9 @@ mod tests {
     }
 
     #[test]
-    fn rescale_leaves_empty_stats_empty() {
-        let mut s = RunningStats::new();
-        s.rescale(crate::transform::prefix_ratio("Ω", "kΩ").unwrap());
+    fn re_expressing_empty_stats_leaves_them_empty() {
+        let s =
+            RunningStats::new().re_expressed(crate::transform::prefix_ratio("Ω", "kΩ").unwrap());
         assert_eq!(s.count, 0);
         assert!(s.min.is_none() && s.avg().is_none() && s.std_dev().is_none());
     }
@@ -798,37 +833,6 @@ mod tests {
         // Total: 1.5
         assert!((i.value() - 1.5).abs() < 1e-9);
         assert_eq!(i.count, 3);
-    }
-
-    /// 900 mV for a second, then the meter steps to V and reads 1.1 V a
-    /// second later: the straddling trapezoid joins 0.9 V and 1.1 V.
-    #[test]
-    fn integrator_rescale_carries_across_a_step() {
-        let mut i = Integrator::new();
-        let t0 = Instant::now();
-        i.push(900.0, t0);
-        i.push(900.0, t0 + Duration::from_secs(1));
-        i.rescale(crate::transform::prefix_ratio("mV", "V").unwrap());
-        assert!((i.value() - 0.9).abs() < 1e-12);
-        i.push(1.1, t0 + Duration::from_secs(2));
-        // 0.9 V·s, then (0.9 + 1.1) / 2 × 1 s = 1.0 V·s.
-        assert!((i.value() - 1.9).abs() < 1e-12);
-        assert_eq!(i.count, 3);
-    }
-
-    /// After a gap there is no previous reading to re-express; the integral
-    /// still is.
-    #[test]
-    fn integrator_rescale_after_a_gap() {
-        let mut i = Integrator::new();
-        let t0 = Instant::now();
-        i.push(2.0, t0);
-        i.push(2.0, t0 + Duration::from_secs(1));
-        i.push_gap();
-        i.rescale(crate::transform::prefix_ratio("A", "mA").unwrap());
-        assert_eq!(i.value(), 2000.0);
-        i.push(1500.0, t0 + Duration::from_secs(2));
-        assert_eq!(i.value(), 2000.0);
     }
 
     #[test]
@@ -1011,7 +1015,7 @@ mod tests {
         assert_eq!(s.push(&reading("DC V", "V", 1.0, Instant::now())), None);
         assert_eq!(s.mode(), Some("DC V"));
         assert_eq!(s.unit(), Some("V"));
-        assert_eq!(s.stats.count, 1);
+        assert_eq!(s.stats().count, 1);
     }
 
     /// A mode whose readings move to another quantity, as a frequency mode
@@ -1022,7 +1026,7 @@ mod tests {
         let mut s = SeriesStats::new(true);
         s.push(&reading("Hz", "Hz", 50.0, t0));
         s.push(&reading("Hz", "Hz", 50.1, t0 + Duration::from_millis(100)));
-        assert_eq!(s.stats.count, 2);
+        assert_eq!(s.stats().count, 2);
 
         let change = s.push(&reading("Hz", "%", 49.9, t0 + Duration::from_millis(200)));
         assert_eq!(
@@ -1033,8 +1037,8 @@ mod tests {
             })
         );
         // Reset, then the triggering reading itself is counted.
-        assert_eq!(s.stats.count, 1);
-        assert_eq!(s.stats.min, Some(49.9));
+        assert_eq!(s.stats().count, 1);
+        assert_eq!(s.stats().min, Some(49.9));
         assert_eq!(s.integrator.count, 1);
         assert_eq!(s.integrator.value(), 0.0);
         assert_eq!(s.unit(), Some("%"));
@@ -1053,16 +1057,112 @@ mod tests {
             None
         );
         assert_eq!(s.unit(), Some("V"));
-        assert_eq!(s.stats.count, 3);
-        assert_eq!(s.stats.min, Some(0.9));
-        assert_eq!(s.stats.max, Some(1.1));
-        assert!((s.stats.avg().unwrap() - 2.9 / 3.0).abs() < 1e-12);
+        assert_eq!(s.stats().count, 3);
+        assert_eq!(s.stats().min, Some(0.9));
+        assert_eq!(s.stats().max, Some(1.1));
+        assert!((s.stats().avg().unwrap() - 2.9 / 3.0).abs() < 1e-12);
         // 0.9 V·s over the first second, then (0.9 + 1.1) / 2 over the
         // second, which straddles the step.
         assert_eq!(s.integrator.count, 3);
         let (value, unit) = s.integral_display().unwrap();
         assert!((value - 1.9).abs() < 1e-12);
         assert_eq!(unit, "V\u{00b7}s");
+    }
+
+    /// A reading flickering across a decade, mV and V in turn, is held as
+    /// the same readings in mV are, to the bit: a step changes nothing held.
+    #[test]
+    fn a_reading_flickering_across_a_decade_holds_as_one_prefix() {
+        let t0 = Instant::now();
+        let at = |i: u64| t0 + Duration::from_millis(500 * i);
+        let mut flicker = SeriesStats::new(true);
+        let mut millivolts = SeriesStats::new(true);
+        for i in 0..400 {
+            // 1.5 V is 1500 mV exactly, so nothing but the steps could part them.
+            let (shown, unit, mv) = if i % 2 == 0 {
+                (999.5, "mV", 999.5)
+            } else {
+                (1.5, "V", 1500.0)
+            };
+            assert_eq!(flicker.push(&reading("DC V", unit, shown, at(i))), None);
+            millivolts.push(&reading("DC V", "mV", mv, at(i)));
+        }
+        let held = |s: &SeriesStats| {
+            let r = &s.stats;
+            let bits = [
+                r.shift,
+                r.shifted_sum,
+                r.shifted_squares,
+                s.integrator.value(),
+            ];
+            (r.count, r.min, r.max, bits.map(f64::to_bits))
+        };
+        assert_eq!(held(&flicker), held(&millivolts));
+        assert_eq!(flicker.unit(), Some("V"));
+        // Read in V: 1.5 V and 0.9995 V, and (1.5 + 0.9995) / 2 V over each
+        // half second of the 199.5 s.
+        let stats = flicker.stats();
+        assert_eq!((stats.min, stats.max), (Some(0.9995), Some(1.5)));
+        let (integral, unit) = flicker.integral_display().unwrap();
+        assert_eq!(unit, "V\u{00b7}s");
+        assert!((integral - 1.24975 * 199.5).abs() < 1e-9, "{integral}");
+    }
+
+    /// A step that comes after a gap, an overload between amps and
+    /// milliamps: the integral holds through both and goes on in mA.
+    #[test]
+    fn a_step_after_a_gap_keeps_the_integral() {
+        let t0 = Instant::now();
+        let mut s = SeriesStats::new(true);
+        s.push(&reading("DC A", "A", 2.0, t0));
+        s.push(&reading("DC A", "A", 2.0, t0 + Duration::from_secs(1)));
+        let mut ol = reading("DC A", "A", 0.0, t0 + Duration::from_secs(2));
+        ol.value = MeasuredValue::Overload;
+        s.push(&ol);
+        s.push(&reading("DC A", "mA", 1500.0, t0 + Duration::from_secs(3)));
+        s.push(&reading("DC A", "mA", 1500.0, t0 + Duration::from_secs(4)));
+        // 2 A·s, then nothing across the overload, then 1.5 A·s.
+        let (integral, unit) = s.integral_display().unwrap();
+        assert_eq!(unit, "mAh");
+        assert!((integral - 3500.0 / 3600.0).abs() < 1e-12, "{integral}");
+    }
+
+    /// Without a step the figures are summed as the readings came, to the
+    /// bit: from the first reading with a value, after an overload in
+    /// another decade, and again after a reset.
+    #[test]
+    fn a_run_without_a_step_is_summed_as_it_came() {
+        let t0 = Instant::now();
+        let at = |i: u64| t0 + Duration::from_millis(100 * i);
+        let kohms = [219.97, 219.93, 220.04, 219.99];
+        let mut plain = SeriesStats::new(true);
+        for (i, v) in kohms.iter().enumerate() {
+            plain.push(&reading("\u{3a9}", "k\u{3a9}", *v, at(i as u64)));
+        }
+        let mut s = SeriesStats::new(true);
+        let mut ol = reading("\u{3a9}", "M\u{3a9}", 0.0, t0);
+        ol.value = MeasuredValue::Overload;
+        s.push(&ol);
+        for (i, v) in kohms.iter().enumerate() {
+            s.push(&reading("\u{3a9}", "k\u{3a9}", *v, at(i as u64)));
+        }
+        assert_eq!(s.anchor.as_deref(), Some("k\u{3a9}"));
+        let same = |a: &SeriesStats, b: &SeriesStats| {
+            let (x, y) = (a.stats(), b.stats());
+            assert_eq!((x.count, x.min, x.max), (y.count, y.min, y.max));
+            assert_eq!(x.avg().map(f64::to_bits), y.avg().map(f64::to_bits));
+            assert_eq!(x.std_dev().map(f64::to_bits), y.std_dev().map(f64::to_bits));
+        };
+        same(&s, &plain);
+        // Anchored in MΩ, reset, then readings in kΩ: those anchor.
+        let mut s = SeriesStats::new(true);
+        s.push(&reading("\u{3a9}", "M\u{3a9}", 1.2, at(5)));
+        s.reset();
+        assert_eq!(s.anchor, None);
+        for (i, v) in kohms.iter().enumerate() {
+            s.push(&reading("\u{3a9}", "k\u{3a9}", *v, at(i as u64 + 6)));
+        }
+        same(&s, &plain);
     }
 
     /// Every prefixed unit steps as voltage does, and what was shown in each
@@ -1085,9 +1185,9 @@ mod tests {
             s.push(&before);
             assert_eq!(s.push(&after), None, "{low} to {high}");
             assert_eq!(s.unit(), Some(high));
-            assert_eq!(s.stats.count, 2);
-            assert_eq!(s.stats.min, Some(0.9));
-            assert_eq!(s.stats.max, Some(1.1));
+            assert_eq!(s.stats().count, 2);
+            assert_eq!(s.stats().min, Some(0.9));
+            assert_eq!(s.stats().max, Some(1.1));
             let (unit, _, decimals) = s.shown().layout(0.9, high).unwrap();
             assert_eq!((unit.as_str(), decimals), (low, 1));
             let (unit, _, decimals) = s.shown().layout(1.1, high).unwrap();
@@ -1119,11 +1219,11 @@ mod tests {
             );
         }
         assert_eq!(s.unit(), Some("\u{3a9}"));
-        assert_eq!(s.stats.count, 4);
+        assert_eq!(s.stats().count, 4);
         let close = |a: Option<f64>, b: f64| (a.unwrap() - b).abs() < 1e-9;
-        assert!(close(s.stats.min, 219.0), "{:?}", s.stats.min);
-        assert!(close(s.stats.max, 221.0), "{:?}", s.stats.max);
-        assert!(close(s.stats.avg(), 219.875), "{:?}", s.stats.avg());
+        assert!(close(s.stats().min, 219.0), "{:?}", s.stats().min);
+        assert!(close(s.stats().max, 221.0), "{:?}", s.stats().max);
+        assert!(close(s.stats().avg(), 219.875), "{:?}", s.stats().avg());
     }
 
     /// An overload names whatever decade the meter shows while out of range;
@@ -1155,8 +1255,8 @@ mod tests {
             )),
             None
         );
-        assert_eq!(s.stats.count, 2);
-        assert_eq!(s.stats.max, Some(1.06));
+        assert_eq!(s.stats().count, 2);
+        assert_eq!(s.stats().max, Some(1.06));
         assert_eq!(s.integrator.overload_gaps, 1);
 
         // The dial turned to DC V with the probes open: the Ω figures are
@@ -1166,12 +1266,12 @@ mod tests {
             Some(SeriesChange::Mode { .. })
         ));
         assert_eq!(s.mode(), Some("DC V"));
-        assert_eq!(s.stats.count, 0);
+        assert_eq!(s.stats().count, 0);
         assert_eq!(
             s.push(&reading("DC V", "V", 1.5, t0 + Duration::from_millis(400))),
             None
         );
-        assert_eq!(s.stats.count, 1);
+        assert_eq!(s.stats().count, 1);
 
         // An overload's unit that is no prefix of the reading's (none at
         // all) is taken from the first reading, not reported as a change.
@@ -1189,7 +1289,7 @@ mod tests {
             None
         );
         assert_eq!(s.unit(), Some("\u{3a9}"));
-        assert_eq!(s.stats.count, 1);
+        assert_eq!(s.stats().count, 1);
     }
 
     /// The reset used to watch the unit alone. `--unit` pins the label, so
@@ -1239,7 +1339,7 @@ mod tests {
         );
         assert_eq!(s.integrator.overload_gaps, 1);
         // Overload is not a number: it never reaches min/max/avg.
-        assert_eq!(s.stats.count, 2);
+        assert_eq!(s.stats().count, 2);
         assert_eq!(s.unit(), Some("A"));
     }
 
@@ -1266,10 +1366,10 @@ mod tests {
             s.push(&reading("DC V", "V", 3.0, t0 + Duration::from_millis(200))),
             None
         );
-        assert_eq!(s.stats.count, 2);
-        assert_eq!(s.stats.min, Some(1.0));
-        assert_eq!(s.stats.max, Some(3.0));
-        assert_eq!(s.stats.avg(), Some(2.0));
+        assert_eq!(s.stats().count, 2);
+        assert_eq!(s.stats().min, Some(1.0));
+        assert_eq!(s.stats().max, Some(3.0));
+        assert_eq!(s.stats().avg(), Some(2.0));
         // The stretch with no reading is not bridged: nothing is integrated
         // across it, and it is not counted as an overload.
         assert_eq!(s.integrator.count, 2);
@@ -1301,8 +1401,8 @@ mod tests {
             3.0,
             t0 + Duration::from_millis(1000),
         ));
-        assert_eq!(s.stats.count, 2);
-        assert_eq!(s.stats.avg(), Some(2.0));
+        assert_eq!(s.stats().count, 2);
+        assert_eq!(s.stats().avg(), Some(2.0));
         // Bridged DC to DC: one trapezoid over the whole second.
         assert_eq!(s.integrator.count, 2);
         assert!((s.integrator.value() - 2.0).abs() < 1e-9);
@@ -1332,7 +1432,7 @@ mod tests {
         let mut s = SeriesStats::new(false);
         s.push(&reading("DC A", "A", 1.0, t0));
         s.push(&reading("DC A", "A", 1.0, t0 + Duration::from_millis(100)));
-        assert_eq!(s.stats.count, 2);
+        assert_eq!(s.stats().count, 2);
         assert_eq!(s.integrator.count, 0);
         assert_eq!(s.integral_display(), None);
     }
@@ -1351,7 +1451,7 @@ mod tests {
         s.push(&reading("DC V", "V", 1.0, t0));
         s.push(&reading("DC V", "V", 3.0, t0 + Duration::from_millis(100)));
         s.reset();
-        assert_eq!(s.stats.count, 0);
+        assert_eq!(s.stats().count, 0);
         assert_eq!(s.integrator.count, 0);
         assert_eq!(s.unit(), Some("V"));
 
@@ -1360,7 +1460,7 @@ mod tests {
             s.push(&reading("DC V", "V", 2.0, t0 + Duration::from_millis(200))),
             None
         );
-        assert_eq!(s.stats.count, 1);
+        assert_eq!(s.stats().count, 1);
     }
 
     /// A reading the meter showed as `display`, its value read off it.

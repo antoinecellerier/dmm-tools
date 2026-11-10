@@ -218,19 +218,24 @@ fn compact_figures(
 
 impl App {
     pub(super) fn show_stats_section(&mut self, ui: &mut Ui, compact: bool, scale: f32) {
-        // The unit the figures are held in, not the latest reading's: a word
+        // The unit the figures are read in, not the latest reading's: a word
         // the meter shows instead of a reading, or an overload in another
         // decade ("OL MΩ" between kΩ readings), leaves the series alone, so
         // the figures still belong to the readings before it.
         // Blank without a reading: `clear_session` drops `last_measurement`
         // but `SeriesStats::reset` keeps its series, and the integral's row
         // should vanish with the reading it describes.
+        let session = &self.capture.session;
         let unit = match self.last_measurement {
-            Some(_) => self.capture.session.unit().unwrap_or(""),
+            Some(_) => session.unit().unwrap_or(""),
             None => "",
         };
-        let integral_info = stats::integral_display(self.capture.session.integrator.value(), unit)
-            .map(|(value, unit)| (value, unit, self.capture.session.integrator.elapsed_secs()));
+        let integral_info = self
+            .last_measurement
+            .as_ref()
+            .and_then(|_| session.integral_display())
+            .map(|(value, unit)| (value, unit, session.integrator.elapsed_secs()));
+        let session_stats = session.stats();
         // The visible block reports what the graph draws, which is not the
         // main reading's unit when a sub-value is plotted.
         // Before the unit is borrowed: the graph keeps them between frames.
@@ -260,7 +265,7 @@ impl App {
         let formatted = FormattedStats {
             session: FormattedStatsGroup::new(
                 &l10n,
-                &self.capture.session.stats,
+                &session_stats,
                 unit,
                 FigureStyle::AsShown(shown),
                 integral_info,
@@ -528,12 +533,12 @@ mod tests {
         let as_shown = FigureStyle::AsShown(session.shown());
         let whole = FormattedStatsGroup::new(
             &l10n,
-            &session.stats,
+            &session.stats(),
             "\u{3a9}",
             as_shown,
             Some((0.000_012_34, "mAh", None)),
         );
-        let visible = FormattedStatsGroup::new(&l10n, &session.stats, "\u{3a9}", as_shown, None);
+        let visible = FormattedStatsGroup::new(&l10n, &session.stats(), "\u{3a9}", as_shown, None);
         for s in [&whole, &visible] {
             assert_eq!(s.min, "    219.82 \u{3a9}");
             assert_eq!(s.max, "    1.2341 M\u{3a9}");
@@ -547,7 +552,7 @@ mod tests {
         // showed in those ranges: five significant digits in its own prefix.
         let sub_value = FormattedStatsGroup::new(
             &l10n,
-            &session.stats,
+            &session.stats(),
             "\u{3a9}",
             FigureStyle::Significant,
             None,

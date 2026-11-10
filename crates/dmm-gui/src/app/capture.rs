@@ -320,7 +320,7 @@ mod tests {
         let scaled = |v: &MeasuredValue| matches!(v, MeasuredValue::Normal(x) if *x == 3.0);
         assert!(scaled(&shown.value), "shown {:?}", shown.value);
         assert_eq!(shown.unit, "A");
-        assert_eq!(capture.session.stats.min, Some(3.0));
+        assert_eq!(capture.session.stats().min, Some(3.0));
         assert_eq!(graph.plotted_unit(), "A");
         let kept: Vec<_> = capture.recording.history_samples().collect();
         assert_eq!(kept.len(), 1);

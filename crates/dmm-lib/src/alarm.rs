@@ -221,22 +221,6 @@ impl Limits {
         }
     }
 
-    /// The limits in base units for ones in `unit`, as [`Limits::in_unit`]
-    /// gives them back: `mV` turns 5000 into 5. Rounded to 15 significant
-    /// digits, past which the scaling only adds noise: 3.29 mV is 0.00329,
-    /// not 0.0032900000000000003.
-    pub fn from_unit(&self, unit: &str, limit_unit: LimitUnit) -> Self {
-        let mult = limit_unit.mult(unit);
-        let base = |v: f64| {
-            let v = v * mult;
-            format!("{v:.14e}").parse().unwrap_or(v)
-        };
-        Self {
-            low: self.low.map(base),
-            high: self.high.map(base),
-        }
-    }
-
     /// `"above 5 or below 3"`, `"above 5, hysteresis 1%"`: what both
     /// binaries say when an alarm starts. The automatic band goes unnamed.
     pub fn describe(&self, band: Hysteresis) -> String {
@@ -261,6 +245,15 @@ impl Limits {
             Zone::Inside
         }
     }
+}
+
+/// A limit at `value` in `unit`, the unit a reading is shown in, in the
+/// limits' unit, as [`Limits::in_unit`] gives it back: `mV` turns 5000 into
+/// 5. Rounded to 15 significant digits, past which the scaling only adds
+/// noise: 3.29 mV is 0.00329, not 0.0032900000000000003.
+pub fn limit_from_unit(value: f64, unit: &str, limit_unit: LimitUnit) -> f64 {
+    let v = value * limit_unit.mult(unit);
+    format!("{v:.14e}").parse().unwrap_or(v)
 }
 
 /// The unit a limit typed now would be in for readings like `m`: its base
@@ -950,18 +943,15 @@ mod tests {
 
     #[test]
     fn limits_convert_back_from_the_shown_unit() {
-        let shown = Limits::check(Some(3.29), Some(4321.0)).unwrap();
-        let base = shown.from_unit("mV", LimitUnit::Base);
-        assert_eq!((base.low, base.high), (Some(0.00329), Some(4.321)));
-        let kohm = Limits::check(None, Some(4.7))
-            .unwrap()
-            .from_unit("kΩ", LimitUnit::Base);
-        assert_eq!(kohm.high, Some(4700.0));
-        assert_eq!(shown.from_unit("mV", LimitUnit::Shown), shown);
+        let base = |v| limit_from_unit(v, "mV", LimitUnit::Base);
+        assert_eq!((base(3.29), base(4321.0)), (0.00329, 4.321));
+        assert_eq!(limit_from_unit(4.7, "kΩ", LimitUnit::Base), 4700.0);
+        assert_eq!(limit_from_unit(3.29, "mV", LimitUnit::Shown), 3.29);
+        let limits = Limits::check(Some(0.00329), Some(4.321)).unwrap();
+        let shown = limits.in_unit("mV", LimitUnit::Base);
         assert_eq!(
-            base.in_unit("mV", LimitUnit::Base)
-                .from_unit("mV", LimitUnit::Base),
-            base
+            (shown.low.map(base), shown.high.map(base)),
+            (limits.low, limits.high)
         );
     }
 }

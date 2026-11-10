@@ -2429,7 +2429,7 @@ mod tests {
         assert_eq!(modes(&app), ["DC V", "Auto", "DC V"]);
         assert!(first.is_some());
         assert_eq!(app.graph.first_point_time(), first);
-        assert_eq!(app.capture.session.stats.count, 2);
+        assert_eq!(app.capture.session.stats().count, 2);
         assert_eq!(
             app.capture
                 .recording
@@ -2470,8 +2470,8 @@ mod tests {
         assert_eq!(modes(&app), ["AC+DC V"; 4]);
         assert_eq!(app.graph.overlays_len(), 1, "AC drawn beside DC");
         assert_eq!(app.graph.first_point_time(), Some(t0));
-        assert_eq!(app.capture.session.stats.count, 2);
-        assert_eq!(app.capture.session.stats.min, Some(1.6112));
+        assert_eq!(app.capture.session.stats().count, 2);
+        assert_eq!(app.capture.session.stats().min, Some(1.6112));
     }
 
     /// A UT181A in V AC + Hz: picking Frequency under **Plot:** keeps the
@@ -2672,13 +2672,13 @@ mod tests {
     fn another_meter_in_the_same_mode_starts_the_statistics_again() {
         let mut app = connected_app();
         deliver_readings(&mut app, &[DC, DC]);
-        assert_eq!(app.capture.session.stats.count, 2);
+        assert_eq!(app.capture.session.stats().count, 2);
         app.deliver(DmmMessage::Disconnected(dmm_lib::error::Error::LinkLost));
         app.deliver(connected("ut181a", Stability::Experimental, 4));
-        assert_eq!(app.capture.session.stats.count, 0);
+        assert_eq!(app.capture.session.stats().count, 0);
         assert_eq!(app.graph.len(), 0);
         deliver_readings(&mut app, &[DC]);
-        assert_eq!(app.capture.session.stats.count, 1);
+        assert_eq!(app.capture.session.stats().count, 1);
         assert_eq!(app.graph.len(), 1);
         assert_eq!(app.capture.recording.export_samples().len(), 1);
     }
@@ -2705,7 +2705,7 @@ mod tests {
         app.disconnect();
         app.deliver(connected("ut61eplus", Stability::Verified, 0));
         assert!(app.capture.recording.is_active());
-        assert_eq!(app.capture.session.stats.count, 2);
+        assert_eq!(app.capture.session.stats().count, 2);
         assert!(app.toast.is_none());
     }
 
@@ -2721,7 +2721,7 @@ mod tests {
         app.settings.shared.device_family = "ut181a".to_string();
         app.deliver(connected("ut181a", Stability::Experimental, 4));
         assert!(!app.capture.recording.is_active());
-        assert_eq!(app.capture.session.stats.count, 0);
+        assert_eq!(app.capture.session.stats().count, 0);
     }
 
     /// A meter picked in Settings is the entry picked: another one of the
@@ -2912,7 +2912,7 @@ mod tests {
             app.deliver(DmmMessage::Disconnected(dmm_lib::error::Error::LinkLost));
             app.deliver(second);
             assert!(app.capture.recording.is_active());
-            assert_eq!(app.capture.session.stats.count, 1);
+            assert_eq!(app.capture.session.stats().count, 1);
         }
     }
 

@@ -868,12 +868,11 @@ impl Run {
             );
         }
         let session = &self.session;
-        if let (Some(min), Some(max), Some(avg)) =
-            (session.stats.min, session.stats.max, session.stats.avg())
-        {
-            // The figures are held in the latest reading's unit, every
-            // sample behind them re-expressed in it across an auto-range
-            // step; they reset whenever the mode or the quantity moves.
+        let stats = session.stats();
+        if let (Some(min), Some(max), Some(avg)) = (stats.min, stats.max, stats.avg()) {
+            // The figures read in the latest reading's unit, across any
+            // auto-range step; they reset whenever the mode or the quantity
+            // moves.
             let unit = session.unit().unwrap_or("");
             // Cyan figures, each in a range and to the resolution the meter
             // showed, with its unit after it.
@@ -886,7 +885,7 @@ impl Run {
                     format!("{number} {unit}")
                 }
             };
-            let count = session.stats.count;
+            let count = stats.count;
             let (min, max, mean) = (figure(min), figure(max), figure(avg));
             // One message per cell, so a new figure leaves the others'
             // translations alone. σ needs two samples; a one-reading
@@ -897,7 +896,7 @@ impl Run {
                 tr!(l, "read-summary-max", max = max),
                 tr!(l, "read-summary-mean", mean = mean),
             ];
-            if let Some(sd) = session.stats.std_dev() {
+            if let Some(sd) = stats.std_dev() {
                 cells.push(tr!(l, "read-summary-sd", sd = figure(sd)));
             }
             let summary = cells.join(" | ");
