@@ -220,7 +220,7 @@ dmm-cli read [OPTIONS]
 | `--no-reconnect` | off | End the run, with its summary and an error, when the link to the meter drops. |
 | `--replay <FILE>` | | Play back a `--format replay` file at its recorded pace instead of opening a meter; the run ends with the file, or sooner with `--count` or Ctrl+C. |
 | `--import <FILE>` | | Read an exported CSV, JSON or replay file instead of opening a meter, without waiting: to convert it (`--format`, `-o`) or print its summary. Its markers come through; a CSV or JSON file refuses `--format replay` and `--interval-ms`. |
-| `--mock-mode <MODE>` | `mock_mode` in `settings.json` | Pin mock device to a specific mode (only with `--device mock`). See [Mock modes](#mock-modes). |
+| `--mock-mode <MODE>` | `mock_mode` in `settings.json` | Pin mock device to a specific mode (only with `--device mock`, or the mock saved by `dmm-gui`). See [Mock modes](#mock-modes). |
 | `--integrate` | off | Show cumulative time-integral. For current modes, this computes charge (Ah, mAh, …). For voltage modes, V·s (mV·s, …). Adds `integral` and `integral_unit` columns to CSV/JSON output. |
 | `--scale <FACTOR>` | `1` | Multiply the reading, taken in base units, by FACTOR. See [Scaling readings in software](#scaling-readings-in-software). |
 | `--offset <VALUE>` | `0` | Add VALUE after scaling. |
@@ -394,7 +394,7 @@ dmm-cli get <SETTING>        # that setting alone, with what to type for each va
 | Option | Default | Description |
 |---|---|---|
 | `--format <FORMAT>` | `text` | Output format: `text` or `json`. |
-| `--mock-mode <MODE>` | `mock_mode` in `settings.json` | Pin mock device to a specific mode (only with `--device mock`). See [Mock modes](#mock-modes). |
+| `--mock-mode <MODE>` | `mock_mode` in `settings.json` | Pin mock device to a specific mode (only with `--device mock`, or the mock saved by `dmm-gui`). See [Mock modes](#mock-modes). |
 
 A setting with no choice from the current position (Peak on a meter without
 it, a dial position with one function) is left out of the whole-meter listing;
@@ -471,7 +471,7 @@ dmm-cli set <SETTING> <CHOICE>   # switch, by label
 
 | Option | Default | Description |
 |---|---|---|
-| `--mock-mode <MODE>` | `mock_mode` in `settings.json` | Pin mock device to a specific mode (only with `--device mock`). See [Mock modes](#mock-modes). |
+| `--mock-mode <MODE>` | `mock_mode` in `settings.json` | Pin mock device to a specific mode (only with `--device mock`, or the mock saved by `dmm-gui`). See [Mock modes](#mock-modes). |
 
 After switching, `dmm-cli` waits for the meter to report the new value and
 prints it (`Meter now in AC+DC V`). A refused or unconfirmed switch exits
@@ -824,7 +824,8 @@ dmm-cli completions powershell >> $PROFILE
 
 `--device mock` cycles through these scenarios; `--mock-mode <MODE>` on
 `read`, `get` or `set` pins one, and without it `dmm-gui`'s Mock mode setting
-does (`mock_mode` in `settings.json`):
+does (`mock_mode` in `settings.json`). `--mock-mode` is refused unless the
+mock is the run's device, typed or saved:
 
 | Mode | Description |
 |---|---|

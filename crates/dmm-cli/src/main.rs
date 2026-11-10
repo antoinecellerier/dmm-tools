@@ -11,7 +11,7 @@ mod test_fixtures;
 
 use clap::FromArgMatches;
 use clap_complete::Shell;
-use cli::{CaptureArgs, Cli, Cmd};
+use cli::{CaptureArgs, Cli, ClockScale, Cmd};
 use cmd::command::cmd_command;
 use cmd::debug::cmd_debug;
 use cmd::info::cmd_info;
@@ -22,7 +22,7 @@ use console::style;
 use dmm_lib::protocol::registry::{SelectableDevice, Selection};
 use dmm_shared::help::{Diagnosis, LinksSearched};
 use dmm_shared::l10n::{Localizer, arg_errors, help_layout};
-use dmm_shared::session::UnknownDevice;
+use dmm_shared::session::{self, MockOnly, UnknownDevice};
 use dmm_shared::tr;
 use l10n::{Localized, error_label, warning_label};
 use log::debug;
@@ -100,6 +100,8 @@ fn main() {
             arg_errors::exit(refused, l, &cli::hidden_subcommands())
         });
     // A replay or an import names its own meter; a saved pick is not it.
+    // Before any note about the pick: a refused run opens nothing.
+    refuse_mock_only_flags(l, &cli.command, pick.selection());
     let opens_the_pick = opens_the_pick(&cli.command);
     // An id a newer build saved, or a hand edit: detection stands in for
     // it, said where a meter is opened, as dmm-gui says it.
@@ -191,6 +193,45 @@ fn main() {
     if let Err(e) = result {
         report_failure(l, &e, selection, cli.adapter.as_deref());
     }
+}
+
+/// End the run, as clap ends one, when `command` carries a mock-only flag
+/// its session device can't take ([`session::mock_flags_fit`]): checked
+/// before anything opens, so a meter on a cable is never opened for one.
+/// A replay or an import names its own device.
+fn refuse_mock_only_flags(l: &Localizer, command: &Cmd, selection: Selection) {
+    let (subcommand, mock_mode, clock) = match command {
+        Cmd::Read(a) if a.replay.is_none() && a.import.is_none() => {
+            // `max` is for a replay alone, which `read` says itself.
+            let clock = match (a.mock_clock_scale, a.mock_clock_preseed) {
+                (Some(ClockScale::Factor(f)), _) => Some(("mock_clock_scale", f.to_string())),
+                (Some(ClockScale::Max), _) => None,
+                (None, Some(secs)) => Some(("mock_clock_preseed", secs.to_string())),
+                (None, None) => None,
+            };
+            ("read", a.mock_mode, clock)
+        }
+        Cmd::Get { mock_mode, .. } => ("get", *mock_mode, None),
+        Cmd::Set { mock_mode, .. } => ("set", *mock_mode, None),
+        _ => return,
+    };
+    let Err(flag) = session::mock_flags_fit(selection, mock_mode.is_some(), clock.is_some()) else {
+        return;
+    };
+    // The flag refused, as it was given: `mock_flags_fit` names only one.
+    let given = match flag {
+        MockOnly::MockMode => mock_mode.map(|mode| ("mock_mode", mode.label().to_string())),
+        MockOnly::Clock => clock,
+    };
+    let (id, value) = given.unwrap_or_default();
+    let mut cmd = cli::command(l);
+    cmd.build();
+    let reason = l.help().mock_only(flag).into_owned();
+    let refused = match cmd.find_subcommand(subcommand) {
+        Some(subcommand) => arg_errors::refused(subcommand, id, &value, reason),
+        None => arg_errors::refused(&cmd, id, &value, reason),
+    };
+    arg_errors::exit(refused, l, &cli::hidden_subcommands())
 }
 
 /// Whether `command` opens the meter `--device` or the settings file

@@ -49,6 +49,9 @@ stability-warning =
 mock-mode-list = Modes: { $modes }
 # $example is a command line.
 mock-mode-example = Example: { $example }
+# Why --mock-mode was refused: the session's device, typed with --device or
+# saved by dmm-gui, is not the mock.
+mock-mode-mock-only = --mock-mode only applies to the mock device. Re-run with --device mock, or without --mock-mode.
 mock-clock-mock-only = --mock-clock-scale and --mock-clock-preseed only apply to the mock device and to a replay. Re-run with --device mock or --replay, or without the clock flags.
 
 ## A link's short name, where the meter is already named: the GUI's

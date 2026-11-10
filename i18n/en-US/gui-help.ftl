@@ -21,7 +21,7 @@ dmm-gui--device =
     .help = Device to connect to [auto, ut61eplus, ut8803, ut171, ut181a, mock, ...]
 # dmm-gui --mock-mode
 dmm-gui--mock-mode =
-    .help = Pin mock device to a specific mode (implies --device mock)
+    .help = Pin mock device to a specific mode (mock device only)
 # dmm-gui --theme
 dmm-gui--theme =
     .help = Theme override

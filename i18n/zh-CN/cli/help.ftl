@@ -12,8 +12,6 @@
 
 # Before the list of devices.
 help-device-intro = 要连接的设备。
-# Before the list of the simulated meter's modes.
-help-mock-mode-intro = 将仿真设备固定在指定的测量模式，而不是自动循环。仅在使用 --device mock 时有效。未指定时，由设置文件中的 mock_mode (dmm-gui 的“仿真模式”) 固定。
 
 ## After the options of dmm-cli -h.
 

@@ -19,9 +19,6 @@ dmm-gui =
 # dmm-gui --device
 dmm-gui--device =
     .help = 接続するデバイス [auto, ut61eplus, ut8803, ut171, ut181a, mock, ...]
-# dmm-gui --mock-mode
-dmm-gui--mock-mode =
-    .help = シミュレーション デバイスを特定のモードに固定する (--device mock を指定したものとして扱う)
 # dmm-gui --theme
 dmm-gui--theme =
     .help = テーマを指定する (保存された設定より優先される)

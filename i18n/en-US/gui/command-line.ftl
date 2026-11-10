@@ -10,4 +10,4 @@
 command-line-device-intro = Device to connect to. Overrides saved settings for this session.
 # Before the list of the simulated meter's modes. "Mock mode" is the
 # setting's name in the GUI's Settings.
-command-line-mock-mode-intro = Pin the mock device to a specific measurement mode instead of auto-cycling. Implies --device mock, and overrides the saved Mock mode setting for this session.
+command-line-mock-mode-intro = Pin the mock device to a specific measurement mode instead of auto-cycling. Only with --device mock or the mock picked in Settings; overrides the saved Mock mode setting for this session.

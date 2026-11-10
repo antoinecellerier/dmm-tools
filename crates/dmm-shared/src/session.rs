@@ -70,6 +70,35 @@ pub fn resolve_device(
     })
 }
 
+/// A mock-only flag given for a session whose device is not simulated.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MockOnly {
+    /// `--mock-mode`, which pins a scenario of the mock alone.
+    MockMode,
+    /// `--mock-clock-scale` or `--mock-clock-preseed`, which bend session
+    /// time: a meter on a cable is paced by it, and its readings would be
+    /// stamped with instants it never produced.
+    Clock,
+}
+
+/// Whether the mock-only flags fit the session's device, `selection` as
+/// typed or saved: `--mock-mode` takes the mock, the clock flags any
+/// simulated meter. Nothing implies the mock, so Auto-detect refuses both.
+/// A replay is the session's device instead, and is not checked here.
+pub fn mock_flags_fit(selection: Selection, mock_mode: bool, clock: bool) -> Result<(), MockOnly> {
+    let device = match selection {
+        Selection::Device(device) => Some(device),
+        Selection::Auto => None,
+    };
+    if mock_mode && device.is_none_or(|d| d.id != dmm_lib::mock::MOCK.id) {
+        return Err(MockOnly::MockMode);
+    }
+    if clock && device.is_none_or(|d| d.requires_hardware) {
+        return Err(MockOnly::Clock);
+    }
+    Ok(())
+}
+
 /// The row `name` resolves to, `Some(None)` for `auto`, `None` when nothing
 /// answers to it. `auto` is [`registry::resolve_selection`]'s to decide, so
 /// both apps spell it as the library does.
@@ -149,5 +178,36 @@ mod tests {
         );
         // A typed name stands in for the file, whose id is then not news.
         assert_eq!(resolved(Some("mock"), Some(&file)), Ok(("mock", None)));
+    }
+
+    /// `--mock-mode` takes the mock, typed or saved; the clock flags any
+    /// simulated meter; neither a meter on a cable, nor Auto-detect.
+    #[test]
+    fn the_mock_only_flags_need_a_simulated_device() {
+        let pick = |name: &str| resolve_device(Some(name), None).unwrap().selection();
+        let saved = |name: &str| {
+            let file = saved(name);
+            resolve_device(None, Some(&file)).unwrap().selection()
+        };
+        for mock in [pick("mock"), saved("mock")] {
+            assert_eq!(mock_flags_fit(mock, true, true), Ok(()));
+        }
+        for zt5b in [pick("mock-zt5b"), saved("mock-zt5b")] {
+            assert_eq!(mock_flags_fit(zt5b, false, true), Ok(()));
+            assert_eq!(mock_flags_fit(zt5b, true, false), Err(MockOnly::MockMode));
+        }
+        for real in [
+            pick("ut61eplus"),
+            saved("ut61eplus"),
+            pick("auto"),
+            saved(""),
+            saved("nope"),
+        ] {
+            assert_eq!(mock_flags_fit(real, false, false), Ok(()));
+            assert_eq!(mock_flags_fit(real, true, false), Err(MockOnly::MockMode));
+            assert_eq!(mock_flags_fit(real, false, true), Err(MockOnly::Clock));
+            // The first flag the rule names is the one refused.
+            assert_eq!(mock_flags_fit(real, true, true), Err(MockOnly::MockMode));
+        }
     }
 }

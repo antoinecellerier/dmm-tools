@@ -8,6 +8,3 @@
 
 # Before the list of devices.
 command-line-device-intro = Dispositivo al que conectarse. En esta sesión anula la configuración guardada.
-# Before the list of the simulated meter's modes. "Mock mode" is the
-# setting's name in the GUI's Settings.
-command-line-mock-mode-intro = Fijar el dispositivo simulado en un modo de medición concreto en lugar de recorrer los modos automáticamente. Implica --device mock y, en esta sesión, anula el valor guardado de Modo simulado.

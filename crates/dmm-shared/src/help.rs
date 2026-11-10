@@ -196,7 +196,7 @@ impl<'a> Help<'a> {
     /// device list comes from the registry — the CLI's hardcoded copy had
     /// fallen four modes behind the mock. `intro` and `example` differ
     /// between the binaries: the CLI's flag sits on a subcommand, the GUI's
-    /// implies `--device mock`.
+    /// on the program.
     pub fn mock_mode_help(self, intro: &str, example: &str) -> String {
         format!(
             "{intro}\n\n{}\n\n{}",
@@ -205,17 +205,16 @@ impl<'a> Help<'a> {
         )
     }
 
-    /// What both binaries answer when the clock flags meet a hardware
-    /// device.
+    /// What both binaries answer when a mock-only flag meets a session
+    /// device that is not simulated ([`crate::session::mock_flags_fit`]).
     ///
-    /// `--mock-clock-scale` and `--mock-clock-preseed` bend session time,
-    /// and a real meter is paced by USB: honouring them there would stamp
-    /// readings with instants the meter never produced. A replay takes them
-    /// too — its readings are already recorded, so time can be run through
-    /// them at any speed. Shared so the CLI and the GUI refuse with the same
-    /// sentence.
-    pub fn mock_clock_mock_only(self) -> Cow<'a, str> {
-        tr!(self.0, "mock-clock-mock-only")
+    /// A replay takes the clock flags too: its readings are already
+    /// recorded, so time can be run through them at any speed.
+    pub fn mock_only(self, flag: crate::session::MockOnly) -> Cow<'a, str> {
+        match flag {
+            crate::session::MockOnly::MockMode => tr!(self.0, "mock-mode-mock-only"),
+            crate::session::MockOnly::Clock => tr!(self.0, "mock-clock-mock-only"),
+        }
     }
 
     /// The name of a transport's link

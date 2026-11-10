@@ -229,6 +229,38 @@ fn an_unknown_saved_device_is_detected_instead() {
     assert_eq!(code, Some(2));
 }
 
+/// The mock-only flags need the mock as the run's device, typed or saved:
+/// under Auto-detect, nothing implies it, and they are refused before any
+/// cable is opened, against the flag given.
+#[test]
+fn a_mock_only_flag_needs_the_mock() {
+    for (args, flag) in [
+        (
+            &["read", "--mock-mode", "dcv"][..],
+            "'--mock-mode <MOCK_MODE>'",
+        ),
+        (
+            &["get", "mode", "--mock-mode", "dcv"][..],
+            "'--mock-mode <MOCK_MODE>'",
+        ),
+        (
+            &["read", "--mock-clock-preseed", "5"][..],
+            "'--mock-clock-preseed <MOCK_CLOCK_PRESEED>'",
+        ),
+    ] {
+        let out = dmm_cli()
+            .args(["--lang", "en", "--no-bluetooth"])
+            .args(args)
+            .output()
+            .expect("run dmm-cli");
+        let stderr = String::from_utf8(out.stderr).expect("utf-8 stderr");
+        assert!(stderr.starts_with("error: invalid value"), "{stderr}");
+        assert!(stderr.contains(flag), "{stderr}");
+        assert!(stderr.contains("only appl"), "{stderr}");
+        assert_eq!(out.status.code(), Some(2), "{stderr}");
+    }
+}
+
 /// A command name the meter doesn't have is answered with the ones it
 /// takes, on the error line.
 #[test]

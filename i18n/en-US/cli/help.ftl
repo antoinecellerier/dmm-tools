@@ -13,7 +13,7 @@
 # Before the list of devices.
 help-device-intro = Device to connect to.
 # Before the list of the simulated meter's modes.
-help-mock-mode-intro = Pin the mock device to a specific measurement mode instead of auto-cycling. Only effective with --device mock. Without it, the settings file's mock_mode (dmm-gui's Mock mode) pins it.
+help-mock-mode-intro = Pin the mock device to a specific measurement mode instead of auto-cycling. Only with --device mock, or the mock saved by dmm-gui. Without it, the settings file's mock_mode (dmm-gui's Mock mode) pins it.
 
 ## After the options of dmm-cli -h.
 

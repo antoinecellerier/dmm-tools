@@ -158,6 +158,8 @@ cmd_run() {
 	done
 	# With the hardware grant and no --device, the app opens what settings.json
 	# names, as a user's launch does — no "(--device)" mark on the Device row.
+	# The mock-only flags then need that saved device to be simulated: the app
+	# refuses them on anything else, as nothing implies the mock.
 	if [ -z "$dev" ] && [ "$replay" = 0 ] && [ "${VERIFY_GUI_ALLOW_HW:-0}" != 1 ]; then
 		args=(--device mock ${args[@]+"${args[@]}"})
 	elif [ -n "$dev" ] && [ "${VERIFY_GUI_ALLOW_HW:-0}" != 1 ]; then

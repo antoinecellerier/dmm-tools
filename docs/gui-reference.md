@@ -718,7 +718,7 @@ another value there clears the override and saves the new one.
 | `--device <ID>` | Meter model to connect to (e.g., `ut61eplus`, `ut181a`, `mock`), or `auto` (default). `--help` lists them. |
 | `--adapter <SERIAL_PATH_OR_ADDRESS>` | Select a specific adapter when more than one is reachable. Use the serial number or HID path of a USB cable, or the address of a Bluetooth adapter or meter, from `dmm-cli list` output. |
 | `--no-bluetooth` | Turn off Bluetooth scanning for this session, whatever **Look for Bluetooth devices** is set to. |
-| `--mock-mode <MODE>` | Pin mock device to a specific mode (only with `--device mock`). Modes: dcv, acv, ohm, cap, hz, temp, dcma, ohm-ol, ncv, acv-hz, temp2, temp-diff, temp-diff-rev, noise. |
+| `--mock-mode <MODE>` | Pin mock device to a specific mode (only with `--device mock`, or the mock picked in Settings). Modes: dcv, acv, ohm, cap, hz, temp, dcma, ohm-ol, ncv, acv-hz, temp2, temp-diff, temp-diff-rev, noise. |
 | `--replay <FILE>` | Play back a replay file — saved by [Export…](#recording) or `dmm-cli read --format replay` — instead of connecting to a meter. The last reading stays on screen once the recording has ended. |
 | `--import <FILE>` | Open an exported CSV, JSON or replay file, with its markers, instead of connecting to a meter. Connect leaves it for a meter. |
 | `--theme <THEME>` | Theme override: `dark`, `light`, `system`, or a named theme such as `midnight`. |

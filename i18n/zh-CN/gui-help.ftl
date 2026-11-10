@@ -19,9 +19,6 @@ dmm-gui =
 # dmm-gui --device
 dmm-gui--device =
     .help = 要连接的设备 [auto, ut61eplus, ut8803, ut171, ut181a, mock, ...]
-# dmm-gui --mock-mode
-dmm-gui--mock-mode =
-    .help = 将仿真设备固定在指定模式 (同时启用 --device mock)
 # dmm-gui --theme
 dmm-gui--theme =
     .help = 覆盖主题设置

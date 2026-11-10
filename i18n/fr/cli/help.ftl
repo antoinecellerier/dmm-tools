@@ -12,8 +12,6 @@
 
 # Before the list of devices.
 help-device-intro = Appareil auquel se connecter.
-# Before the list of the simulated meter's modes.
-help-mock-mode-intro = Fixer l’appareil simulé sur un mode de mesure précis au lieu de parcourir les modes automatiquement. N’a d’effet qu’avec --device mock. Sans cette option, c’est le mock_mode du fichier de paramètres (le mode simulé de dmm-gui) qui le fixe.
 
 ## After the options of dmm-cli -h.
 

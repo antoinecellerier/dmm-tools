@@ -19,7 +19,7 @@ use dmm_lib::clock::ClockFlagError;
 use dmm_lib::protocol::registry;
 use dmm_lib::replay::Replay;
 use dmm_shared::l10n::{Localizer, arg_errors, clap_help, help_layout};
-use dmm_shared::session::UnknownDevice;
+use dmm_shared::session::{self, MockOnly, UnknownDevice};
 use dmm_shared::tr;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -52,7 +52,7 @@ struct Args {
     #[arg(long)]
     device: Option<String>,
 
-    /// Pin mock device to a specific mode (implies --device mock)
+    /// Pin mock device to a specific mode (mock device only)
     #[arg(long, value_parser = dmm_shared::help::MockModeParser)]
     mock_mode: Option<dmm_lib::mock::MockMode>,
 
@@ -83,21 +83,25 @@ struct Args {
 
     /// Open an exported CSV, JSON or replay file, with its markers, instead
     /// of connecting to a meter
-    #[arg(long, value_name = "FILE", conflicts_with_all = ["device", "mock_mode", "replay"])]
+    #[arg(
+        long,
+        value_name = "FILE",
+        conflicts_with_all = ["device", "mock_mode", "replay", "mock_clock_scale", "mock_clock_preseed"]
+    )]
     import: Option<PathBuf>,
 
     /// Print a shell completion script and exit
     #[arg(long, value_enum, value_name = "SHELL", exclusive = true)]
     completions: Option<clap_complete::Shell>,
 
-    /// Run session time at FACTOR times real time (mock only, implies
-    /// --device mock). Hidden: a contributor tool for screenshots and
+    /// Run session time at FACTOR times real time (a simulated meter or a
+    /// replay only). Hidden: a contributor tool for screenshots and
     /// performance runs, documented in docs/development.md.
     #[arg(long, hide = true, value_name = "FACTOR", value_parser = parse_clock_scale)]
     mock_clock_scale: Option<f64>,
 
-    /// Start the session with SECS of history, produced instantly (mock
-    /// only, implies --device mock). Hidden for the same reason as
+    /// Start the session with SECS of history, produced instantly (a
+    /// simulated meter or a replay only). Hidden for the same reason as
     /// --mock-clock-scale.
     #[arg(long, hide = true, value_name = "SECS")]
     mock_clock_preseed: Option<f64>,
@@ -194,7 +198,7 @@ fn theme_values(user: &[theme::named::NamedTheme]) -> Vec<String> {
 fn build_mock_mode_help(l: &Localizer) -> String {
     l.help().mock_mode_help(
         &tr!(l, "command-line-mock-mode-intro"),
-        "dmm-gui --mock-mode dcv",
+        "dmm-gui --device mock --mock-mode dcv",
     )
 }
 
@@ -332,19 +336,24 @@ fn load_replay(path: PathBuf, draws_keys: bool, l: &Localizer) -> Result<ReplayS
 
 /// Resolve the device and the session clock from the flags that decide them.
 ///
-/// Split out of [`parse_args`] because it holds three rules worth testing on
-/// their own: the clock flags are validated like `--theme`, they imply
-/// `--device mock` the way `--mock-mode` does, and they are refused outright
-/// on a hardware device, where bent session time would stamp readings with
-/// instants a USB-paced meter never produced.
+/// Split out of [`parse_args`] because it holds two rules worth testing on
+/// their own: the clock flags are validated like `--theme`, and the
+/// mock-only flags are refused unless the session's device is simulated
+/// ([`session::mock_flags_fit`]): a bent session clock would stamp a
+/// USB-paced meter's readings with instants it never produced, and nothing
+/// implies the mock.
 ///
-/// `device` is the canonical id `--device` resolved to, `None` when the flag
-/// was not given. `replay_device` is the meter a `--replay` file names, which
-/// clap has already refused `--device` alongside. A refusal is worded in
-/// `l`'s language.
+/// `typed` is the canonical id `--device` resolved to, `None` when the flag
+/// was not given; `session` is the device the session opens, typed or
+/// saved. `replay_device` is the meter a `--replay` file names, which clap
+/// has already refused `--device` and `--mock-mode` alongside: it is the
+/// session's device, and takes the clock flags. The id returned is the one
+/// to pin for the session, the replay's or the typed one. A refusal is
+/// worded in `l`'s language.
 fn resolve_device_and_clock(
     l: &Localizer,
-    device: Option<String>,
+    typed: Option<String>,
+    session: registry::Selection,
     replay_device: Option<&'static str>,
     mock_mode_given: bool,
     scale: Option<f64>,
@@ -357,44 +366,26 @@ fn resolve_device_and_clock(
         },
         reason: l.clock_flag(&e),
     })?;
-
-    // Auto counts as hardware: it names no meter, but the meter it finds is a
-    // real one, and bending session time under it would stamp readings with
-    // instants no USB-paced meter produced. A replay names a hardware meter
-    // too, but nothing is on the cable and the file paces itself, so the
-    // clock flags apply to it as they do to the mock.
-    let hardware = replay_device.is_none()
-        && match device.as_deref().and_then(registry::resolve_selection) {
-            Some(registry::Selection::Auto) => true,
-            Some(registry::Selection::Device(d)) => d.requires_hardware,
-            None => false,
-        };
-    if !clock.is_real() && hardware {
-        return Err(Refusal {
-            id: "device",
-            reason: l.help().mock_clock_mock_only().into_owned(),
-        });
+    if let Some(id) = replay_device {
+        return Ok((Some(id.to_string()), clock));
     }
-
-    // A replay is the session's device; failing that, --mock-mode and either
-    // clock flag each imply --device mock, so `dmm-gui --mock-clock-preseed
-    // 90` is a complete invocation.
-    let device = match (replay_device, device) {
-        (Some(id), _) => Some(id.to_string()),
-        (None, d @ Some(_)) => d,
-        (None, None) if mock_mode_given || !clock.is_real() => {
-            Some(dmm_lib::mock::MOCK.id.to_string())
-        }
-        (None, None) => None,
-    };
-    Ok((device, clock))
+    let clock_given = scale.is_some() || preseed.is_some();
+    session::mock_flags_fit(session, mock_mode_given, clock_given).map_err(|flag| Refusal {
+        id: match flag {
+            MockOnly::MockMode => "mock_mode",
+            MockOnly::Clock if scale.is_some() => "mock_clock_scale",
+            MockOnly::Clock => "mock_clock_preseed",
+        },
+        reason: l.help().mock_only(flag).into_owned(),
+    })?;
+    Ok((typed, clock))
 }
 
 /// The settings file's device no entry answers to, when a Connect in this
-/// session detects the meter in its place: not when `--device`, a replay or
-/// the mock-only flags name the session's meter. An import's session
-/// connects to the saved device on its first Connect, which says so then.
-/// `device` is the one [`resolve_device_and_clock`] settled on.
+/// session detects the meter in its place: not when `--device` or a replay
+/// names the session's meter. An import's session connects to the saved
+/// device on its first Connect, which says so then. `device` is the one
+/// [`resolve_device_and_clock`] settled on.
 fn unknown_saved_device(
     pick: dmm_shared::session::DevicePick,
     device: Option<&str>,
@@ -481,6 +472,7 @@ fn parse_args(l: &Localizer, saved: &dmm_shared::SharedSettings) -> CliOverrides
     let (device, clock) = resolve_device_and_clock(
         l,
         device,
+        pick.selection(),
         replay.as_ref().map(|source| source.replay.listing.id()),
         args.mock_mode.is_some(),
         args.mock_clock_scale,
@@ -751,9 +743,28 @@ mod tests {
         };
         let pick = || dmm_shared::session::resolve_device(None, Some(&saved)).unwrap();
         assert_eq!(unknown_saved_device(pick(), None).as_deref(), Some("ut62"));
-        // `--device`, a replay or the mock-only flags name the meter instead.
+        // `--device` or a replay names the meter instead.
         assert_eq!(unknown_saved_device(pick(), Some("mock")), None);
         assert_eq!(unknown_saved_device(pick(), Some("ut61eplus")), None);
+    }
+
+    /// The device and clock for `typed` (`--device`) over `saved` (the
+    /// settings file's `device_family`), with `--mock-mode` given or not.
+    fn resolve_with(
+        typed: Option<&str>,
+        saved: &str,
+        mock_mode: bool,
+        scale: Option<f64>,
+        preseed: Option<f64>,
+    ) -> Result<(Option<String>, dmm_lib::Clock), Refusal> {
+        let l = crate::l10n::english();
+        let file = dmm_shared::SharedSettings {
+            device_family: saved.to_string(),
+            ..Default::default()
+        };
+        let pick = session::resolve_device(typed, Some(&file)).expect("a known device");
+        let typed = typed.map(|_| pick.id().to_string());
+        resolve_device_and_clock(&l, typed, pick.selection(), None, mock_mode, scale, preseed)
     }
 
     fn resolve(
@@ -761,8 +772,7 @@ mod tests {
         scale: Option<f64>,
         preseed: Option<f64>,
     ) -> Result<(Option<String>, dmm_lib::Clock), Refusal> {
-        let l = crate::l10n::english();
-        resolve_device_and_clock(&l, device.map(str::to_string), None, false, scale, preseed)
+        resolve_with(device, "", false, scale, preseed)
     }
 
     /// As [`resolve`], for a session playing back a recording of `device`.
@@ -771,17 +781,15 @@ mod tests {
         preseed: Option<f64>,
     ) -> Result<(Option<String>, dmm_lib::Clock), Refusal> {
         let l = crate::l10n::english();
-        resolve_device_and_clock(&l, None, Some(device), false, None, preseed)
+        let auto = registry::Selection::Auto;
+        resolve_device_and_clock(&l, None, auto, Some(device), false, None, preseed)
     }
 
-    /// The refusal of the clock flags on a hardware device.
-    fn mock_only() -> Refusal {
+    /// The refusal of a mock-only flag, against the flag `id`.
+    fn mock_only(id: &'static str, flag: MockOnly) -> Refusal {
         Refusal {
-            id: "device",
-            reason: crate::l10n::english()
-                .help()
-                .mock_clock_mock_only()
-                .into_owned(),
+            id,
+            reason: crate::l10n::english().help().mock_only(flag).into_owned(),
         }
     }
 
@@ -792,15 +800,44 @@ mod tests {
         assert!(clock.is_real());
     }
 
-    /// `dmm-gui --mock-clock-preseed 90` has to be a complete invocation, the
-    /// way `--mock-mode dcv` is.
+    /// Nothing implies the mock: a mock-only flag with nothing named is
+    /// refused against that flag, as under Auto-detect.
     #[test]
-    fn a_clock_flag_alone_implies_the_mock_device() {
-        for (scale, preseed) in [(Some(30.0), None), (None, Some(90.0))] {
-            let (device, clock) = resolve(None, scale, preseed).expect("clock flag");
-            assert_eq!(device.as_deref(), Some("mock"));
-            assert!(!clock.is_real());
-        }
+    fn a_mock_only_flag_alone_is_refused() {
+        assert_eq!(
+            resolve(None, Some(30.0), None).unwrap_err(),
+            mock_only("mock_clock_scale", MockOnly::Clock)
+        );
+        assert_eq!(
+            resolve(None, None, Some(90.0)).unwrap_err(),
+            mock_only("mock_clock_preseed", MockOnly::Clock)
+        );
+        assert_eq!(
+            resolve_with(None, "", true, None, None).unwrap_err(),
+            mock_only("mock_mode", MockOnly::MockMode)
+        );
+    }
+
+    /// A saved mock is the session's device as a typed one is, and pins
+    /// nothing for the session: the Settings row keeps naming it.
+    #[test]
+    fn a_saved_mock_takes_the_mock_only_flags() {
+        let (device, clock) =
+            resolve_with(None, "mock", true, None, Some(90.0)).expect("saved mock");
+        assert_eq!(device, None);
+        assert_eq!(clock.preseed(), std::time::Duration::from_secs(90));
+        // Another simulated meter takes the clock flags, not --mock-mode.
+        assert!(resolve_with(None, "mock-zt5b", false, Some(5.0), None).is_ok());
+        assert_eq!(
+            resolve_with(None, "mock-zt5b", true, None, None).unwrap_err(),
+            mock_only("mock_mode", MockOnly::MockMode)
+        );
+        // A saved meter on a cable refuses them, unless --device names the mock.
+        assert_eq!(
+            resolve_with(None, "ut61eplus", true, None, None).unwrap_err(),
+            mock_only("mock_mode", MockOnly::MockMode)
+        );
+        assert!(resolve_with(Some("mock"), "ut61eplus", true, Some(5.0), None).is_ok());
     }
 
     #[test]
@@ -816,11 +853,11 @@ mod tests {
     fn a_hardware_device_refuses_the_clock_flags() {
         assert_eq!(
             resolve(Some("ut61eplus"), None, Some(90.0)).unwrap_err(),
-            mock_only()
+            mock_only("mock_clock_preseed", MockOnly::Clock)
         );
         assert_eq!(
             resolve(Some("ut61eplus"), Some(30.0), None).unwrap_err(),
-            mock_only()
+            mock_only("mock_clock_scale", MockOnly::Clock)
         );
         // Without the flags the same device is of course fine.
         assert!(resolve(Some("ut61eplus"), None, None).is_ok());
@@ -833,7 +870,7 @@ mod tests {
     fn auto_detect_is_hardware_for_the_clock_flags() {
         assert_eq!(
             resolve(Some("auto"), None, Some(90.0)).unwrap_err(),
-            mock_only()
+            mock_only("mock_clock_preseed", MockOnly::Clock)
         );
         let (device, clock) = resolve(Some("auto"), None, None).expect("no clock flags");
         assert_eq!(device.as_deref(), Some("auto"));
@@ -857,6 +894,26 @@ mod tests {
         let (device, clock) = resolve_replay("ut181a", None).expect("replay");
         assert_eq!(device.as_deref(), Some("ut181a"));
         assert!(clock.is_real());
+    }
+
+    /// An import is loaded whole, not paced on the session clock, so the
+    /// clock flags have nothing to bend: clap refuses them, as dmm-cli does.
+    #[test]
+    fn an_import_refuses_the_clock_flags() {
+        for extra in [["--mock-clock-scale", "5"], ["--mock-clock-preseed", "5"]] {
+            let err = Args::try_parse_from(
+                ["dmm-gui", "--import", "readings.csv"]
+                    .into_iter()
+                    .chain(extra),
+            )
+            .err()
+            .expect("an import is not paced");
+            assert_eq!(
+                err.kind(),
+                clap::error::ErrorKind::ArgumentConflict,
+                "{err}"
+            );
+        }
     }
 
     /// And the refusal is clap's, so it is spelled out before anything opens.

@@ -371,8 +371,9 @@ report](#triaging-a-capture-report).
 **Session clock.** `--mock-clock-preseed <SECS>` hands out that many seconds
 of session time instantly, and `--mock-clock-scale <FACTOR>` runs what follows
 at `FACTOR` times real speed. They let a run start with history rather than
-wait for it. Both apply to the mock only: in `dmm-gui` either one implies
-`--device mock`, and an explicit hardware `--device` is refused.
+wait for it. Both apply only to a simulated meter, named with `--device` or
+saved in Settings, and to a replay; a meter on a cable, Auto-detect and
+`--import` refuse them, as anything but the mock refuses `--mock-mode`.
 
 ```sh
 .claude/skills/verify-gui/scripts/gui-display.sh run --mock-mode dcv --mock-clock-preseed 90
@@ -381,9 +382,10 @@ wait for it. Both apply to the mock only: in `dmm-gui` either one implies
 The first `shot` then shows 90 s of readings. Pin a mock mode as above: the
 auto-cycling mock changes scenario on its own, and the graph restarts on each
 change. The burst is spent once per process, so a reconnect does not replay
-it. `dmm-cli read` takes the same two flags, with `--device mock` spelled out.
-`--replay <FILE>` takes them in place of `--mock-mode`, and opens the
-recording at the instant the preseed names.
+it (the script adds `--device mock` when no device is named). `dmm-cli read`
+takes the same two flags, with `--device mock` or a saved mock. `--replay
+<FILE>` takes them in place of `--mock-mode`, and opens the recording at the
+instant the preseed names.
 
 **Buttons during a replay.** A `dmm-gui --replay` session draws no remote row,
 and its mode and range stay plain labels, as a click would only be refused. `--replay-draws-keys`

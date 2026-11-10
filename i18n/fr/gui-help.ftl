@@ -19,9 +19,6 @@ dmm-gui =
 # dmm-gui --device
 dmm-gui--device =
     .help = Appareil auquel se connecter [auto, ut61eplus, ut8803, ut171, ut181a, mock, ...]
-# dmm-gui --mock-mode
-dmm-gui--mock-mode =
-    .help = Fixer l’appareil simulé sur un mode précis (implique --device mock)
 # dmm-gui --theme
 dmm-gui--theme =
     .help = Thème à utiliser à la place du thème enregistré

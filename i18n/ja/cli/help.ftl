@@ -12,8 +12,6 @@
 
 # Before the list of devices.
 help-device-intro = 接続するデバイス。
-# Before the list of the simulated meter's modes.
-help-mock-mode-intro = シミュレーション デバイスの測定モードを、自動で切り替えずに特定のモードに固定する。--device mock を指定したときのみ有効。このオプションを省略すると、設定ファイルの mock_mode (dmm-gui のシミュレーション モード) で固定される。
 
 ## After the options of dmm-cli -h.
 

@@ -11,6 +11,7 @@
 - **A ZOTEK meter sending another model's data names the model to pick** — the notice only reached the log.
 - **dmm-gui says when it took the first of several Bluetooth devices** — unless `--adapter` named it.
 - **dmm-gui says when the settings file names a device it doesn't know** — it detected the meter without saying why.
+- **`--mock-mode` needs `--device mock` or the mock picked in Settings** — it switched to the mock on its own.
 
 ### CLI
 
@@ -20,6 +21,7 @@
 - **dmm-cli's connection warnings come in the chosen language** — several USB cables or Bluetooth adapters, a meter naming or sending another model, unknown data.
 - **dmm-cli says which meter is picked when its data won't read**
 - **"No USB cable found" says when Bluetooth wasn't searched** — and how to switch the search on.
+- **`--mock-mode` with a real meter or Auto-detect is refused** — it was ignored.
 
 ### Bug fixes
 

@@ -151,13 +151,12 @@ impl ReadPlan {
                     // No cable to pace this run, so the clock flags apply as
                     // they do to the mock.
                     Some(path) => Source::Replay(path),
-                    None => {
-                        refuse_clock_on_hardware(selection, &clock)?;
-                        Source::Meter(MeterSource {
-                            reconnect: !no_reconnect,
-                            mock_mode,
-                        })
-                    }
+                    // `main` has refused the clock flags for a device on a
+                    // cable.
+                    None => Source::Meter(MeterSource {
+                        reconnect: !no_reconnect,
+                        mock_mode,
+                    }),
                 }
             }
         };
@@ -463,8 +462,6 @@ pub(crate) enum Refused {
     /// A `--mock-clock-*` flag as typed, and why its value can't be used,
     /// worded.
     Clock(&'static str, String),
-    /// A bent session clock on a meter paced by its cable.
-    ClockNeedsMock,
     /// `--device` alongside a `--replay`.
     ReplayNamesItsDevice,
     /// `--device` alongside an `--import`.
@@ -489,7 +486,6 @@ impl crate::l10n::Localized for Refused {
                 flags = *flag,
                 reason = reason.as_str()
             ),
-            Self::ClockNeedsMock => l.help().mock_clock_mock_only(),
             Self::ReplayNamesItsDevice => tr!(
                 l,
                 "read-replay-names-its-device",
@@ -648,18 +644,6 @@ fn session_clock(
         };
         Refused::Clock(flag, l.clock_flag(&e))
     })
-}
-
-/// Refuse a bent session clock on a device that is paced by USB.
-///
-/// Checked before the device is opened, so a hardware `--device` with the
-/// clock flags fails with no meter attached and nothing to plug in — and so
-/// does Auto, which has a cable to open before it knows anything at all.
-fn refuse_clock_on_hardware(selection: Selection, clock: &dmm_lib::Clock) -> Result<(), Refused> {
-    if requires_hardware(selection) && !clock.is_real() {
-        return Err(Refused::ClockNeedsMock);
-    }
-    Ok(())
 }
 
 /// One `read` run's output side, whatever the readings come from: the file
@@ -1380,7 +1364,6 @@ fn unreachable_replay_header() -> format::ReplayHeader {
 mod tests {
     use super::*;
     use crate::cli::{Cli, Cmd, ReadArgs};
-    use crate::test_fixtures::selection;
     use clap::Parser;
     use dmm_lib::protocol::registry;
 
@@ -1469,27 +1452,6 @@ mod tests {
             .expect_err("negative preseed")
             .to_string();
         assert!(preseed.starts_with("--mock-clock-preseed: "), "{preseed}");
-    }
-
-    /// A bent clock on a USB-paced meter would stamp readings with instants
-    /// the meter never produced, so `read` refuses before it opens anything.
-    /// Auto is one of those: it has a cable to open either way.
-    #[test]
-    fn clock_flags_are_refused_on_a_hardware_device() {
-        let mock = selection("mock");
-        let virtual_clock = dmm_lib::Clock::from_flags(None, Some(90.0)).expect("valid preseed");
-
-        for hardware in [selection("ut61eplus"), selection("auto")] {
-            let err = refuse_clock_on_hardware(hardware, &virtual_clock)
-                .expect_err("a hardware device must refuse a virtual clock");
-            assert_eq!(
-                err.to_string(),
-                crate::l10n::get().help().mock_clock_mock_only()
-            );
-            assert!(refuse_clock_on_hardware(hardware, &dmm_lib::Clock::real()).is_ok());
-        }
-
-        assert!(refuse_clock_on_hardware(mock, &virtual_clock).is_ok());
     }
 
     /// Without `--format`, the file's extension says what to write; an

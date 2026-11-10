@@ -8,6 +8,3 @@
 
 # Before the list of devices.
 command-line-device-intro = 要连接的设备。在本次会话中覆盖已保存的设置。
-# Before the list of the simulated meter's modes. "Mock mode" is the
-# setting's name in the GUI's Settings.
-command-line-mock-mode-intro = 将仿真设备固定在指定的测量模式，不再自动循环。同时启用 --device mock，并在本次会话中覆盖已保存的“仿真模式”设置。
