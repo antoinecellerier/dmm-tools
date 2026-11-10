@@ -14,8 +14,8 @@ use crate::protocol::registry::{DEVICES, SelectableDevice};
 use crate::protocol::unrecognised::report_unknown;
 use crate::protocol::{
     Choice, DeviceFamily, DeviceProfile, Evidence, Fingerprint, MeterKey, MeterKeys, Probing,
-    Protocol, Setting, Stability, check_len, cycle, display_number, spells_ol, unknown_mode,
-    unknown_mode16, unsupported_setting,
+    Protocol, Setting, Stability, check_len, cycle, display_number, spells_ol, unknown_byte_mode,
+    unknown_mode, unsupported_setting,
 };
 use crate::transport::{Link, Transport};
 use command::Command;
@@ -699,14 +699,10 @@ impl cycle::CycleMeter for Ut61PlusProtocol {
     }
 
     fn mode_label(&self, mode: u16) -> Cow<'static, str> {
-        match u8::try_from(mode) {
-            Ok(byte) => match Mode::from_byte(byte) {
-                Some(m) => Cow::Borrowed(m.as_static_str()),
-                None => unknown_mode(byte),
-            },
-            // This family's mode field is one byte wide; anything wider than
-            // that never came from a meter.
-            Err(_) => unknown_mode16(mode),
+        // This family's mode field is one byte wide.
+        match u8::try_from(mode).ok().and_then(Mode::from_byte) {
+            Some(m) => Cow::Borrowed(m.as_static_str()),
+            None => unknown_byte_mode(mode),
         }
     }
 

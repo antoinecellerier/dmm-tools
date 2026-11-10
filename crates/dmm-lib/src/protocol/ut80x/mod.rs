@@ -2091,7 +2091,7 @@ raw_payload=11"#
     fn ut803_unknown_mode_permissive() {
         let p = ut803_payload(&[1, 0, 0, 0], 0, 0x7, 0x0, 0x0, 0x0);
         let m = parse_measurement_ut803(&p).unwrap();
-        assert!(m.mode.starts_with("Unknown"));
+        assert!(crate::protocol::is_unknown_mode(&m.mode));
     }
 
     #[test]

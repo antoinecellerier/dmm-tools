@@ -1239,7 +1239,7 @@ pub(crate) mod test_support {
             let payload = make_payload::<M>(code, 0x30, b"  1.234", &zero_status::<M>());
             let m = parse_measurement::<M>(&payload).unwrap();
             assert!(
-                !m.mode.starts_with("Unknown"),
+                !crate::protocol::is_unknown_mode(&m.mode),
                 "function {code:#04x} should be known"
             );
         }

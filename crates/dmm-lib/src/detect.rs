@@ -17,6 +17,7 @@
 //! lives in `docs/detection-design.md`.
 
 use crate::error::{Error, Result};
+use crate::protocol::framing::MAX_EMPTY_READS;
 use crate::protocol::registry::{self, SelectableDevice};
 use crate::protocol::{DeviceFamily, Evidence, Fingerprint, Probing};
 use crate::transport::Transport;
@@ -56,12 +57,6 @@ const LISTEN_ONLY_WINDOW: Duration = Duration::from_millis(1500);
 /// deadline rather than on a single read, and a frame split across reads has
 /// to be re-classified promptly.
 const READ_TIMEOUT_MS: i32 = 50;
-
-/// Guard against a transport that returns empty reports without blocking —
-/// `MockTransport` does exactly that once drained, and the deadline alone
-/// would leave us spinning on it. Same value and reason as
-/// `framing::read_uart_bytes`.
-const MAX_EMPTY_READS: usize = 256;
 
 /// Buffer cap. A wrong baud rate or a noisy line can deliver garbage forever;
 /// the oldest bytes are dropped so growth stays bounded.

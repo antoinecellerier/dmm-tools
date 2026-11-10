@@ -36,7 +36,10 @@ pub enum Need {
 }
 
 impl Need {
-    /// Every need, in the order the up-front checklist lists them.
+    /// Every need, in the order the up-front checklist lists them. A new
+    /// variant goes here as well as in [`Need::label`], whose match the
+    /// compiler holds to every variant: one missing here drops out of the
+    /// checklist and `--plan`'s names.
     pub const ALL: [Need; 10] = [
         Need::ShortedLeads,
         Need::DcSource,
@@ -128,16 +131,9 @@ impl CaptureStep {
         samples: usize,
     ) -> Self {
         Self {
-            id,
-            instruction,
             command: Some(command),
             samples,
-            verified: false,
-            gate: false,
-            expect: None,
-            needs: &[],
-            wait_for_enter: false,
-            starts_from: None,
+            ..Self::basic(id, instruction)
         }
     }
 

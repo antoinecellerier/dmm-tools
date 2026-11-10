@@ -111,10 +111,7 @@ impl Expect {
     pub const fn mode(label: &'static str) -> Self {
         Self {
             mode: Some(label),
-            flags: &[],
-            range: None,
-            value: None,
-            at_least: None,
+            ..Self::new()
         }
     }
 

@@ -438,7 +438,10 @@ mod tests {
                     f.base
                 );
                 let label = decode_mode_word(word);
-                assert!(!label.starts_with("Unknown"), "{word:#06x} -> {label}");
+                assert!(
+                    !crate::protocol::is_unknown_mode(&label),
+                    "{word:#06x} -> {label}"
+                );
             }
         }
     }

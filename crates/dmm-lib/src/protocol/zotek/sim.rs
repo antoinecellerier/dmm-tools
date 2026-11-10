@@ -804,7 +804,11 @@ mod tests {
             for step in 0..260 {
                 clock.advance(secs(0.25));
                 let m = read(&mut mock);
-                assert!(!m.mode.starts_with("Unknown"), "{keys:?}: {}", m.mode);
+                assert!(
+                    !crate::protocol::is_unknown_mode(&m.mode),
+                    "{keys:?}: {}",
+                    m.mode
+                );
                 if step == 100 || step == 110 {
                     press(&mut mock, "hold");
                 }

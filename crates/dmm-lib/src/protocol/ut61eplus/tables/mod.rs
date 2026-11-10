@@ -182,7 +182,7 @@ mod tests {
     fn label(mode: u16) -> Cow<'static, str> {
         match u8::try_from(mode).ok().and_then(Mode::from_byte) {
             Some(mode) => Cow::Borrowed(mode.as_static_str()),
-            None => Cow::Owned(format!("Unknown({mode:#04x})")),
+            None => crate::protocol::unknown_byte_mode(mode),
         }
     }
 

@@ -45,12 +45,19 @@ const MAX_READS_PER_FRAME: usize = 160;
 /// stream we can't parse doesn't grow `rx_buf` without bound.
 const MAX_RX_BUF: usize = 4096;
 
+/// Empty reads a read loop takes before giving up early. Every empty report
+/// costs a USB poll interval (~10 ms), so the deadline is normally what stops
+/// a loop; this guards against a transport that returns empty without
+/// blocking — `MockTransport` does exactly that once drained — which would
+/// otherwise busy-spin until the deadline.
+pub(crate) const MAX_EMPTY_READS: usize = 256;
+
 /// How long a drain waits for the next queued frame, real time. Not zero:
 /// the Bluetooth transport's runtime only moves notifications from the
 /// platform's socket onto its queue while a read is waiting, and a zero wait
 /// gives it no turn to. Anything arriving within it counts as already
 /// queued.
-pub(crate) const DRAIN_WAIT_MS: i32 = 10;
+const DRAIN_WAIT_MS: i32 = 10;
 
 /// Input reports a HID queue keeps for a reader that is not reading: the
 /// hidraw ring on Linux, hidapi's buffer on Windows. More empty reads in a
@@ -219,12 +226,6 @@ pub(crate) fn read_uart_bytes(
     buf: &mut [u8],
     deadline: Instant,
 ) -> Result<usize> {
-    // Every empty report costs a USB poll interval (~10 ms), so the deadline
-    // is normally what stops us. The counter is a guard against a transport
-    // that returns empty without blocking, which would otherwise busy-spin
-    // until the deadline.
-    const MAX_EMPTY_READS: usize = 256;
-
     for _ in 0..MAX_EMPTY_READS {
         // `checked_duration_since` rather than `duration_since`: a backward
         // clock jump must not panic here.

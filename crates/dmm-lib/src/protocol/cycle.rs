@@ -1211,7 +1211,7 @@ fn check_table(
                     ));
                 }
                 let name = label(mode);
-                if name.starts_with("Unknown") {
+                if crate::protocol::is_unknown_mode(&name) {
                     return Err(format!("position {i} lists {mode:#04x}, which has no name"));
                 }
             }
@@ -1364,7 +1364,7 @@ mod tests {
             HFE => Cow::Borrowed("hFE"),
             LPF_V => Cow::Borrowed("LPF V"),
             ACDC_V => Cow::Borrowed("AC+DC V"),
-            other => Cow::Owned(format!("Unknown({other:#04x})")),
+            other => crate::protocol::unknown_byte_mode(other),
         }
     }
 
@@ -2419,9 +2419,7 @@ mod tests {
         assert!(meter.flags.hold);
     }
 
-    // ---- table invariants ----
-
-    // --- Flag-backed settings ---------------------------------------------
+    // ---- flag-backed settings ----
 
     #[test]
     fn flag_choices_name_the_badges_and_mark_the_live_one() {
@@ -2596,6 +2594,8 @@ mod tests {
         let peak = flag_choices(&meter, FlagSetting::Peak, &current);
         assert_eq!(labels(&peak), vec!["off", "P-MAX", "P-MIN"]);
     }
+
+    // ---- table invariants ----
 
     #[test]
     fn the_test_table_satisfies_the_invariants() {

@@ -709,7 +709,7 @@ mod tests {
     fn parse_unknown_function() {
         let payload = make_payload(0x20, 0x30, b"  1.234", zero_status());
         let m = parse_measurement(&payload).unwrap();
-        assert!(m.mode.starts_with("Unknown"));
+        assert!(crate::protocol::is_unknown_mode(&m.mode));
     }
 
     #[test]

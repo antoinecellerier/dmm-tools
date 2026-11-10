@@ -224,7 +224,7 @@ follow-up, not part of this design.
 
 A listen window is bounded twice: a deadline (`WINDOW` in `detect.rs`, long enough for the UT61+
 name reply and one frame of a UT8803's 2–3 Hz stream) **and** an empty-read cap
-(`MAX_EMPTY_READS`, as in `framing::read_uart_bytes`), because a drained `MockTransport` returns
+(`framing::MAX_EMPTY_READS`, shared with `read_uart_bytes`), because a drained `MockTransport` returns
 `Ok(0)` instantly and would otherwise spin until the deadline. The walk to "not identified" takes
 one window per trigger: four on the CP2110, three on the CH9329, the UT-D07B and the BU-86X. A
 UT61+ answers inside the first one, so an auto open normally costs one name reply.

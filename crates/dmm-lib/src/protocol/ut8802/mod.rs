@@ -905,7 +905,7 @@ raw_payload=7"#
             let payload = make_payload(code, [0, 1, 0, 0, 0], 0, 0x00, 0x00, 0x00);
             let m = parse_measurement(&payload).unwrap();
             assert!(
-                !m.mode.starts_with("Unknown"),
+                !crate::protocol::is_unknown_mode(&m.mode),
                 "position {code:#04x} should be known"
             );
         }

@@ -96,6 +96,16 @@ pub(crate) fn unknown_mode16(code: u16) -> Cow<'static, str> {
     Cow::Owned(format!("Unknown({code:#06x})"))
 }
 
+/// [`unknown_mode`] for a one-byte mode code carried as a `u16`, as
+/// [`Protocol::mode_label`] takes it; a wider code, which never came from
+/// such a meter, as [`unknown_mode16`] spells it.
+pub(crate) fn unknown_byte_mode(code: u16) -> Cow<'static, str> {
+    match u8::try_from(code) {
+        Ok(byte) => unknown_mode(byte),
+        Err(_) => unknown_mode16(code),
+    }
+}
+
 /// The unit of a reading whose scale rests on a code no table lists, such as
 /// a range or a metric prefix: reported, and no unit. Never the base unit,
 /// which would pass for a reading off by powers of a thousand.
@@ -953,6 +963,8 @@ mod tests {
         assert!(is_unknown_mode(&unknown_mode(0x05)));
         assert!(is_unknown_mode(&unknown_mode16(0x1234)));
         assert!(!is_unknown_mode("DC V"));
+        assert_eq!(unknown_byte_mode(0x05), unknown_mode(0x05));
+        assert_eq!(unknown_byte_mode(0x0105), unknown_mode16(0x0105));
     }
 
     /// Every device's capture steps, with the device id for failure messages.
@@ -1179,9 +1191,6 @@ mod tests {
     }
 
     fn d_family(id: &str) -> Option<DeviceFamily> {
-        registry::DEVICES
-            .iter()
-            .find(|d| d.id == id)
-            .map(|d| d.family)
+        registry::find_device(id).map(|d| d.family)
     }
 }

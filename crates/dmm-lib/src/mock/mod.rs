@@ -660,7 +660,8 @@ impl CycleMeter for MockProtocol {
         }
         match SCENARIOS.iter().find(|s| s.mode_raw == mode) {
             Some(scenario) => Cow::Borrowed(scenario.mode),
-            None => Cow::Owned(format!("mode {mode:#06x}")),
+            // Spelled as the UT61E+ it simulates spells a mode it lacks.
+            None => crate::protocol::unknown_byte_mode(mode),
         }
     }
 
@@ -1251,6 +1252,20 @@ mod tests {
         assert_eq!("noisy".parse::<MockMode>().unwrap(), MockMode::Noise);
         assert_eq!("spikes".parse::<MockMode>().unwrap(), MockMode::Noise);
         assert!("invalid".parse::<MockMode>().is_err());
+    }
+
+    /// A mode no scenario has is named as the UT61E+ names one its table
+    /// lacks.
+    #[test]
+    fn a_mode_the_mock_lacks_is_named_as_the_ut61e_plus_names_it() {
+        let mock = MockProtocol::new();
+        for mode in [0x7F, 0x0105] {
+            assert!(SCENARIOS.iter().all(|s| s.mode_raw != mode));
+            assert_eq!(
+                mock.mode_label(mode),
+                crate::protocol::unknown_byte_mode(mode)
+            );
+        }
     }
 
     #[test]

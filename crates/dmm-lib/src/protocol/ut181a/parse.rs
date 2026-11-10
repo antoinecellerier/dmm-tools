@@ -1210,7 +1210,7 @@ raw_payload=57"#
     #[test]
     fn decode_mode_word_unknown() {
         let s = decode_mode_word(0xFFFF);
-        assert!(s.starts_with("Unknown"));
+        assert!(crate::protocol::is_unknown_mode(&s));
     }
 
     #[test]
