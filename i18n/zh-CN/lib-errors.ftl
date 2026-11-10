@@ -176,10 +176,6 @@ error-rejected-by-meter = 万用表拒绝了 { $sent }
 error-rejected-zero-needs-capacitance = ZERO 只能在电容模式下使用
 error-rejected-rel-needs-reading = 显示屏上有数值时才能使用 REL
 error-rejected-rel-is-on = REL 已开启，请先退出 REL
-# $code is a number, $model and $opened are meters (e.g. OWON B41T+), $id a
-# meter's ID as --device takes it. "Auto-detect" is the GUI's Device
-# choice.
-error-rejected-other-model = 万用表报告的 OWON 型号代码为 { $code } ({ $model })，不是连接时选择的 { $opened }，因此遥控按键已关闭；请选择“自动检测”或 --device { $id }
 # $code is a number.
 error-rejected-unknown-model = 万用表报告的 OWON 型号代码为 { $code }，本工具尚无法识别，因此遥控按键已关闭
 # $command is a command word.
@@ -196,39 +192,17 @@ error-sent-range = 量程 { $range }
 
 ## Another meter: the one on the link is not one the meter chosen can
 ## read. After "invalid response:". Model names (OWON B35T+, Brymen BM82x)
-## and --device's values (vc871, bm82x) stay as they are. Auto-detect is
-## the meter choice that finds the meter itself: the GUI's Device list
-## names it so, and the CLI takes it as --device auto.
+## stay as they are. Each app follows the sentence with what to pick.
 
-# An OWON meter names its model, which sends the other kind of data frame.
-# $code is OWON's model number, e.g. 87; $model the model it names, e.g.
-# Voltcraft VC871; $frame the length of that model's frame in bytes, 6 or
-# 15; $opened the meter chosen, e.g. OWON B35T+; $id the --device value
-# for $model.
-error-wrong-meter-other-frame = 万用表报告的 OWON 型号代码为 { $code } ({ $model })，不是连接时选择的 { $opened }，该型号发送 OWON 的 { $frame } 字节数据帧；请选择“自动检测”或 --device { $id }
-# An OWON meter sends the other kind of data frame and names no model.
-# $sent and $expected are frame lengths in bytes, 6 or 15; $opened is the
-# meter chosen, e.g. Voltcraft VC871. $remedy is auto-detect, or own-model
-# when the user has to pick the meter's model themselves.
-error-wrong-meter-other-frame-kind =
-    { $remedy ->
-        [auto-detect] 万用表发送的是 OWON 的 { $sent } 字节数据帧，而不是连接时选择的 { $opened } 的 { $expected } 字节数据帧；请选择“自动检测”
-       *[own-model] 万用表发送的是 OWON 的 { $sent } 字节数据帧，而不是连接时选择的 { $opened } 的 { $expected } 字节数据帧；请选择该万用表的实际型号
-    }
 # An OWON model this tool does not read yet. $code is OWON's model number,
 # e.g. 83. "This message" is the whole error, for the issue.
 error-wrong-meter-not-yet = 万用表报告的 OWON 型号代码为 { $code }，本工具尚无法读取；请附上此消息提交议题
 # An OWON model whose readings carry their sign where this tool does not
 # read it yet. $code is OWON's model number, e.g. 55.
 error-wrong-meter-sign-in-function-word = 万用表报告的 OWON 型号代码为 { $code }: 该型号发送的 OWON 6 字节数据帧把符号放在功能字中，本工具尚无法读取
-# A Brymen meter of another series answered. $found and $opened are series,
-# e.g. Brymen BM82x and Brymen BM86x; $id is the --device value for $found.
-error-wrong-meter-other-series = 连接线上的万用表是 { $found }，不是 { $opened }；请选择“自动检测”或 --device { $id }
 # An OWON meter chosen by its model sends bytes, but never its 6-byte data
 # frame. B35 and B35T are OWON models.
 error-wrong-meter-no-six-byte-frames = 万用表没有发送 OWON 的 6 字节数据帧；可能是较旧的 B35 或 B35T，本工具尚无法读取这些型号的 14 字节数据帧
-# The same for a meter whose data frame is 15 bytes long.
-error-wrong-meter-no-fifteen-byte-frames = 万用表没有发送 OWON 的 15 字节数据帧，请选择“自动检测”
 # An OWON meter that names no model sends frames of neither length. "This
 # message" is the whole error, for the issue.
 error-wrong-meter-untold-frame-kind = 无法从万用表的型号代码或数据帧判断发送的是 OWON 的 6 字节还是 15 字节数据帧，请附上此消息提交议题

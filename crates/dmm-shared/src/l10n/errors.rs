@@ -18,8 +18,8 @@ use super::Localizer;
 use crate::export::escape_controls;
 use crate::tr;
 use dmm_lib::error::{
-    BluetoothIssue, BluetoothOnlyMiss, CharacteristicRole, Error, FrameRemedy, Rejected, Sent,
-    Unread, Unsupported, WrongMeter,
+    BluetoothIssue, BluetoothOnlyMiss, CharacteristicRole, Error, Rejected, Sent, Unread,
+    Unsupported, WrongMeter,
 };
 use dmm_lib::text::TextKind;
 use dmm_lib::transport::{LateReadings, Link};
@@ -168,31 +168,26 @@ impl Localizer {
                 model,
                 frame,
                 opened,
-                id,
+                ..
             } => tr!(
                 self,
                 "error-wrong-meter-other-frame",
                 code = *code,
                 model = *model,
                 frame = *frame,
-                opened = *opened,
-                id = *id
+                opened = *opened
             ),
             WrongMeter::OtherFrameKind {
                 sent,
                 expected,
                 opened,
-                remedy,
+                ..
             } => tr!(
                 self,
                 "error-wrong-meter-other-frame-kind",
                 sent = *sent,
                 expected = *expected,
-                opened = *opened,
-                remedy = match remedy {
-                    FrameRemedy::AutoDetect => "auto-detect",
-                    FrameRemedy::OwnModel => "own-model",
-                }
+                opened = *opened
             ),
             WrongMeter::UnreadModel { code, why } => match why {
                 Unread::NotYet => tr!(self, "error-wrong-meter-not-yet", code = *code),
@@ -204,12 +199,11 @@ impl Localizer {
                     )
                 }
             },
-            WrongMeter::OtherSeries { found, opened, id } => tr!(
+            WrongMeter::OtherSeries { found, opened, .. } => tr!(
                 self,
                 "error-wrong-meter-other-series",
                 found = *found,
-                opened = *opened,
-                id = *id
+                opened = *opened
             ),
             WrongMeter::NoSixByteFrames => tr!(self, "error-wrong-meter-no-six-byte-frames"),
             WrongMeter::NoFifteenByteFrames => {
@@ -435,14 +429,13 @@ impl Localizer {
                 code,
                 model,
                 opened,
-                id,
+                ..
             } => tr!(
                 self,
                 "error-rejected-other-model",
                 code = *code,
                 model = *model,
-                opened = *opened,
-                id = *id
+                opened = *opened
             ),
             Rejected::UnknownModel { code } => {
                 tr!(self, "error-rejected-unknown-model", code = *code)
@@ -539,6 +532,7 @@ pub fn link_key(link: Option<Link>, built_in_radio: bool) -> &'static str {
 mod tests {
     use super::*;
     use crate::l10n::LIB_RESOURCES;
+    use dmm_lib::error::FrameRemedy;
     use dmm_lib::protocol::Setting;
 
     fn s(text: &'static str) -> Cow<'static, str> {

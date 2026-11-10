@@ -513,7 +513,8 @@ mod tests {
         );
     }
 
-    /// The reasons word the remedies as the messages they replaced did.
+    /// The reasons say what is wrong, as the messages they replaced did; the
+    /// entry to pick is a field, for each app to word.
     #[test]
     fn wrong_meter_reasons_read_as_invalid_responses() {
         let read = |reason| Error::wrong_meter(reason, &[]).to_string();
@@ -526,8 +527,7 @@ mod tests {
                 id: "vc871",
             }),
             "invalid response: the meter reports OWON model code 87 (Voltcraft VC871), which \
-             sends OWON's 15-byte frame, not the OWON B35T+ it was opened as; choose Auto-detect \
-             or --device vc871"
+             sends OWON's 15-byte frame, not the OWON B35T+ it was opened as"
         );
         assert_eq!(
             read(WrongMeter::OtherFrameKind {
@@ -537,7 +537,7 @@ mod tests {
                 remedy: FrameRemedy::AutoDetect,
             }),
             "invalid response: the meter sends OWON's 6-byte frames, not the 15-byte frames of \
-             the Voltcraft VC871 it was opened as; choose Auto-detect"
+             the Voltcraft VC871 it was opened as"
         );
         assert_eq!(
             read(WrongMeter::UnreadModel {
@@ -553,8 +553,7 @@ mod tests {
                 opened: "Brymen BM86x",
                 id: "bm82x",
             }),
-            "invalid response: the meter on the cable is a Brymen BM82x, not a Brymen BM86x; \
-             choose Auto-detect or --device bm82x"
+            "invalid response: the meter on the cable is a Brymen BM82x, not a Brymen BM86x"
         );
     }
 

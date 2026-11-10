@@ -108,6 +108,10 @@ settings-refused =
         [range] the meter refused { $choice }: { $reason } — check the dial position and that the input is within the range
        *[other] the meter refused { $choice }: { $reason } — check the dial position
     }
+# The meter refused because it is another model than the one chosen: $choice
+# and $reason as above; $remedy says what to pick, a sentence of its own
+# (shared.ftl's choose-meter-cli).
+settings-refused-other-model = the meter refused { $choice }: { $reason }. { $remedy }
 # The meter took the command, but its readings never showed the choice.
 settings-not-switched =
     { $setting ->

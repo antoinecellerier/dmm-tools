@@ -122,7 +122,7 @@ still leaves a report, the case bring-up hits most: `no_response: true`, the err
 on in `no_response_error`, no steps, and the bytes received in `init_frames`. It goes to a file of
 its own beside the report, so it never replaces a report in progress or an earlier failure. Only a
 timeout gets the steps to enable transmission; a refused answer ends the run on its own error,
-which may name the `--device` to choose. A link that fails, or a setting to change, ends it with no
+followed by the `--device` to pass when the meter names one. A link that fails, or a setting to change, ends it with no
 report: the wire holds nothing about the meter.
 
 A run without a terminal still leaves a report, whose frames stay useful, but nobody was there to

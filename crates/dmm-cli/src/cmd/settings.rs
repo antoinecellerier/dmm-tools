@@ -378,6 +378,20 @@ impl crate::l10n::Localized for SetFailed {
                 setting = setting.name(),
                 input = input.as_str()
             ),
+            // Not the dial: the meter is another model, so say which to pick.
+            Self::Refused {
+                setting,
+                choice,
+                reason,
+            } if let Some(pick) = dmm_shared::help::MeterChoice::for_rejected(reason) => {
+                tr!(
+                    l,
+                    "settings-refused-other-model",
+                    choice = choice_text(l, *setting, choice),
+                    reason = l.rejected(reason),
+                    remedy = l.help().cli_choose_meter(pick, None),
+                )
+            }
             Self::Refused {
                 setting,
                 choice,
@@ -876,6 +890,32 @@ mod tests {
         assert!(err.contains("the meter refused on"), "{err}");
         assert!(err.contains("HOLD did nothing in off"), "{err}");
         assert!(err.contains("check the dial position"), "{err}");
+    }
+
+    /// A meter that refuses because it is another model says which to pass,
+    /// not to check the dial.
+    #[test]
+    fn a_refusal_from_another_model_says_what_to_pass() {
+        let (mut dmm, _) = fake_meter_with(
+            &a_full_meter(),
+            Quirks {
+                refusal: Some(Rejected::OtherModel {
+                    code: 61,
+                    model: "OWON CMS061",
+                    opened: "OWON B35T+",
+                    id: "cms061",
+                }),
+                ..Default::default()
+            },
+        );
+        let err = run_set(&mut dmm, Setting::Hold, Some("on".to_string()))
+            .expect_err("the meter refused")
+            .to_string();
+        assert!(
+            err.ends_with("so remote keys are off. Pass --device cms061."),
+            "{err}"
+        );
+        assert!(!err.contains("dial"), "{err}");
     }
 
     /// A meter that takes the command and never reports the new value fails

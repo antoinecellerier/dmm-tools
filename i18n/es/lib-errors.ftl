@@ -180,10 +180,6 @@ error-rejected-by-meter = el multímetro rechazó { $sent }
 error-rejected-zero-needs-capacitance = ZERO solo funciona en modo capacitancia
 error-rejected-rel-needs-reading = REL necesita que la pantalla muestre un número
 error-rejected-rel-is-on = REL ya está activado; sal primero de REL
-# $code is a number, $model and $opened are meters (e.g. OWON B41T+), $id a
-# meter's ID as --device takes it. "Auto-detect" is the GUI's Device
-# choice.
-error-rejected-other-model = el multímetro indica el código de modelo OWON { $code } ({ $model }) y no es el multímetro { $opened } elegido al abrir la conexión, así que los botones remotos están desactivados; elige Detección automática o --device { $id }
 # $code is a number.
 error-rejected-unknown-model = el multímetro indica el código de modelo OWON { $code }, que esta herramienta aún no conoce, así que los botones remotos están desactivados
 # $command is a command word.
@@ -200,39 +196,17 @@ error-sent-range = el rango { $range }
 
 ## Another meter: the one on the link is not one the meter chosen can
 ## read. After "invalid response:". Model names (OWON B35T+, Brymen BM82x)
-## and --device's values (vc871, bm82x) stay as they are. Auto-detect is
-## the meter choice that finds the meter itself: the GUI's Device list
-## names it so, and the CLI takes it as --device auto.
+## stay as they are. Each app follows the sentence with what to pick.
 
-# An OWON meter names its model, which sends the other kind of data frame.
-# $code is OWON's model number, e.g. 87; $model the model it names, e.g.
-# Voltcraft VC871; $frame the length of that model's frame in bytes, 6 or
-# 15; $opened the meter chosen, e.g. OWON B35T+; $id the --device value
-# for $model.
-error-wrong-meter-other-frame = el multímetro indica el código de modelo OWON { $code } ({ $model }), que envía la trama OWON de { $frame } bytes, y no es el multímetro { $opened } elegido al abrir la conexión; elige Detección automática o --device { $id }
-# An OWON meter sends the other kind of data frame and names no model.
-# $sent and $expected are frame lengths in bytes, 6 or 15; $opened is the
-# meter chosen, e.g. Voltcraft VC871. $remedy is auto-detect, or own-model
-# when the user has to pick the meter's model themselves.
-error-wrong-meter-other-frame-kind =
-    { $remedy ->
-        [auto-detect] el multímetro envía tramas OWON de { $sent } bytes, no las tramas de { $expected } bytes del multímetro { $opened } elegido al abrir la conexión; elige Detección automática
-       *[own-model] el multímetro envía tramas OWON de { $sent } bytes, no las tramas de { $expected } bytes del multímetro { $opened } elegido al abrir la conexión; elige el modelo exacto del multímetro
-    }
 # An OWON model this tool does not read yet. $code is OWON's model number,
 # e.g. 83. "This message" is the whole error, for the issue.
 error-wrong-meter-not-yet = el multímetro indica el código de modelo OWON { $code }, que esta herramienta aún no lee; abre una incidencia (issue) con este mensaje
 # An OWON model whose readings carry their sign where this tool does not
 # read it yet. $code is OWON's model number, e.g. 55.
 error-wrong-meter-sign-in-function-word = el multímetro indica el código de modelo OWON { $code }: envía la trama OWON de 6 bytes con el signo en la palabra de función, que esta herramienta aún no lee
-# A Brymen meter of another series answered. $found and $opened are series,
-# e.g. Brymen BM82x and Brymen BM86x; $id is the --device value for $found.
-error-wrong-meter-other-series = el multímetro conectado al cable es de la serie { $found }, no de la serie { $opened }; elige Detección automática o --device { $id }
 # An OWON meter chosen by its model sends bytes, but never its 6-byte data
 # frame. B35 and B35T are OWON models.
 error-wrong-meter-no-six-byte-frames = el multímetro no envía tramas OWON de 6 bytes; puede ser un B35 o un B35T antiguo, cuyas tramas de 14 bytes esta herramienta aún no lee
-# The same for a meter whose data frame is 15 bytes long.
-error-wrong-meter-no-fifteen-byte-frames = el multímetro no envía tramas OWON de 15 bytes; elige Detección automática
 # An OWON meter that names no model sends frames of neither length. "This
 # message" is the whole error, for the issue.
 error-wrong-meter-untold-frame-kind = ni el código de modelo del multímetro ni sus tramas indican si envía tramas OWON de 6 o de 15 bytes; abre una incidencia (issue) con este mensaje

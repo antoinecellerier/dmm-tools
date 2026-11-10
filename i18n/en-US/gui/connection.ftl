@@ -203,6 +203,10 @@ connection-switch-failed =
         [range] Range switch failed: { $error }
        *[other] { $setting } switch failed: { $error }
     }
+# The same, when the meter is another model than the one picked: $failed is
+# one of the two messages above; $remedy says what to pick, a sentence of
+# its own (shared.ftl's choose-meter-gui).
+connection-failed-then = { $failed }. { $remedy }
 
 # The × that closes a toast or a notice.
 connection-dismiss =

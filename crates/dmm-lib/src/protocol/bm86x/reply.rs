@@ -252,7 +252,7 @@ pub(super) mod tests {
                 Err(Error::WrongMeter { reason, raw }) => {
                     let message = reason.to_string();
                     assert!(
-                        message.contains(&format!("--device {}", other.id())),
+                        matches!(reason, WrongMeter::OtherSeries { id, .. } if id == other.id()),
                         "{message}"
                     );
                     assert!(
@@ -271,8 +271,10 @@ pub(super) mod tests {
         let cable = ScriptedCable::new(request(0x82), reports, Vec::new());
         match read(&cable, Series::Bm82x) {
             Err(Error::WrongMeter { reason, .. }) => {
-                let message = reason.to_string();
-                assert!(message.contains("--device bm86x"), "{message}");
+                assert!(
+                    matches!(reason, WrongMeter::OtherSeries { id: "bm86x", .. }),
+                    "{reason}"
+                );
             }
             other => panic!("{other:?}"),
         }

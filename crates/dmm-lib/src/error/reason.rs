@@ -268,7 +268,7 @@ pub enum Rejected {
     /// names, `id` the reported entry's registry id.
     #[error(
         "the meter reports OWON model code {code} ({model}), not the {opened} it was opened as, \
-         so remote keys are off; choose Auto-detect or --device {id}"
+         so remote keys are off"
     )]
     OtherModel {
         code: u8,
@@ -573,7 +573,7 @@ mod tests {
                     id: "b41t+",
                 },
                 "the meter reports OWON model code 41 (OWON B41T+), not the OWON B35T+ it was \
-                 opened as, so remote keys are off; choose Auto-detect or --device b41t+",
+                 opened as, so remote keys are off",
             ),
             (
                 Rejected::UnknownModel { code: 223 },

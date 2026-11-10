@@ -676,9 +676,16 @@ mod tests {
             assert!(proto.rx_buf.is_empty());
         }
         let says = |opened, sent| other_frame(opened, sent).to_string();
-        assert!(
-            says(&model::VC871, FrameKind::Six)
-                .ends_with("Voltcraft VC871 it was opened as; choose Auto-detect")
+        assert!(says(&model::VC871, FrameKind::Six).ends_with("Voltcraft VC871 it was opened as"));
+        // Detection opens a 6-byte stream's fallback entry, so that is the
+        // way out; nothing in a 15-byte frame names the model.
+        let remedy = |opened, sent| match other_frame(opened, sent) {
+            WrongMeter::OtherFrameKind { remedy, .. } => remedy,
+            other => panic!("{other:?}"),
+        };
+        assert_eq!(
+            remedy(&model::VC871, FrameKind::Six),
+            FrameRemedy::AutoDetect
         );
         assert!(
             says(&model::B35, FrameKind::Fifteen)
@@ -1002,17 +1009,20 @@ mod tests {
     /// entry to open, both ways round (spec §10.1).
     #[test]
     fn a_model_code_of_the_other_frame_names_its_entry() {
-        for (opened, code, says) in [
-            (&model::B35, 87, "--device vc871"),
-            (&model::B35, 101, "--device cms101"),
-            (&model::VC871, 35, "--device b35t+"),
-            (&model::OW65B, 18, "--device ow18b"),
+        for (opened, code, entry) in [
+            (&model::B35, 87, "vc871"),
+            (&model::B35, 101, "cms101"),
+            (&model::VC871, 35, "b35t+"),
+            (&model::OW65B, 18, "ow18b"),
         ] {
             let meter = Meter::new(Some(&info(code)), Vec::new());
             match proto(opened).init(&meter) {
                 Err(Error::WrongMeter { reason, .. }) => {
                     let message = reason.to_string();
-                    assert!(message.contains(says), "{code}: {message}");
+                    assert!(
+                        matches!(reason, WrongMeter::OtherFrame { id, .. } if id == entry),
+                        "{code}: {message}"
+                    );
                     assert!(message.contains(&format!("model code {code}")), "{message}");
                     assert!(message.contains(opened.entry.model), "{message}");
                 }

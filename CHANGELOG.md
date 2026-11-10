@@ -8,6 +8,7 @@
 - **dmm-gui names the meter of a played-back recording** — with **Show device name on connect (beeps)** off, it showed none.
 - **dmm-gui's replay files name the meter as dmm-cli's do** — they gave the menu's name, such as "UNI-T UT61E+".
 - **A rebranded Bluetooth meter keeps its picked name when Bluetooth isn't searched** — the UNI-T UT217A was called the OWON CMS061.
+- **dmm-gui names the model to pick for another OWON or Brymen meter** — it said to pass `--device`.
 - **"Waiting for meter…" no longer stays frozen while dmm-gui reconnects**
 - **dmm-gui's remote buttons, dropdown picks, Pause and Sample interval act at once** — they waited for the next sample.
 - **dmm-gui's mode and range readouts switch only a connected meter** — a pick made while reconnecting went to whichever meter answered next.

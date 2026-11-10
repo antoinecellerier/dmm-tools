@@ -15,7 +15,7 @@
 use crate::l10n::{Localizer, Resource};
 use crate::reopen::SeveralCables;
 use crate::tr;
-use dmm_lib::error::{BluetoothOnlyMiss, Error, ErrorKind};
+use dmm_lib::error::{BluetoothOnlyMiss, Error, ErrorKind, FrameRemedy, Rejected, WrongMeter};
 use dmm_lib::list_devices;
 use dmm_lib::mock::MockMode;
 use dmm_lib::protocol::registry::SelectableDevice;
@@ -248,6 +248,56 @@ impl<'a> Help<'a> {
         } else {
             tr!(self.0, "bluetooth-off-cli-setting")
         }
+    }
+
+    /// How to open the meter as the model it is, after a message saying it
+    /// is another, as dmm-gui says it: an entry under the pick's brand, and
+    /// Auto-detect as well unless nothing was `picked`, Auto-detect having
+    /// opened it.
+    pub fn gui_choose_meter(
+        self,
+        choice: MeterChoice,
+        picked: Option<registry::Listing>,
+    ) -> String {
+        self.choose_meter(true, choice, picked)
+    }
+
+    /// [`Self::gui_choose_meter`] as dmm-cli says it.
+    pub fn cli_choose_meter(
+        self,
+        choice: MeterChoice,
+        picked: Option<registry::Listing>,
+    ) -> String {
+        self.choose_meter(false, choice, picked)
+    }
+
+    fn choose_meter(
+        self,
+        gui: bool,
+        choice: MeterChoice,
+        picked: Option<registry::Listing>,
+    ) -> String {
+        let (key, listing) = match choice {
+            // Auto-detect opened it, so it is no way out.
+            MeterChoice::Entry(device) if picked.is_none() => {
+                ("entry-only", Some(device.listing()))
+            }
+            MeterChoice::Entry(device) => {
+                ("entry", Some(registry::named_under_pick(picked, device)))
+            }
+            MeterChoice::AutoDetect => ("auto-detect", None),
+            MeterChoice::OwnModel => ("own-model", None),
+        };
+        if gui {
+            let model = listing.map_or(Cow::Borrowed(""), |l| {
+                self.0.label(TextKind::Model, l.display_name())
+            });
+            tr!(self.0, "choose-meter-gui", choice = key, model = model)
+        } else {
+            let id = listing.map_or("", |l| l.id());
+            tr!(self.0, "choose-meter-cli", choice = key, id = id)
+        }
+        .into_owned()
     }
 
     /// The same in the GUI, where ticking the setting also clears a
@@ -781,12 +831,59 @@ pub enum Diagnosis {
         model: &'static str,
         miss: BluetoothOnlyMiss,
     },
+    /// The meter on the link is another than the one chosen: what to pick
+    /// instead.
+    OtherMeter(MeterChoice),
     /// The meter stopped answering.
     NoResponse,
     /// The meter answered with data that could not be read.
     BadData,
     /// Nothing to add to the error's own words.
     Other,
+}
+
+/// What to pick for a meter that is another than the one chosen.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MeterChoice {
+    /// The entry the meter names.
+    Entry(&'static SelectableDevice),
+    /// Detection finds it.
+    AutoDetect,
+    /// Nothing says which model it is: the user has to pick it.
+    OwnModel,
+}
+
+impl MeterChoice {
+    /// The entry registry id `id` names, which an error carries.
+    fn entry(id: &str) -> Option<Self> {
+        registry::find_device(id).map(Self::Entry)
+    }
+
+    /// What a refused command's `reason` says to pick, when it is the
+    /// meter being another model.
+    pub fn for_rejected(reason: &Rejected) -> Option<Self> {
+        match reason {
+            Rejected::OtherModel { id, .. } => Self::entry(id),
+            _ => None,
+        }
+    }
+
+    /// What `reason` says to pick, when it says anything.
+    fn for_wrong_meter(reason: &WrongMeter) -> Option<Self> {
+        match reason {
+            WrongMeter::OtherFrame { id, .. } | WrongMeter::OtherSeries { id, .. } => {
+                Self::entry(id)
+            }
+            WrongMeter::OtherFrameKind { remedy, .. } => Some(match remedy {
+                FrameRemedy::AutoDetect => Self::AutoDetect,
+                FrameRemedy::OwnModel => Self::OwnModel,
+            }),
+            WrongMeter::NoFifteenByteFrames => Some(Self::AutoDetect),
+            WrongMeter::UnreadModel { .. }
+            | WrongMeter::NoSixByteFrames
+            | WrongMeter::UntoldFrameKind => None,
+        }
+    }
 }
 
 impl Diagnosis {
@@ -852,6 +949,15 @@ impl Diagnosis {
                 model: named(model),
                 miss: *miss,
             },
+            // Unreadable as the entry chosen, but saying which to choose.
+            Error::WrongMeter { reason, .. } => {
+                MeterChoice::for_wrong_meter(reason).map_or(Self::BadData, Self::OtherMeter)
+            }
+            Error::CommandRejected(reason)
+                if let Some(choice) = MeterChoice::for_rejected(reason) =>
+            {
+                Self::OtherMeter(choice)
+            }
             // The variant, not the kind: a pulled cable's HID error names a
             // timeout too, and detection finding nothing is that kind.
             Error::Timeout => Self::NoResponse,
@@ -1400,6 +1506,129 @@ mod tests {
             Diagnosis::Other
         );
         assert_eq!(Diagnosis::of(&stack, None, None), Diagnosis::Other);
+    }
+
+    /// A meter that is another than the one chosen says what to pick: the
+    /// entry it names, or Auto-detect, or its own model; one that names
+    /// nothing to pick stays unreadable data.
+    #[test]
+    fn another_meter_says_what_to_pick() {
+        let wrong = |reason| Error::WrongMeter {
+            reason,
+            raw: Vec::new(),
+        };
+        let entry = |id| MeterChoice::Entry(registry::find_device(id).expect("an entry"));
+        let of = |e: &Error| Diagnosis::of(e, None, None);
+        assert_eq!(
+            of(&wrong(WrongMeter::OtherSeries {
+                found: "Brymen BM82x",
+                opened: "Brymen BM86x",
+                id: "bm82x",
+            })),
+            Diagnosis::OtherMeter(entry("bm82x"))
+        );
+        assert_eq!(
+            of(&wrong(WrongMeter::OtherFrameKind {
+                sent: 15,
+                expected: 6,
+                opened: "OWON B35T+",
+                remedy: FrameRemedy::OwnModel,
+            })),
+            Diagnosis::OtherMeter(MeterChoice::OwnModel)
+        );
+        assert_eq!(
+            of(&wrong(WrongMeter::NoFifteenByteFrames)),
+            Diagnosis::OtherMeter(MeterChoice::AutoDetect)
+        );
+        assert_eq!(
+            of(&wrong(WrongMeter::OtherFrame {
+                code: 87,
+                model: "Voltcraft VC871",
+                frame: 15,
+                opened: "OWON B35T+",
+                id: "vc871",
+            })),
+            Diagnosis::OtherMeter(entry("vc871"))
+        );
+        assert_eq!(
+            of(&wrong(WrongMeter::OtherFrameKind {
+                sent: 6,
+                expected: 15,
+                opened: "Voltcraft VC871",
+                remedy: FrameRemedy::AutoDetect,
+            })),
+            Diagnosis::OtherMeter(MeterChoice::AutoDetect)
+        );
+        for nothing_to_pick in [
+            WrongMeter::NoSixByteFrames,
+            WrongMeter::UntoldFrameKind,
+            WrongMeter::UnreadModel {
+                code: 83,
+                why: dmm_lib::error::Unread::NotYet,
+            },
+        ] {
+            assert_eq!(of(&wrong(nothing_to_pick)), Diagnosis::BadData);
+        }
+        assert_eq!(
+            of(&Error::CommandRejected(Rejected::RelIsOn)),
+            Diagnosis::Other
+        );
+        assert_eq!(
+            of(&Error::CommandRejected(Rejected::OtherModel {
+                code: 61,
+                model: "OWON CMS061",
+                opened: "OWON B35T+",
+                id: "cms061",
+            })),
+            Diagnosis::OtherMeter(entry("cms061"))
+        );
+    }
+
+    /// Each app says what to pick in its own terms, by the name the pick's
+    /// brand sells the meter under.
+    #[test]
+    fn each_app_says_what_to_pick_in_its_terms() {
+        let cms061 = MeterChoice::Entry(registry::find_device("cms061").expect("an entry"));
+        let help = english();
+        assert_eq!(
+            help.gui_choose_meter(cms061, pick("b35t+")),
+            "Pick OWON CMS061 or Auto-detect in Settings (\u{2699})."
+        );
+        assert_eq!(
+            help.cli_choose_meter(cms061, pick("b35t+")),
+            "Pass --device cms061, or --device auto."
+        );
+        // Under Auto-detect, which opened it, only the entry.
+        assert_eq!(
+            help.gui_choose_meter(cms061, None),
+            "Pick OWON CMS061 in Settings (\u{2699})."
+        );
+        assert_eq!(help.cli_choose_meter(cms061, None), "Pass --device cms061.");
+        assert_eq!(
+            help.gui_choose_meter(MeterChoice::OwnModel, None),
+            "Pick the meter's own model in Settings (\u{2699})."
+        );
+        assert_eq!(
+            help.cli_choose_meter(MeterChoice::OwnModel, None),
+            "Pass --device with the meter's own model; --help lists them."
+        );
+        assert_eq!(
+            help.gui_choose_meter(MeterChoice::AutoDetect, None),
+            "Pick Auto-detect in Settings (\u{2699})."
+        );
+        let sold_as = pick("ut217a");
+        assert_eq!(
+            help.gui_choose_meter(cms061, sold_as),
+            "Pick UNI-T UT217A or Auto-detect in Settings (\u{2699})."
+        );
+        assert_eq!(
+            help.cli_choose_meter(cms061, sold_as),
+            "Pass --device ut217a, or --device auto."
+        );
+        assert_eq!(
+            help.cli_choose_meter(MeterChoice::AutoDetect, None),
+            "Pass --device auto."
+        );
     }
 
     /// A meter with the radio built in, not found or not looked for, goes by

@@ -3,6 +3,7 @@
 //! reading column shows when there is nothing to read.
 
 use dmm_lib::protocol::registry;
+use dmm_shared::help::Diagnosis;
 use dmm_shared::l10n::Localizer;
 use dmm_shared::reopen::ReopenPin;
 use dmm_shared::tr;
@@ -139,14 +140,20 @@ fn named_after_detection_toast(
 }
 
 /// What the toast says when a command the user sent failed: `command`'s
-/// subject, and the library's `error`.
+/// subject, and the library's `error`, then what to pick when the meter is
+/// another model than `picked`.
 fn command_failed_toast(
     l10n: &Localizer,
     command: &RemoteCommand,
     error: &dmm_lib::error::Error,
+    picked: Option<registry::Listing>,
 ) -> String {
+    let remedy = match Diagnosis::of(error, None, picked) {
+        Diagnosis::OtherMeter(choice) => Some(l10n.help().gui_choose_meter(choice, picked)),
+        _ => None,
+    };
     let error = l10n.error(error);
-    match command {
+    let failed = match command {
         RemoteCommand::Named(name) => {
             tr!(
                 l10n,
@@ -161,8 +168,17 @@ fn command_failed_toast(
             setting = setting.name(),
             error = error
         ),
+    };
+    match remedy {
+        Some(remedy) => tr!(
+            l10n,
+            "connection-failed-then",
+            failed = failed,
+            remedy = remedy
+        )
+        .into_owned(),
+        None => failed.into_owned(),
     }
-    .into_owned()
 }
 
 impl App {
@@ -690,7 +706,8 @@ impl App {
                     clear_channel = true;
                 }
                 DmmMessage::CommandFailed { command, error } => {
-                    let message = command_failed_toast(&self.l10n, &command, &error);
+                    let message =
+                        command_failed_toast(&self.l10n, &command, &error, self.picked_listing());
                     self.toast = Some(Toast::error(message));
                 }
                 DmmMessage::Choices(setting, choices) => {
@@ -1797,6 +1814,32 @@ mod tests {
         assert_eq!(
             detected_device_to_save("ut61eplus", true, false, Some("ut161e")),
             Some("ut161e")
+        );
+    }
+
+    /// A key the meter refused because it is another model says which to
+    /// pick, in the GUI's terms; any other failure keeps its bare words.
+    #[test]
+    fn a_refusal_from_another_model_says_what_to_pick() {
+        use crate::app::connection::RemoteCommand;
+        use dmm_lib::error::{Error, Rejected};
+        let l10n = crate::l10n::english();
+        let hold = RemoteCommand::Named("hold".to_string());
+        let other = Error::CommandRejected(Rejected::OtherModel {
+            code: 61,
+            model: "OWON CMS061",
+            opened: "OWON B35T+",
+            id: "cms061",
+        });
+        assert_eq!(
+            command_failed_toast(&l10n, &hold, &other, None),
+            "Command 'hold' failed: command rejected: the meter reports OWON model code 61 \
+             (OWON CMS061), not the OWON B35T+ it was opened as, so remote keys are off. Pick \
+             OWON CMS061 in Settings (\u{2699})."
+        );
+        assert_eq!(
+            command_failed_toast(&l10n, &hold, &Error::LinkLost, None),
+            format!("Command 'hold' failed: {}", l10n.error(&Error::LinkLost))
         );
     }
 

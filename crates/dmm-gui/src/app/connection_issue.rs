@@ -488,6 +488,25 @@ impl App {
                     body,
                 )
             }
+            // Data that could not be read, from a meter that says which it
+            // is: the way out is picking that one.
+            Diagnosis::OtherMeter(choice) => {
+                let text = escape_controls(&l10n.error(error)).into_owned();
+                let remedy = l10n.help().gui_choose_meter(*choice, self.picked_listing());
+                let body = if self.connection.state.is_linked() {
+                    format!("{text}\n\n{remedy}")
+                } else {
+                    format!(
+                        "{text}\n\n{remedy}\n\n{}",
+                        tr!(l10n, "connection-click-connect")
+                    )
+                };
+                notice(
+                    NoticeKind::BadData,
+                    tr!(l10n, "connection-bad-data").into_owned(),
+                    body,
+                )
+            }
             // Anything else — a cable that cannot carry the meter, a
             // permission error — with its text, which is all the user has to
             // go on.
@@ -859,6 +878,39 @@ mod tests {
         // The error itself is worded again too, not only the sentence around it.
         let quoted = crate::l10n::english().error(&Error::LinkLost);
         assert!(!hover.contains(&quoted), "{hover}");
+    }
+
+    /// A meter that says which it is gets the way out under its words:
+    /// pick that one.
+    #[test]
+    fn another_meter_names_the_one_to_pick() {
+        let mut app = app("b35t+");
+        app.connection.state = ConnectionState::Disconnected;
+        let issue = ConnectionIssue::of(Error::WrongMeter {
+            reason: dmm_lib::error::WrongMeter::OtherFrame {
+                code: 87,
+                model: "Voltcraft VC871",
+                frame: 15,
+                opened: "OWON B35T+",
+                id: "vc871",
+            },
+            raw: Vec::new(),
+        });
+        let n = notice_for(&mut app, issue);
+        assert_eq!(n.kind, NoticeKind::BadData);
+        assert_eq!(n.title, "Meter sent data that could not be read");
+        assert!(
+            n.body.contains(
+                "not the OWON B35T+ it was opened as\n\nPick Voltcraft VC871 or Auto-detect in \
+                 Settings (\u{2699})."
+            ),
+            "{}",
+            n.body
+        );
+        assert!(
+            n.body
+                .ends_with("Click \"Connect\" after resolving the issue.")
+        );
     }
 
     /// The waiting notice is measured to fit the big meter's window, so its

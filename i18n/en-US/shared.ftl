@@ -123,6 +123,27 @@ bluetooth-setting = Look for Bluetooth devices
 bluetooth-off-cli-flag = Leave out --no-bluetooth.
 bluetooth-off-cli-setting = Tick "{ bluetooth-setting }" in dmm-gui's settings, which dmm-cli reads too.
 bluetooth-off-gui = Tick "{ bluetooth-setting }" in Settings (⚙).
+# How to open the meter as the model it is, after a message saying it is
+# another, in dmm-gui. $choice is entry ($model the meter to pick, e.g.
+# OWON CMS061), entry-only (the same, when Auto-detect is what opened it),
+# auto-detect, or own-model (nothing says which model: the user has to pick
+# it). "Auto-detect" is the Device choice that finds the meter itself.
+choose-meter-gui =
+    { $choice ->
+        [entry] Pick { $model } or Auto-detect in Settings (⚙).
+        [entry-only] Pick { $model } in Settings (⚙).
+        [auto-detect] Pick Auto-detect in Settings (⚙).
+       *[own-model] Pick the meter's own model in Settings (⚙).
+    }
+# The same in dmm-cli: $choice as above, $id the --device value of the
+# meter to pick, e.g. cms061; --device auto detects the meter.
+choose-meter-cli =
+    { $choice ->
+        [entry] Pass --device { $id }, or --device auto.
+        [entry-only] Pass --device { $id }.
+        [auto-detect] Pass --device auto.
+       *[own-model] Pass --device with the meter's own model; --help lists them.
+    }
 
 ## What is connected, when an --adapter value matched nothing.
 

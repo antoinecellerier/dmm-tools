@@ -121,8 +121,8 @@ pub(super) fn verify_meter(
                 Ok(_) => None,
                 // A meter that answered with something the parser refuses,
                 // or a link that failed, is not cured by enabling
-                // transmission: its own error, which may name the `--device`
-                // to choose, is the run's closing line.
+                // transmission: its own error is the run's closing line,
+                // followed by the `--device` to pass when the meter names one.
                 Err(e) if e.kind() != ErrorKind::Timeout => return Err(e),
                 Err(e) => {
                     eprintln!();
