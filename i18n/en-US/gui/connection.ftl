@@ -117,11 +117,14 @@ connection-several-cables-recording = Recording stopped: the link dropped and th
 # Any other failure to connect or to keep reading. The error itself
 # follows, then connection-click-connect.
 connection-failed = Connection failed
+# The reading thread crashed. $detail is the crash's own text, which stays
+# English. Followed by connection-click-connect.
+connection-internal-error = Internal error: { $detail }
 
 # A meter that stopped answering in the middle of a session. $title is the
 # shared notice title, "No response from meter".
 connection-no-response-check = { $title } — check device selection and data transmission
-# The reading thread stopped by itself: it crashed, or gave up connecting.
+# The reading thread stopped without saying why.
 connection-acquisition-stopped = Acquisition stopped unexpectedly — reconnect to resume
 
 # The last line of a notice for a meter whose support isn't fully verified;

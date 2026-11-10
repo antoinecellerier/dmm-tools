@@ -237,13 +237,16 @@ pub(crate) enum DmmMessage {
         several: SeveralCables,
         reconnects: bool,
     },
-    /// A library failure, carried whole rather than pre-formatted: the UI
-    /// classifies it by [`ErrorKind`] and by variant, which a message string
-    /// can only be string-matched back into.
-    Error(dmm_lib::error::Error),
-    /// A failure the GUI itself diagnosed, such as a panicking thread. No
-    /// library error stands behind these.
-    ErrorText(String),
+    /// The open failed and the thread has ended. Carried whole rather than
+    /// pre-formatted, as [`Self::BadFrame`]: the UI classifies it by
+    /// [`ErrorKind`] and by variant, which a message string can only be
+    /// string-matched back into.
+    Failed(dmm_lib::error::Error),
+    /// A frame the meter sent could not be read. The link is fine and the
+    /// thread reads on; the next good frame clears it.
+    BadFrame(dmm_lib::error::Error),
+    /// The thread panicked, with the panic's own text, and has ended.
+    Panicked(String),
     /// A command the user sent was refused or could not be sent. Shown as a
     /// toast, not as a connection issue: the link is fine and the meter is
     /// still streaming, so neither the help text nor a reconnect applies.
@@ -513,7 +516,7 @@ where
             d
         }
         Err(e) => {
-            let _ = msg_tx.send(DmmMessage::Error(e));
+            let _ = msg_tx.send(DmmMessage::Failed(e));
             ctx.request_repaint();
             return;
         }
@@ -641,7 +644,7 @@ where
                 if protocol_errors == 1
                     || protocol_errors.is_multiple_of(PROTOCOL_ERROR_REPORT_INTERVAL)
                 {
-                    let _ = msg_tx.send(DmmMessage::Error(e));
+                    let _ = msg_tx.send(DmmMessage::BadFrame(e));
                     ctx.request_repaint();
                 }
             }
@@ -838,7 +841,7 @@ fn handle_thread_panic(
 ) {
     let msg = panic_text(panic.as_ref());
     error!("background thread panicked: {msg}");
-    let _ = tx.send(DmmMessage::ErrorText(format!("internal error: {msg}")));
+    let _ = tx.send(DmmMessage::Panicked(msg));
     ctx.request_repaint();
 }
 
@@ -1506,7 +1509,9 @@ mod tests {
             thread_ctx,
         );
         assert!(
-            !msg_rx.try_iter().any(|m| matches!(m, DmmMessage::Error(_))),
+            !msg_rx
+                .try_iter()
+                .any(|m| matches!(m, DmmMessage::Failed(_) | DmmMessage::BadFrame(_))),
             "reported an open it stopped itself"
         );
     }
@@ -1598,7 +1603,9 @@ mod tests {
         );
         let messages: Vec<DmmMessage> = msg_rx.try_iter().collect();
         assert!(
-            !messages.iter().any(|m| matches!(m, DmmMessage::Error(_))),
+            !messages
+                .iter()
+                .any(|m| matches!(m, DmmMessage::Failed(_) | DmmMessage::BadFrame(_))),
             "a failed reconnect ended in an error notice"
         );
         assert!(messages.iter().any(|m| matches!(

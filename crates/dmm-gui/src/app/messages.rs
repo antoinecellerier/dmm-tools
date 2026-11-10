@@ -558,11 +558,7 @@ impl App {
                 DmmMessage::Ended => {
                     self.connection.ended = true;
                 }
-                DmmMessage::WaitingForMeter(count) => {
-                    if self.on_waiting_for_meter(count) {
-                        clear_channel = true;
-                    }
-                }
+                DmmMessage::WaitingForMeter(count) => self.on_waiting_for_meter(count),
                 DmmMessage::Reconnecting {
                     attempt,
                     last_error,
@@ -614,24 +610,21 @@ impl App {
                     // as an unplugged cable.
                     self.mark_data_loss();
                 }
-                DmmMessage::Error(e) => {
+                // The thread has ended: the session goes with it.
+                DmmMessage::Failed(e) => {
                     error!("UI: error: {e}");
-                    self.connection.last_error = Some(ConnectionIssue::from_error(
-                        &self.l10n,
-                        &e,
-                        self.settings.overrides.adapter.as_deref(),
-                        self.picked_listing(),
-                    ));
-                    if !self.connection.state.is_linked() {
-                        clear_channel = true;
-                    }
+                    self.connection.last_error = Some(self.issue_from(&e));
+                    clear_channel = true;
                 }
-                DmmMessage::ErrorText(msg) => {
-                    error!("UI: error: {msg}");
-                    self.connection.last_error = Some(ConnectionIssue::Other(msg));
-                    if !self.connection.state.is_linked() {
-                        clear_channel = true;
-                    }
+                // The thread reads on, and the next good frame clears it.
+                DmmMessage::BadFrame(e) => {
+                    error!("UI: error: {e}");
+                    self.connection.last_error = Some(self.issue_from(&e));
+                }
+                DmmMessage::Panicked(msg) => {
+                    error!("UI: error: internal error: {msg}");
+                    self.connection.last_error = Some(ConnectionIssue::Internal(msg));
+                    clear_channel = true;
                 }
                 DmmMessage::CommandFailed { command, error } => {
                     let message = command_failed_toast(&self.l10n, &command, &error);
@@ -649,10 +642,11 @@ impl App {
         self.mark_breaches(breaches);
 
         if thread_gone && !clear_channel {
-            // The acquisition thread exited on its own — it panicked, or it
-            // gave up during connect. Nothing more will ever arrive on this
-            // channel, so drop the connection instead of leaving a green
-            // "Connected" dot and enabled controls in front of a dead thread.
+            // The acquisition thread ended without saying why: a panic or a
+            // failed open says so and ends the session itself. Nothing more
+            // will ever arrive on this channel, so drop the connection instead
+            // of leaving a green "Connected" dot and enabled controls in
+            // front of a dead thread.
             error!("UI: acquisition thread exited unexpectedly");
             if self.connection.last_error.is_none() {
                 self.connection.last_error = Some(ConnectionIssue::Other(
@@ -666,6 +660,17 @@ impl App {
             // Disconnect properly: send stop signal so the background thread exits
             self.disconnect();
         }
+    }
+
+    /// What to tell the user about a library failure, for this session's
+    /// pick and adapter.
+    fn issue_from(&self, e: &dmm_lib::error::Error) -> ConnectionIssue {
+        ConnectionIssue::from_error(
+            &self.l10n,
+            e,
+            self.settings.overrides.adapter.as_deref(),
+            self.picked_listing(),
+        )
     }
 
     /// A link is up: record the meter, save or toast about the model it
@@ -769,10 +774,10 @@ impl App {
         }
     }
 
-    /// The meter missed `count` reads in a row. Whether to drop the channel:
-    /// the no-response error was raised while already Disconnected, as the
-    /// Error and ErrorText arms drop it.
-    fn on_waiting_for_meter(&mut self, count: u32) -> bool {
+    /// The meter missed `count` reads in a row: the waiting notice, and past
+    /// the threshold the no-response one. The link is up, so the session
+    /// stays.
+    fn on_waiting_for_meter(&mut self, count: u32) {
         self.connection.waiting_timeouts = count;
         // No reading for a read timeout: nothing to integrate across, whatever
         // the interval.
@@ -796,9 +801,6 @@ impl App {
                 connection::no_response(&crate::l10n::english())
             );
             self.connection.last_error = Some(ConnectionIssue::NoResponse);
-            !self.connection.state.is_linked()
-        } else {
-            false
         }
     }
 
@@ -1293,9 +1295,43 @@ mod tests {
     fn a_failed_open_leaves_connecting() {
         let mut app = app("ut61eplus", false);
         app.connection.state = ConnectionState::Connecting;
-        app.deliver(DmmMessage::ErrorText("no meter".into()));
+        app.deliver(DmmMessage::Failed(dmm_lib::error::Error::Timeout));
         assert_eq!(app.connection.state, ConnectionState::Disconnected);
         assert!(app.connection.worker.is_none(), "the thread is let go");
+        assert!(app.connection.last_error.is_some());
+    }
+
+    /// A panicked thread ends the session in the drain that hears of it,
+    /// whether or not its channel has hung up yet: nothing will read the
+    /// meter again, and Connected over it would say otherwise.
+    #[test]
+    fn a_panic_ends_a_connected_session_at_once() {
+        let mut app = connected_app();
+        app.deliver(DmmMessage::Panicked("index out of bounds".into()));
+        assert_eq!(app.connection.state, ConnectionState::Disconnected);
+        assert!(app.connection.worker.is_none(), "the thread is let go");
+        let notice = app.connection_notice().expect("a notice");
+        assert!(
+            notice
+                .body
+                .starts_with("Internal error: index out of bounds"),
+            "{}",
+            notice.body
+        );
+    }
+
+    /// A frame that can't be read is said, and the session reads on.
+    #[test]
+    fn a_bad_frame_keeps_the_session() {
+        let mut app = connected_app();
+        app.deliver(DmmMessage::BadFrame(
+            dmm_lib::error::Error::ChecksumMismatch {
+                expected: 0x01a3,
+                actual: 0x0003,
+            },
+        ));
+        assert_eq!(app.connection.state, ConnectionState::Connected);
+        assert!(app.connection.worker.is_some());
         assert!(app.connection.last_error.is_some());
     }
 

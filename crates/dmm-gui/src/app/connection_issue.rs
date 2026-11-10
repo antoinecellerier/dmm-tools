@@ -79,6 +79,9 @@ pub(crate) enum ConnectionIssue {
     /// error, a stopped thread — with its text, which is all the user has to
     /// go on.
     Other(String),
+    /// The acquisition thread panicked, with the panic's own text, which
+    /// stays English; the lead-in is worded where it is drawn.
+    Internal(String),
 }
 
 /// Which connection notice is on screen.
@@ -552,6 +555,19 @@ impl App {
                 format!(
                     "{}\n\n{}",
                     escape_controls(error),
+                    tr!(l10n, "connection-click-connect")
+                ),
+            ),
+            ConnectionIssue::Internal(detail) => notice(
+                NoticeKind::Failed,
+                tr!(l10n, "connection-failed").into_owned(),
+                format!(
+                    "{}\n\n{}",
+                    tr!(
+                        l10n,
+                        "connection-internal-error",
+                        detail = escape_controls(detail).into_owned()
+                    ),
                     tr!(l10n, "connection-click-connect")
                 ),
             ),
