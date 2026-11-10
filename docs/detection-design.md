@@ -96,8 +96,8 @@ name frame arriving in it outranks the fallback (see
 [Names and the registry](#names-and-the-registry)). When the window ends with nothing stronger,
 that fallback is what detection returns rather than the next probe going out — the family is
 settled, and every trigger left in the cascade belongs to another one. Two *different* families
-tied at the top identify nothing: a WARN names both and the window keeps listening, because a
-tie is a 2^-16 checksum collision or a rule claiming too much, not a meter.
+tied at the top identify nothing: a WARN, once per detection, names both and the window keeps
+listening, because a tie is a 2^-16 checksum collision or a rule claiming too much, not a meter.
 Extractor errors are ignored throughout: to a classifier "this is not that format here" is the
 answer, not a failure, and a checksum mismatch at one offset says nothing about the next.
 

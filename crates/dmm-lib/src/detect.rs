@@ -67,13 +67,18 @@ const MAX_EMPTY_READS: usize = 256;
 /// the oldest bytes are dropped so growth stays bounded.
 const MAX_RX_BUF: usize = 4096;
 
-/// A family settled by a frame that named no model.
-#[derive(Clone, Copy)]
-struct FamilyEvidence {
-    /// Which family the frame came from, for the warning the user reads.
-    family: DeviceFamily,
-    /// The entry to open when nothing better arrives.
-    fallback: &'static SelectableDevice,
+/// What the windows of one detection heard that settles nothing yet.
+#[derive(Default)]
+struct Heard {
+    /// A frame that settles the family but not the model — a bare UT61+
+    /// reading, stale from an earlier session or caught mid-poll — and the
+    /// entry it falls back to. Kept while listening goes on: a name frame
+    /// later in the same window outranks it, and when the window ends it
+    /// settles detection.
+    family_only: Option<&'static SelectableDevice>,
+    /// Reads on which two families tied. The tied bytes stay in the buffer,
+    /// so every later read ties again: only the first one warns.
+    ties: u32,
 }
 
 /// The fingerprints worth running on `bridge`, in registry order and each one
@@ -213,11 +218,7 @@ fn detect_among(
         info_characteristic: transport.info_characteristic().map(<[u8]>::to_vec),
         ..Probing::default()
     };
-    // A frame that settles the family but not the model — a bare UT61+
-    // reading, stale from an earlier session or caught mid-poll. Remember it
-    // and keep listening: a name frame later in the same window outranks it,
-    // and when the window ends it settles detection (below).
-    let mut family_only: Option<FamilyEvidence> = None;
+    let mut heard = Heard::default();
 
     for fp in probes {
         let window = match fp.trigger {
@@ -233,13 +234,7 @@ fn detect_among(
             }
         };
         if let Some(detected) = listen(
-            transport,
-            &mut buf,
-            window,
-            fp.label,
-            &carried,
-            &probing,
-            &mut family_only,
+            transport, &mut buf, window, fp.label, &carried, &probing, &mut heard,
         )? {
             // The meter's own answer wins over the name its radio advertises;
             // a mismatch is worth a report, not a second guess.
@@ -256,8 +251,8 @@ fn detect_among(
         // The family is settled, only the model is not — the remaining
         // probes belong to other families and would go out to a meter we
         // already know the family of.
-        if let Some(found) = family_only {
-            let (device, why) = family_fallback(found, probing.advertised, bridge);
+        if let Some(fallback) = heard.family_only {
+            let (device, why) = family_fallback(fallback, probing.advertised, bridge);
             warn!("{why}");
             return Ok(announce(
                 Detected {
@@ -301,7 +296,7 @@ fn listen(
     label: &str,
     recognisers: &[&'static Fingerprint],
     probing: &Probing,
-    family_only: &mut Option<FamilyEvidence>,
+    heard: &mut Heard,
 ) -> Result<Option<Detected>> {
     let deadline = Instant::now() + window;
     let mut chunk = [0u8; 64];
@@ -320,13 +315,10 @@ fn listen(
         empty_reads = 0;
         push(buf, &chunk[..n]);
         match classify(buf, recognisers, probing) {
-            Some((
-                _,
-                Evidence::Model {
-                    device,
-                    reported_name,
-                },
-            )) => {
+            Verdict::Claim(Evidence::Model {
+                device,
+                reported_name,
+            }) => {
                 debug!(
                     "detect: {} identified from {} received bytes during {label}",
                     device.id,
@@ -337,10 +329,19 @@ fn listen(
                     reported_name,
                 }));
             }
-            Some((family, Evidence::FamilyOnly { fallback })) => {
-                *family_only = Some(FamilyEvidence { family, fallback })
+            Verdict::Claim(Evidence::FamilyOnly { fallback }) => heard.family_only = Some(fallback),
+            Verdict::Tie(family, other) => {
+                heard.ties += 1;
+                if heard.ties == 1 {
+                    warn!(
+                        "detect: the {family} and {other} rules claim the same bytes with \
+                         equal confidence; identifying neither and listening on"
+                    );
+                } else {
+                    debug!("detect: the {family} and {other} rules still tie");
+                }
             }
-            None => {}
+            Verdict::Nothing => {}
         }
     }
     Ok(None)
@@ -395,22 +396,28 @@ fn strength(fp: &Fingerprint, evidence: &Evidence) -> Strength {
     }
 }
 
+/// What [`classify`] made of the buffer.
+enum Verdict {
+    /// The strongest evidence, which no other family matched.
+    Claim(Evidence),
+    /// Two families claimed the same bytes just as strongly.
+    Tie(DeviceFamily, DeviceFamily),
+    /// No rule claimed anything.
+    Nothing,
+}
+
 /// Classify everything received so far: every rule runs, and the strongest
 /// evidence wins.
 ///
 /// Two rules claiming the same bytes at the same [`Strength`] for *different*
 /// families is a coincidence — a 2^-16 checksum collision, or a rule that
-/// claims too much — and nothing is identified from it: the warning names
-/// both and the caller keeps listening.
+/// claims too much — and nothing is identified from it: the caller warns,
+/// naming both, and keeps listening.
 ///
 /// Extractor errors are ignored inside every recogniser: to a classifier
 /// "this is not that format here" is the answer, not a failure, and a
 /// checksum mismatch at one offset says nothing about the next.
-fn classify(
-    buf: &[u8],
-    recognisers: &[&'static Fingerprint],
-    probing: &Probing,
-) -> Option<(DeviceFamily, Evidence)> {
+fn classify(buf: &[u8], recognisers: &[&'static Fingerprint], probing: &Probing) -> Verdict {
     let mut best: Option<(Strength, DeviceFamily, Evidence)> = None;
     let mut tied_with: Option<DeviceFamily> = None;
 
@@ -436,15 +443,11 @@ fn classify(
         best = Some((rank, fp.family, evidence));
     }
 
-    let (_, family, evidence) = best?;
-    if let Some(other) = tied_with {
-        warn!(
-            "detect: the {family} and {other} rules claim the same bytes with equal \
-             confidence; identifying neither and listening on"
-        );
-        return None;
+    match (best, tied_with) {
+        (None, _) => Verdict::Nothing,
+        (Some((_, family, _)), Some(other)) => Verdict::Tie(family, other),
+        (Some((_, _, evidence)), None) => Verdict::Claim(evidence),
     }
-    Some((family, evidence))
 }
 
 /// The entry a detection that settled only the family opens, and the warning
@@ -454,17 +457,17 @@ fn classify(
 /// (`advertised`, when that name is its alone), and its ranges are not the
 /// family fallback's: a UT60BT's V position starts at 999.9mV, the UT61E+'s
 /// at 2.2V (ut61-family spec §9). Every other link — an adapter, a cable —
-/// gets the fingerprint's fallback.
+/// gets `fallback`, the entry the rule named.
 fn family_fallback(
-    found: FamilyEvidence,
+    fallback: &'static SelectableDevice,
     advertised: Option<&'static SelectableDevice>,
     bridge: &str,
 ) -> (&'static SelectableDevice, String) {
     let unnamed = format!(
         "detect: a frame in the {} format arrived on {bridge} but the meter never named its model",
-        found.family
+        fallback.family
     );
-    match advertised.filter(|d| d.family == found.family) {
+    match advertised.filter(|d| d.family == fallback.family) {
         Some(device) => (
             device,
             format!(
@@ -474,10 +477,10 @@ fn family_fallback(
             ),
         ),
         None => (
-            found.fallback,
+            fallback,
             format!(
                 "{unnamed}; falling back to the {} tables",
-                found.fallback.display_name()
+                fallback.display_name()
             ),
         ),
     }
@@ -902,11 +905,8 @@ mod tests {
     /// cable keeps the family fallback and its wording.
     #[test]
     fn the_family_fallback_says_which_tables_and_why() {
-        let found = FamilyEvidence {
-            family: DeviceFamily::Ut61EPlus,
-            fallback: &crate::protocol::ut61eplus::devices::UT61EPLUS,
-        };
-        let (device, why) = family_fallback(found, None, "CP2110");
+        let fallback = &crate::protocol::ut61eplus::devices::UT61EPLUS;
+        let (device, why) = family_fallback(fallback, None, "CP2110");
         assert_eq!(device.id, "ut61eplus");
         assert_eq!(
             why,
@@ -914,7 +914,7 @@ mod tests {
              falling back to the UNI-T UT61E+ tables"
         );
         let ut60bt = registry::find_device("ut60bt");
-        let (device, why) = family_fallback(found, ut60bt, crate::BLUETOOTH);
+        let (device, why) = family_fallback(fallback, ut60bt, crate::BLUETOOTH);
         assert_eq!(device.id, "ut60bt");
         assert_eq!(
             why,
@@ -1426,8 +1426,7 @@ mod tests {
     fn the_strongest_evidence_wins_whatever_the_order() {
         let rules: [&'static Fingerprint; 4] = [&UNCHECKSUMMED, &FAMILY_ONLY, &CHECKSUMMED, &NAMED];
         let probing = Probing::default();
-        let family =
-            |rules: &[&'static Fingerprint]| classify(b"", rules, &probing).map(|(f, _)| f);
+        let family = |rules: &[&'static Fingerprint]| claimed_family(b"", rules, &probing);
 
         assert_eq!(family(&rules), Some(DeviceFamily::Ut61EPlus));
         assert_eq!(family(&rules[..3]), Some(DeviceFamily::Ut8803));
@@ -1440,11 +1439,53 @@ mod tests {
     #[test]
     fn two_families_tied_at_the_top_identify_nothing() {
         let probing = Probing::default();
-        assert!(classify(b"", &[&CHECKSUMMED, &RIVAL_CHECKSUMMED], &probing).is_none());
+        assert!(matches!(
+            classify(b"", &[&CHECKSUMMED, &RIVAL_CHECKSUMMED], &probing),
+            Verdict::Tie(DeviceFamily::Ut8803, DeviceFamily::Ut171)
+        ));
         // The tie is only between the leaders: something stronger settles it.
         assert_eq!(
-            classify(b"", &[&CHECKSUMMED, &RIVAL_CHECKSUMMED, &NAMED], &probing).map(|(f, _)| f),
+            claimed_family(b"", &[&CHECKSUMMED, &RIVAL_CHECKSUMMED, &NAMED], &probing),
             Some(DeviceFamily::Ut61EPlus)
         );
+    }
+
+    /// The family of the entry `classify` claims; `None` on a tie or nothing.
+    fn claimed_family(
+        buf: &[u8],
+        rules: &[&'static Fingerprint],
+        probing: &Probing,
+    ) -> Option<DeviceFamily> {
+        match classify(buf, rules, probing) {
+            Verdict::Claim(Evidence::Model { device, .. }) => Some(device.family),
+            Verdict::Claim(Evidence::FamilyOnly { fallback }) => Some(fallback.family),
+            Verdict::Tie(..) | Verdict::Nothing => None,
+        }
+    }
+
+    /// The tied bytes stay in the buffer, so every later read ties again,
+    /// across windows; the count is what keeps the warning to the first.
+    #[test]
+    fn a_tie_is_counted_across_windows_and_identifies_nothing() {
+        let rules: [&'static Fingerprint; 2] = [&CHECKSUMMED, &RIVAL_CHECKSUMMED];
+        let probing = Probing::default();
+        let mut buf = Vec::new();
+        let mut heard = Heard::default();
+        // Long enough never to cut a read short: the drained mock's empty
+        // reads end each window.
+        let window = Duration::from_secs(10);
+        let first = MockTransport::new(vec![vec![0x01], vec![0x02], vec![0x03]]);
+        let found = listen(
+            &first, &mut buf, window, "first", &rules, &probing, &mut heard,
+        );
+        assert!(found.unwrap().is_none());
+        assert_eq!(heard.ties, 3);
+        let second = MockTransport::new(vec![vec![0x04], vec![0x05]]);
+        let found = listen(
+            &second, &mut buf, window, "second", &rules, &probing, &mut heard,
+        );
+        assert!(found.unwrap().is_none());
+        assert_eq!(heard.ties, 5);
+        assert!(heard.family_only.is_none());
     }
 }
