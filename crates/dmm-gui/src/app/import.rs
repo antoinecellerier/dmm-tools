@@ -331,6 +331,8 @@ fn load_replay(text: &str, base: Instant, limit: usize) -> Result<Loaded, Unread
                     readings.push((m, 0));
                 }
                 Ok(StreamEvent::Ended) => break,
+                // No wake is set: nothing else acts between frames.
+                Ok(StreamEvent::Woken) => {}
                 // A gap in the recording: nothing to take.
                 Ok(StreamEvent::Timeout { .. }) => {}
                 // A frame the family refuses is one reading fewer, as it was

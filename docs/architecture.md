@@ -170,7 +170,10 @@ Code: `protocol/mod.rs` (`Setting`, `Choice`, `MeterKeys`), `protocol/cycle.rs`.
 polled meter on absolute ticks. It reads a streaming meter continuously and keeps the frame nearest
 each tick, so every frame is read, and stamped, as it arrives. It also spots a link that hands a
 streaming meter's readings over two at a time, and passes on the link's own notice about it
-(`Transport::late_readings`) for the binary to show. Cancellation stays with the caller.
+(`Transport::late_readings`) for the binary to show. Each binary owns its own stop signal and hands
+it to the stream, which cuts its wait short on it. A caller with work between readings, such as a
+command to send, also hands over a wake signal: the wait then ends without a reading, and the next
+tick stays on the schedule.
 
 `Dmm::request_measurement` stamps every reading with the session `Clock` and its `wall_time`, and
 attaches the spec data. Stamping in one place means the statistics, the graph, the recording and

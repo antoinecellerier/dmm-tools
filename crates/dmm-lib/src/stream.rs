@@ -23,7 +23,10 @@
 //! its acquisition thread). Callers check it around each
 //! [`MeasurementStream::tick`] call and hand it to
 //! [`MeasurementStream::with_cancel`], so the wait for a reading gives up on
-//! that same signal instead of running to term.
+//! that same signal instead of running to term. A caller with work of its
+//! own to do between readings (the GUI's commands) hands its signal for that
+//! to [`MeasurementStream::with_wake`]: the wait then ends without a reading,
+//! and the next tick keeps the same schedule.
 
 use crate::Dmm;
 use crate::clock::Clock;
@@ -59,6 +62,9 @@ pub enum StreamEvent {
     /// Nothing more will come: a replay has handed out its last frame. Every
     /// later tick says so again.
     Ended,
+    /// The wake predicate ([`MeasurementStream::with_wake`]) fired during the
+    /// wait: nothing is handed over, and the next tick is due when it was.
+    Woken,
 }
 
 /// Paced acquisition wrapper around a [`Dmm`].
@@ -91,6 +97,30 @@ pub struct MeasurementStream<'a, T: Transport> {
     /// (the GUI reassigns `dmm` after a reconnect). Both callers hand over an
     /// owned `Arc` anyway.
     cancel: Option<Box<dyn Fn() -> bool + Send + 'static>>,
+    /// `'static` for the same reason as `cancel`.
+    wake: Option<Box<dyn Fn() -> bool + Send + 'static>>,
+}
+
+/// What a tick's read came back with.
+#[expect(
+    clippy::large_enum_variant,
+    reason = "short-lived: returned to `tick`, which unwraps it at once"
+)]
+enum Next {
+    Reading(Measurement),
+    Woken,
+    /// The source has ended with nothing left to hand over.
+    Ended,
+}
+
+/// Why a pacing wait ended.
+#[derive(Debug, PartialEq, Eq)]
+enum Waited {
+    /// The whole wait, or the cancel predicate cut it short: either way a
+    /// reading follows.
+    Out,
+    /// The wake predicate fired: no reading follows.
+    Woken,
 }
 
 /// Longest single sleep inside a cancellable pacing wait.
@@ -180,6 +210,7 @@ impl<'a, T: Transport> MeasurementStream<'a, T> {
             pairs: Pairs::default(),
             consecutive_timeouts: 0,
             cancel: None,
+            wake: None,
         }
     }
 
@@ -200,9 +231,29 @@ impl<'a, T: Transport> MeasurementStream<'a, T> {
         self
     }
 
+    /// Poll `wake` while waiting for a reading, and hand control back with
+    /// [`StreamEvent::Woken`] when it returns true, so the caller can act at
+    /// once (send a command, apply a pause) rather than at the next reading.
+    ///
+    /// Unlike [`Self::with_cancel`], a wake hands over nothing, and the next
+    /// tick waits for the reading that was due, so the schedule doesn't
+    /// move. A polled meter is not asked; its wait hears the wake within
+    /// a poll slice. A streaming meter hears it between frames, and the
+    /// frames it read in the interval so far are discarded: a tick that
+    /// then ends on a corrupt frame reports the error, where an unwoken one
+    /// would hand over the last good frame, since keeping it could hand over
+    /// a reading from before a pause or a mode change. The stream only reads
+    /// the predicate, so clearing it is the caller's: one left raised wakes
+    /// the next tick too. When both fire, cancel wins.
+    pub fn with_wake(mut self, wake: impl Fn() -> bool + Send + 'static) -> Self {
+        self.wake = Some(Box::new(wake));
+        self
+    }
+
     /// Read one measurement, paced to the tick schedule.
     ///
-    /// Returns `Ok(Measurement)` or `Ok(Timeout)`. Non-timeout transport
+    /// Returns `Ok(Measurement)` or `Ok(Timeout)`, or `Ok(Woken)` with a wake
+    /// predicate set ([`Self::with_wake`]). Non-timeout transport
     /// errors bubble up as `Err(_)` and leave the counter unchanged; the
     /// caller decides whether to reconnect or abort.
     ///
@@ -215,14 +266,17 @@ impl<'a, T: Transport> MeasurementStream<'a, T> {
         }
         let result = match self.dmm.delivery() {
             Delivery::Polled => {
-                self.sleep_until_tick();
-                self.dmm.request_measurement().map(Some)
+                if self.sleep_until_tick() == Waited::Woken {
+                    return Ok(StreamEvent::Woken);
+                }
+                self.dmm.request_measurement().map(Next::Reading)
             }
             Delivery::Streamed => self.next_streamed(),
         };
         match result {
-            Ok(None) => Ok(StreamEvent::Ended),
-            Ok(Some(m)) => {
+            Ok(Next::Ended) => Ok(StreamEvent::Ended),
+            Ok(Next::Woken) => Ok(StreamEvent::Woken),
+            Ok(Next::Reading(m)) => {
                 self.consecutive_timeouts = 0;
                 Ok(StreamEvent::Measurement(m))
             }
@@ -274,20 +328,26 @@ impl<'a, T: Transport> MeasurementStream<'a, T> {
     /// Read a streaming meter's frames until one is due, keeping none of the
     /// others. A protocol error in between is dropped as the frames are: it
     /// stands for the interval only if nothing good arrives by the tick.
-    /// `None` once the source has ended with nothing left to hand over; the
-    /// last frame of a replay is kept whatever the tick.
-    fn next_streamed(&mut self) -> Result<Option<Measurement>> {
+    /// [`Next::Ended`] once the source has ended with nothing left to hand
+    /// over; the last frame of a replay is kept whatever the tick. The wake
+    /// predicate is heard between frames.
+    fn next_streamed(&mut self) -> Result<Next> {
         let mut dropped: Option<Measurement> = None;
         let mut skipped = 0u32;
         loop {
             if self.dmm.ended() {
-                return Ok(dropped);
+                return Ok(dropped.map_or(Next::Ended, Next::Reading));
             }
-            if self.cancelled()
-                && let Some(m) = dropped.take()
-            {
+            let cancelled = self.cancelled();
+            if cancelled && let Some(m) = dropped.take() {
                 self.keep(m.timestamp);
-                return Ok(Some(m));
+                return Ok(Next::Reading(m));
+            }
+            if !cancelled && self.woken() {
+                if skipped > 0 {
+                    trace!("stream: woken, {skipped} frames since the last kept");
+                }
+                return Ok(Next::Woken);
             }
             match self.dmm.request_measurement() {
                 Ok(m) => {
@@ -295,7 +355,7 @@ impl<'a, T: Transport> MeasurementStream<'a, T> {
                     self.watch_pairs(m.timestamp, gap);
                     if self.keep(m.timestamp) {
                         trace!("stream: kept a reading, {skipped} frames since the last");
-                        return Ok(Some(m));
+                        return Ok(Next::Reading(m));
                     }
                     skipped += 1;
                     dropped = Some(m);
@@ -309,7 +369,7 @@ impl<'a, T: Transport> MeasurementStream<'a, T> {
                         // good frame from this window stands for it instead.
                         self.advance(self.clock.now());
                         if let Some(m) = dropped {
-                            return Ok(Some(m));
+                            return Ok(Next::Reading(m));
                         }
                     }
                     return Err(e);
@@ -424,15 +484,23 @@ impl<'a, T: Transport> MeasurementStream<'a, T> {
         self.cancel.as_ref().is_some_and(|cancel| cancel())
     }
 
-    fn sleep_until_tick(&mut self) {
+    fn woken(&self) -> bool {
+        self.wake.as_ref().is_some_and(|wake| wake())
+    }
+
+    /// Wait for the next polled tick and move the schedule on, unless woken:
+    /// then the tick stays where it was, for the next call to wait for.
+    fn sleep_until_tick(&mut self) -> Waited {
         if self.tick.is_zero() {
-            return;
+            return Waited::Out;
         }
         let now = self.clock.now();
         match self.next_tick {
             Some(target) => {
-                if let Some(wait) = target.checked_duration_since(now) {
-                    self.sleep_cancellable(wait);
+                if let Some(wait) = target.checked_duration_since(now)
+                    && self.sleep_cancellable(wait) == Waited::Woken
+                {
+                    return Waited::Woken;
                 }
                 let mut next = target + self.tick;
                 let now2 = self.clock.now();
@@ -447,21 +515,26 @@ impl<'a, T: Transport> MeasurementStream<'a, T> {
                 self.next_tick = Some(now + self.tick);
             }
         }
+        Waited::Out
     }
 
-    /// Sleep for `wait`, returning early if the cancel predicate fires.
+    /// Sleep for `wait`, returning early if the cancel or the wake predicate
+    /// fires; cancel first, as a stop outranks anything a wake asks for.
     ///
     /// With no predicate this is a single clock sleep; the slicing costs
-    /// nothing when nobody is watching for cancellation.
-    fn sleep_cancellable(&self, wait: Duration) {
-        let Some(cancel) = &self.cancel else {
+    /// nothing when nobody is watching.
+    fn sleep_cancellable(&self, wait: Duration) -> Waited {
+        if self.cancel.is_none() && self.wake.is_none() {
             self.clock.sleep(wait);
-            return;
-        };
+            return Waited::Out;
+        }
         let deadline = self.clock.now() + wait;
         loop {
-            if cancel() {
-                return;
+            if self.cancelled() {
+                return Waited::Out;
+            }
+            if self.woken() {
+                return Waited::Woken;
             }
             // `checked_duration_since` rather than a subtraction: a backward
             // clock jump must not panic here. Nothing remaining ends the wait
@@ -469,7 +542,7 @@ impl<'a, T: Transport> MeasurementStream<'a, T> {
             // zero would spin forever waiting to pass the deadline.
             let remaining = deadline.checked_duration_since(self.clock.now());
             let Some(remaining) = remaining.filter(|r| !r.is_zero()) else {
-                return;
+                return Waited::Out;
             };
             self.clock.sleep(remaining.min(CANCEL_POLL_SLICE));
         }
@@ -589,6 +662,46 @@ mod tests {
             waited <= CANCEL_POLL_SLICE,
             "cancelled sleep should give up within a poll slice of the 10 s tick, waited {waited:?}"
         );
+    }
+
+    /// A wake hands control back mid-wait without asking the meter, and the
+    /// reading that was due still comes on time: the schedule doesn't move.
+    #[test]
+    fn a_wake_returns_without_reading_and_keeps_the_schedule() {
+        let clock = Clock::manual();
+        let mut dmm = new_clocked_dmm(two_readings(), &clock);
+        let tick = Duration::from_secs(10);
+        // The first tick reads at once, polling nothing; the wait for the
+        // second hears the wake on its third poll, two slices in.
+        let mut stream = MeasurementStream::new(&mut dmm, tick).with_wake(wake_on_poll(3));
+
+        let start = clock.now();
+        assert!(matches!(stream.tick(), Ok(StreamEvent::Measurement(_))));
+        let asked = stream.dmm().transport().written.borrow().len();
+        assert!(matches!(stream.tick(), Ok(StreamEvent::Woken)));
+        assert_eq!(
+            clock.now().saturating_duration_since(start),
+            CANCEL_POLL_SLICE * 2
+        );
+        assert_eq!(stream.dmm().transport().written.borrow().len(), asked);
+
+        let StreamEvent::Measurement(m) = stream.tick().unwrap() else {
+            panic!("expected the reading that was due");
+        };
+        assert_eq!(m.timestamp.saturating_duration_since(start), tick);
+    }
+
+    /// Stop outranks a wake: the wait ends, and the meter is asked once
+    /// more, as with a cancel alone.
+    #[test]
+    fn a_cancel_raised_with_a_wake_still_reads() {
+        let clock = Clock::manual();
+        let mut dmm = new_clocked_dmm(two_readings(), &clock);
+        let mut stream = MeasurementStream::new(&mut dmm, Duration::from_secs(10))
+            .with_cancel(|| true)
+            .with_wake(|| true);
+        assert!(matches!(stream.tick(), Ok(StreamEvent::Measurement(_))));
+        assert!(matches!(stream.tick(), Ok(StreamEvent::Measurement(_))));
     }
 
     /// The predicate must not shorten a wait nobody asked to cancel.
@@ -877,6 +990,66 @@ mod tests {
         let start = clock.now();
         assert!(matches!(stream.tick(), Ok(StreamEvent::Measurement(_))));
         assert!(clock.now() - start < Duration::from_secs(1));
+    }
+
+    /// A wake predicate that fires once, on its `nth` poll. A streaming
+    /// stream polls it before each frame, so the first tick takes poll 1 and
+    /// frame 0, and a wake on poll 6 comes with frames 1 to 4 read.
+    fn wake_on_poll(nth: usize) -> impl Fn() -> bool + Send + 'static {
+        let polls = std::sync::atomic::AtomicUsize::new(0);
+        move || polls.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1 == nth
+    }
+
+    fn frame_index(event: StreamEvent) -> u32 {
+        match event {
+            StreamEvent::Measurement(m) => {
+                u32::from_le_bytes(m.raw_payload[..4].try_into().unwrap())
+            }
+            other => panic!("expected a reading, got {other:?}"),
+        }
+    }
+
+    /// A streaming meter woken mid-interval keeps the frame an unwoken
+    /// stream keeps: the frames read before the wake were never the tick's.
+    #[test]
+    fn a_woken_stream_keeps_the_frame_it_would_have_kept() {
+        let tick = Duration::from_secs(1);
+        let (mut plain, _) = timed_dmm(jittered(100, 40), vec![]);
+        let expected = kept(&mut plain, tick, 2);
+
+        // Each clock starts at its own instant: compare which frame was kept.
+        let (mut dmm, _) = timed_dmm(jittered(100, 40), vec![]);
+        let mut stream = MeasurementStream::new(&mut dmm, tick).with_wake(wake_on_poll(6));
+        assert_eq!(frame_index(stream.tick().unwrap()), expected[0].0);
+        assert!(matches!(stream.tick(), Ok(StreamEvent::Woken)));
+        assert_eq!(frame_index(stream.tick().unwrap()), expected[1].0);
+    }
+
+    /// Stop outranks a wake on a streaming meter too: the newest frame read
+    /// is handed over.
+    #[test]
+    fn a_cancel_raised_with_a_wake_still_hands_over_a_frame() {
+        let (mut dmm, _) = timed_dmm(jittered(100, 40), vec![]);
+        let mut stream = MeasurementStream::new(&mut dmm, Duration::from_secs(60))
+            .with_cancel(|| true)
+            .with_wake(|| true);
+        assert!(matches!(stream.tick(), Ok(StreamEvent::Measurement(_))));
+        assert!(matches!(stream.tick(), Ok(StreamEvent::Measurement(_))));
+    }
+
+    /// A wake drops the frames read before it: a tick that then sees only
+    /// corrupt frames reports the error rather than a reading from before the
+    /// wake, which may predate a pause or a mode change.
+    #[test]
+    fn a_woken_stream_hands_over_no_frame_from_before_the_wake() {
+        // Frames 1 to 4 read before the wake are good, all after it corrupt.
+        let (mut dmm, _) = timed_dmm(jittered(100, 40), (5..40).collect());
+        let mut stream =
+            MeasurementStream::new(&mut dmm, Duration::from_secs(1)).with_wake(wake_on_poll(6));
+        assert!(matches!(stream.tick(), Ok(StreamEvent::Measurement(_))));
+        assert!(matches!(stream.tick(), Ok(StreamEvent::Woken)));
+        let err = stream.tick().unwrap_err();
+        assert_eq!(err.kind(), ErrorKind::Protocol);
     }
 
     /// A Bluetooth link that hands readings over two at a time when it is

@@ -83,6 +83,8 @@ pub(crate) fn cmd_debug(
             }
             // Only a replay ends, and `debug` reads a meter.
             Ok(StreamEvent::Ended) => break,
+            // No wake is set: nothing else acts between readings.
+            Ok(StreamEvent::Woken) => {}
             Ok(StreamEvent::Timeout { .. }) => {
                 eprintln!(
                     "{} {}",

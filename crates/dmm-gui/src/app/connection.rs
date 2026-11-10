@@ -573,6 +573,9 @@ where
                     ctx.request_repaint_after(READING_REPAINT_DELAY);
                 }
             }
+            // Back to the top, where control messages and commands are
+            // applied: the stream read nothing.
+            Ok(StreamEvent::Woken) => {}
             Ok(StreamEvent::Ended) => {
                 info!("background thread: the recording has ended");
                 let _ = msg_tx.send(DmmMessage::Ended);

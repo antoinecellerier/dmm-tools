@@ -1090,6 +1090,8 @@ fn run_read_loop<T: dmm_lib::transport::Transport>(
             }
             // A replay's last frame is behind us: the run ends with the file.
             Ok(StreamEvent::Ended) => break,
+            // No wake is set: nothing else acts between readings.
+            Ok(StreamEvent::Woken) => {}
             Ok(StreamEvent::Timeout { consecutive }) => {
                 log::warn!("measurement timeout, retrying");
                 // Nothing was read for a read timeout: no interval to bridge.
