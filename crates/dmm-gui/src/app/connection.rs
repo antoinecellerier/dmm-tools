@@ -717,6 +717,12 @@ where
                         Ok(_) if stop_flag.load(Ordering::Relaxed) => return,
                         Ok((mut d, detected)) => {
                             info!("background thread: reconnected on attempt {attempt}");
+                            // Before the UI hears of the new link, so every
+                            // command still queued was sent for the one that
+                            // went: its dial position, or under Auto-detect
+                            // its model, may be gone. Dropped, not sent to
+                            // whatever answered.
+                            while cmd_rx.try_recv().is_ok() {}
                             establish_connection(
                                 &mut d, detected, selected, query_name, &msg_tx, &ctx,
                             );
@@ -1238,6 +1244,49 @@ mod tests {
             reopen: None,
             after: None,
         }
+    }
+
+    /// A command queued while the link was down is dropped once it is back:
+    /// it names a dial position, or a model, the reopened link may not have.
+    /// Sent, this one would come back refused.
+    #[test]
+    fn a_command_queued_across_a_reconnect_is_dropped() {
+        let live = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let (msg_tx, msg_rx) = mpsc::channel();
+        let (ctrl_tx, ctrl_rx) = mpsc::channel();
+        let (cmd_tx, cmd_rx) = mpsc::channel();
+        let (done_tx, done_rx) = mpsc::channel();
+        let opens = std::sync::atomic::AtomicUsize::new(0);
+        let entry = dmm_lib::protocol::registry::find_device("ut61eplus").expect("registry");
+        let open_live = Arc::clone(&live);
+        let open_fn = move |_: Option<&ReopenPin>| match opens.fetch_add(1, Ordering::SeqCst) {
+            0 => dmm_lib::Dmm::new(Dropout::open(&open_live), (entry.new_protocol)())
+                .map(|d| (d, None)),
+            1 => {
+                // Pressed while the thread is retrying the link.
+                let _ = cmd_tx.send(RemoteCommand::Named("no-such-command".to_string()));
+                dmm_lib::Dmm::new(Dropout::open(&open_live), (entry.new_protocol)())
+                    .map(|d| (d, None))
+            }
+            _ => {
+                let _ = done_tx.send(());
+                Err(dmm_lib::error::Error::Timeout)
+            }
+        };
+        let thread = std::thread::spawn(move || {
+            run_device_thread(open_fn, thread_context(msg_tx, ctrl_rx, cmd_rx))
+        });
+        done_rx
+            .recv_timeout(Duration::from_secs(10))
+            .expect("the thread reconnects twice");
+        drop(ctrl_tx);
+        thread.join().unwrap();
+        assert!(
+            !msg_rx
+                .try_iter()
+                .any(|m| matches!(m, DmmMessage::CommandFailed { .. })),
+            "the queued command reached the reopened link"
+        );
     }
 
     /// A Bluetooth transport disconnects its peripheral when dropped, so a

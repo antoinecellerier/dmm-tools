@@ -606,10 +606,8 @@ impl App {
                 DmmMessage::Measurement(m) => breaches.extend(self.on_measurement(m)),
                 DmmMessage::Disconnected(err) => {
                     info!("UI: disconnected: {err} ({:?})", err.kind());
-                    self.connection.state = ConnectionState::Reconnecting;
+                    self.connection.link_lost();
                     self.held.clear();
-                    // Its command names a link that is gone.
-                    self.connection.late_readings = None;
                     // Tell the graph this was a real loss of data. It can't
                     // infer that from timestamps — the meter goes quiet for
                     // over a second while auto-ranging, which looks the same
@@ -673,10 +671,8 @@ impl App {
     /// A link is up: record the meter, save or toast about the model it
     /// names, and clear the error and reconnect state.
     fn on_connected(&mut self, meter: ConnectedMeter) {
-        self.connection.state = ConnectionState::Connected;
+        self.connection.link_up();
         self.held.clear();
-        // A new link: it says again if its readings come in pairs.
-        self.connection.late_readings = None;
         self.capture.device_aux_slots = meter.max_aux_values;
         // A reconnect mid-recording is the same meter, so the in-flight capture
         // picks the slot count back up — it was 0 before the first Connected of
@@ -691,9 +687,6 @@ impl App {
                 .experimental
                 .get_or_insert(!meter.stability.is_verified());
         }
-        // A reconnect may find the dial elsewhere; the thread re-lists the
-        // choices with its first reading.
-        self.connection.choices.clear();
         let device_id = meter.device.map(|d| d.id);
         let reported = meter.name.clone().unwrap_or_default();
         let (named, picked) = (meter.named_other, meter.device);
@@ -765,10 +758,6 @@ impl App {
             // probing the cable again.
             _ => self.remember_detected_device(device_id, &reported, new_meter),
         }
-        self.connection.last_error = None;
-        self.connection.reconnect_attempt = 0;
-        self.connection.reconnect_last_error = None;
-        self.connection.waiting_for_own_cable = false;
         if let Some(meter) = &self.connection.meter {
             info!(
                 "UI: connected to {} (meter reports {:?})",
@@ -1129,6 +1118,67 @@ mod tests {
         app.deliver(DmmMessage::LateReadings(notice()));
         app.disconnect();
         assert_eq!(app.connection.late_readings, None, "disconnected");
+    }
+
+    /// A lost link stops the waiting notice it was counting towards: the top
+    /// bar says Reconnecting, and a count frozen beside it said the meter
+    /// was being waited for. The link coming back starts the count afresh.
+    #[test]
+    fn a_lost_link_ends_the_wait_for_the_meter() {
+        let mut app = app("ut61eplus", false);
+        app.deliver(connected("ut61eplus", Stability::Verified, 0));
+        app.deliver(DmmMessage::WaitingForMeter(2));
+        assert_eq!(
+            app.connection_notice().map(|n| n.kind),
+            Some(NoticeKind::Waiting)
+        );
+        app.deliver(DmmMessage::Disconnected(dmm_lib::error::Error::LinkLost));
+        assert_eq!(app.connection_notice().map(|n| n.kind), None);
+
+        // Nor does the notice the old link raised.
+        app.deliver(connected("ut61eplus", Stability::Verified, 0));
+        app.deliver(DmmMessage::WaitingForMeter(
+            dmm_lib::stream::NO_RESPONSE_TIMEOUTS,
+        ));
+        assert_eq!(
+            app.connection_notice().map(|n| n.kind),
+            Some(NoticeKind::NoResponse)
+        );
+        app.deliver(DmmMessage::Disconnected(dmm_lib::error::Error::LinkLost));
+        assert_eq!(app.connection_notice().map(|n| n.kind), None);
+
+        app.connection.waiting_timeouts = 2;
+        app.deliver(connected("ut61eplus", Stability::Verified, 0));
+        assert_eq!(app.connection.waiting_timeouts, 0);
+    }
+
+    /// While the link is being retried the readouts take no pick: one would
+    /// wait for the meter and reach whatever answered, with its dial wherever
+    /// it was by then. They stay drawn where they were, as labels.
+    #[test]
+    fn the_readouts_take_no_pick_while_reconnecting() {
+        let mut app = app("ut61eplus", false);
+        app.deliver(connected("ut61eplus", Stability::Verified, 0));
+        let choice = |id, label: &'static str, current| dmm_lib::protocol::Choice {
+            id,
+            label: label.into(),
+            current,
+        };
+        app.deliver(DmmMessage::Choices(
+            dmm_lib::protocol::Setting::Range,
+            vec![choice(0, "Auto", true), choice(1, "22V", false)],
+        ));
+        assert!(!app.readouts().plain);
+
+        app.deliver(DmmMessage::Disconnected(dmm_lib::error::Error::LinkLost));
+        let readouts = app.readouts();
+        assert!(readouts.plain, "no pick while reconnecting");
+        assert_eq!(readouts.range.len(), 2, "the readout keeps its place");
+
+        app.deliver(connected("ut61eplus", Stability::Verified, 0));
+        let readouts = app.readouts();
+        assert!(!readouts.plain);
+        assert!(readouts.range.is_empty(), "listed again by the new link");
     }
 
     /// A Sample interval picked while connected goes to the running session

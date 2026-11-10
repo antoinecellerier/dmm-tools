@@ -387,8 +387,9 @@ impl Default for Connection {
 impl Connection {
     /// Stop the acquisition thread and forget everything about the link.
     /// Nothing is connected, so nothing is identified: under Auto-detect the
-    /// next connect asks the cable again. The waiting count goes too: only an
-    /// incoming measurement clears it otherwise, and there won't be one.
+    /// next connect asks the cable again. The waiting count goes too: only a
+    /// reading or a link transition clears it otherwise, and there won't be
+    /// one.
     /// Only the error that ended the link, a pending reconnect and the
     /// stopped thread's channel survive.
     fn hang_up(&mut self) {
@@ -402,6 +403,33 @@ impl Connection {
             stopping,
             ..Self::default()
         };
+    }
+
+    /// The link went down and the acquisition thread is retrying it. What
+    /// described that link goes with it: its waiting count, the notice it
+    /// raised (a frame it couldn't read, a meter gone quiet) and its late
+    /// readings notice. The choice lists stay, drawn as labels until the
+    /// link is back ([`App::readouts`]), so the readout keeps its place.
+    pub(super) fn link_lost(&mut self) {
+        self.state = ConnectionState::Reconnecting;
+        self.waiting_timeouts = 0;
+        self.last_error = None;
+        self.late_readings = None;
+    }
+
+    /// A link is up, first or again: nothing of the one before it stands.
+    /// The dial may be anywhere, so the choices go until the thread lists
+    /// them with its first reading; the link says again if its readings
+    /// come in pairs; and the error and the reconnect progress are over.
+    pub(super) fn link_up(&mut self) {
+        self.state = ConnectionState::Connected;
+        self.choices.clear();
+        self.waiting_timeouts = 0;
+        self.late_readings = None;
+        self.last_error = None;
+        self.reconnect_attempt = 0;
+        self.reconnect_last_error = None;
+        self.waiting_for_own_cable = false;
     }
 
     /// What the readout dropdowns offer: the listed choices, and the
@@ -704,10 +732,13 @@ impl App {
     }
 
     /// The readouts' lists: what the meter offers, shown as plain labels where
-    /// the session draws no controls.
+    /// the session draws no controls, and unless the link is up (Connected)
+    /// to take a pick: one made while reconnecting would reach whatever
+    /// answers next, with its dial wherever it is by then.
     pub(super) fn readouts(&self) -> display::ReadoutChoices<'_> {
         display::ReadoutChoices {
-            plain: !self.draws_meter_controls(),
+            plain: !self.draws_meter_controls()
+                || self.connection.state != ConnectionState::Connected,
             ..self.connection.readouts()
         }
     }
