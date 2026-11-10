@@ -160,7 +160,8 @@ fn gui_file(path: &str) -> Vec<Resource> {
     GUI.iter().filter(|r| r.path == path).copied().collect()
 }
 
-/// English, shared: what tests and an app built without a window speak.
+/// English, shared: what tests and an app built without a window speak, and
+/// what the log quotes a theme file's reason in.
 pub(crate) fn english() -> Arc<Localizer> {
     static ENGLISH: OnceLock<Arc<Localizer>> = OnceLock::new();
     ENGLISH

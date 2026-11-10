@@ -69,8 +69,8 @@ pub(crate) struct ThemeCatalog {
 }
 
 /// Why a theme file can't be offered, or Save as theme won't write one.
-/// `Display` is the English the log takes; [`ThemeIssue::text`] what the
-/// GUI shows, in its language.
+/// [`ThemeIssue::text`] is what the GUI shows, in its language; `Display`
+/// the same messages in English, for the log.
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum ThemeIssue {
     /// The file system's or the JSON reader's own words.
@@ -109,31 +109,7 @@ pub(crate) enum Pair {
 
 impl std::fmt::Display for ThemeIssue {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let what = |pair: &Pair| match pair {
-            Pair::Text => "text on the background",
-            Pair::Button => "button text on the button",
-            Pair::Frame => "text on the frame",
-        };
-        match self {
-            Self::Read(why) => f.write_str(why),
-            Self::NotAFile => f.write_str("not a file"),
-            Self::TooBig => write!(f, "over {} KiB", MAX_FILE_BYTES / 1024),
-            Self::NameEmpty => f.write_str("the name is empty"),
-            Self::NameTooLong => write!(f, "the name is over {MAX_NAME_CHARS} characters"),
-            Self::NameUnusable => f.write_str("the name has characters a theme name can't use"),
-            Self::NameReserved(name) => write!(f, "{name:?} is taken by the Theme row"),
-            Self::NotOpaque(pair) => write!(f, "{} is not opaque", what(pair)),
-            Self::LowContrast(pair, ratio) => write!(
-                f,
-                "{} is {ratio:.1}:1, under the {MIN_READABLE_CONTRAST}:1 floor",
-                what(pair)
-            ),
-            Self::NameTaken(name, file) => write!(f, "{name:?} is already the name of {file}"),
-            Self::FileNameUnprintable => {
-                f.write_str("the file name has characters that don't print")
-            }
-            Self::TooMany(_) => write!(f, "over the {MAX_FILES}-file limit"),
-        }
+        f.write_str(&self.text(&crate::l10n::english()))
     }
 }
 
@@ -903,35 +879,72 @@ mod tests {
         assert!(why.contains("?[WARN] forged?"), "{why:?}");
     }
 
-    /// The GUI's English for each reason is the log's.
+    /// The log's English is the GUI's English messages: a name quoted with
+    /// its quotes and backslashes escaped, the figures in place.
     #[test]
     fn the_reasons_read_in_english_as_the_log_has_them() {
         let l10n = &crate::l10n::english();
-        let issues = [
-            ThemeIssue::Read("expected value at line 1 column 1".into()),
-            ThemeIssue::NotAFile,
-            ThemeIssue::TooBig,
-            ThemeIssue::NameEmpty,
-            ThemeIssue::NameTooLong,
-            ThemeIssue::NameUnusable,
-            ThemeIssue::NameReserved("Dark".into()),
-            ThemeIssue::NotOpaque(Pair::Text),
-            ThemeIssue::NotOpaque(Pair::Button),
-            ThemeIssue::NotOpaque(Pair::Frame),
-            ThemeIssue::LowContrast(Pair::Text, 1.14),
-            ThemeIssue::LowContrast(Pair::Button, 2.96),
-            ThemeIssue::LowContrast(Pair::Frame, 1.05),
-            ThemeIssue::NameTaken("It's \"Dusk\"".into(), "b-dusk.json".into()),
-            ThemeIssue::NameTaken("Back\\slash".into(), "c.json".into()),
-            ThemeIssue::FileNameUnprintable,
-            ThemeIssue::TooMany(5),
-        ];
-        for issue in &issues {
-            assert_eq!(issue.text(l10n), issue.to_string());
-            if !matches!(issue, ThemeIssue::TooMany(_)) {
-                assert_eq!(issue.line(l10n, "x.json"), format!("x.json: {issue}"));
-            }
+        for (issue, english) in [
+            (
+                ThemeIssue::Read("expected value at line 1 column 1".into()),
+                "expected value at line 1 column 1",
+            ),
+            (ThemeIssue::NotAFile, "not a file"),
+            (ThemeIssue::TooBig, "over 64 KiB"),
+            (ThemeIssue::NameEmpty, "the name is empty"),
+            (ThemeIssue::NameTooLong, "the name is over 32 characters"),
+            (
+                ThemeIssue::NameUnusable,
+                "the name has characters a theme name can't use",
+            ),
+            (
+                ThemeIssue::NameReserved("Dark".into()),
+                "\"Dark\" is taken by the Theme row",
+            ),
+            (
+                ThemeIssue::NotOpaque(Pair::Text),
+                "text on the background is not opaque",
+            ),
+            (
+                ThemeIssue::NotOpaque(Pair::Button),
+                "button text on the button is not opaque",
+            ),
+            (
+                ThemeIssue::NotOpaque(Pair::Frame),
+                "text on the frame is not opaque",
+            ),
+            (
+                ThemeIssue::LowContrast(Pair::Text, 1.14),
+                "text on the background is 1.1:1, under the 3:1 floor",
+            ),
+            (
+                ThemeIssue::LowContrast(Pair::Button, 2.96),
+                "button text on the button is 3.0:1, under the 3:1 floor",
+            ),
+            (
+                ThemeIssue::LowContrast(Pair::Frame, 1.05),
+                "text on the frame is 1.1:1, under the 3:1 floor",
+            ),
+            (
+                ThemeIssue::NameTaken("It's \"Dusk\"".into(), "b-dusk.json".into()),
+                "\"It's \\\"Dusk\\\"\" is already the name of b-dusk.json",
+            ),
+            (
+                ThemeIssue::NameTaken("Back\\slash".into(), "c.json".into()),
+                "\"Back\\\\slash\" is already the name of c.json",
+            ),
+            (
+                ThemeIssue::FileNameUnprintable,
+                "the file name has characters that don't print",
+            ),
+        ] {
+            assert_eq!(issue.to_string(), english, "{issue:?}");
+            assert_eq!(issue.line(l10n, "x.json"), format!("x.json: {english}"));
         }
+        assert_eq!(
+            ThemeIssue::TooMany(5).to_string(),
+            "over the 100-file limit"
+        );
         assert_eq!(
             ThemeIssue::TooMany(5).line(l10n, "5 more"),
             "5 more: over the 100-file limit"
