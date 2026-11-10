@@ -39,8 +39,6 @@ pub(crate) struct ReadPlan {
     // What the format and the `-o` file make of each other, printed once
     // the run is sure to start.
     note: Option<String>,
-    // As typed: a meter run reads the settings file's when the mock opens.
-    mock_mode: Option<dmm_lib::mock::MockMode>,
     // Virtual session time; real unless a --mock-clock-* flag asked otherwise.
     clock: dmm_lib::Clock,
     options: RunOptions,
@@ -49,11 +47,19 @@ pub(crate) struct ReadPlan {
 /// Where a `read` run's readings come from.
 enum Source {
     /// The meter the selection names or detection finds, or the mock.
-    Meter,
+    Meter(MeterSource),
     /// A recording played back: `--replay`, or a replay file `--import`ed.
     Replay(PathBuf),
     /// A CSV or JSON export read back.
     Import(PathBuf),
+}
+
+/// What a meter run takes that no other source does.
+struct MeterSource {
+    /// Reopen a link that drops; the mock has no link to lose.
+    reconnect: bool,
+    /// As typed: a run on the mock reads the settings file's when it opens.
+    mock_mode: Option<dmm_lib::mock::MockMode>,
 }
 
 /// The `read` options every source honours: what each reading goes
@@ -61,9 +67,6 @@ enum Source {
 struct RunOptions {
     destination: output::Destination,
     count: usize,
-    // Reopen a meter whose link drops; the mock and a recording have no
-    // link to lose.
-    reconnect: bool,
     integrate: bool,
     // Applied to every reading before anything else sees it; the identity
     // transform (no --scale/--offset/--unit) is a no-op.
@@ -152,7 +155,10 @@ impl ReadPlan {
                     Some(path) => Source::Replay(path),
                     None => {
                         refuse_clock_on_hardware(selection, &clock)?;
-                        Source::Meter
+                        Source::Meter(MeterSource {
+                            reconnect: !no_reconnect,
+                            mock_mode,
+                        })
                     }
                 }
             }
@@ -163,12 +169,10 @@ impl ReadPlan {
             interval_ms,
             format,
             note,
-            mock_mode,
             clock,
             options: RunOptions {
                 destination,
                 count,
-                reconnect: !no_reconnect,
                 integrate,
                 transform: transform.to_transform(),
                 alarm,
@@ -190,7 +194,6 @@ impl ReadPlan {
             interval_ms,
             format,
             note,
-            mock_mode,
             clock,
             options,
         } = self;
@@ -200,32 +203,32 @@ impl ReadPlan {
         match source {
             Source::Import(path) => read_import(&path, format, options),
             Source::Replay(path) => read_replay(&path, interval_ms, format, options, clock),
-            Source::Meter => {
-                let mock_mode = pinned_mock_mode(selection, mock_mode, settings);
-                read_meter(
-                    selection,
-                    opts,
-                    interval_ms,
-                    format,
-                    options,
-                    mock_mode,
-                    clock,
-                )
+            Source::Meter(meter) => {
+                let meter = MeterSource {
+                    mock_mode: pinned_mock_mode(selection, meter.mock_mode, settings),
+                    ..meter
+                };
+                read_meter(selection, opts, interval_ms, format, options, meter, clock)
             }
         }
     }
 }
 
-/// Read the meter `selection` names, on its cable or simulated.
+/// Read the meter `selection` names, on its cable or simulated; `meter`'s
+/// mock mode is pinned already.
 fn read_meter(
     selection: Selection,
     opts: dmm_lib::OpenOptions<'_>,
     interval_ms: u64,
     format: OutputFormat,
     options: RunOptions,
-    mock_mode: Option<dmm_lib::mock::MockMode>,
+    meter: MeterSource,
     clock: dmm_lib::Clock,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    let MeterSource {
+        reconnect,
+        mock_mode,
+    } = meter;
     let markers = options.alarm.is_some();
     let stop = setup_ctrlc()?;
     if requires_hardware(selection) {
@@ -261,7 +264,7 @@ fn read_meter(
         // Reopened as the meter first opened, even under Auto-detect: the
         // CSV layout and the file's name are that meter's. `reopen_pin` says
         // on which link; chosen here, with this meter's cable still listed.
-        let pin = options.reconnect.then(|| {
+        let pin = reconnect.then(|| {
             reopen_pin(
                 Some(device),
                 opts.adapter,
@@ -645,7 +648,6 @@ impl Run {
         let RunOptions {
             destination,
             count: _,
-            reconnect: _,
             integrate,
             transform,
             alarm,
@@ -1666,7 +1668,6 @@ mod tests {
         let options = RunOptions {
             destination: output::Destination::Path(path.clone()),
             count,
-            reconnect: true,
             integrate: false,
             transform,
             alarm: None,
