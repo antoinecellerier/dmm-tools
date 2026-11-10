@@ -613,8 +613,8 @@ pub(crate) struct Fingerprint {
 pub(crate) enum Evidence {
     /// A frame that pins a [`registry::DEVICES`] entry.
     Model {
-        /// The entry's id.
-        id: &'static str,
+        /// The entry the frame names.
+        device: &'static registry::SelectableDevice,
         /// The model name the meter reported, where it sent one.
         reported_name: Option<String>,
     },
@@ -623,8 +623,8 @@ pub(crate) enum Evidence {
     /// model claimed by a rule that validates no checksum — a UT61+ reading
     /// must never be second-guessed by the checksum-less UT8802 rule.
     FamilyOnly {
-        /// Registry id to open when nothing names the model.
-        fallback: &'static str,
+        /// The entry to open when nothing names the model.
+        fallback: &'static registry::SelectableDevice,
     },
 }
 

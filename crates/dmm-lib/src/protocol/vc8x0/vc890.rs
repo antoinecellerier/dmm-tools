@@ -306,7 +306,7 @@ pub(crate) struct Vc890Model;
 impl Vc8x0Model for Vc890Model {
     const LOG: &'static str = "vc890";
     const NAME: &'static str = "VC-890";
-    const DETECTED_ID: &'static str = super::devices::VC890.id;
+    const DETECTED: &'static crate::protocol::registry::SelectableDevice = &super::devices::VC890;
     const DELIVERY: crate::protocol::Delivery = crate::protocol::Delivery::Polled;
     const PAYLOAD_LEN: usize = LIVE_DATA_PAYLOAD_LEN;
     const STATUS_AT: usize = 53;

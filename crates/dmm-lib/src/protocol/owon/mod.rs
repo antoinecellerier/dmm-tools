@@ -475,14 +475,13 @@ fn recognise(buf: &[u8], probing: &Probing) -> Option<Evidence> {
             if model::unsupported_format(info.code).is_none() && !whole {
                 return None;
             }
-            let id = model.unwrap_or(FALLBACK).entry.id;
             Some(Evidence::Model {
-                id,
+                device: model.unwrap_or(FALLBACK).entry,
                 reported_name: Some(name_for(info.code)),
             })
         }
         None => frame::tiles(buf).then_some(Evidence::Model {
-            id: FALLBACK.entry.id,
+            device: FALLBACK.entry,
             reported_name: None,
         }),
     }
@@ -1054,7 +1053,7 @@ mod tests {
                 other => panic!("{code}: {other:?}"),
             }
             let fallback = Some(Evidence::Model {
-                id: "b35t+",
+                device: &devices::B35T_PLUS,
                 reported_name: Some(format!("OWON model code {code}")),
             });
             let probing = probing(Some(&info(code)));
@@ -1225,7 +1224,7 @@ mod tests {
         assert_eq!(
             recognise(&frame, &probing(Some(&B41_INFO))),
             Some(Evidence::Model {
-                id: "b41t+",
+                device: &devices::B41T_PLUS,
                 reported_name: Some("B41T+".to_string()),
             })
         );
@@ -1243,7 +1242,7 @@ mod tests {
             assert_eq!(
                 found,
                 Some(Evidence::Model {
-                    id: m.entry.id,
+                    device: m.entry,
                     reported_name: Some(m.entry.model.to_string()),
                 }),
                 "{}",
@@ -1260,7 +1259,7 @@ mod tests {
         let probing = probing(Some(&info(87)));
         assert_eq!(recognise(&VC871_STREAM[0][..14], &probing), None);
         let vc871 = Some(Evidence::Model {
-            id: "vc871",
+            device: &devices::VC871,
             reported_name: Some("VC871".to_string()),
         });
         assert_eq!(recognise(&VC871_STREAM[0], &probing), vc871);
@@ -1278,7 +1277,7 @@ mod tests {
         assert_eq!(
             recognise(&stream(), &none),
             Some(Evidence::Model {
-                id: "b35t+",
+                device: &devices::B35T_PLUS,
                 reported_name: None,
             })
         );
@@ -1327,7 +1326,7 @@ mod tests {
         assert_eq!(
             recognise(&VECTORS[0], &probing(Some(&info(223)))),
             Some(Evidence::Model {
-                id: "b35t+",
+                device: &devices::B35T_PLUS,
                 reported_name: Some("OWON model code 223".to_string()),
             })
         );

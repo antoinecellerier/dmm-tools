@@ -254,7 +254,7 @@ pub(crate) static FINGERPRINT: Fingerprint = Fingerprint {
 /// reads a packet with a reserved bit and reports it.
 fn recognise(buf: &[u8], _probing: &Probing) -> Option<Evidence> {
     packet::first_decodable(buf).map(|_| Evidence::Model {
-        id: ID,
+        device: &devices::EEVBLOG_121GW,
         reported_name: None,
     })
 }
@@ -461,7 +461,7 @@ mod tests {
             assert_eq!(
                 recognise(&p, &Probing::default()),
                 Some(Evidence::Model {
-                    id: ID,
+                    device: &devices::EEVBLOG_121GW,
                     reported_name: None
                 })
             );

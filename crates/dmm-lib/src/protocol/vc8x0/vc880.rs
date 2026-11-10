@@ -279,9 +279,9 @@ impl Vc8x0Model for Vc880Model {
     const LOG: &'static str = "vc880";
     const NAME: &'static str = "VC-880";
     const DELIVERY: crate::protocol::Delivery = crate::protocol::Delivery::Streamed;
-    // The VC650BT speaks the same protocol and shares this id; see
-    // `Vc8x0Model::DETECTED_ID`.
-    const DETECTED_ID: &'static str = super::devices::VC880.id;
+    // The VC650BT speaks the same protocol and shares this entry; see
+    // `Vc8x0Model::DETECTED`.
+    const DETECTED: &'static crate::protocol::registry::SelectableDevice = &super::devices::VC880;
     const PAYLOAD_LEN: usize = LIVE_DATA_PAYLOAD_LEN;
     const STATUS_AT: usize = 27;
     const DIAL: &'static [DialPosition] = DIAL;

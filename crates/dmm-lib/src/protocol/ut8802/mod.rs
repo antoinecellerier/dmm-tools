@@ -549,7 +549,7 @@ fn recognise(buf: &[u8], _probing: &Probing) -> Option<Evidence> {
         }
         if frame_at(start) && frame_at(next) {
             return Some(Evidence::Model {
-                id: devices::UT8802.id,
+                device: &devices::UT8802,
                 reported_name: None,
             });
         }
@@ -1272,7 +1272,7 @@ raw_payload=7"#
         assert_eq!(
             recognise(&pair, &Probing::default()),
             Some(Evidence::Model {
-                id: "ut8802",
+                device: &devices::UT8802,
                 reported_name: None,
             })
         );

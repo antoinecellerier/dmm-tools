@@ -530,11 +530,6 @@ fn advertising_in<'a>(devices: &[&'a SelectableDevice], name: &str) -> Vec<&'a S
         .collect()
 }
 
-/// Returns the default device entry ("ut61eplus").
-pub(crate) fn default_device() -> &'static SelectableDevice {
-    find_device("ut61eplus").expect("ut61eplus must be in DEVICES")
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -627,12 +622,6 @@ mod tests {
     #[test]
     fn resolve_selection_unknown() {
         assert!(resolve_selection("nonexistent").is_none());
-    }
-
-    #[test]
-    fn default_device_is_ut61eplus() {
-        let d = default_device();
-        assert_eq!(d.id, "ut61eplus");
     }
 
     /// The lists read `ALL` for their order, the derived `Ord` is what a

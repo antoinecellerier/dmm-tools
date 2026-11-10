@@ -1122,7 +1122,7 @@ fn recognise(buf: &[u8], _probing: &Probing) -> Option<Evidence> {
     // send the UT804's packets at 2400 (ut71 spec §1, §2), so they are
     // claimed as a UT804, and have to be named too.
     extract_packet(buf).ok().flatten().map(|_| Evidence::Model {
-        id: devices::UT804.id,
+        device: &devices::UT804,
         reported_name: None,
     })
 }
@@ -3535,7 +3535,7 @@ raw_payload=11"#
         assert_eq!(
             recognise(&buf, &Probing::default()),
             Some(Evidence::Model {
-                id: "ut804",
+                device: &devices::UT804,
                 reported_name: None,
             })
         );
@@ -3554,7 +3554,7 @@ raw_payload=11"#
         assert_eq!(
             (FINGERPRINT.recognise)(&packet, &Probing::default()),
             Some(Evidence::Model {
-                id: "ut804",
+                device: &devices::UT804,
                 reported_name: None,
             })
         );

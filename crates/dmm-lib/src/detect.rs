@@ -72,8 +72,8 @@ const MAX_RX_BUF: usize = 4096;
 struct FamilyEvidence {
     /// Which family the frame came from, for the warning the user reads.
     family: DeviceFamily,
-    /// Registry id to open when nothing better arrives.
-    fallback: &'static str,
+    /// The entry to open when nothing better arrives.
+    fallback: &'static SelectableDevice,
 }
 
 /// The fingerprints worth running on `bridge`, in registry order and each one
@@ -321,26 +321,22 @@ fn listen(
         push(buf, &chunk[..n]);
         match classify(buf, recognisers, probing) {
             Some((
-                family,
+                _,
                 Evidence::Model {
-                    id,
-                    reported_name: name,
+                    device,
+                    reported_name,
                 },
-            )) => match registry::find_device(id) {
-                Some(device) => {
-                    debug!(
-                        "detect: {id} identified from {} received bytes during {label}",
-                        buf.len()
-                    );
-                    return Ok(Some(Detected {
-                        device,
-                        reported_name: name,
-                    }));
-                }
-                // Unreachable while the registry holds: every id a
-                // fingerprint returns is one `DEVICES` carries.
-                None => warn!("detect: the {family} rule claims {id:?}, which is no registry id"),
-            },
+            )) => {
+                debug!(
+                    "detect: {} identified from {} received bytes during {label}",
+                    device.id,
+                    buf.len()
+                );
+                return Ok(Some(Detected {
+                    device,
+                    reported_name,
+                }));
+            }
             Some((family, Evidence::FamilyOnly { fallback })) => {
                 *family_only = Some(FamilyEvidence { family, fallback })
             }
@@ -477,26 +473,14 @@ fn family_fallback(
                 device.display_name()
             ),
         ),
-        None => {
-            let device = pin(found.fallback);
-            (
-                device,
-                format!(
-                    "{unnamed}; falling back to the {} tables",
-                    device.display_name()
-                ),
-            )
-        }
+        None => (
+            found.fallback,
+            format!(
+                "{unnamed}; falling back to the {} tables",
+                found.fallback.display_name()
+            ),
+        ),
     }
-}
-
-/// The registry entry a fingerprint's fallback id names.
-///
-/// Every id a fingerprint returns is a literal `DEVICES` carries; falling back
-/// to the default keeps a registry rename degrading to the UT61E+ tables
-/// rather than aborting a user's session.
-fn pin(id: &'static str) -> &'static SelectableDevice {
-    registry::find_device(id).unwrap_or_else(registry::default_device)
 }
 
 #[cfg(test)]
@@ -920,7 +904,7 @@ mod tests {
     fn the_family_fallback_says_which_tables_and_why() {
         let found = FamilyEvidence {
             family: DeviceFamily::Ut61EPlus,
-            fallback: "ut61eplus",
+            fallback: &crate::protocol::ut61eplus::devices::UT61EPLUS,
         };
         let (device, why) = family_fallback(found, None, "CP2110");
         assert_eq!(device.id, "ut61eplus");
@@ -1394,7 +1378,7 @@ mod tests {
         DeviceFamily::Ut61EPlus,
         true,
         Evidence::Model {
-            id: "ut61b+",
+            device: &crate::protocol::ut61eplus::devices::UT61BPLUS,
             reported_name: Some("UT61B+".to_string()),
         }
     );
@@ -1403,7 +1387,7 @@ mod tests {
         DeviceFamily::Ut8803,
         true,
         Evidence::Model {
-            id: "ut8803",
+            device: &crate::protocol::ut8803::devices::UT8803,
             reported_name: None,
         }
     );
@@ -1411,14 +1395,16 @@ mod tests {
         FAMILY_ONLY,
         DeviceFamily::Vc880,
         true,
-        Evidence::FamilyOnly { fallback: "vc880" }
+        Evidence::FamilyOnly {
+            fallback: &crate::protocol::vc8x0::devices::VC880
+        }
     );
     claiming!(
         UNCHECKSUMMED,
         DeviceFamily::Ut8802,
         false,
         Evidence::Model {
-            id: "ut8802",
+            device: &crate::protocol::ut8802::devices::UT8802,
             reported_name: None,
         }
     );
@@ -1427,7 +1413,7 @@ mod tests {
         DeviceFamily::Ut171,
         true,
         Evidence::Model {
-            id: "ut171",
+            device: &crate::protocol::ut171::devices::UT171,
             reported_name: None,
         }
     );

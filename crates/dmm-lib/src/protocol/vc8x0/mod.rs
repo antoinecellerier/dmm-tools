@@ -486,12 +486,12 @@ pub(crate) trait Vc8x0Model: Send + 'static {
     /// What the front panel calls this meter, for the errors a user reads.
     const NAME: &'static str;
 
-    /// The [`crate::protocol::registry`] id detection pins for this meter.
+    /// The [`crate::protocol::registry`] entry detection pins for this meter.
     ///
     /// The VC650BT shares the VC-880's protocol byte for byte, so a frame
-    /// cannot tell the two apart and detection always reports `"vc880"`;
+    /// cannot tell the two apart and detection always reports the VC-880;
     /// `--device vc650bt` carries the other name, with the same tables.
-    const DETECTED_ID: &'static str;
+    const DETECTED: &'static crate::protocol::registry::SelectableDevice;
 
     /// The VC-880 streams once its PC button is pressed; the VC-890 answers
     /// one request at a time.
@@ -1003,7 +1003,7 @@ fn recognise_live<M: Vc8x0Model>(buf: &[u8]) -> Option<Evidence> {
         };
         if payload.first() == Some(&MSG_TYPE_LIVE_DATA) && payload.len() == M::PAYLOAD_LEN {
             return Some(Evidence::Model {
-                id: M::DETECTED_ID,
+                device: M::DETECTED,
                 reported_name: None,
             });
         }
@@ -1052,17 +1052,18 @@ mod tests {
     /// Only the payload length separates the two meters' live frames.
     #[test]
     fn the_payload_length_picks_the_meter() {
-        for (len, id) in [
-            (vc880::Vc880Model::PAYLOAD_LEN, "vc880"),
-            (vc890::Vc890Model::PAYLOAD_LEN, "vc890"),
+        for (len, device) in [
+            (vc880::Vc880Model::PAYLOAD_LEN, &devices::VC880),
+            (vc890::Vc890Model::PAYLOAD_LEN, &devices::VC890),
         ] {
             assert_eq!(
                 recognise(&framing::test_frame_be16(&live_payload(len))),
                 Some(Evidence::Model {
-                    id,
+                    device,
                     reported_name: None,
                 }),
-                "a {len}-byte live payload is a {id}"
+                "a {len}-byte live payload is a {}",
+                device.id
             );
         }
     }
@@ -1165,7 +1166,7 @@ pub(crate) mod test_support {
 
     /// [`super::parse_measurement`] as `M`'s own entry reads.
     pub(crate) fn parse_measurement<M: Vc8x0Model>(payload: &[u8]) -> Result<Measurement> {
-        super::parse_measurement::<M>(M::DETECTED_ID, payload)
+        super::parse_measurement::<M>(M::DETECTED.id, payload)
     }
 
     /// Build a live-data payload for `M`: the header, the 7-byte main
@@ -1772,7 +1773,7 @@ pub(crate) mod test_support {
         let transport = MockTransport::new(stream.chunks(32).map(<[u8]>::to_vec).collect());
         let mut rx_buf = Vec::new();
         let (payload, reports) =
-            capture_reports(|| read_live::<M>(&mut rx_buf, &transport, M::DETECTED_ID));
+            capture_reports(|| read_live::<M>(&mut rx_buf, &transport, M::DETECTED.id));
         assert_eq!(payload.unwrap().len(), M::PAYLOAD_LEN);
         reports
     }

@@ -79,9 +79,10 @@ whether its extractor validates a checksum, and a rule that classifies the whole
 with that family's constants. Which of them run is the registry's call: every `DEVICES` entry
 points at its family's fingerprint, and detection runs the ones the bridge carries, in table order.
 
-A rule answers `Evidence::Model` (a registry id, plus the name where the meter sent one) or
-`Evidence::FamilyOnly` (the family is settled, no model named). Every carried rule runs after
-every read, against every candidate offset in the buffer, and the strongest answer wins:
+A rule answers `Evidence::Model` (the registry entry, plus the name where the meter sent one) or
+`Evidence::FamilyOnly` (the family is settled, no model named, and the entry to fall back to).
+Every carried rule runs after every read, against every candidate offset in the buffer, and the
+strongest answer wins:
 
 | Rank | Evidence | Where it comes from |
 |---|---|---|

@@ -385,7 +385,7 @@ fn recognise(buf: &[u8], probing: &Probing) -> Option<Evidence> {
             );
         }
         return Some(Evidence::Model {
-            id: devices::UT171.id,
+            device: &devices::UT171,
             reported_name: None,
         });
     }
@@ -411,7 +411,7 @@ mod tests {
     }
 
     const UT171: Option<Evidence> = Some(Evidence::Model {
-        id: "ut171",
+        device: &devices::UT171,
         reported_name: None,
     });
 

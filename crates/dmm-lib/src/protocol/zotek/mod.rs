@@ -254,7 +254,7 @@ fn recognise(buf: &[u8], _probing: &Probing) -> Option<Evidence> {
         .filter_map(|start| frame::packet_at(buf, start))
         .find_map(|packet| layout::plausible(&packet))
         .map(|layout| Evidence::Model {
-            id: layout.entry.id,
+            device: layout.entry,
             reported_name: None,
         })
 }
@@ -288,12 +288,17 @@ mod tests {
     /// Each worked example is recognised as its layout's entry.
     #[test]
     fn the_worked_examples_are_recognised_as_their_layouts() {
-        for (example, id) in [(0, "zt300ab"), (1, "zt5bq"), (2, "zt5b"), (3, "zt5566se")] {
+        for (example, device) in [
+            (0, &devices::ZT300AB),
+            (1, &devices::ZT5BQ),
+            (2, &devices::ZT5B),
+            (3, &devices::ZT5566SE),
+        ] {
             let (raw, _) = EXAMPLES[example];
             assert_eq!(
                 recognise(raw, &Probing::default()),
                 Some(Evidence::Model {
-                    id,
+                    device,
                     reported_name: None
                 })
             );

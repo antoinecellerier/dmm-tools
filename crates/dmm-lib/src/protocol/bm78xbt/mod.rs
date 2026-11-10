@@ -159,7 +159,7 @@ pub(crate) static FINGERPRINT: Fingerprint = Fingerprint {
 /// a meter's.
 fn recognise(buf: &[u8], _probing: &Probing) -> Option<Evidence> {
     packet::first_meter_reading(buf).map(|_| Evidence::Model {
-        id: ID,
+        device: &devices::BM78XBT,
         reported_name: None,
     })
 }
@@ -322,7 +322,7 @@ mod tests {
         assert_eq!(
             recognise(&example_notification(), &Probing::default()),
             Some(Evidence::Model {
-                id: ID,
+                device: &devices::BM78XBT,
                 reported_name: None
             })
         );

@@ -263,7 +263,7 @@ fn trigger(transport: &dyn Transport, series: Series) -> Result<()> {
 /// §4.2).
 fn recognise(buf: &[u8], series: Series) -> Option<Evidence> {
     reply::model_run_at(buf, series).map(|_| Evidence::Model {
-        id: series.id(),
+        device: devices::entry(series),
         reported_name: None,
     })
 }
@@ -466,7 +466,7 @@ mod tests {
             let evidence =
                 (fingerprint.recognise)(&bm820_example(series.code()), &Probing::default());
             assert!(
-                matches!(evidence, Some(Evidence::Model { id, .. }) if id == series.id()),
+                matches!(evidence, Some(Evidence::Model { device, .. }) if device == devices::entry(series)),
                 "{series:?}"
             );
         }

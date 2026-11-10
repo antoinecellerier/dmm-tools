@@ -116,7 +116,7 @@ impl Default for Ut61PlusProtocol {
 impl Ut61PlusProtocol {
     /// A UT61E+.
     pub(crate) fn new() -> Self {
-        Self::for_model(FALLBACK_ID)
+        Self::for_model(FALLBACK.id)
     }
 
     /// The protocol for the family's registry entry `id`; an id outside the
@@ -186,7 +186,7 @@ impl Ut61PlusProtocol {
             // "ut61eplus", and any id outside the family.
             _ => (
                 &tables::ut61e_plus::UT61E_PLUS,
-                FALLBACK_ID,
+                FALLBACK.id,
                 Stability::Verified,
                 SpecModel::Ut61ePlus,
             ),
@@ -581,7 +581,7 @@ fn recognise(buf: &[u8], probing: &Probing) -> Option<Evidence> {
                 Some(device) => {
                     debug!("detect: name frame {name:?} resolves to {}", device.id);
                     Evidence::Model {
-                        id: device.id,
+                        device,
                         reported_name: Some(name),
                     }
                 }
@@ -603,18 +603,18 @@ fn recognise(buf: &[u8], probing: &Probing) -> Option<Evidence> {
                             ),
                         );
                         Evidence::Model {
-                            id: device.id,
+                            device,
                             reported_name: Some(name),
                         }
                     }
                     None => {
                         report_unknown(
-                            FALLBACK_ID,
+                            FALLBACK.id,
                             "model name",
                             format_args!("{name:?}, using the UT61E+ tables"),
                         );
                         Evidence::Model {
-                            id: FALLBACK_ID,
+                            device: FALLBACK,
                             reported_name: Some(name),
                         }
                     }
@@ -622,9 +622,7 @@ fn recognise(buf: &[u8], probing: &Probing) -> Option<Evidence> {
             });
         }
         if payload.len() == UT61EPLUS_MEASUREMENT_PAYLOAD_LEN {
-            evidence = Some(Evidence::FamilyOnly {
-                fallback: FALLBACK_ID,
-            });
+            evidence = Some(Evidence::FamilyOnly { fallback: FALLBACK });
         }
     }
     evidence
@@ -632,7 +630,7 @@ fn recognise(buf: &[u8], probing: &Probing) -> Option<Evidence> {
 
 /// The entry a frame that names no model opens: the tables every meter in the
 /// family reads with, even where a sibling's ranges differ.
-const FALLBACK_ID: &str = devices::UT61EPLUS.id;
+const FALLBACK: &SelectableDevice = &devices::UT61EPLUS;
 
 /// Resolve the ASCII model name a UT61+/UT161 meter answers Get Name
 /// (`0x5F`) with — "UT61E+", "UT61B+" — to its registry entry.
@@ -1280,7 +1278,7 @@ pub fn make_test_measurement(
     flags: (u8, u8, u8),
 ) -> Measurement {
     let payload = make_payload(mode, range, display, progress, flags);
-    parse_measurement(FALLBACK_ID, &payload, &tables::ut61e_plus::UT61E_PLUS).unwrap()
+    parse_measurement(FALLBACK.id, &payload, &tables::ut61e_plus::UT61E_PLUS).unwrap()
 }
 
 /// Every unit a reading of this family can carry, for
@@ -1312,7 +1310,7 @@ mod tests {
     /// [`super::parse_measurement`] as the UT61E+ entry reads: what these
     /// tests check is the decoding, whichever model's table they pass.
     fn parse_measurement(payload: &[u8], table: &ModelTable) -> Result<Measurement> {
-        super::parse_measurement(FALLBACK_ID, payload, table)
+        super::parse_measurement(FALLBACK.id, payload, table)
     }
 
     #[test]
@@ -3014,14 +3012,14 @@ raw_payload=14"#
     /// sibling's name is its own registry entry.
     #[test]
     fn a_name_frame_picks_the_registry_entry() {
-        for (frame, id, name) in [
-            (NAME_UT61EPLUS, "ut61eplus", "UT61E+"),
-            (NAME_UT61BPLUS, "ut61b+", "UT61B+"),
+        for (frame, device, name) in [
+            (NAME_UT61EPLUS, &devices::UT61EPLUS, "UT61E+"),
+            (NAME_UT61BPLUS, &devices::UT61BPLUS, "UT61B+"),
         ] {
             assert_eq!(
                 recognised(&frame),
                 Some(Evidence::Model {
-                    id,
+                    device,
                     reported_name: Some(name.to_string()),
                 })
             );
@@ -3035,7 +3033,7 @@ raw_payload=14"#
         assert_eq!(
             recognised(&test_frame_be16(b"UT216XD")),
             Some(Evidence::Model {
-                id: "ut61eplus",
+                device: &devices::UT61EPLUS,
                 reported_name: Some("UT216XD".to_string()),
             })
         );
@@ -3056,7 +3054,7 @@ raw_payload=14"#
         assert_eq!(
             evidence,
             Some(Evidence::Model {
-                id: "ut60bt",
+                device: &devices::UT60BT,
                 reported_name: Some("UT216XD".to_string()),
             })
         );
@@ -3074,16 +3072,15 @@ raw_payload=14"#
     /// 2026-09-25), which pick their own tables.
     #[test]
     fn the_bluetooth_meters_names_pick_their_own_tables() {
-        for (name, id) in [("UT60BT", "ut60bt"), ("UT202BT", "ut202bt")] {
+        for (name, device) in [("UT60BT", &devices::UT60BT), ("UT202BT", &devices::UT202BT)] {
             assert_eq!(
                 recognised(&test_frame_be16(name.as_bytes())),
                 Some(Evidence::Model {
-                    id,
+                    device,
                     reported_name: Some(name.to_string()),
                 })
             );
-            let device = registry::find_device(id).expect("registry entry");
-            assert_eq!((device.new_protocol)().profile().id, id);
+            assert_eq!((device.new_protocol)().profile().id, device.id);
         }
         // Range byte 0 of DC V is 999.9 mV on a UT60BT, 9.999 V on a UT202BT.
         let payload = make_payload(0x02, 0, b" 12.345", (0, 0), (0, 0, 0));
@@ -3106,7 +3103,7 @@ raw_payload=14"#
         assert_eq!(
             recognised(&reading),
             Some(Evidence::FamilyOnly {
-                fallback: "ut61eplus",
+                fallback: &devices::UT61EPLUS,
             })
         );
     }
@@ -3601,10 +3598,7 @@ raw_payload=14"#
         assert!(
             matches!(
                 evidence,
-                Some(Evidence::Model {
-                    id: "ut61eplus",
-                    ..
-                })
+                Some(Evidence::Model { device, .. }) if device == FALLBACK
             ),
             "{evidence:?}"
         );
