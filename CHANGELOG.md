@@ -13,6 +13,7 @@
 - **`--bluetooth` scans Bluetooth for one run, whatever the saved setting**
 - **An unknown `--device` value points to `--help`, which lists the devices**
 - **A mistyped `command` name is answered with the meter's commands**
+- **dmm-cli's connection warnings come in the chosen language** — such as several USB cables plugged in.
 - **dmm-cli says which meter is picked when its data won't read**
 - **"No USB cable found" says when Bluetooth wasn't searched** — and how to switch the search on.
 

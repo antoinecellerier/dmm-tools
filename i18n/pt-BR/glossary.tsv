@@ -281,5 +281,5 @@ phase rotation direction (3-phase)	sentido de rotação das fases	s. m.	key-hove
 square wave	onda quadrada	s. f.	mode-square-wave, note-sensitivity-2-5vp-square-wave-for	Minipa ET-2517A/2615A PDF p.22 «2.5Vp (onda quadrada)»	
 swipe (two-finger)	deslizar com dois dedos	v.	shortcuts-mouse-swipe	MS-T «swipe» → «deslizar o dedo»	MS-T also gives «passar o dedo».
 flashlight	lanterna	s. f.	key-hover-toggle-the-backlight-and-an-ow18	no approved source found	
-link dropped	a conexão caiu	v.	connection-cables-no-reconnect, connection-several-cables-recording, read--no-reconnect	no approved source found	Built on «conexão»; infinitive «cair».
-open (a cable)	abrir	v.	connection-cables-at-open, several-cables, waiting-for-own-cable	MS-T «open» → «abrir»	
+link dropped	a conexão caiu	v.	cables-no-reconnect, connection-several-cables-recording, read--no-reconnect	no approved source found	Built on «conexão»; infinitive «cair».
+open (a cable)	abrir	v.	cables-at-open, several-cables, waiting-for-own-cable	MS-T «open» → «abrir»	

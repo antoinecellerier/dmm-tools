@@ -588,13 +588,8 @@ where
     // What a reconnect goes back to, chosen now while this meter's cable is
     // still listed, or why it can't.
     let mut pin = reopen.as_ref().map(|source| source.pin(&dmm)).transpose();
-    let at_open = match &pin {
-        Ok(pin) => pin
-            .as_ref()
-            .and_then(ReopenPin::beside_others)
-            .map(|several| (several, true)),
-        Err(several) => Some((*several, false)),
-    };
+    let at_open =
+        dmm_shared::reopen::at_open(pin.as_ref().map(Option::as_ref).map_err(|several| *several));
     if let Some((several, reconnects)) = at_open {
         let _ = msg_tx.send(DmmMessage::CablesAtOpen {
             several,

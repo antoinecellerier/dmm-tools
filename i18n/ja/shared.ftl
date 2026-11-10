@@ -98,6 +98,12 @@ setup-bluetooth-scan = 'dmm-cli list' を実行すると、通信範囲内のア
 
 ## Notices both binaries show.
 
+# When the meter opened, other cables were there to open and the session
+# took the first, with --adapter a command-line option kept as it is. $count
+# is 2 or more. dmm-gui shows it in a toast, dmm-cli after "Warning:".
+cables-at-open = 使用できる USB ケーブルが { $count } 本接続されています。最初に見つかったケーブルを使用しています。別のケーブルを選択するには、--adapter を指定してください。
+# Follows cables-at-open when nothing tells those cables apart.
+cables-no-reconnect = これらのケーブルは区別できません。--adapter でケーブルのパスを指定しない限り、リンクが切断されるとそのまま接続が終了します。
 # A cable or Bluetooth link is open but no meter on it identified itself.
 # A notice title in the GUI; dmm-cli starts a sentence with it, naming the
 # link after it (cli/connect.ftl).

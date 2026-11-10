@@ -99,6 +99,15 @@ setup-bluetooth-scan = 运行 'dmm-cli list' 扫描蓝牙范围内的适配器�
 
 ## Notices both binaries show.
 
+# When the meter opened, other cables were there to open and the session
+# took the first, with --adapter a command-line option kept as it is. $count
+# is 2 or more. dmm-gui shows it in a toast, dmm-cli after "Warning:".
+cables-at-open =
+    { $count ->
+       *[other] 本次会话检测到 { $count } 根可用的 USB 连接线，已使用最先找到的一根。可通过 --adapter 选择其他连接线。
+    }
+# Follows cables-at-open when nothing tells those cables apart.
+cables-no-reconnect = 这些连接线无法相互区分，除非用 --adapter 指定连接线的路径，否则连接断开后本次会话将结束。
 # A cable or Bluetooth link is open but no meter on it identified itself.
 # A notice title in the GUI; dmm-cli starts a sentence with it, naming the
 # link after it (cli/connect.ftl).

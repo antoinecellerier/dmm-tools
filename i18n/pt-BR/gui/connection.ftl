@@ -97,16 +97,6 @@ connection-no-response-auto =
 # The meter answered, but with data that could not be read: a corrupt
 # frame, or a mode this tool does not know. The error itself follows.
 connection-bad-data = O multímetro enviou dados ilegíveis
-# A toast once connected, when other cables were there to open and the session
-# took the first, with --adapter a command-line option kept as it is. $count is
-# 2 or more.
-connection-cables-at-open =
-    { $count ->
-        [one] Há { $count } cabo USB conectado que esta sessão pode abrir, e ele foi aberto. Para escolher outro, use --adapter.
-       *[other] Há { $count } cabos USB conectados disponíveis para esta sessão, e o primeiro encontrado foi aberto. Para escolher outro, use --adapter.
-    }
-# Follows connection-cables-at-open when nothing tells those cables apart.
-connection-cables-no-reconnect = Não é possível distinguir esses cabos; por isso, se a conexão cair, esta sessão será encerrada, a menos que você indique o caminho de um cabo com --adapter.
 # A dropped link that was not reconnected. shared.ftl's several-cables
 # follows, then connection-several-cables-action. "Connect" is the top bar's
 # button.

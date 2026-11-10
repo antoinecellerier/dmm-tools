@@ -673,15 +673,11 @@ impl App {
                     several,
                     reconnects,
                 } => {
-                    let opened = tr!(
-                        self.l10n,
-                        "connection-cables-at-open",
-                        count = several.count
-                    );
+                    let opened = self.l10n.help().cables_at_open(several);
                     let message = if reconnects {
                         opened.into_owned()
                     } else {
-                        let no_reconnect = tr!(self.l10n, "connection-cables-no-reconnect");
+                        let no_reconnect = self.l10n.help().cables_no_reconnect();
                         format!("{opened} {no_reconnect}")
                     };
                     self.caution_toast(message);

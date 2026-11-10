@@ -118,7 +118,7 @@ simulated / mock	仿真	adj./n.	brand-simulated, mock models, settings-mock-*	MS
 USB cable	USB 连接线	n.	link-name-usb-cable, link-usb-cable, notices	UT71 CN PDF p.7 “USB接口连接线”; UT171 CN PDF p.5L (p.5) “USB连接线”	UT61E+ CN PDF p.14L (p.25) calls its own cable «USB通信模组»: the app talks about the cable.
 Bluetooth adapter	蓝牙适配器	n.	link-name-bluetooth-adapter, notices	MS-T Bluetooth => 蓝牙, adapter => 适配器	MS-T Bluetooth adapter => 蓝牙无线收发器 (dated): avoid.
 Bluetooth link (built-in Bluetooth)	蓝牙链路	n.	link-name-bluetooth-link, top-bar-link-*	no approved source found (MS-T link => 链接/连接)	Keeps the app's link/connection distinction; «连接» is taken by connection.
-link (to the meter, cable or Bluetooth)	连接	n.	read-link-lost, read--no-reconnect, connection-several-cables, connection-several-cables-recording, connection-cables-no-reconnect	no approved source found	For a link that drops or comes back. «链路» stays where the link itself is the subject and «连接» would echo the verb: The link is connected → «链路已建立». Bluetooth link: its own row.
+link (to the meter, cable or Bluetooth)	连接	n.	read-link-lost, read--no-reconnect, connection-several-cables, connection-several-cables-recording, cables-no-reconnect	no approved source found	For a link that drops or comes back. «链路» stays where the link itself is the subject and «连接» would echo the verb: The link is connected → «链路已建立». Bluetooth link: its own row.
 connection	连接	n.	top bar, notices, errors	MS-T connection => 连接	
 connect / Connect	连接	v.	top-bar-connect, shortcuts-connect	MS-T connect => 连接	Status «已连接».
 disconnect / Disconnect	断开连接	v.	top-bar-disconnect, top-bar-stop-retrying	MS-T disconnect => 断开连接	Status «已断开连接» (MS-T disconnected). Button «断开» if the top bar is tight.
@@ -252,7 +252,7 @@ measure word for samples, readings, markers, files, digits	个	量词	plurals wi
 measure word for records / log entries	条	量词	stored records, log lines, notes	MS-SG p.6 “3 条记录”; UT181A CN PDF p.23 (p.19) “记录数量最多达到20000条”	
 measure word for times / attempts	次	量词	"attempt counts, ""2–3 times a second"""	UT61E+ CN PDF p.14R (p.26) “显示更新约每秒2～3次”	Reconnecting (attempt 3) → «第 3 次尝试».
 measure word for beeps	声	量词	activation notes	UT61E+ CN PDF p.14L (p.25) “连续发出5声警示”	
-measure word for cables	根	量词	several-cables, connection-cables-at-open, waiting-for-own-cable, top-bar-own-cable-action	no approved source found	«{ $count } 根 USB 连接线».
+measure word for cables	根	量词	several-cables, cables-at-open, waiting-for-own-cable, top-bar-own-cable-action	no approved source found	«{ $count } 根 USB 连接线».
 seconds / minutes / hours / days (in prose)	秒 / 分钟 / 小时 / 天	n.	"""17 minutes"", ""2 seconds"" in notes and hovers"	UT181A CN PDF p.24 (p.20) “持续时间可设置天数，小时和分钟”; UT61E+ CN PDF p.14L (p.25) “约15分钟”	Where the English writes a symbol (s, ms, h) keep the symbol (STYLE §6).
 input terminal / jack	插孔 / 输入端子	n.	lead-error and activation text naming the jacks	UT61E+ CN PDF p.8L (p.13) “将红表笔插入…插孔”; UT181A CN PDF p.8 (p.4) “(3)输入端子”	«COM 插孔».
 analog bar graph (meter display)	模拟条	n.	not in en-US today; listed for the «模拟» clash	UT61E+ CN PDF p.14R (p.26) “模拟条：31段”	Why «仿真», not «模拟», for the simulated meter.
@@ -274,7 +274,7 @@ SI prefixes	皮, 纳, 微, 毫, 千, 兆, 吉	prefix	reading-unit-prefix-* (spok
 Screen reader updates	屏幕阅读器播报	n.	settings-announce	no approved source at hand	The settings-announce-* hovers keep the verb «播报». Every reading → «每个读数» (the Sample interval chip); Never → «从不».
 focus (keyboard)	焦点	n.	settings-announce-focused	MS-T focus => 焦点	«获得焦点».
 issue (GitHub)	议题	n.	lib-errors error-wrong-meter-*, cli-help list-steps format, connection feedback hover, README	GitHub Docs zh «创建议题» (docs.github.com/zh/issues), user ruling 2026-11-02	GitHub's own term; 问题 reads as "problem".
-session	会话	n.	several-cables, waiting-for-own-cable, connection-cables-no-reconnect, command-line-*, dmm-gui--no-bluetooth, import and connect confirmations	no approved source found	
+session	会话	n.	several-cables, waiting-for-own-cable, cables-no-reconnect, command-line-*, dmm-gui--no-bluetooth, import and connect confirmations	no approved source found	
 two-finger swipe	双指滑动	n.	shortcuts-mouse-swipe	no approved source found	
 second display	副显示屏	n.	key-hover-show-vac-or-vdc-on-the, key-hover-swap-the-main-and-second-displays	no approved source found	Pairs with «主显示屏» and «副读数». UT181A prints «辅助显示屏» (row sub-value).
 flashlight	手电筒	n.	key-hover-toggle-the-backlight-and-an-ow18	no approved source found	

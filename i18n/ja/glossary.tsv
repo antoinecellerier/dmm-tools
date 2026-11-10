@@ -320,7 +320,7 @@ characteristic (Bluetooth LE)	キャラクタリスティック	n.	lib-errors	no
 step (capture)	ステップ	n.	capture help	no approved source found	
 issue (GitHub)	Issue	n.	lib-errors error-wrong-meter-*, cli-help list-steps format, README	GitHub Docs ja «Issue では、バグレポート…» (docs.github.com/ja/issues), user ruling 2026-11-02	GitHub's own spelling, capitalised.
 thyristor	サイリスタ	n.	capture-need-scr	no approved source found	Not on MS-SG's exception list (p.36–39) and not in MS-T, so ruling 5 read literally gives «サイリスター». Kept as the electronics spelling, parallel to «トランジスタ». Provisional: the reviewer decides.
-counter for cables	本	counter	several-cables, connection-cables-at-open	no approved source found	«{ $count } 本» (STYLE §5); «個» reads wrong for a cable.
+counter for cables	本	counter	several-cables, cables-at-open	no approved source found	«{ $count } 本» (STYLE §5); «個» reads wrong for a cable.
 this session / this run (of the program)	今回の実行	n.	dmm-gui--no-bluetooth, dmm-cli--no-bluetooth, command-line-device-intro, command-line-mock-mode-intro, capture-status-partly-verified-detail, capture-error-instructions-ids	no approved source found	«セッション» is a recorded or imported session only.
 flashlight (on an OW18)	ライト	n.	key-hover-toggle-the-backlight-and-an-ow18	no approved source found for «ライト»; MS-T flashlight => フラッシュライト	Alternative: «フラッシュライト».
 irradiance	日射強度	n.	capture-need-pv-adapter	no approved source found	

@@ -284,8 +284,11 @@ fn read_meter(
                     move |pin| dmm_lib::open_device(device, pin.options(Some(&stop)))
                 }),
             }),
-            Some(Err(several)) => {
-                warn_several_cables(several);
+            // The open said how many cables there are; what is left to say
+            // is that a dropped link won't come back on this one.
+            Some(Err(_)) => {
+                let l = crate::l10n::get();
+                eprintln!("{} {}", warning_label(), l.help().cables_no_reconnect());
                 None
             }
             None => None,

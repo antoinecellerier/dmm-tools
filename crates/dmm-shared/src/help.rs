@@ -250,6 +250,17 @@ impl<'a> Help<'a> {
         }
     }
 
+    /// That `several` cables could have been opened and the first was: the
+    /// notice both binaries give once a meter opens on one.
+    pub fn cables_at_open(self, several: SeveralCables) -> Cow<'a, str> {
+        tr!(self.0, "cables-at-open", count = several.count)
+    }
+
+    /// After [`Self::cables_at_open`], when nothing tells the cables apart.
+    pub fn cables_no_reconnect(self) -> Cow<'a, str> {
+        tr!(self.0, "cables-no-reconnect")
+    }
+
     /// What to check after the meter refused a switch of `setting` (its
     /// name as the command line takes it: `mode`, `range`, `hold`), or did
     /// not take it.

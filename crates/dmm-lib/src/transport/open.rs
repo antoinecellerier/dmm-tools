@@ -8,7 +8,7 @@ use crate::error::{BluetoothOnlyMiss, Error, Result};
 use crate::protocol::registry::{self, SelectableDevice};
 use crate::transport::{BluetoothPeers, Transport, ble, bu86x, ch9325, ch9329, cp2110};
 use crate::{BLUETOOTH, BLUETOOTH_SUPPORTED, DeviceInfo, OpenOptions};
-use log::{info, warn};
+use log::info;
 use std::ffi::CString;
 
 /// Descriptor for a known USB-HID transport bridge.
@@ -359,10 +359,9 @@ fn open_first_match(
     for &kt in &candidates {
         if let Ok(device) = api.open(kt.vid, kt.pid) {
             if cables > 1 {
-                // What was found, not what to do about it: how to pick
-                // another is each app's to say (dmm-gui's
-                // `connection-cables-at-open` toast says it on screen).
-                warn!(
+                // What was found, for the log: both apps say it themselves,
+                // with how to pick another (`cables-at-open`).
+                info!(
                     "{cables} USB cables this session could open are plugged in; it took the first it found."
                 );
             }

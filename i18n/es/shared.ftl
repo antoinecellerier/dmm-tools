@@ -98,6 +98,16 @@ setup-bluetooth-scan = Ejecuta 'dmm-cli list' para buscar adaptadores y multíme
 
 ## Notices both binaries show.
 
+# When the meter opened, other cables were there to open and the session
+# took the first, with --adapter a command-line option kept as it is. $count
+# is 2 or more. dmm-gui shows it in a toast, dmm-cli after "Warning:".
+cables-at-open =
+    { $count ->
+        [one] Hay { $count } cable USB conectado que esta sesión podría abrir. Se abrió ese. Usa --adapter para elegir otro.
+       *[other] Hay { $count } cables USB conectados que esta sesión podría abrir. Abrió el primero que encontró. Usa --adapter para elegir otro.
+    }
+# Follows cables-at-open when nothing tells those cables apart.
+cables-no-reconnect = Estos cables no se pueden distinguir entre sí: si se pierde el enlace, la sesión terminará, a menos que indiques la ruta de un cable con --adapter.
 # A cable or Bluetooth link is open but no meter on it identified itself.
 # A notice title in the GUI; dmm-cli starts a sentence with it, naming the
 # link after it (cli/connect.ftl).

@@ -96,12 +96,6 @@ connection-no-response-auto =
 # The meter answered, but with data that could not be read: a corrupt
 # frame, or a mode this tool does not know. The error itself follows.
 connection-bad-data = マルチメーターから読み取れないデータが届きました
-# A toast once connected, when other cables were there to open and the session
-# took the first, with --adapter a command-line option kept as it is. $count is
-# 2 or more.
-connection-cables-at-open = 使用できる USB ケーブルが { $count } 本接続されています。最初に見つかったケーブルを使用しています。別のケーブルを選択するには、--adapter を指定してください。
-# Follows connection-cables-at-open when nothing tells those cables apart.
-connection-cables-no-reconnect = これらのケーブルは区別できません。--adapter でケーブルのパスを指定しない限り、リンクが切断されるとそのまま接続が終了します。
 # A dropped link that was not reconnected. shared.ftl's several-cables
 # follows, then connection-several-cables-action. "Connect" is the top bar's
 # button.

@@ -341,7 +341,41 @@ pub(crate) fn open_with_help(
         ),
     };
     warn_if_experimental(device, dmm.profile());
+    warn_cables_at_open(selection, opts, dmm.transport());
     Ok((dmm, device))
+}
+
+/// Say that other cables were there to open and this run took the first, as
+/// dmm-gui does at its first open. Nothing for a meter opened over
+/// Bluetooth, or a cable the only one of its kind.
+fn warn_cables_at_open(
+    selection: Selection,
+    opts: dmm_lib::OpenOptions<'_>,
+    transport: &dyn dmm_lib::transport::Transport,
+) {
+    // A simulated meter, or one over Bluetooth, took no cable.
+    if transport.link() != Some(dmm_lib::transport::Link::UsbCable) {
+        return;
+    }
+    // Every cable kind under Auto-detect, as its open looked at them all.
+    let device = match selection {
+        Selection::Auto => None,
+        Selection::Device(device) => Some(device),
+    };
+    let pin = dmm_shared::reopen::reopen_pin(
+        device,
+        opts.adapter,
+        opts.bluetooth,
+        transport.link(),
+        transport.bluetooth_selector(),
+        transport.cable_serial(),
+        dmm_shared::reopen::listed_cables,
+    );
+    if let Some((several, _)) = dmm_shared::reopen::at_open(pin.as_ref().map(Some).map_err(|s| *s))
+    {
+        let l = crate::l10n::get();
+        eprintln!("{} {}", warning_label(), l.help().cables_at_open(several));
+    }
 }
 
 /// An open `stop` overtook comes to [`Error::Cancelled`], whatever it came to
@@ -415,6 +449,7 @@ pub(crate) fn open_recording_with_help(
         }
     };
     warn_if_experimental(device, dmm.profile());
+    warn_cables_at_open(selection, opts, dmm.transport());
     Ok((dmm, recorder, device, detected))
 }
 

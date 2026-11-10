@@ -122,6 +122,19 @@ pub fn reopen_pin(
     }
 }
 
+/// What a session says once its meter opened over a cable: the `several`
+/// cables it could have opened, and whether a dropped link can still come
+/// back on this one, from the first open's `pin` (`Ok(None)` for no pin).
+/// `None` when nothing else could have been opened.
+pub fn at_open(pin: Result<Option<&ReopenPin>, SeveralCables>) -> Option<(SeveralCables, bool)> {
+    match pin {
+        Ok(pin) => pin
+            .and_then(ReopenPin::beside_others)
+            .map(|several| (several, true)),
+        Err(several) => Some((several, false)),
+    }
+}
+
 impl ReopenPin {
     /// The other cables the first open could have taken, with nothing naming
     /// the one it did: it reconnects to that one, which may not be the meter
@@ -327,6 +340,29 @@ mod tests {
         assert_eq!(pin.beside_others(), None);
         let alone = [cp2110("a", Some("S1"))];
         assert_eq!(on_cable(Some("S1"), &alone).unwrap().beside_others(), None);
+    }
+
+    /// At the open, a session says how many cables it could have taken, and
+    /// whether a dropped link comes back on this one: yes when this cable
+    /// pins, no when nothing tells them apart; nothing for a cable alone.
+    #[test]
+    fn the_first_open_says_what_else_was_there() {
+        let pinned = [cp2110("a", Some("S1")), cp2110("b", Some("S2"))];
+        let pin = on_cable(Some("S1"), &pinned);
+        assert_eq!(
+            at_open(pin.as_ref().map(Some).map_err(|s| *s)),
+            Some((SeveralCables { count: 2 }, true))
+        );
+        let alike = [cp2110("a", None), cp2110("b", None)];
+        let pin = on_cable(None, &alike);
+        assert_eq!(
+            at_open(pin.as_ref().map(Some).map_err(|s| *s)),
+            Some((SeveralCables { count: 2 }, false))
+        );
+        let alone = [cp2110("a", Some("S1"))];
+        let pin = on_cable(Some("S1"), &alone);
+        assert_eq!(at_open(pin.as_ref().map(Some).map_err(|s| *s)), None);
+        assert_eq!(at_open(Ok(None)), None);
     }
 
     /// No serial, a shared serial, and a serial the listing spells otherwise
