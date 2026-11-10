@@ -478,6 +478,11 @@ pub struct Settings {
     /// the defaults (not serialized). The first frame tells the user.
     #[serde(skip)]
     pub(crate) load_problem: Option<LoadProblem>,
+    /// The file names a device no entry answers to, so the session detects
+    /// the meter instead (not serialized; the file keeps it until a meter
+    /// is detected). The first frame tells the user.
+    #[serde(skip)]
+    pub(crate) unknown_saved_device: Option<String>,
 }
 
 /// A settings file that could not be loaded: where it is, and where a copy
@@ -553,6 +558,7 @@ impl Default for Settings {
             overrides: Overrides::default(),
             user_themes: Arc::default(),
             load_problem: None,
+            unknown_saved_device: None,
         }
     }
 }
@@ -1110,6 +1116,7 @@ mod tests {
             overrides: Overrides::default(),
             user_themes: Arc::default(),
             load_problem: None,
+            unknown_saved_device: None,
         };
         let json = serde_json::to_string(&s).unwrap();
         let deserialized: Settings = serde_json::from_str(&json).unwrap();

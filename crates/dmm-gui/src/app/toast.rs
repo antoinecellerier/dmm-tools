@@ -112,6 +112,11 @@ impl Toast {
         self.kind == ToastKind::Error
     }
 
+    /// Whether it is a caution.
+    pub(super) fn is_caution(&self) -> bool {
+        self.kind == ToastKind::Caution
+    }
+
     /// How long it stays up from its first frame.
     fn duration(&self) -> Duration {
         match self.kind {

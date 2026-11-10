@@ -24,7 +24,7 @@ use dmm_shared::help::{Diagnosis, LinksSearched};
 use dmm_shared::l10n::{Localizer, arg_errors, help_layout};
 use dmm_shared::session::UnknownDevice;
 use dmm_shared::tr;
-use l10n::{Localized, error_label};
+use l10n::{Localized, error_label, warning_label};
 use log::debug;
 use open::{
     device_for_listing, open_recording_with_help, opened_device, pinned_mock_mode,
@@ -83,8 +83,8 @@ fn main() {
     l10n::get().log_load_report();
 
     // Whether the meter was named on the command line, as opposed to coming
-    // from the settings file or from detection. `read --replay`, `--import`
-    // and the unknown-device refusal ask.
+    // from the settings file or from detection. `read --replay` and
+    // `--import` ask, and the Selected line says which.
     let device_named = cli.device.is_some();
 
     // Nothing named a meter, so none is assumed: detection is the fallback,
@@ -99,13 +99,19 @@ fn main() {
             let refused = arg_errors::refused(&cmd, "device", &raw, reason);
             arg_errors::exit(refused, l, &cli::hidden_subcommands())
         });
-    if let Some(saved) = &pick.unknown_saved {
-        fail(tr!(l, "connect-unknown-device", device = saved.as_str()));
-    }
     // A replay or an import names its own meter; a saved pick is not it.
-    if !matches!(&cli.command, Cmd::Read(a) if a.replay.is_some() || a.import.is_some())
-        && let Some(listing) = pick.listing
-    {
+    let opens_the_pick = opens_the_pick(&cli.command);
+    // An id a newer build saved, or a hand edit: detection stands in for
+    // it, said where a meter is opened, as dmm-gui says it.
+    if let Some(saved) = pick.unknown_saved.as_deref().filter(|_| opens_the_pick) {
+        eprintln!(
+            "{} {} {}",
+            warning_label(),
+            l.help().saved_device_unknown(saved),
+            tr!(l, "connect-saved-device-unknown-action")
+        );
+    }
+    if opens_the_pick && let Some(listing) = pick.listing {
         let by = if device_named {
             open::PickedBy::Flag
         } else {
@@ -184,6 +190,22 @@ fn main() {
     open::warn_unrecognised();
     if let Err(e) = result {
         report_failure(l, &e, selection, cli.adapter.as_deref());
+    }
+}
+
+/// Whether `command` opens the meter `--device` or the settings file
+/// picks: not one that opens nothing, nor a replay or an import, which name
+/// their own.
+fn opens_the_pick(command: &Cmd) -> bool {
+    match command {
+        Cmd::List | Cmd::Completions { .. } | Cmd::Triage(_) => false,
+        Cmd::Read(a) => a.replay.is_none() && a.import.is_none(),
+        Cmd::Info
+        | Cmd::Command { .. }
+        | Cmd::Get { .. }
+        | Cmd::Set { .. }
+        | Cmd::Debug { .. }
+        | Cmd::Capture(_) => true,
     }
 }
 

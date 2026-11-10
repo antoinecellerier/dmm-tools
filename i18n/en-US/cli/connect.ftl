@@ -18,9 +18,9 @@ connect-unrecognised-report = Please report it at { $url } with the meter in thi
 # The same when the data came from a recording being played back: $url as
 # above.
 connect-unrecognised-report-file = Please report it at { $url }, attaching the recording.
-# $device is the meter id dmm-gui saved in the settings file, e.g.
-# ut61eplus.
-connect-unknown-device = unknown device: { $device }
+# After saved-device-unknown: how to name the meter from now on. Settings
+# is dmm-gui's panel; --device a command-line option, kept as it is.
+connect-saved-device-unknown-action = To name the meter, pass --device or pick it in dmm-gui's Settings.
 # info and debug talk to a real meter. $device is the simulated meter's id,
 # e.g. mock.
 connect-needs-hardware = This command requires real hardware (not supported with --device { $device }).

@@ -11,9 +11,6 @@
 ## Refusals before anything is opened. Each follows "Error:" or "Warning:"
 ## (common.ftl) on the same line.
 
-# $device is the meter id dmm-gui saved in the settings file, e.g.
-# ut61eplus.
-connect-unknown-device = 不明なデバイス: { $device }
 # info and debug talk to a real meter. $device is the simulated meter's id,
 # e.g. mock.
 connect-needs-hardware = このコマンドには実際のハードウェアが必要です (--device { $device } では使用できません)。

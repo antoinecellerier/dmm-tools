@@ -10,6 +10,7 @@
 - **Data the meter sends that this tool doesn't know asks for a report** — the request only reached the log.
 - **A ZOTEK meter sending another model's data names the model to pick** — the notice only reached the log.
 - **dmm-gui says when it took the first of several Bluetooth devices** — unless `--adapter` named it.
+- **dmm-gui says when the settings file names a device it doesn't know** — it detected the meter without saying why.
 
 ### CLI
 
@@ -31,6 +32,7 @@
 - **dmm-gui's remote buttons, dropdown picks, Pause and Sample interval act at once** — they waited for the next sample.
 - **dmm-gui's mode and range readouts switch only a connected meter** — a pick made while reconnecting went to whichever meter answered next.
 - **dmm-gui stays paused when a device or mock mode picked in Settings reconnects it** — it started reading again.
+- **dmm-cli detects the meter when the settings file names a device it doesn't know** — every command stopped, `list` and `completions` too.
 - **Markers start at 1 when dmm-gui connects after an import** — the first one took the number after the imported file's last marker.
 - **A cable pulled at `capture`'s meter check asks for no report** — it saved a no-response report and asked you to attach it.
 - **The mock ignores HOLD, REL, MIN/MAX and Peak where a UT61E+ does**

@@ -615,6 +615,7 @@ impl App {
             settings.shared.bluetooth = false;
         }
         settings.overrides.adapter = cli.adapter;
+        settings.unknown_saved_device = cli.unknown_saved_device;
         let mut app = Self::from_settings(settings, cli.clock);
         app.source.replay = cli.replay;
         app.source.cli_import = cli.import;
@@ -1064,6 +1065,31 @@ impl App {
         self.settings_load_toast();
     }
 
+    /// Tell the user, at the first Connect, that the settings file names a
+    /// device no entry answers to, so the meter is detected instead:
+    /// detection then saves the meter it finds over that id, and its news
+    /// joins this caution. Not once another device has been picked.
+    pub(super) fn saved_device_toast(&mut self) {
+        // A caution gives way to a failure on screen: say it at the next
+        // Connect instead of losing it.
+        if self
+            .toast
+            .as_ref()
+            .is_some_and(|t| t.is_error() && !t.expired())
+        {
+            return;
+        }
+        let Some(device) = self.settings.unknown_saved_device.take() else {
+            return;
+        };
+        if self.settings.shared.device_family != device {
+            return;
+        }
+        log::warn!("the settings file names device {device:?}, which no entry answers to");
+        let message = self.l10n.help().saved_device_unknown(&device).into_owned();
+        self.caution_toast(message);
+    }
+
     /// Tell the user, once, that their settings file could not be loaded and
     /// the defaults are in use — the log alone would go unseen until the
     /// first save had written over it.
@@ -1372,6 +1398,49 @@ mod tests {
             app.settings_load_toast();
             assert!(app.toast.is_none(), "raised twice");
         }
+    }
+
+    /// A saved device no entry answers to raises one caution, naming it,
+    /// and a run that names its own meter raises none.
+    #[test]
+    fn an_unknown_saved_device_is_said_once() {
+        let unknown = || crate::CliOverrides {
+            unknown_saved_device: Some("nope".to_string()),
+            ..crate::CliOverrides::none()
+        };
+        let mut settings = Settings::default();
+        settings.shared.device_family = "nope".to_string();
+        let mut app = App::from_cli(settings.clone(), unknown());
+        app.saved_device_toast();
+        let toast = app.toast.take().expect("no toast");
+        assert!(toast.is_caution());
+        assert!(
+            toast.message.contains("names the device \"nope\"")
+                && toast.message.ends_with("so the meter is detected instead."),
+            "{}",
+            toast.message
+        );
+        app.saved_device_toast();
+        assert!(app.toast.is_none(), "raised twice");
+
+        let mut app = App::from_cli(settings, crate::CliOverrides::none());
+        app.saved_device_toast();
+        assert!(app.toast.is_none());
+
+        // Behind a failure on screen it waits for the next Connect.
+        let mut settings = Settings::default();
+        settings.shared.device_family = "nope".to_string();
+        let mut app = App::from_cli(settings, unknown());
+        app.toast = Some(Toast::error("The meter stopped answering."));
+        app.saved_device_toast();
+        assert!(app.toast.take().is_some_and(|t| t.is_error()));
+        app.saved_device_toast();
+        assert!(app.toast.is_some_and(|t| t.is_caution()));
+
+        // Another device picked before the first Connect: nothing to say.
+        let mut app = App::from_cli(Settings::default(), unknown());
+        app.saved_device_toast();
+        assert!(app.toast.is_none());
     }
 
     /// The most strings the main scenes may draw without going through the

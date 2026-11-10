@@ -100,6 +100,11 @@ setup-bluetooth-scan = Run 'dmm-cli list' to scan for adapters and meters in ran
 
 ## Notices both binaries show.
 
+# The settings file names a meter this version has no entry for: a file a
+# newer version wrote, or one edited by hand. $device is the id as the file
+# holds it, e.g. ut62; $path is the file. dmm-gui shows it in a toast,
+# dmm-cli after "Warning:" and before what to do.
+saved-device-unknown = The settings file { $path } names the device "{ $device }", which this version doesn't know, so the meter is detected instead.
 # When the meter opened, other cables were there to open and the session
 # took the first, with --adapter a command-line option kept as it is. $count
 # is 2 or more. dmm-gui shows it in a toast, dmm-cli after "Warning:".

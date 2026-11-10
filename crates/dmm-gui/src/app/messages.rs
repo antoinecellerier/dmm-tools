@@ -214,6 +214,10 @@ impl App {
         let Some(device) = detected_under_auto(self.connection.detecting, device_id) else {
             return;
         };
+        // An id no entry answers to, `auto` aside, which the caution at the
+        // first Connect said is being detected over.
+        let replacing_unknown =
+            registry::resolve_selection(&self.settings.shared.device_family).is_none();
         let to_save = detected_device_to_save(
             &self.settings.shared.device_family,
             self.connection.detecting,
@@ -234,12 +238,15 @@ impl App {
         {
             return;
         }
-        self.toast = Some(Toast::info(detected_toast(
-            &self.l10n,
-            device,
-            reported,
-            to_save.is_some(),
-        )));
+        let news = detected_toast(&self.l10n, device, reported, to_save.is_some());
+        // The caution that the settings file named a device nothing answers
+        // to leads, and the news of the meter found in its place joins it.
+        self.toast = Some(match &self.toast {
+            Some(toast) if replacing_unknown && toast.is_caution() && !toast.expired() => {
+                Toast::caution(format!("{} {news}", toast.message))
+            }
+            _ => Toast::info(news),
+        });
     }
 
     /// Say that lowering Buffer size ended the capture that was running.
@@ -261,7 +268,7 @@ impl App {
     /// A caution, giving way to a failure still on screen. News still on
     /// screen stays beside it: "detected, and saved as your device" names the
     /// meter the caution's arbitrary cable turned out to carry.
-    fn caution_toast(&mut self, message: String) {
+    pub(super) fn caution_toast(&mut self, message: String) {
         let message = match &self.toast {
             Some(toast) if toast.expired() => message,
             Some(toast) if toast.is_error() => return,
@@ -353,6 +360,7 @@ impl App {
         if self.source.is_import() {
             self.reset_session_for_import();
         }
+        self.saved_device_toast();
 
         // Unbounded: `drain_messages` empties the message channel every
         // frame, and from `App::logic` while the window is hidden, so it only
@@ -1838,6 +1846,44 @@ mod tests {
             detected_device_to_save(registry::AUTO_DEVICE_ID, true, false, Some("ut61eplus")),
             Some("ut61eplus")
         );
+    }
+
+    /// An id no entry answers to is detected over, as Auto is, and the
+    /// meter found is saved in its place.
+    #[test]
+    fn a_detected_meter_replaces_an_unknown_saved_device() {
+        assert_eq!(
+            detected_device_to_save("nope", true, false, Some("ut61eplus")),
+            Some("ut61eplus")
+        );
+    }
+
+    /// The caution that the saved device is unknown stays up, and the news
+    /// of the meter found in its place joins it.
+    #[test]
+    fn detection_news_joins_a_caution_on_screen() {
+        let mut settings = crate::settings::Settings::default();
+        settings.shared.device_family = "nope".to_string();
+        let mut app = App::from_settings(settings, dmm_lib::Clock::real());
+        app.connection.detecting = true;
+        app.toast = Some(Toast::caution("The settings file names nope."));
+        app.remember_detected_device(Some("ut61eplus"), "UT61E+", true);
+        let toast = app.toast.take().expect("no toast");
+        assert!(toast.is_caution());
+        assert!(
+            toast
+                .message
+                .starts_with("The settings file names nope. Detected UNI-T UT61E+, saved"),
+            "{}",
+            toast.message
+        );
+        // Another caution up, with the saved device known: news is news.
+        let mut app =
+            App::from_settings(crate::settings::Settings::default(), dmm_lib::Clock::real());
+        app.connection.detecting = true;
+        app.toast = Some(Toast::caution("Two USB cables are plugged in."));
+        app.remember_detected_device(Some("ut61eplus"), "UT61E+", true);
+        assert!(!app.toast.expect("no toast").is_caution());
     }
 
     /// `--device auto` detects for one run. Saving under it would either be

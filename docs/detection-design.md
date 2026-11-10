@@ -256,6 +256,7 @@ what gives a slow streamer (the UT8803) the whole walk instead of one window.
 | Several adapters plugged in | Only the first bridge found is probed | The other meter is never seen | The existing warning; `--adapter` selects one |
 | Reconnect churn in the GUI | Every reconnect attempt re-probes | Repeated beeps, slower recovery | The GUI saves the meter it detected and opens it pinned |
 | Older binary reads `"auto"` | A newer settings file opened by an older binary | `unknown device: auto` | Pass `--device`, or pick any model in the GUI |
+| Saved id this build doesn't know | A newer build's id, or a hand edit | A warning naming the id and the file | Detected as under Auto; the GUI saves the meter it finds |
 | Name probe beeps the UT61+ | `0x5F` beeps (confirmed on our UT61E+) | A beep per connect | The GUI saves the meter it detected; `--device` pins from the start |
 
 In the GUI, a first failure shows the help and waits for Connect, while a drop mid-session

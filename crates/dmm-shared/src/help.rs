@@ -312,6 +312,17 @@ impl<'a> Help<'a> {
         tr!(self.0, "switch-check-dial", setting = setting)
     }
 
+    /// That the settings file names `device`, which no entry answers to,
+    /// so the session detects the meter instead
+    /// ([`crate::session::DevicePick::unknown_saved`]).
+    pub fn saved_device_unknown(self, device: &str) -> Cow<'a, str> {
+        // No file, no saved id: the path is there whenever this is said.
+        let path = crate::config_path()
+            .map(|p| p.display().to_string())
+            .unwrap_or_default();
+        tr!(self.0, "saved-device-unknown", device = device, path = path)
+    }
+
     /// Why a `--device` value was refused: no meter has that name. For
     /// [`crate::l10n::arg_errors::refused`].
     pub fn unknown_device(self) -> Cow<'a, str> {

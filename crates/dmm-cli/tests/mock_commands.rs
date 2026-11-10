@@ -177,11 +177,12 @@ fn an_unknown_device_points_at_the_list() {
     assert_eq!(out.status.code(), Some(2));
 }
 
-/// A saved device id this build doesn't know keeps its own message: it came
-/// from the settings file, not from the command line.
+/// A saved device id this build doesn't know is detected over, said where
+/// a meter is opened, naming the id and the file; a command that opens
+/// none, or a replay that names its own, runs as if it weren't there.
 #[cfg(target_os = "linux")]
 #[test]
-fn an_unknown_saved_device_is_said_as_such() {
+fn an_unknown_saved_device_is_detected_instead() {
     let config = std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join("dmm-cli-saved-unknown");
     std::fs::create_dir_all(config.join("dmm-tools")).expect("config dir");
     std::fs::write(
@@ -189,14 +190,43 @@ fn an_unknown_saved_device_is_said_as_such() {
         r#"{"device_family": "ut62"}"#,
     )
     .expect("settings file");
-    let out = dmm_cli()
-        .env("XDG_CONFIG_HOME", &config)
-        .arg("info")
-        .output()
-        .expect("run dmm-cli");
-    let stderr = String::from_utf8(out.stderr).expect("utf-8 stderr");
-    assert!(stderr.contains("unknown device: ut62"), "{stderr}");
-    assert_eq!(out.status.code(), Some(1));
+    let run_with = |args: &[&str]| {
+        let out = dmm_cli()
+            .env("XDG_CONFIG_HOME", &config)
+            .args(args)
+            .output()
+            .expect("run dmm-cli");
+        let stderr = String::from_utf8(out.stderr).expect("utf-8 stderr");
+        (out.status.code(), stderr)
+    };
+    // An adapter that isn't there: the open fails without probing a meter
+    // this machine may have plugged in, after the warning.
+    let (_, stderr) = run_with(&["--no-bluetooth", "--adapter", "no-such-adapter", "info"]);
+    let file = config.join("dmm-tools/settings.json");
+    assert!(
+        stderr.starts_with(&format!(
+            "Warning: The settings file {} names the device \"ut62\", which this version \
+             doesn't know, so the meter is detected instead. To name the meter, pass \
+             --device or pick it in dmm-gui's Settings.\n",
+            file.display()
+        )),
+        "{stderr}"
+    );
+
+    let (code, stderr) = run_with(&["completions", "bash"]);
+    assert_eq!((code, stderr.as_str()), (Some(0), ""));
+    let (_, stderr) = run_with(&["--no-bluetooth", "list"]);
+    assert!(!stderr.contains("ut62"), "{stderr}");
+    let replay = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../assets/replays/dcv-steps.replay"
+    );
+    let (code, stderr) = run_with(&["read", "--replay", replay, "--mock-clock-scale", "max"]);
+    assert_eq!(code, Some(0), "{stderr}");
+    assert!(!stderr.contains("ut62"), "{stderr}");
+    // Typed, the same id is refused.
+    let (code, _) = run_with(&["--device", "ut62", "completions", "bash"]);
+    assert_eq!(code, Some(2));
 }
 
 /// A command name the meter doesn't have is answered with the ones it
