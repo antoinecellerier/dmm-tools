@@ -205,6 +205,36 @@ export-unsaved-connect =
     }
 # The prompt's button that goes ahead: discards, then connects the meter.
 export-unsaved-connect-confirm = Discard and connect
+# The prompt when the window is asked to close (its close button, Ctrl+Q or
+# Ctrl+W). $lost, $samples and $markers are as for Record.
+export-unsaved-quit =
+    { $lost ->
+        [samples]
+            { $samples ->
+                [one] Quitting will discard { $samples } unexported sample.
+               *[other] Quitting will discard { $samples } unexported samples.
+            }
+        [markers]
+            { $markers ->
+                [one] Quitting will discard unsaved changes to { $markers } marker.
+               *[other] Quitting will discard unsaved changes to { $markers } markers.
+            }
+       *[both]
+            { $samples ->
+                [one]
+                    { $markers ->
+                        [one] Quitting will discard { $samples } unexported sample and unsaved changes to { $markers } marker.
+                       *[other] Quitting will discard { $samples } unexported sample and unsaved changes to { $markers } markers.
+                    }
+               *[other]
+                    { $markers ->
+                        [one] Quitting will discard { $samples } unexported samples and unsaved changes to { $markers } marker.
+                       *[other] Quitting will discard { $samples } unexported samples and unsaved changes to { $markers } markers.
+                    }
+            }
+    }
+# The prompt's button that goes ahead: discards, then closes the window.
+export-unsaved-quit-confirm = Discard and quit
 # The prompt's other button, which keeps everything; it has the focus.
 export-unsaved-cancel = Cancel
 

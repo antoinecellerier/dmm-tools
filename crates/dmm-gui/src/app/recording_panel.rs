@@ -93,6 +93,13 @@ fn discard_prompt(
             samples = samples,
             markers = markers
         ),
+        DiscardFor::Quit => tr!(
+            l10n,
+            "export-unsaved-quit",
+            lost = lost,
+            samples = samples,
+            markers = markers
+        ),
     };
     let heading = if samples == 0 {
         tr!(l10n, "export-unsaved-heading-markers")
@@ -125,6 +132,8 @@ enum DiscardFor {
     /// Connect was pressed in an imported session: a meter's session
     /// replaces it.
     Connect,
+    /// The window was asked to close: its ×, `Ctrl+Q` or `Ctrl+W`.
+    Quit,
 }
 
 /// The recording panel's own state: the discard prompt that guards an
@@ -137,6 +146,9 @@ pub(super) struct RecordingPanel {
     /// The file an import asked about is waiting to replace the session.
     pending_import: Option<std::path::PathBuf>,
     confirm_discard_focus_pending: bool,
+    /// The user chose to quit at the prompt: the close it sends goes
+    /// through on the next pass, and nothing after.
+    quitting: bool,
     /// The Export… menu opened this frame; its first entry still has to be
     /// given the focus — see `show_export_menu`.
     export_menu_focus_pending: bool,
@@ -225,7 +237,7 @@ impl App {
     /// The samples and markers no file holds that `action` would lose.
     fn discard_losses(&self, action: DiscardFor) -> (usize, usize) {
         match action {
-            DiscardFor::Record | DiscardFor::Import | DiscardFor::Connect => (
+            DiscardFor::Record | DiscardFor::Import | DiscardFor::Connect | DiscardFor::Quit => (
                 self.capture.recording.unexported_count(),
                 self.capture.recording.unsaved_marker_count(&self.markers),
             ),
@@ -250,6 +262,36 @@ impl App {
                     self.import_file(ctx, path);
                 }
             }
+            DiscardFor::Quit => {
+                self.recording_panel.quitting = true;
+                ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+            }
+        }
+    }
+
+    /// Hold a window close, from its × or a shortcut, while a recording
+    /// holds samples or markers no file does, and ask first. Called from
+    /// `App::logic`, which also runs while the window is minimized or
+    /// covered, so a close from the taskbar is held too; the window comes
+    /// forward to show the prompt. A close asked again while a prompt is up
+    /// is held and leaves that prompt as it is: a second click on the × must
+    /// not lose anything, and a system logging out says itself that the app
+    /// is in the way. macOS's Cmd+Q never asks: it quits outside the app.
+    pub(super) fn hold_close(&mut self, ctx: &egui::Context) {
+        // The close "Discard and quit" sends arrives on the next pass; one
+        // that never does arms nothing for a later close.
+        let quitting = std::mem::take(&mut self.recording_panel.quitting);
+        if !ctx.input(|i| i.viewport().close_requested())
+            || quitting
+            || self.discard_losses(DiscardFor::Quit) == (0, 0)
+        {
+            return;
+        }
+        ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
+        ctx.send_viewport_cmd(egui::ViewportCommand::Minimized(false));
+        ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
+        if self.recording_panel.pending_discard.is_none() {
+            self.ask_before_discarding(DiscardFor::Quit);
         }
     }
 
@@ -287,8 +329,12 @@ impl App {
         let (unexported, markers) = self.discard_losses(action);
         if unexported == 0 && markers == 0 {
             // An export completed while the prompt was up — nothing left to
-            // warn about.
-            self.apply_pending_discard(action, ctx);
+            // warn about. A quit goes on only at the user's word.
+            if action == DiscardFor::Quit {
+                self.recording_panel.pending_discard = None;
+            } else {
+                self.apply_pending_discard(action, ctx);
+            }
             return;
         }
 
@@ -319,6 +365,7 @@ impl App {
                     DiscardFor::Discard => tr!(self.l10n, "export-unsaved-discard-confirm"),
                     DiscardFor::Import => tr!(self.l10n, "export-unsaved-import-confirm"),
                     DiscardFor::Connect => tr!(self.l10n, "export-unsaved-connect-confirm"),
+                    DiscardFor::Quit => tr!(self.l10n, "export-unsaved-quit-confirm"),
                 };
                 if ui.button(confirm).clicked() {
                     discard = true;
@@ -1173,6 +1220,126 @@ mod tests {
         run
     }
 
+    /// A pass in which the window is asked to close, as eframe runs one for
+    /// a minimized or covered window: `App::logic` alone. What it asked of
+    /// the window.
+    fn close_frame(run: &mut MenuRun) -> Vec<egui::ViewportCommand> {
+        let mut raw = egui::RawInput::default();
+        raw.viewports
+            .entry(egui::ViewportId::ROOT)
+            .or_default()
+            .events
+            .push(egui::ViewportEvent::Close);
+        let app = &mut run.app;
+        let mut frame = eframe::Frame::_new_kittest();
+        let out = run
+            .ctx
+            .run_logic(&raw, |ctx| eframe::App::logic(app, ctx, &mut frame));
+        out.viewport_commands
+            .get(&egui::ViewportId::ROOT)
+            .cloned()
+            .unwrap_or_default()
+    }
+
+    /// Closing the window with an unexported recording is held, the window
+    /// brought forward and the prompt shown; a close asked again is held too.
+    /// Cancel keeps the window; Discard and quit lets the next close through,
+    /// once.
+    #[test]
+    fn closing_with_an_unexported_recording_asks_first() {
+        let mut run = run_with_stopped_recording(3);
+        let held = close_frame(&mut run);
+        assert!(
+            held.contains(&egui::ViewportCommand::CancelClose),
+            "{held:?}"
+        );
+        assert!(
+            held.contains(&egui::ViewportCommand::Minimized(false)),
+            "{held:?}"
+        );
+        // The modal is laid out on its first frame and shown on the next.
+        run.frame(0.1, vec![]);
+        run.frame(0.1, vec![]);
+        assert!(run.shows_widget("Discard and quit"));
+        assert!(close_frame(&mut run).contains(&egui::ViewportCommand::CancelClose));
+
+        run.frame(0.1, vec![]);
+        run.click(run.node_rect("Cancel").center());
+        assert_eq!(run.app.recording_panel.pending_discard, None);
+
+        assert!(close_frame(&mut run).contains(&egui::ViewportCommand::CancelClose));
+        run.frame(0.1, vec![]);
+        run.frame(0.1, vec![]);
+        run.click(run.node_rect("Discard and quit").center());
+        assert!(run.app.recording_panel.quitting);
+        assert!(
+            !close_frame(&mut run).contains(&egui::ViewportCommand::CancelClose),
+            "the close it asked for goes through"
+        );
+        assert!(!run.app.recording_panel.quitting, "once");
+    }
+
+    /// A close while another prompt is up is held and leaves that prompt to
+    /// be answered: a picked file still waits to be imported.
+    #[test]
+    fn a_close_over_another_prompt_keeps_it() {
+        let mut run = run_with_stopped_recording(3);
+        run.app.toggle_recording();
+        assert_eq!(
+            run.app.recording_panel.pending_discard,
+            Some(DiscardFor::Record)
+        );
+        assert!(close_frame(&mut run).contains(&egui::ViewportCommand::CancelClose));
+        assert_eq!(
+            run.app.recording_panel.pending_discard,
+            Some(DiscardFor::Record)
+        );
+    }
+
+    /// The go-ahead lasts one pass: a close the system never delivered
+    /// leaves the next one asked about.
+    #[test]
+    fn a_quit_whose_close_never_came_asks_again() {
+        let mut run = run_with_stopped_recording(3);
+        close_frame(&mut run);
+        run.frame(0.1, vec![]);
+        run.frame(0.1, vec![]);
+        run.click(run.node_rect("Discard and quit").center());
+        let app = &mut run.app;
+        let mut frame = eframe::Frame::_new_kittest();
+        let _ = run.ctx.run_logic(&egui::RawInput::default(), |ctx| {
+            eframe::App::logic(app, ctx, &mut frame)
+        });
+        run.app.capture.recording.push(&reading(), 0);
+        assert!(close_frame(&mut run).contains(&egui::ViewportCommand::CancelClose));
+    }
+
+    /// An export landing while the quit prompt is up leaves nothing to lose:
+    /// the prompt goes, and the window stays until closed again.
+    #[test]
+    fn an_export_under_the_quit_prompt_does_not_quit() {
+        let mut run = run_with_stopped_recording(3);
+        close_frame(&mut run);
+        let recording = &mut run.app.capture.recording;
+        recording.mark_exported(recording.epoch(), 3, Default::default());
+        run.frame(0.1, vec![]);
+        assert_eq!(run.app.recording_panel.pending_discard, None);
+        assert!(!run.app.recording_panel.quitting);
+    }
+
+    /// With nothing a file doesn't hold, the window closes unasked.
+    #[test]
+    fn closing_with_everything_exported_asks_nothing() {
+        let mut run = MenuRun::new();
+        run.app.capture.recording.push(&reading(), 0);
+        run.frame(1.0, vec![]);
+        assert!(
+            close_frame(&mut run).is_empty(),
+            "the graph's history is not asked about"
+        );
+        assert_eq!(run.app.recording_panel.pending_discard, None);
+    }
+
     /// Discard is offered only for a recording that has stopped and holds
     /// something: the history is the graph's, and a running recording is
     /// stopped first.
@@ -1368,6 +1535,14 @@ mod tests {
                 };
                 format!("Connecting ends the imported session and will discard {lost}.")
             }
+            DiscardFor::Quit => {
+                let lost = match (samples, markers) {
+                    (0, _) => changes,
+                    (n, 0) => format!("{n} unexported {samples_noun}"),
+                    (n, _) => format!("{n} unexported {samples_noun} and {changes}"),
+                };
+                format!("Quitting will discard {lost}.")
+            }
             DiscardFor::Discard => {
                 let lost = match (samples, markers) {
                     (0, _) => format!("{changes} on readings that have left the graph"),
@@ -1404,6 +1579,7 @@ mod tests {
             DiscardFor::Discard,
             DiscardFor::Import,
             DiscardFor::Connect,
+            DiscardFor::Quit,
         ] {
             for samples in [0, 1, 2, 94] {
                 for markers in [0, 1, 2, 7] {

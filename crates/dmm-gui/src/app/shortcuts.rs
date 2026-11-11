@@ -575,12 +575,12 @@ impl App {
                     | ConnectionState::Connected
                     | ConnectionState::Reconnecting => self.disconnect(),
                 },
-                // macOS never gets here: Cmd+Q is the Quit item of winit's
-                // default menu, which calls AppKit's `terminate:`
-                // (winit-0.30.13 `src/platform_impl/macos/menu.rs`) without
-                // the app ever seeing the key. A confirm-on-quit built on
-                // `ViewportCommand::CancelClose` would have to cover that
-                // path separately.
+                // A close request like the window's own, which `hold_close`
+                // holds while a recording isn't exported. macOS never gets
+                // here: Cmd+Q is the Quit item of winit's default menu,
+                // which calls AppKit's `terminate:` (winit-0.30.13
+                // `src/platform_impl/macos/menu.rs`) without the app ever
+                // seeing the key, so it quits without asking.
                 Shortcut::Quit => ctx.send_viewport_cmd(egui::ViewportCommand::Close),
                 Shortcut::ClearSession => {
                     if connected {

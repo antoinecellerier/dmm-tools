@@ -358,6 +358,9 @@ A thin strip below the main plot showing the full capture history.
   graph's readings, the recording's among them while the graph still holds
   them. It asks first only for unexported samples and markers the graph has
   dropped
+- Closing the window (its close button, `Ctrl+Q` or `Ctrl+W`; `Cmd+W` on
+  macOS) asks first while the recording holds samples or markers you haven't
+  exported; on macOS, `Cmd+Q` quits without asking
 - Sample counter and duration shown while recording
 - Scrollable log of the whole recording (past about a million samples, the
   latest million; export for the rest) showing timestamp, value, unit, flags
