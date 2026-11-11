@@ -554,7 +554,7 @@ pub(crate) fn open_recording_with_help(
         // the first bytes on the wire, and a report that starts after them
         // hides how the meter was picked.
         Selection::Auto => {
-            let (transport, _) = dmm_lib::open_transport(&[], opts)
+            let transport = dmm_lib::open_transport(&[], opts)
                 .map_err(|e| open_error_help(selection, opts, e))?;
             let (transport, recorder) = recording::RecordingTransport::new(transport);
             let transport = Box::new(transport) as Boxed;
@@ -591,7 +591,7 @@ pub(crate) fn open_recording_with_help(
 fn detect_only(
     opts: dmm_lib::OpenOptions<'_>,
 ) -> Result<&'static SelectableDevice, crate::l10n::Failure> {
-    let (transport, _) = dmm_lib::open_transport(&[], opts)
+    let transport = dmm_lib::open_transport(&[], opts)
         .map_err(|e| open_error_help(Selection::Auto, opts, e))?;
     let detected = dmm_lib::detect::detect_device(&*transport)
         .map_err(|e| open_error_help(Selection::Auto, opts, e))?;

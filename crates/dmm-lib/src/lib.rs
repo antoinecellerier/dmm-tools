@@ -438,8 +438,7 @@ pub fn open_device_transport(
         return open::open_bluetooth_only(device, opts);
     }
     let peers = open::bluetooth_peers(Some(device));
-    let (transport, _) = open::open_links(device.links, &peers, Some(device), opts)?;
-    Ok(transport)
+    open::open_links(device.links, &peers, Some(device), opts)
 }
 
 /// Open the meter on the cable without being told which one it is.
@@ -457,7 +456,7 @@ pub fn open_auto(opts: OpenOptions<'_>) -> Result<(Dmm<Box<dyn Transport>>, dete
 fn open_detected(opts: OpenOptions<'_>) -> Result<(Box<dyn Transport>, detect::Detected)> {
     // No family, so no link to prefer: whichever bridge answers first is the
     // one the meter is probed through.
-    let (transport, _) = open_transport(&[], opts)?;
+    let transport = open_transport(&[], opts)?;
     let detected = detect::detect_device(&*transport)?;
     Ok((transport, detected))
 }
@@ -467,9 +466,8 @@ fn open_detected(opts: OpenOptions<'_>) -> Result<(Box<dyn Transport>, detect::D
 ///
 /// `preferred` orders the links to try, empty when nothing is known about
 /// the meter; on the radio, any adapter or meter we support is taken, since
-/// detection picks the entry afterwards. The returned name is the bridge's
-/// (`"CP2110"`, `"CH9329"`, `"CH9325"`, `"BU-86X"`, [`BLUETOOTH`]), the
-/// transport's own [`Transport::transport_name`].
+/// detection picks the entry afterwards. Which bridge it opened is the
+/// transport's [`Transport::transport_name`].
 ///
 /// The USB bus comes first and Bluetooth is the fallback, which has one known
 /// consequence: a cable with a silent meter on it wins over a live meter on a
@@ -483,7 +481,7 @@ fn open_detected(opts: OpenOptions<'_>) -> Result<(Box<dyn Transport>, detect::D
 pub fn open_transport(
     preferred: &[&'static str],
     opts: OpenOptions<'_>,
-) -> Result<(Box<dyn Transport>, &'static str)> {
+) -> Result<Box<dyn Transport>> {
     open::open_links(preferred, &open::bluetooth_peers(None), None, opts)
 }
 

@@ -16,6 +16,8 @@ use std::sync::{Mutex, MutexGuard, OnceLock, PoisonError};
 pub(crate) struct KnownTransport {
     pub(crate) vid: u16,
     pub(crate) pid: u16,
+    /// Also what the opened transport's `transport_name()` returns, which is
+    /// where detection and capture read the bridge from.
     pub(crate) name: &'static str,
     /// The cable passes the meter's UART bytes through, so any UART meter
     /// can be tried on it. A cable that speaks a meter's protocol itself does
@@ -197,7 +199,7 @@ pub(crate) fn open_links(
     peers: &BluetoothPeers,
     meter: Option<&SelectableDevice>,
     opts: OpenOptions<'_>,
-) -> Result<(Box<dyn Transport>, &'static str)> {
+) -> Result<Box<dyn Transport>> {
     // An address or a peripheral UUID can only be a Bluetooth adapter, so the
     // selector alone says which opener the user meant — and asking for one by
     // name is asking for the radio, whatever the probing setting says.
@@ -205,16 +207,16 @@ pub(crate) fn open_links(
         if let Some(meter) = meter {
             check_cable(meter, BLUETOOTH)?;
         }
-        return Ok((ble::open_selected(selector, opts.stop)?, BLUETOOTH));
+        return ble::open_selected(selector, opts.stop);
     }
 
     let radio_gets_a_turn = bluetooth_is_next(preferred, opts);
     let hid = open_hid_transport(preferred, meter, opts.adapter);
     match hid {
-        Ok(opened) => Ok(opened),
+        Ok(transport) => Ok(transport),
         Err(err) if radio_gets_a_turn && usb_failure_falls_through(&err) => {
             match ble::open_first(peers, opts.stop) {
-                Ok(transport) => Ok((transport, BLUETOOTH)),
+                Ok(transport) => Ok(transport),
                 // Called off, nothing was found or missed: the caller asked.
                 Err(Error::Cancelled) => Err(Error::Cancelled),
                 Err(bluetooth_err) => {
@@ -270,7 +272,7 @@ fn open_hid_transport(
     preferred: &[&'static str],
     meter: Option<&SelectableDevice>,
     adapter: Option<&str>,
-) -> Result<(Box<dyn Transport>, &'static str)> {
+) -> Result<Box<dyn Transport>> {
     let (device, kt) = {
         let _bus = hid_bus();
         let api = hidapi::HidApi::new().map_err(Error::Hid)?;
@@ -286,7 +288,7 @@ fn open_hid_transport(
         "found {} adapter (VID={:#06x} PID={:#06x})",
         kt.name, kt.vid, kt.pid
     );
-    Ok(((kt.init)(device)?, kt.name))
+    (kt.init)(device)
 }
 
 /// One call into hidapi's process-wide state at a time: listing the bus and

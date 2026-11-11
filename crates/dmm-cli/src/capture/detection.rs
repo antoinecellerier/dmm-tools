@@ -171,9 +171,8 @@ fn is_zero(n: &u64) -> bool {
 
 /// Opens the link again, the way `auto` would but trying the bridge named
 /// first. It can still land elsewhere; [`detect_on`] refuses that link.
-pub(crate) type Reopen<'a> = Box<
-    dyn FnOnce(&'static str) -> dmm_lib::error::Result<(Box<dyn Transport>, &'static str)> + 'a,
->;
+pub(crate) type Reopen<'a> =
+    Box<dyn FnOnce(&'static str) -> dmm_lib::error::Result<Box<dyn Transport>> + 'a>;
 
 /// Run the check, or file what the open already found when the run was
 /// itself opened through detection. `None` leaves the report's section as it
@@ -302,13 +301,14 @@ fn detect_on(
     );
     let mut check = DetectionCheck::new(DetectionOutcome::OpenFailed);
     check.capture_bridge = Some(capture_bridge.to_string());
-    let (transport, bridge) = match reopen(capture_bridge) {
-        Ok(opened) => opened,
+    let transport = match reopen(capture_bridge) {
+        Ok(transport) => transport,
         Err(e) => {
             check.error = Some(e.to_string());
             return (check, None);
         }
     };
+    let bridge = transport.transport_name();
     check.bridge = Some(bridge.to_string());
     check.advertised_name = transport.advertised_name().map(str::to_string);
     if bridge != capture_bridge
@@ -609,10 +609,10 @@ mod tests {
         .unwrap()
     }
 
-    /// A UT61E+ on a CP2110 that answers the first probe it is sent, as ours
+    /// A UT61E+ on `bridge` that answers the first probe it is sent, as ours
     /// does.
-    fn answering_ut61eplus() -> Box<dyn Transport> {
-        let meter = MockTransport::new(vec![]).on_bridge("CP2110");
+    fn answering_ut61eplus(bridge: &'static str) -> Box<dyn Transport> {
+        let meter = MockTransport::new(vec![]).on_bridge(bridge);
         meter.push_reply(ACK.to_vec());
         meter.push_reply(NAME.to_vec());
         Box::new(meter)
@@ -641,7 +641,7 @@ mod tests {
             &input,
             Box::new(|bridge| {
                 asked.set(Some(bridge));
-                Ok((answering_ut61eplus(), bridge))
+                Ok(answering_ut61eplus(bridge))
             }),
         )
         .unwrap()
@@ -676,12 +676,7 @@ mod tests {
             None,
             None,
             &input,
-            Box::new(|bridge| {
-                Ok((
-                    Box::new(MockTransport::new(vec![]).on_bridge(bridge)),
-                    bridge,
-                ))
-            }),
+            Box::new(|bridge| Ok(Box::new(MockTransport::new(vec![]).on_bridge(bridge)))),
         )
         .unwrap()
         .unwrap();
@@ -744,7 +739,7 @@ mod tests {
             None,
             None,
             &typed(&[Key::Enter, Key::Enter, Key::Char('s')]),
-            Box::new(|bridge| Ok((answering_ut61eplus(), bridge))),
+            Box::new(|bridge| Ok(answering_ut61eplus(bridge))),
         )
         .unwrap()
         .unwrap();
@@ -827,7 +822,7 @@ mod tests {
             None,
             None,
             &typed(&[Key::Enter, Key::Enter]),
-            Box::new(|_| Ok((answering_ut61eplus(), "CH9329"))),
+            Box::new(|_| Ok(answering_ut61eplus("CH9329"))),
         )
         .unwrap()
         .unwrap();
