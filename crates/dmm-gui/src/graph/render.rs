@@ -693,17 +693,20 @@ impl Graph {
         grid_step: Option<f64>,
         line_color: egui::Color32,
     ) -> AxisHints<'static> {
-        let unit = self.current_unit.clone();
-        let axis = AxisHints::new_y().formatter(move |mark, _range| {
-            let (value, decimals) = match grid_step {
-                Some(step) => (
-                    (mark.value / step).round() * step,
-                    axes::step_decimals(step),
-                ),
-                None => (
-                    mark.value,
-                    (-mark.step_size.log10().round() as usize).min(6),
-                ),
+        let plotted = self.current_unit.clone();
+        let axis = AxisHints::new_y().formatter(move |mark, range| {
+            let (value, step) = match grid_step {
+                Some(step) => ((mark.value / step).round() * step, step),
+                None => (mark.value, mark.step_size),
+            };
+            // In a prefix that fits the span shown, which a trace the meter
+            // auto-ranged out of may hold a thousand times over.
+            let prefix = axes::axis_prefix(&plotted, *range.start(), *range.end());
+            let (value, unit) = axes::in_prefix(prefix.as_ref(), &plotted, value);
+            let step = axes::in_prefix(prefix.as_ref(), &plotted, step).0.abs();
+            let decimals = match grid_step {
+                Some(_) => axes::step_decimals(step),
+                None => (-step.log10().round() as usize).min(6),
             };
             let val = eframe::emath::format_with_decimals_in_range(value, decimals..=decimals);
             if unit.is_empty() {
@@ -961,10 +964,17 @@ impl Graph {
             cursor_vb: cursors
                 .b
                 .and_then(|t| self.nearest_point(t).map(|(_, v)| v)),
+            // Each the reading the cursor is on, as the meter showed it.
+            cursor_texts: [cursors.a, cursors.b].map(|t| {
+                let (at, v) = self.nearest_point(t?)?;
+                let key = self.current_series.as_deref();
+                let (number, unit) = self.point_text(key, &self.current_unit, [at, v], digits);
+                Some(format!("{number} {unit}").trim_end().to_string())
+            }),
             marker_times: in_view.iter().map(|&(t, _)| t).collect(),
             overlay_unit: self.current_unit.clone(),
-            point_decimals: self.decimals(true),
             other_decimals: self.decimals(false),
+            levels: self.levels,
             view_max,
             mean_color: tc.graph_mean(),
             ref_color: tc.graph_ref(),
@@ -1069,7 +1079,9 @@ impl Graph {
             series,
         }) = hover
         {
-            let rows = hover_lines(l10n, &series, t, overload, overlay.point_decimals);
+            let rows = hover_lines(l10n, &series, t, overload, &|s, point| {
+                self.hover_value(s, point, digits)
+            });
             paint_hover_dots(ui, body, &transform, &series, &rows, tc.plot_background());
             let per_point = transform.dvalue_dpos()[1].abs();
             let max_decimals = if self.levels {
@@ -1077,9 +1089,16 @@ impl Graph {
             } else {
                 usize::MAX
             };
-            if let Some((left, right_tags)) =
-                height_tags(y, per_point, &self.current_unit, &right.maps, max_decimals)
-            {
+            let bounds = transform.bounds();
+            let prefix = axes::axis_prefix(&self.current_unit, bounds.min()[1], bounds.max()[1]);
+            if let Some((left, right_tags)) = height_tags(
+                y,
+                per_point,
+                &self.current_unit,
+                prefix.as_ref(),
+                &right.maps,
+                max_decimals,
+            ) {
                 let left_color = if grid_step.is_some() {
                     tick_color(ui, tc.graph_line())
                 } else {
@@ -1418,11 +1437,15 @@ impl Graph {
                 .parse::<i64>()
                 .unwrap_or(0);
             let window = tr!(l10n, "graph-plot-a11y-window", seconds = seconds);
+            // In the prefix the axis is written in.
+            let prefix = axes::axis_prefix(unit, y_min, y_max);
+            let (y_min, _) = axes::in_prefix(prefix.as_ref(), unit, y_min);
+            let (y_max, axis_unit) = axes::in_prefix(prefix.as_ref(), unit, y_max);
             let y_axis = tr!(
                 l10n,
                 "graph-plot-a11y-y-axis",
                 min = format!("{y_min:.3}"),
-                max = crate::display::spoken_amount(l10n, &format!("{y_max:.3}"), unit)
+                max = crate::display::spoken_amount(l10n, &format!("{y_max:.3}"), axis_unit)
             );
             let samples = tr!(l10n, "graph-plot-a11y-samples", count = self.history.len());
             let sentences = [

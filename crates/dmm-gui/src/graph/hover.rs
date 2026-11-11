@@ -6,10 +6,12 @@ use dmm_shared::tr;
 use eframe::egui::{self, Ui};
 use egui_plot::{PlotPoint, PlotTransform};
 
-use super::Graph;
 use super::axes::AxisMap;
 use super::render::OverlayTrace;
+use super::{Graph, ReadingDigits};
 use crate::theme::ThemeColors;
+use dmm_lib::transform::PrefixRatio;
+use std::time::Instant;
 
 /// The segment spanning time `t`, from segments in time order: found by
 /// its start, as the hover asks on every frame the pointer moves.
@@ -137,6 +139,9 @@ fn segment_distance((a, b): (egui::Pos2, egui::Pos2), p: egui::Pos2) -> f32 {
 /// and its unit.
 pub(super) struct HoverSeries<'a> {
     pub name: String,
+    /// The sub-value its readings are, by the label the meter gives it, or
+    /// `None` for the main reading: what its digits are looked up by.
+    pub key: Option<String>,
     pub segments: &'a [Vec<[f64; 2]>],
     pub unit: String,
     /// Its line's colour, for its row of the readout and its dot.
@@ -158,6 +163,9 @@ impl HoverSeries<'_> {
 /// reading it gives, for the dot on the line — none for an overload.
 pub(super) type HoverRow = (usize, String, Option<[f64; 2]>);
 
+/// How a row writes a series' reading: its number and its unit.
+pub(super) type ValueText<'f> = &'f dyn Fn(&HoverSeries, [f64; 2]) -> (String, String);
+
 /// The rows of the hover readout, after the time: every series with a value
 /// at `t` in its own unit, in the key's order, each named when there are
 /// several — with one series the number alone says it. The plotted series (first in
@@ -167,7 +175,7 @@ pub(super) fn hover_lines(
     series: &[HoverSeries],
     t: f64,
     overload: bool,
-    decimals: usize,
+    value_text: ValueText,
 ) -> Vec<HoverRow> {
     let named = series.len() > 1;
     series
@@ -184,18 +192,18 @@ pub(super) fn hover_lines(
                 return Some((i, text, None));
             }
             let point = reading_at(s.segments, t, s.stepped)?;
-            let value = format!("{:.decimals$}", point[1]);
+            let (value, unit) = value_text(s, point);
             let text = if named {
                 tr!(
                     l10n,
                     "graph-hover-series",
                     series = name,
                     value = value,
-                    unit = s.unit.as_str()
+                    unit = unit
                 )
                 .into_owned()
             } else {
-                format!("{value} {}", s.unit).trim_end().to_string()
+                format!("{value} {unit}").trim_end().to_string()
             };
             Some((i, text, Some(point)))
         })
@@ -220,6 +228,7 @@ pub(super) fn height_tags(
     y: f64,
     per_point: f64,
     unit: &str,
+    prefix: Option<&(String, PrefixRatio)>,
     maps: &[(String, AxisMap)],
     max_decimals: usize,
 ) -> Option<(String, Vec<(usize, String)>)> {
@@ -230,7 +239,14 @@ pub(super) fn height_tags(
         let val = eframe::emath::format_with_decimals_in_range(value, decimals..=decimals);
         format!("{val} {unit}").trim_end().to_string()
     };
-    let left = tag(y, height_decimals(per_point)?.min(max_decimals), unit);
+    // In the prefix the left axis writes its ticks in.
+    let (left_y, left_unit) = super::axes::in_prefix(prefix, unit, y);
+    let left_per_point = super::axes::in_prefix(prefix, unit, per_point).0.abs();
+    let left = tag(
+        left_y,
+        height_decimals(left_per_point)?.min(max_decimals),
+        left_unit,
+    );
     let right = maps
         .iter()
         .enumerate()
@@ -374,6 +390,7 @@ impl Graph {
     ) -> Vec<HoverSeries<'a>> {
         let plotted = HoverSeries {
             name: main_name.to_string(),
+            key: self.current_series.clone(),
             segments: plotted,
             unit: self.current_unit.clone(),
             color: tc.graph_line(),
@@ -385,6 +402,7 @@ impl Graph {
             .zip(maps)
             .map(|((k, label, segments), map)| HoverSeries {
                 name: self.series_text(l10n, label).into_owned(),
+                key: Some(label.clone()),
                 segments: segments.as_slice(),
                 unit: self.overlay_unit(label).to_string(),
                 color: tc.graph_overlay(*k),
@@ -392,5 +410,87 @@ impl Graph {
                 map: *map,
             });
         std::iter::once(plotted).chain(traces).collect()
+    }
+
+    /// What the hover readout writes for `series`'s reading at `point`
+    /// ([`Graph::point_text`]): a reading taken before an auto-range step is
+    /// held in the prefix plotted now, where four decimals would round
+    /// 0.07 Ω to 0.0000 MΩ.
+    pub(super) fn hover_value(
+        &self,
+        series: &HoverSeries,
+        point: [f64; 2],
+        digits: ReadingDigits,
+    ) -> (String, String) {
+        self.point_text(series.key.as_deref(), &series.unit, point, digits)
+    }
+
+    /// The reading of series `key` (`None` the main reading) at `point`, in
+    /// `unit`, as a number and its unit: the digits the meter showed for
+    /// it, else a five-digit figure in a prefix that fits it. A level is its
+    /// whole number. What the hover and the cursors' labels write.
+    pub(super) fn point_text(
+        &self,
+        key: Option<&str>,
+        unit: &str,
+        [t, v]: [f64; 2],
+        digits: ReadingDigits,
+    ) -> (String, String) {
+        // A level is a whole number, with no prefix to lose; the meter's
+        // text for it is the export's ("NCV:3").
+        if self.levels && key == self.current_series.as_deref() {
+            let digits = format!("{v:.prec$}", prec = self.decimals(true));
+            return (digits, unit.to_string());
+        }
+        // The main reading's trace, kept while a sub-value is plotted, has
+        // the main reading's digits.
+        let digits_of = key.filter(|label| !self.is_main_trace(label));
+        if let Some(text) = self
+            .reading_time(key, t, v)
+            .and_then(|at| digits(at, digits_of))
+        {
+            // "0.07 Ω": the export's digits keep no space.
+            return match text.rsplit_once(' ') {
+                Some((number, unit)) => (number.to_string(), unit.to_string()),
+                None => (text, String::new()),
+            };
+        }
+        let (number, unit) = dmm_shared::stat_figure(v, unit, None);
+        (number, unit.into_owned())
+    }
+
+    /// When the reading of value `v` the hover found at `t` seconds was
+    /// taken: of the plotted series for `key` the plotted one, else of the
+    /// kept trace `key`. The one at or just before `t` with that value, or
+    /// just after it.
+    fn reading_time(&self, key: Option<&str>, t: f64, v: f64) -> Option<Instant> {
+        let mut points: Vec<(Instant, Option<f64>)> = Vec::with_capacity(2);
+        if key == self.current_series.as_deref() {
+            let around = self.around(&self.history, |p| p.time, t);
+            points.extend(self.history.range(around).map(|p| (p.time, Some(p.value))));
+        } else {
+            let trace = self
+                .overlays
+                .iter()
+                .find(|o| Some(o.label.as_str()) == key)?;
+            let around = self.around(&trace.points, |p| p.time, t);
+            points.extend(trace.points.range(around).map(|p| (p.time, p.value)));
+        }
+        points
+            .into_iter()
+            .find(|&(_, value)| value == Some(v))
+            .map(|(at, _)| at)
+    }
+
+    /// The indices of the point of `points` at or just before `t` seconds
+    /// and the one just after it.
+    fn around<P>(
+        &self,
+        points: &std::collections::VecDeque<P>,
+        time: impl Fn(&P) -> Instant,
+        t: f64,
+    ) -> std::ops::Range<usize> {
+        let i = points.partition_point(|p| self.elapsed_secs(time(p)) <= t);
+        i.saturating_sub(1)..(i + 1).min(points.len())
     }
 }

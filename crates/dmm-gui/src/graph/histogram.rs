@@ -14,7 +14,9 @@
 //! its own readings, so a period shorter, longer or apart from the view
 //! still compares with it.
 
+use super::axes::{axis_prefix, in_prefix, prefixed_decimals};
 use dmm_lib::stats::RunningStats;
+use dmm_lib::transform::PrefixRatio;
 use dmm_shared::l10n::Localizer;
 use dmm_shared::tr;
 use eframe::egui::{self, Color32, Rect, Sense, Ui};
@@ -427,23 +429,48 @@ impl Histogram {
             .fold(0.0, f64::max)
     }
 
+    /// The prefix the plot's axis takes for values across this histogram's
+    /// range, which its numbers are written in.
+    fn value_prefix(&self, unit: &str) -> Option<(String, PrefixRatio)> {
+        axis_prefix(unit, self.range.0, self.range.1)
+    }
+
     /// The readings bin `i` holds, as its hover names them: one value when a
     /// bin is one step wide, else the first and last a reading can take.
     ///
     /// `amount` gives a number as shown with its unit: the symbol on
     /// screen, the name a screen reader hears, whose plural follows the
-    /// number. The range's last number carries the unit.
-    fn range_label(&self, l10n: &Localizer, i: usize, amount: impl Fn(&str) -> String) -> String {
-        let d = self.decimals;
+    /// number. The range's last number carries the unit. The numbers are in
+    /// `prefix` where it has one, the prefix the plot's axis writes in.
+    fn range_label(
+        &self,
+        l10n: &Localizer,
+        i: usize,
+        prefix: Option<&(String, PrefixRatio)>,
+        amount: impl Fn(&str) -> String,
+    ) -> String {
+        let shown = |v: f64| in_prefix(prefix, "", v).0;
+        // Re-expressed, the readings' own decimals stay exact (1 Ω is
+        // 0.000001 MΩ).
+        let d = prefixed_decimals(prefix, self.decimals);
         let (low, high) = self.edges(i);
         let (first, last) = (low + self.quantum / 2.0, high - self.quantum / 2.0);
-        if self.quantum > 0.0 && (last - first).abs() < self.quantum / 2.0 {
+        let (low, high, first, last) = (shown(low), shown(high), shown(first), shown(last));
+        let quantum = shown(self.quantum).abs();
+        // Where those run longer than the bin's own width (1 Ω readings in
+        // 0.05 MΩ bins), the bin is named by its edges at the width's
+        // decimals, as one with no lattice is.
+        let width_decimals = super::axes::step_decimals(shown(self.width).abs());
+        let by_edges = prefix.is_some() && d > width_decimals;
+        if quantum > 0.0 && (last - first).abs() < quantum / 2.0 {
             amount(&format!("{first:.d$}"))
         } else {
-            let (low, high) = if self.quantum > 0.0 {
-                (first, last)
-            } else {
-                (low, high)
+            let (low, high, d) = match (quantum > 0.0 && !by_edges, prefix) {
+                (true, _) => (first, last, d),
+                // The edges to the width's decimals, which a prefix may
+                // have moved past the readings' own.
+                (false, Some(_)) => (low, high, width_decimals),
+                (false, None) => (low, high, d),
             };
             tr!(
                 l10n,
@@ -459,10 +486,12 @@ impl Histogram {
     /// the view and of the interval, with their shares.
     fn hover_text(&self, l10n: &Localizer, i: usize, unit: &str) -> String {
         let percent = |c: &Counts| format!("{:.1}", c.share(c.counts[i]) * 100.0);
+        let prefix = self.value_prefix(unit);
+        let unit = in_prefix(prefix.as_ref(), unit, 0.0).1;
         let mut text = tr!(
             l10n,
             "graph-histogram-bin.hover",
-            range = self.range_label(l10n, i, |v| with_symbol(v, unit)),
+            range = self.range_label(l10n, i, prefix.as_ref(), |v| with_symbol(v, unit)),
             count = self.view.counts[i],
             percent = percent(&self.view)
         )
@@ -504,8 +533,12 @@ impl Histogram {
     /// plot's label takes among its own.
     /// Units are said by name, as the reading says them.
     pub(super) fn spoken(&self, l10n: &Localizer, unit: &str) -> String {
+        let prefix = self.value_prefix(unit);
+        // The mean's decimals in the axis's prefix, as the plot's labels.
         let d = self.sigma_decimals;
+        let (_, unit) = in_prefix(prefix.as_ref(), unit, 0.0);
         let sd = |sd: f64| {
+            let sd = in_prefix(prefix.as_ref(), "", sd).0;
             let value = crate::display::spoken_amount(l10n, &format!("{sd:.d$}"), unit);
             tr!(l10n, "graph-histogram-a11y-sd", value = value)
         };
@@ -530,7 +563,9 @@ impl Histogram {
             let most = tr!(
                 l10n,
                 "graph-histogram-a11y-most",
-                range = self.range_label(l10n, i, |v| crate::display::spoken_amount(l10n, v, unit)),
+                range = self.range_label(l10n, i, prefix.as_ref(), |v| {
+                    crate::display::spoken_amount(l10n, v, unit)
+                }),
                 count = c
             );
             clause(&mut text, &comma, &most);
@@ -886,9 +921,26 @@ impl Pane<'_> {
         // as the plot's axis writes them. The count and σ are the statistics
         // panel's.
         let labels_y = bars.bottom() + 2.0;
-        for (value, decimals) in band_ticks(lo, hi, bars.width()) {
+        // In the prefix the plot's own axis would take for these values.
+        let prefix = axis_prefix(unit, lo, hi);
+        let (_, shown_unit) = in_prefix(prefix.as_ref(), unit, 0.0);
+        let ticks = band_ticks(lo, hi, bars.width());
+        // Re-expressed, every tick to the decimals their step takes there.
+        let step = match ticks.as_slice() {
+            [(a, _), (b, _), ..] => (b - a).abs(),
+            _ => hi - lo,
+        };
+        let shown_decimals =
+            super::axes::step_decimals(in_prefix(prefix.as_ref(), unit, step).0.abs());
+        for (value, decimals) in ticks {
             let x = x_of(value);
-            let text = format!("{} {unit}", fixed(value, decimals));
+            let text = match prefix {
+                Some(_) => {
+                    let shown = in_prefix(prefix.as_ref(), unit, value).0;
+                    format!("{} {shown_unit}", fixed(shown, shown_decimals))
+                }
+                None => format!("{} {unit}", fixed(value, decimals)),
+            };
             let galley = painter.layout_no_wrap(text, font.clone(), colors.text);
             // Under its tick, shifted in from an end it would overhang: the ticks
             // are far enough apart that a shifted label still clears the next.
@@ -1075,7 +1127,31 @@ mod tests {
         assert_eq!(h.width, 1e-3);
         assert_eq!(h.view.counts, vec![0, 10, 20, 30, 0]);
         let symbol = |v: &str| with_symbol(v, "V");
-        assert_eq!(h.range_label(&crate::l10n::english(), 2, symbol), "5.002 V");
+        assert_eq!(
+            h.range_label(&crate::l10n::english(), 2, None, symbol),
+            "5.002 V"
+        );
+    }
+
+    /// A histogram over megohms held in Ω (the meter stepped down after
+    /// them) writes its bins in MΩ, as the plot's axis does.
+    #[test]
+    fn a_bin_is_written_in_the_axis_prefix() {
+        let values = times(&[5.0e6, 5.1e6, 5.1e6, 5.2e6], 10);
+        let h = Histogram::new(i(&values), (4.9e6, 5.3e6), target_bins(1000.0), (0, 0)).unwrap();
+        let text = h.hover_text(&crate::l10n::english(), 2, "\u{3a9}");
+        assert!(text.starts_with("5.00 to 5.05 M\u{3a9}"), "{text}");
+        // Readings on no lattice: the bins are named by their edges, to the
+        // width's decimals.
+        let values = times(&[5_000_001.0, 5_000_002.0, 5_000_002.0], 10);
+        let range = (5_000_000.0, 5_000_004.0);
+        let h = Histogram::new(i(&values), range, target_bins(1000.0), (0, 0)).unwrap();
+        let bin = h.bin_of(5_000_002.0).expect("a bin");
+        let text = h.hover_text(&crate::l10n::english(), bin, "\u{3a9}");
+        assert!(
+            text.starts_with("5.0000020 to 5.0000022 M\u{3a9}"),
+            "{text}"
+        );
     }
 
     /// Spoken, a bin's unit takes the form its number calls for: one volt,
@@ -1088,7 +1164,7 @@ mod tests {
         let say = |v: &str| crate::display::spoken_amount(&en, v, "V");
         let labels: Vec<String> = (0..h.view.counts.len())
             .filter(|&b| h.view.counts[b] > 0)
-            .map(|b| h.range_label(&en, b, say))
+            .map(|b| h.range_label(&en, b, None, say))
             .collect();
         assert_eq!(labels, ["1 volt", "2 volts"]);
     }
@@ -1107,7 +1183,7 @@ mod tests {
             h.view.counts
         );
         assert_eq!(
-            h.range_label(&crate::l10n::english(), 0, |v| with_symbol(v, "V")),
+            h.range_label(&crate::l10n::english(), 0, None, |v| with_symbol(v, "V")),
             "0.000 to 0.009 V"
         );
     }

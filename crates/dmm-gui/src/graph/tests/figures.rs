@@ -73,8 +73,42 @@ fn the_cursor_readout_covers_the_readings_between_the_cursors() {
     assert_eq!(figures[0], "\u{0394}T=1.00 s");
     assert_eq!(
         figures[figures.len() - 3..],
-        ["Mean=1.5000 V", "\u{3c3}=0.3317 V", "Readings=11"]
+        ["Mean=1.5000 V", "\u{3c3}=331.66 mV", "Readings=11"]
     );
+}
+
+/// Over megohms held in Ω, the readout writes its figures in MΩ, as the
+/// axis beside it does.
+#[test]
+fn the_cursor_readout_follows_the_axis_prefix() {
+    let mut g = Graph::new();
+    g.time_window_secs = 10.0;
+    let t0 = Instant::now();
+    for i in 0..=8u32 {
+        g.push(
+            4.0 + f64::from(i),
+            t0 + Duration::from_secs(i.into()),
+            "\u{3a9}",
+            "M\u{3a9}",
+            None,
+        );
+    }
+    g.push(
+        0.07,
+        t0 + Duration::from_secs(9),
+        "\u{3a9}",
+        "\u{3a9}",
+        None,
+    );
+    graph_frame(&mut g, &crate::app::styled_context(), Vec::new());
+    g.cursors.active = true;
+    g.cursors.a = Some(1.0);
+    g.cursors.b = Some(3.0);
+    let figures = g
+        .cursor_readout(&crate::l10n::english())
+        .expect("both cursors");
+    assert_eq!(figures[1], "\u{0394}=2.0000 M\u{3a9}");
+    assert_eq!(figures[figures.len() - 3], "Mean=6.0000 M\u{3a9}");
 }
 
 /// The readout writes its integral as the statistics panel does: a second at

@@ -447,14 +447,18 @@ pub(super) struct OverlayLabelData {
     pub(super) cursors: MeasureCursors,
     pub(super) cursor_va: Option<f64>,
     pub(super) cursor_vb: Option<f64>,
+    /// What each cursor's label writes of its reading: the meter's digits
+    /// with their unit (see `Graph::point_text`).
+    pub(super) cursor_texts: [Option<String>; 2],
     /// The times of the markers in view, whose lines the mean and reference
     /// labels step aside from.
     pub(super) marker_times: Vec<f64>,
     pub(super) overlay_unit: String,
-    /// [`Graph::decimals`] for the cursors' values, which are points, and
-    /// for the mean and the reference lines, which aren't.
-    pub(super) point_decimals: usize,
+    /// [`Graph::decimals`] for the mean and the reference lines, which
+    /// aren't points.
     pub(super) other_decimals: usize,
+    /// The plotted series is a level: a whole number with no unit.
+    pub(super) levels: bool,
     pub(super) view_max: f64,
     pub(super) mean_color: egui::Color32,
     pub(super) ref_color: egui::Color32,
@@ -603,18 +607,40 @@ impl Graph {
             })
         };
 
+        // In the prefix the left axis writes its ticks in, beside them.
+        let bounds = transform.bounds();
+        let prefix = super::axes::axis_prefix(&data.overlay_unit, bounds.min()[1], bounds.max()[1]);
+        let in_axis = |v: f64| super::axes::in_prefix(prefix.as_ref(), &data.overlay_unit, v);
+        // A height the user put there, a reference or a limit: in the
+        // axis's prefix, as typed.
         let level_text = |v: f64| {
-            format!(
-                "{v:.prec$} {}",
-                data.overlay_unit,
-                prec = data.other_decimals
-            )
+            let (v, unit) = in_axis(v);
+            let v = match prefix {
+                Some(_) => super::axes::short_figure(v),
+                None => format!("{v:.prec$}", prec = data.other_decimals),
+            };
+            format!("{v} {unit}").trim_end().to_string()
+        };
+        // A figure of the readings, the mean: in a prefix that fits it, to
+        // five digits, as Statistics writes it, or a level's decimals.
+        let figure_text = |v: f64| {
+            if data.levels {
+                return format!(
+                    "{v:.prec$} {}",
+                    data.overlay_unit,
+                    prec = data.other_decimals
+                )
+                .trim_end()
+                .to_string();
+            }
+            let (number, unit) = dmm_shared::stat_figure(v, &data.overlay_unit, None);
+            format!("{number} {unit}").trim_end().to_string()
         };
         // Cursor labels
         if data.cursors.active {
-            for (name, t, value) in [
-                ("A", data.cursors.a, data.cursor_va),
-                ("B", data.cursors.b, data.cursor_vb),
+            for (name, t, value, text) in [
+                ("A", data.cursors.a, data.cursor_va, &data.cursor_texts[0]),
+                ("B", data.cursors.b, data.cursor_vb, &data.cursor_texts[1]),
             ] {
                 let Some(t) = t else { continue };
                 let y_val = value.unwrap_or(0.0);
@@ -626,14 +652,8 @@ impl Graph {
                     continue;
                 }
                 let pos = egui::pos2(pos.x, pos.y.max(plot_rect.top()).min(plot_rect.bottom()));
-                let galley = layout(
-                    format!(
-                        "{name}: {t:.2} s / {y_val:.prec$} {}",
-                        data.overlay_unit,
-                        prec = data.point_decimals
-                    ),
-                    data.cursor_color,
-                );
+                let reading = text.clone().unwrap_or_else(|| crate::NO_DATA.to_string());
+                let galley = layout(format!("{name}: {t:.2} s / {reading}"), data.cursor_color);
                 if let Some(rect) =
                     cursor_label_rect(pos, galley.size(), plot_rect, &taken, hits_trace)
                 {
@@ -649,7 +669,7 @@ impl Graph {
         if data.show_mean
             && let Some(avg) = data.mean_value
         {
-            let label = tr!(l10n, "graph-mean-line", value = level_text(avg));
+            let label = tr!(l10n, "graph-mean-line", value = figure_text(avg));
             levels.push((avg, label.into_owned(), data.mean_color));
         }
         if data.show_ref {

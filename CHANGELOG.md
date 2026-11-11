@@ -37,6 +37,7 @@
 - **dmm-cli detects the meter when the settings file names a device it doesn't know** — every command stopped, `list` and `completions` too.
 - **Alarms judge an imported scaled file in its own unit** — a limit of 5 on a kV file meant 5 V.
 - **dmm-gui turns an alarm off when an import or another meter is in another unit** — the same numbers judged the new unit.
+- **The graph shows readings from before an auto-range step as the meter did** — 0.07 Ω read 0.0000 MΩ, and the axis 12000000 Ω.
 - **A Y bound or reference value you are typing survives an auto-range step** — the graph rewrote it under the caret.
 - **A right axis keeps its fixed range when the plotted reading auto-ranges**
 - **A file's Y range and reference lines keep to the trace they framed** — an export after a mode change put them on another.

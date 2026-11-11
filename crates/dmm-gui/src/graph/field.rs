@@ -13,6 +13,7 @@
 //! it to the current one. A draft with no number in it (blank, a lone `-`)
 //! has no prefix yet: what is typed into it is in the one the axis shows.
 
+use super::axes::short_figure;
 use dmm_lib::transform::PrefixRatio;
 
 /// Digits the fields show when a value is written into them by the graph
@@ -20,26 +21,11 @@ use dmm_lib::transform::PrefixRatio;
 /// enough to stay editable.
 const SET_PRECISION: usize = 4;
 
-/// Significant digits a field keeps of a number it re-expresses in another
-/// prefix: all a typed one has, none of the float error of the step
-/// (`3.29 × 1000` is `3290.0000000000005`).
-const RESCALED_DIGITS: i32 = 12;
-
-/// `text` re-expressed by `ratio` when it reads as a number, at most
-/// [`RESCALED_DIGITS`] significant digits and no trailing zeros; `None` when
+/// `text` re-expressed by `ratio` when it reads as a number, as
+/// [`short_figure`] writes it; `None` when
 /// it doesn't, for a draft the user is still typing to be left as it is.
 fn rescaled_text(text: &str, ratio: PrefixRatio) -> Option<String> {
-    let v = ratio.apply(text.trim().parse::<f64>().ok()?);
-    if v == 0.0 || !v.is_finite() {
-        return Some(if v == 0.0 { "0".into() } else { v.to_string() });
-    }
-    let decimals = (RESCALED_DIGITS - 1 - v.abs().log10().floor() as i32).max(0) as usize;
-    let s = format!("{v:.decimals$}");
-    Some(if s.contains('.') {
-        s.trim_end_matches('0').trim_end_matches('.').to_string()
-    } else {
-        s
-    })
+    Some(short_figure(ratio.apply(text.trim().parse::<f64>().ok()?)))
 }
 
 /// `pending` and then `ratio`: the step from the prefix a draft was typed in

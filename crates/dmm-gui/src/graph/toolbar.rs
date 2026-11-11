@@ -463,15 +463,24 @@ impl Graph {
         let (ta, tb) = (self.cursors.a?, self.cursors.b?);
         let (stats, integral) = self.cursor_figures()?;
         let unit = &self.current_unit;
+        // Figures of the readings, as Statistics writes them: each in a
+        // prefix that fits it, to five digits, so a spread of a few ohms
+        // beside megohms keeps its digits; a level's to its own decimals.
+        let figure_with = |v: f64, decimals: usize| {
+            let (number, unit) = if self.levels {
+                (format!("{v:.decimals$}"), unit.as_str().into())
+            } else {
+                dmm_shared::stat_figure(v, unit, None)
+            };
+            format!("{number} {unit}").trim_end().to_string()
+        };
         let dv = match (self.nearest_point(ta), self.nearest_point(tb)) {
-            (Some((_, a)), Some((_, b))) => {
-                format!("{:.prec$}", (b - a).abs(), prec = self.decimals(true))
-            }
+            (Some((_, a)), Some((_, b))) => figure_with((b - a).abs(), self.decimals(true)),
             _ => crate::NO_DATA.to_string(),
         };
         let mean_decimals = self.decimals(false);
         let figure = |v: Option<f64>| match v {
-            Some(v) => format!("{v:.mean_decimals$} {unit}"),
+            Some(v) => figure_with(v, mean_decimals),
             None => crate::NO_DATA.to_string(),
         };
         let integral = integral
@@ -482,7 +491,7 @@ impl Graph {
             });
         let figures = [
             Some(format!("\u{0394}T={:.2} s", (tb - ta).abs())),
-            Some(format!("\u{0394}={dv} {unit}")),
+            Some(format!("\u{0394}={dv}")),
             integral,
             Some(tr!(l10n, "graph-readout-mean", value = figure(stats.avg())).into_owned()),
             Some(format!("\u{3c3}={}", figure(stats.std_dev()))),

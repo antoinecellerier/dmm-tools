@@ -9,6 +9,8 @@
 //! is still a whole 1, 2 or 5 × 10ⁿ, and a trace that 2 would squeeze and 5
 //! would flatten gets the height between.
 
+use dmm_lib::transform::{PrefixRatio, prefix_for};
+
 /// Where one unit's values sit on the plot: `y = offset + scale·v`, with a
 /// gridline every `step` of the unit and a label every `label_step`.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -68,6 +70,71 @@ fn secondary_step(x: f64) -> f64 {
         .map(|m| m * base)
         .find(|&s| s >= x * (1.0 - 1e-9))
         .unwrap_or(10.0 * base)
+}
+
+/// The span of the plotted unit an axis writes as it is: from 0.001 to
+/// four integer digits. Past either end, a trace the meter auto-ranged out of
+/// would read 12000000 Ω or 0.0000 MΩ; inside it, the axis keeps the unit the
+/// meter shows, and a reading wandering across a decade never flips it.
+const PLAIN_SPAN: std::ops::Range<f64> = 0.001..10_000.0;
+
+/// The prefix of `unit` an axis spanning `lo..=hi` writes its values in,
+/// and the ratio taking a value in `unit` there, when `unit` writes that
+/// span badly (see [`PLAIN_SPAN`]): the one its larger end reads one to
+/// three digits in, 12 MΩ rather than 12000000 Ω. `None` to write them as
+/// they are, as for a unit no prefix goes on or an empty span.
+pub(super) fn axis_prefix(unit: &str, lo: f64, hi: f64) -> Option<(String, PrefixRatio)> {
+    let largest = lo.abs().max(hi.abs());
+    if !(largest.is_finite() && largest > 0.0) || PLAIN_SPAN.contains(&largest) {
+        return None;
+    }
+    let (prefixed, ratio) = prefix_for(unit, largest.log10().floor() as i32)?;
+    (prefixed != unit).then_some((prefixed, ratio))
+}
+
+/// The decimals that write in the axis's `prefix` what `decimals` wrote in
+/// the plotted unit: 0.15 Ω on a MΩ axis needs six more, 1500 Ω on a kΩ
+/// one three fewer.
+pub(super) fn prefixed_decimals(prefix: Option<&(String, PrefixRatio)>, decimals: usize) -> usize {
+    let Some((_, ratio)) = prefix else {
+        return decimals;
+    };
+    // A power of ten, so the rounded log is exact.
+    let power = ratio.apply(1.0).log10().round() as i64;
+    (decimals as i64 - power).clamp(0, 12) as usize
+}
+
+/// Significant digits a number re-expressed in another prefix keeps: all a
+/// typed one has, none of the float error of the step (`3.29 × 1000` is
+/// `3290.0000000000005`).
+const RESCALED_DIGITS: i32 = 12;
+
+/// `v` to at most [`RESCALED_DIGITS`] significant digits with no trailing
+/// zeros: a number re-expressed in another prefix without the float error of
+/// the step.
+pub(super) fn short_figure(v: f64) -> String {
+    if v == 0.0 || !v.is_finite() {
+        return if v == 0.0 { "0".into() } else { v.to_string() };
+    }
+    let decimals = (RESCALED_DIGITS - 1 - v.abs().log10().floor() as i32).max(0) as usize;
+    let s = format!("{v:.decimals$}");
+    if s.contains('.') {
+        s.trim_end_matches('0').trim_end_matches('.').to_string()
+    } else {
+        s
+    }
+}
+
+/// `value` in `unit`, written in the axis's `prefix` where it has one.
+pub(super) fn in_prefix<'a>(
+    prefix: Option<&'a (String, PrefixRatio)>,
+    unit: &'a str,
+    value: f64,
+) -> (f64, &'a str) {
+    match prefix {
+        Some((prefixed, ratio)) => (ratio.apply(value), prefixed.as_str()),
+        None => (value, unit),
+    }
 }
 
 /// The decimals that write every multiple of `step` exactly: 0.05 needs
@@ -190,6 +257,34 @@ mod tests {
             "{target:?} in {v_lo}..{v_hi}"
         );
         map
+    }
+
+    /// An axis keeps the plotted unit over the span it writes well, and
+    /// past it takes the prefix its larger end reads in.
+    #[test]
+    fn an_axis_takes_another_prefix_only_past_its_plain_span() {
+        let prefix = |unit, lo, hi| axis_prefix(unit, lo, hi).map(|(u, r)| (u, r.apply(1.0)));
+        assert_eq!(
+            prefix("\u{3a9}", -1e6, 12e6),
+            Some(("M\u{3a9}".to_string(), 1e-6))
+        );
+        assert_eq!(
+            prefix("M\u{3a9}", 0.0, 4e-7),
+            Some(("m\u{3a9}".to_string(), 1e9))
+        );
+        assert_eq!(prefix("M\u{3a9}", 0.0, 13.0), None);
+        assert_eq!(
+            prefix("V", 0.0, 0.5),
+            None,
+            "a reading under 1 V stays in V"
+        );
+        assert_eq!(
+            prefix("\u{3a9}", 990.0, 1010.0),
+            None,
+            "no flip across a decade"
+        );
+        assert_eq!(prefix("V", 0.0, 0.0), None);
+        assert_eq!(prefix("\u{b0}C", 0.0, 1e5), None, "no prefix goes on it");
     }
 
     #[test]

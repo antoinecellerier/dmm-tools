@@ -5,6 +5,11 @@ use crate::graph::hover::{
     HoverSeries, height_decimals, height_tags, hover_lines, reading_at, reading_near,
 };
 
+/// A row's value to one decimal, in the series' unit.
+fn one_decimal(s: &HoverSeries, point: [f64; 2]) -> (String, String) {
+    (format!("{:.1}", point[1]), s.unit.clone())
+}
+
 /// The hover lists every series at its time in the key's order, named
 /// when there are several, and leaves out one in a break.
 #[test]
@@ -13,6 +18,7 @@ fn the_hover_lists_every_series_at_its_time() {
     let hz = vec![vec![[0.0, 50.0], [0.9, 50.1]], vec![[1.8, 49.9]]];
     let series = [
         HoverSeries {
+            key: None,
             name: "Main".into(),
             segments: &volts,
             unit: "V".into(),
@@ -21,6 +27,7 @@ fn the_hover_lists_every_series_at_its_time() {
             map: None,
         },
         HoverSeries {
+            key: None,
             name: "Frequency".into(),
             segments: &hz,
             unit: "Hz".into(),
@@ -30,7 +37,7 @@ fn the_hover_lists_every_series_at_its_time() {
         },
     ];
     let rows = |series: &[HoverSeries], t, overload| -> Vec<(usize, String)> {
-        hover_lines(&crate::l10n::english(), series, t, overload, 1)
+        hover_lines(&crate::l10n::english(), series, t, overload, &one_decimal)
             .into_iter()
             .map(|(i, text, _)| (i, text))
             .collect()
@@ -64,7 +71,7 @@ fn the_hover_lists_every_series_at_its_time() {
         vec![(0, "overload".to_string())]
     );
     // Each row's reading is the one it shows, for the dot on its line.
-    let points: Vec<_> = hover_lines(&crate::l10n::english(), &series, 0.5, false, 1)
+    let points: Vec<_> = hover_lines(&crate::l10n::english(), &series, 0.5, false, &one_decimal)
         .into_iter()
         .map(|(_, _, p)| p)
         .collect();
@@ -89,6 +96,7 @@ fn the_hover_snaps_along_a_steep_line_and_a_step() {
     let line = vec![vec![[0.0, 0.0], [1.0, 1.0]]];
     let series = |segments, stepped| HoverSeries {
         name: "Main".into(),
+        key: None,
         segments,
         unit: "V".into(),
         color: egui::Color32::RED,
@@ -156,6 +164,7 @@ fn the_hover_snaps_only_near_a_curve() {
     let map = crate::graph::axes::fit_secondary(0.0, 4.0, 1.0, (40.0, 60.0));
     let series = [
         HoverSeries {
+            key: None,
             name: "Main".into(),
             segments: &volts,
             unit: "V".into(),
@@ -164,6 +173,7 @@ fn the_hover_snaps_only_near_a_curve() {
             map: None,
         },
         HoverSeries {
+            key: None,
             name: "Frequency".into(),
             segments: &hz,
             unit: "Hz".into(),
@@ -215,25 +225,31 @@ fn the_height_tags_resolve_a_point() {
     assert_eq!(height_decimals(f64::INFINITY), None);
     assert_eq!(height_decimals(0.0), None);
 
-    let (left, right) = height_tags(121.8, 4.0 / 300.0, "V", &[], usize::MAX).unwrap();
+    let (left, right) = height_tags(121.8, 4.0 / 300.0, "V", None, &[], usize::MAX).unwrap();
     assert_eq!(left, "121.80 V");
     assert!(right.is_empty());
     // A level is capped at a height's single decimal.
-    let (left, _) = height_tags(2.37, 5.0 / 300.0, "", &[], 1).unwrap();
+    let (left, _) = height_tags(2.37, 5.0 / 300.0, "", None, &[], 1).unwrap();
     assert_eq!(left, "2.4");
-    assert_eq!(height_tags(f64::NAN, 0.01, "V", &[], usize::MAX), None);
+    assert_eq!(
+        height_tags(f64::NAN, 0.01, "V", None, &[], usize::MAX),
+        None
+    );
     // A right axis reads the same height in its own unit, to the decimals a
     // point resolves in that unit.
     let map = crate::graph::axes::fit_secondary(118.0, 122.0, 1.0, (59.95, 60.05));
     let maps = [("Hz".to_string(), map)];
-    let (_, right) = height_tags(121.8, 4.0 / 300.0, "V", &maps, usize::MAX).unwrap();
+    let (_, right) = height_tags(121.8, 4.0 / 300.0, "V", None, &maps, usize::MAX).unwrap();
     let per_point = (map.value_at(121.8 + 4.0 / 300.0) - map.value_at(121.8)).abs();
     let decimals = height_decimals(per_point).unwrap();
     assert_eq!(
         right,
         vec![(0, format!("{:.decimals$} Hz", map.value_at(121.8)))]
     );
-    assert_eq!(height_tags(1.0, f64::INFINITY, "V", &[], usize::MAX), None);
+    assert_eq!(
+        height_tags(1.0, f64::INFINITY, "V", None, &[], usize::MAX),
+        None
+    );
 }
 
 /// The text a frame of the main plot draws with the pointer at `pointer`,
@@ -347,4 +363,73 @@ fn the_hover_survives_an_infinite_y_range() {
         !texts.iter().any(|t| t.contains("NaN") || t.contains("inf")),
         "{texts:?}"
     );
+}
+
+/// A reading taken before an auto-range step reads as the meter showed it,
+/// not rounded in the prefix plotted now: its own digits where the app holds
+/// them, else a figure in a prefix that fits it.
+#[test]
+fn the_readout_writes_a_reading_from_before_a_step_as_shown() {
+    let mut g = Graph::new();
+    let t0 = Instant::now();
+    g.push(0.07, t0, "\u{3a9}", "\u{3a9}", None);
+    g.push(
+        9.461,
+        t0 + Duration::from_secs(1),
+        "\u{3a9}",
+        "M\u{3a9}",
+        None,
+    );
+    let main = HoverSeries {
+        name: "Main".into(),
+        key: None,
+        segments: &[],
+        unit: g.plotted_unit().to_string(),
+        color: egui::Color32::RED,
+        stepped: false,
+        map: None,
+    };
+    // The reading as the graph holds it now, re-expressed in MΩ.
+    let first = g.history[0];
+    let point = [g.elapsed_secs(first.time), first.value];
+    assert_eq!(
+        g.hover_value(&main, point, NO_DIGITS),
+        ("70.000".to_string(), "m\u{3a9}".to_string())
+    );
+    let digits = |at: Instant, label: Option<&str>| {
+        (at == t0 && label.is_none()).then(|| "0.07 \u{3a9}".to_string())
+    };
+    assert_eq!(
+        g.hover_value(&main, point, &digits),
+        ("0.07".to_string(), "\u{3a9}".to_string())
+    );
+}
+
+/// A level is its whole number, not the meter's text for it; a height tag
+/// is written in the axis's prefix.
+#[test]
+fn a_level_reads_as_its_number_and_a_tag_in_the_axis_prefix() {
+    let mut g = Graph::new();
+    let t0 = Instant::now();
+    g.push(3.0, t0, "NCV", "", None);
+    g.levels = true;
+    let main = HoverSeries {
+        name: "Main".into(),
+        key: None,
+        segments: &[],
+        unit: String::new(),
+        color: egui::Color32::RED,
+        stepped: true,
+        map: None,
+    };
+    let digits = |_: Instant, _: Option<&str>| Some("NCV:3".to_string());
+    assert_eq!(
+        g.hover_value(&main, [0.0, 3.0], &digits),
+        ("3".to_string(), String::new())
+    );
+
+    let mega = dmm_lib::transform::prefix_ratio("\u{3a9}", "M\u{3a9}").expect("one base unit");
+    let prefix = ("M\u{3a9}".to_string(), mega);
+    let (left, _) = height_tags(12e6, 1e4, "\u{3a9}", Some(&prefix), &[], usize::MAX).unwrap();
+    assert_eq!(left, "12.00 M\u{3a9}");
 }

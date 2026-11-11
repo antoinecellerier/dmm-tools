@@ -3,6 +3,7 @@
 //! its height, put a cursor on it — and the removal of what lies under the
 //! pointer: a marker, a reference line, a limit.
 
+use dmm_lib::transform::PrefixRatio;
 use dmm_shared::l10n::Localizer;
 use dmm_shared::tr;
 use eframe::egui;
@@ -75,6 +76,9 @@ pub(super) struct MenuPoint {
     limits_apply: bool,
     /// The alarm limit whose line is under the pointer.
     limit: Option<LimitSide>,
+    /// The prefix the value axis wrote its ticks in, which the entries name
+    /// a height in (see `axes::axis_prefix`).
+    prefix: Option<(String, PrefixRatio)>,
     /// The history the menu was opened over. Once restarted — a clear, a
     /// mode change, another series plotted — the times and heights above are
     /// another trace's, and once re-expressed by a decade step its heights
@@ -272,7 +276,7 @@ fn add_entries(
         ui.separator();
     }
     if menu.scope.offers_value() {
-        let height = with_unit(menu.y, unit);
+        let height = with_unit(menu.y, unit, menu.prefix.as_ref());
         heading(
             ui,
             &tr!(l10n, "graph-menu-height-heading", height = &height),
@@ -292,7 +296,7 @@ fn add_entries(
             let (short, spoken) = plain(tr!(
                 l10n,
                 "graph-menu-remove-ref",
-                height = with_unit(v, unit)
+                height = with_unit(v, unit, menu.prefix.as_ref())
             ));
             entry(ui, true, short, spoken, Pick::RemoveRefLine(v));
         }
@@ -441,10 +445,19 @@ pub(super) fn side_arg(side: LimitSide) -> &'static str {
     }
 }
 
-/// `v` with `unit` after it, as the menu's entries name a height.
-fn with_unit(v: f64, unit: &str) -> String {
+/// `v`, in the plotted `unit`, with its unit after it, as the menu's
+/// entries name a height: in the axis's `prefix`, as its ticks are.
+fn with_unit(v: f64, unit: &str, prefix: Option<&(String, PrefixRatio)>) -> String {
+    let (v, unit) = match prefix {
+        // Re-expressed, without the float error of the step.
+        Some(_) => {
+            let (v, unit) = super::axes::in_prefix(prefix, unit, v);
+            (super::axes::short_figure(v), unit)
+        }
+        None => (v.to_string(), unit),
+    };
     if unit.is_empty() {
-        v.to_string()
+        v
     } else {
         format!("{v} {unit}")
     }
@@ -521,6 +534,10 @@ impl Graph {
             scope: MenuScope::Plot,
             limits_apply: !self.levels && self.current_series.is_none(),
             limit,
+            prefix: {
+                let bounds = transform.bounds();
+                super::axes::axis_prefix(&self.current_unit, bounds.min()[1], bounds.max()[1])
+            },
             epoch: self.history_epoch,
         }
     }
