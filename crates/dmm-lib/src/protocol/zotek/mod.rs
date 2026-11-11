@@ -141,6 +141,9 @@ impl Protocol for ZotekProtocol {
 
     fn discard_input(&mut self, transport: &dyn Transport) -> Result<()> {
         self.rx_buf.clear();
+        // What the meter showed before the gap may have changed since, so
+        // a key that follows the display reads a fresh packet first.
+        self.showing = None;
         crate::protocol::framing::discard_queued(transport)
     }
 
@@ -411,6 +414,24 @@ mod tests {
         let err = proto.send_command(&mock, "zero").unwrap_err();
         assert!(matches!(err, Error::CommandRejected(_)), "{err:?}");
         assert_eq!(mock.written.borrow().len(), 1, "nothing sent");
+    }
+
+    /// After input is discarded, as following a gap with no reads, a key
+    /// that follows the display reads a fresh packet rather than using
+    /// the one from before the gap: here F, after A DC, so the current key
+    /// sends the generic `C9`, not A DC's `C8` (spec §8.2).
+    #[test]
+    fn a_display_key_after_a_discard_reads_a_fresh_packet() {
+        let before = MockTransport::new(vec![type4_showing(18, 0x10, true)]);
+        let mut proto = ZotekProtocol::new_zt5566se();
+        proto.request_measurement(&before).unwrap();
+        proto
+            .discard_input(&MockTransport::new(Vec::new()))
+            .unwrap();
+
+        let after = MockTransport::new(vec![type4_showing(17, 0x01, false)]);
+        proto.send_command(&after, "current").unwrap();
+        assert_eq!(*after.written.borrow(), [keys::frame(0xC9)]);
     }
 
     /// An entry opened on a meter sending another layout: the keys follow
