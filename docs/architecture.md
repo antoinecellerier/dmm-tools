@@ -339,6 +339,10 @@ user never sees the log. A meter parked on an unknown value would otherwise repe
 transport runs each `btleplug` call in `block_on` on the caller's thread: no thread, no channel, as
 with HID. So the stream reads streaming meters continuously, and `Dmm` drops what queued unread.
 
+**One login reaches into its family.** Transports use no protocol family's code, except a GATT
+profile whose bring-up is a login: it builds its family's packets, and `BluetoothIssue` carries its
+refusals. A second login would make that exchange data the profile carries.
+
 **Graph two-tier rendering.** The minimap keeps an incremental min/max level in session-time
 buckets, so its cost follows its width rather than the history. The main plot and every per-frame
 helper work on the visible slice only, so frame cost does not grow with the session.
