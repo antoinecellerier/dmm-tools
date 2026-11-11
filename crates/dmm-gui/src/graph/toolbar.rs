@@ -13,6 +13,9 @@ use super::field::{Mark, Undrawn};
 use super::{AxisRefusal, Graph, MAX_AXES, SeriesOption, TIME_WINDOWS};
 use crate::a11y::ResponseA11yExt;
 use crate::text_marks::{self, MarkStyle, TextMark};
+
+/// The cursor readout's text size: the floor `.claude/rules/gui.md` sets.
+const READOUT_SIZE: f32 = 11.0;
 use crate::theme::ThemeColors;
 
 /// Faint container for one labelled toolbar group (**Plot:**, **Show:**).
@@ -540,11 +543,18 @@ impl Graph {
         if !self.cursor_readout.is_empty() {
             let color = tc.graph_cursor_delta();
             const GAP: f32 = 6.0;
+            // Monospace a point under egui's: Hack's glyphs stand as tall at
+            // 11 pt as the chips' Ubuntu Light at 12.5, where at 12 they read
+            // a size larger.
+            let font = egui::FontId::monospace(READOUT_SIZE);
             let galleys: Vec<_> = self
                 .cursor_readout
                 .iter()
                 .map(|text| {
-                    egui::WidgetText::from(egui::RichText::new(text).color(color)).into_galley(
+                    egui::WidgetText::from(
+                        egui::RichText::new(text).font(font.clone()).color(color),
+                    )
+                    .into_galley(
                         ui,
                         Some(egui::TextWrapMode::Extend),
                         f32::INFINITY,
