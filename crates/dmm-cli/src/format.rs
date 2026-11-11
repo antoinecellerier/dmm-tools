@@ -1,13 +1,11 @@
 use clap::ValueEnum;
 use dmm_lib::measurement::Measurement;
 use dmm_lib::text::TextKind;
-use dmm_lib::transport::Link;
 use dmm_shared::export::CsvLayout;
 use dmm_shared::l10n::Localizer;
 use dmm_shared::tr;
 use std::borrow::Cow;
 use std::io::Write;
-use std::time::Instant;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, ValueEnum)]
 pub enum OutputFormat {
@@ -71,26 +69,8 @@ pub enum Output {
         view: Option<String>,
     },
     /// The meter's own frames, under the header naming the meter they came
-    /// from — only the caller knows which meter that is. The header goes out
-    /// with the first frame, dated from it.
-    Replay {
-        header: ReplayHeader,
-        /// When the first frame arrived. Offsets are measured from it, so a
-        /// recording starts at zero however long the meter took to answer.
-        first: Option<Instant>,
-        /// A graph view the recording was saved with, passed through.
-        view: Option<String>,
-    },
-}
-
-/// What a replay file's header names besides when it was recorded, which is
-/// the first frame's wall time, known once it arrives: the offsets count from
-/// that frame, so the header and the offsets agree however long the meter
-/// took to answer, and a copy of a replay keeps the times it was measured at.
-pub struct ReplayHeader {
-    pub device: String,
-    pub model: Option<String>,
-    pub link: Option<Link>,
+    /// from — only the caller knows which meter that is.
+    Replay(dmm_shared::replay::Writer),
 }
 
 impl Output {
@@ -102,7 +82,7 @@ impl Output {
         format: OutputFormat,
         layout: CsvLayout,
         experimental: bool,
-        replay_header: impl FnOnce() -> ReplayHeader,
+        replay_writer: impl FnOnce() -> dmm_shared::replay::Writer,
     ) -> Self {
         match format {
             OutputFormat::Text => Self::Text,
@@ -111,11 +91,7 @@ impl Output {
                 experimental,
                 view: None,
             },
-            OutputFormat::Replay => Self::Replay {
-                header: replay_header(),
-                first: None,
-                view: None,
-            },
+            OutputFormat::Replay => Self::Replay(replay_writer()),
         }
     }
 
@@ -123,7 +99,8 @@ impl Output {
     /// never reads — through to the formats that keep one: JSON and replay.
     pub fn with_view(mut self, view: Option<String>) -> Self {
         match &mut self {
-            Self::Json { view: v, .. } | Self::Replay { view: v, .. } => *v = view,
+            Self::Json { view: v, .. } => *v = view,
+            Self::Replay(writer) => writer.set_view(view),
             Self::Text | Self::Csv(_) => {}
         }
         self
@@ -165,53 +142,19 @@ impl Output {
             Self::Text => format_text(w, m, integral),
             Self::Csv(layout) => format_csv(w, m, integral, *layout, extra_aux, marker),
             Self::Json { experimental, .. } => format_json(w, m, *experimental, integral, marker),
-            Self::Replay {
-                header,
-                first,
-                view,
-            } => {
+            Self::Replay(writer) => {
                 // The payload as the meter sent it: a `--scale` is a choice
                 // the run that plays the file back makes for itself, and this
                 // is one of the reasons it is refused alongside this format.
-                //
-                // Through `dmm_lib::replay`, which also parses these lines, so
-                // the two ends of a recording cannot drift apart.
-                if m.raw_payload.is_empty() {
-                    // A reading with no frame behind it would be written as a
-                    // bare offset, which `Replay::parse` refuses — the same
-                    // reading the GUI's replay export refuses to render.
-                    return Err(std::io::Error::new(
+                let mut lines = String::new();
+                writer.push(&mut lines, m, marker).map_err(|_| {
+                    // The reading the GUI's replay export refuses to render.
+                    std::io::Error::new(
                         std::io::ErrorKind::InvalidData,
                         NoFrame(m.mode.to_string()),
-                    ));
-                }
-                if first.is_none() {
-                    let recorded = dmm_shared::replay::recorded_text(m.wall_time.into());
-                    w.write_all(
-                        dmm_lib::replay::header(
-                            &header.device,
-                            &recorded,
-                            header.model.as_deref(),
-                            header.link,
-                        )
-                        .as_bytes(),
-                    )?;
-                    if let Some(view) = view {
-                        w.write_all(dmm_lib::replay::view_line(view).as_bytes())?;
-                    }
-                }
-                let first = *first.get_or_insert(m.timestamp);
-                let offset = m
-                    .timestamp
-                    .checked_duration_since(first)
-                    .unwrap_or_default();
-                w.write_all(dmm_lib::replay::sample_line(offset, &m.raw_payload).as_bytes())?;
-                match marker {
-                    Some((number, note)) => {
-                        w.write_all(dmm_lib::replay::marker_line(offset, number, note).as_bytes())
-                    }
-                    None => Ok(()),
-                }
+                    )
+                })?;
+                w.write_all(lines.as_bytes())
             }
         }
     }
@@ -826,11 +769,11 @@ mod tests {
         let recorded = std::time::SystemTime::UNIX_EPOCH + Duration::from_millis(1_790_000_000_123);
         m.wall_time = recorded;
         let mut output = Output::new(OutputFormat::Replay, CsvLayout::default(), false, || {
-            ReplayHeader {
-                device: "ut61eplus".to_string(),
-                model: Some("UT61E+".to_string()),
-                link: Some(Link::Bluetooth),
-            }
+            dmm_shared::replay::Writer::new(
+                "ut61eplus",
+                Some("UT61E+".to_string()),
+                Some(dmm_lib::transport::Link::Bluetooth),
+            )
         });
         // Nothing up front: the header is dated from the first frame.
         assert!(output.header("UNI-T UT61E+").is_none());
@@ -864,11 +807,7 @@ mod tests {
         // from.
         let m = Measurement::test_fixture(MeasuredValue::Normal(1.0), "V", StatusFlags::default());
         let mut output = Output::new(OutputFormat::Replay, CsvLayout::default(), false, || {
-            ReplayHeader {
-                device: "ut61eplus".to_string(),
-                model: None,
-                link: None,
-            }
+            dmm_shared::replay::Writer::new("ut61eplus", None, None)
         });
 
         let mut file = Vec::new();

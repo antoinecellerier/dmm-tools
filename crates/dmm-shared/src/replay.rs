@@ -1,5 +1,6 @@
 //! What `--replay` opens, in both binaries: a replay file, or a golden
-//! fixture played as a one-frame recording.
+//! fixture played as a one-frame recording; and the [`Writer`] both write
+//! one with.
 //!
 //! A golden fixture (`crates/dmm-lib/tests/golden/<device-id>/<case>.yaml`)
 //! holds one real frame as `raw_hex`, and the directory it sits in names the
@@ -11,10 +12,12 @@
 use crate::export::{ReadError, ReadReason};
 use chrono::{DateTime, FixedOffset, Local, SecondsFormat};
 use dmm_lib::error::{Error, Result};
+use dmm_lib::measurement::Measurement;
 use dmm_lib::protocol::registry;
 use dmm_lib::replay::{self, Replay};
+use dmm_lib::transport::Link;
 use std::path::Path;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 /// When `replay` was recorded, from its `# recorded:` header line.
 ///
@@ -31,6 +34,88 @@ pub fn recorded_at(replay: &Replay) -> std::result::Result<DateTime<FixedOffset>
 /// reads it back: RFC 3339 to the millisecond.
 pub fn recorded_text(t: DateTime<Local>) -> String {
     t.to_rfc3339_opts(SecondsFormat::Millis, false)
+}
+
+/// Writes a replay file a reading at a time, for both binaries: dmm-cli as
+/// it streams, dmm-gui over its buffer. The lines come from
+/// [`dmm_lib::replay`], which also parses them; this owns how they are put
+/// together.
+///
+/// The header goes out with the first frame, dated from that frame's wall
+/// time, so a copy of a replay keeps the times it was measured at. Offsets
+/// count session time from the first frame's timestamp rather than wall
+/// time, so a recording made on a scaled or preseeded clock plays back at the
+/// spacing its readings arrived at, and a recording starts at zero however
+/// long the meter took to answer. A marker goes after its frame.
+#[derive(Debug)]
+pub struct Writer {
+    device: String,
+    model: Option<String>,
+    link: Option<Link>,
+    view: Option<String>,
+    /// The first frame's session time, once written.
+    first: Option<Instant>,
+}
+
+/// A reading with no frame behind it, which a replay can't hold: a bare
+/// offset is a line [`Replay::parse`] refuses.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct NoFrame;
+
+impl Writer {
+    /// A replay of the meter registered as `device`, under the name it
+    /// reported (`model`), over `link`.
+    pub fn new(device: impl Into<String>, model: Option<String>, link: Option<Link>) -> Self {
+        Self {
+            device: device.into(),
+            model,
+            link,
+            view: None,
+            first: None,
+        }
+    }
+
+    /// The graph view the recording is saved with, passed through: the
+    /// viewer's business, not the file's.
+    pub fn set_view(&mut self, view: Option<String>) {
+        self.view = view;
+    }
+
+    /// Append `m`'s frame to `out`, with the number and note of the marker
+    /// on it, if any; the header first when it is the first frame. A reading
+    /// without a frame writes nothing, header included.
+    pub fn push(
+        &mut self,
+        out: &mut String,
+        m: &Measurement,
+        marker: Option<(u32, &str)>,
+    ) -> std::result::Result<(), NoFrame> {
+        if m.raw_payload.is_empty() {
+            return Err(NoFrame);
+        }
+        let first = match self.first {
+            Some(first) => first,
+            None => {
+                let recorded = recorded_text(m.wall_time.into());
+                out.push_str(&replay::header(
+                    &self.device,
+                    &recorded,
+                    self.model.as_deref(),
+                    self.link,
+                ));
+                if let Some(view) = &self.view {
+                    out.push_str(&replay::view_line(view));
+                }
+                *self.first.insert(m.timestamp)
+            }
+        };
+        let offset = m.timestamp.saturating_duration_since(first);
+        out.push_str(&replay::sample_line(offset, &m.raw_payload));
+        if let Some((number, note)) = marker {
+            out.push_str(&replay::marker_line(offset, number, note));
+        }
+        Ok(())
+    }
 }
 
 /// Why `text`, meant as an RFC 3339 date, was refused — a replay's header or
@@ -118,6 +203,50 @@ mod tests {
     use super::*;
     use dmm_lib::Clock;
     use std::path::PathBuf;
+
+    /// A reading on the meter's frame, `ms` after `at`.
+    fn frame_at(at: Instant, ms: u64) -> Measurement {
+        let mut m = dmm_lib::protocol::make_test_measurement(
+            0x02,
+            0x30,
+            b" 1.6109",
+            (0x03, 0x02),
+            (0x30, 0x30, 0x30),
+        );
+        m.timestamp = at + Duration::from_millis(ms);
+        m
+    }
+
+    /// The header goes out once, with the first frame, and offsets count
+    /// from that frame wherever the session was; a marker follows its frame.
+    #[test]
+    fn the_writer_heads_the_first_frame_and_counts_from_it() {
+        let at = Instant::now();
+        let mut writer = Writer::new("ut61eplus", None, None);
+        writer.set_view(Some("{}".to_string()));
+        let mut out = String::new();
+        writer.push(&mut out, &frame_at(at, 1000), None).unwrap();
+        writer
+            .push(&mut out, &frame_at(at, 1250), Some((3, "load on")))
+            .unwrap();
+        let replay = Replay::parse(&out).expect("parses back");
+        assert_eq!(replay.duration(), Duration::from_millis(250));
+        assert_eq!(replay.view.as_deref(), Some("{}"));
+        assert_eq!(replay.markers[0].offset, Duration::from_millis(250));
+        assert_eq!(out.matches("# dmm-replay").count(), 1);
+    }
+
+    /// A reading with no frame writes nothing, not even the header: a file
+    /// begun on it would hold a header and no frame.
+    #[test]
+    fn a_frameless_reading_writes_nothing() {
+        let mut m = frame_at(Instant::now(), 0);
+        m.raw_payload.clear();
+        let mut writer = Writer::new("ut61eplus", None, None);
+        let mut out = String::new();
+        assert_eq!(writer.push(&mut out, &m, None), Err(NoFrame));
+        assert!(out.is_empty(), "{out}");
+    }
 
     /// Both binaries word a bad header date with this one message.
     #[test]

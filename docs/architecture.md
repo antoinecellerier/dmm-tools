@@ -200,8 +200,9 @@ family's own `Protocol::parse_payload`, as a streaming meter would send it, so a
 decodes exactly as the live one did. Read-only calls delegate to the family's protocol, and commands
 are refused. The clock's wall origin is pinned to the recording's time and each reading keeps the
 session time it was recorded at, so exports of a replay carry the recording's own timestamps. Past
-the last payload the session has ended (`Protocol::ended`, `StreamEvent::Ended`). The file writer
-lives beside the parser, so a recorder cannot drift from it.
+the last payload the session has ended (`Protocol::ended`, `StreamEvent::Ended`). The line writers
+live beside the parser, so a recorder cannot drift from it, and one `dmm_shared::replay::Writer`
+puts a file together for both binaries.
 
 `MockProtocol` is the hardware-free meter the GUI, the CLI demos and the screenshots run against. It
 reaches its settings through the same cycle driver as the button-cycling families, and takes which
@@ -213,14 +214,14 @@ Code: `replay.rs`, `mock/`.
 
 ### Exports and settings
 
-`dmm-shared` holds the cells and lines of each export format, one reader per format, and the
-default file name that the GUI's Export… and `dmm-cli read -o` given no file name both use. Each
-binary assembles the file from them, the CLI a reading at a time as it streams and the GUI from
-its whole buffer. So the two binaries write the same files, and a field added to a reading reaches
-both at once. The settings file is shared the same way (see **One settings type for both
-binaries**).
+`dmm-shared` holds the cells and lines of each export format, one reader per format, and the default
+file name that the GUI's Export… and `dmm-cli read -o` given no file name both use. Each binary
+assembles a CSV or JSON file from them, the CLI a reading at a time as it streams and the GUI from
+its whole buffer; a replay file goes through one shared writer. So the two binaries write the same
+files, and a field added to a reading reaches both at once. The settings file is shared the same way
+(see **One settings type for both binaries**).
 
-Code: `crates/dmm-shared/src/lib.rs`, `export/`.
+Code: `crates/dmm-shared/src/lib.rs`, `export/`, `replay.rs`.
 
 ### Translation
 

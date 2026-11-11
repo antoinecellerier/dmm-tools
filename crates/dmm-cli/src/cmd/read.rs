@@ -255,10 +255,12 @@ fn read_meter(
             &options.transform,
             options.integrate,
             markers,
-            || format::ReplayHeader {
-                device: crate::open::meter_listing(device).id().to_string(),
-                model,
-                link,
+            || {
+                dmm_shared::replay::Writer::new(
+                    crate::open::meter_listing(device).id(),
+                    model,
+                    link,
+                )
             },
         );
         // Reopened as the meter first opened, even under Auto-detect: the
@@ -324,11 +326,7 @@ fn read_meter(
             &options.transform,
             options.integrate,
             markers,
-            || format::ReplayHeader {
-                device: selection_id(selection).to_string(),
-                model: None,
-                link: None,
-            },
+            || dmm_shared::replay::Writer::new(selection_id(selection), None, None),
         );
         // Not hardware, so the selection names a registry entry — `auto` is a
         // cable to open and never lands here.
@@ -350,7 +348,7 @@ fn read_output<T: dmm_lib::transport::Transport>(
     integrate: bool,
     // Whether the run writes markers: a recording saved with some.
     markers: bool,
-    replay_header: impl FnOnce() -> format::ReplayHeader,
+    replay_writer: impl FnOnce() -> dmm_shared::replay::Writer,
 ) -> format::Output {
     // Fixed for the whole run: the CSV column layout is per meter family, so
     // a mode that reports fewer sub-values than the family can leaves its own
@@ -365,7 +363,7 @@ fn read_output<T: dmm_lib::transport::Transport>(
         markers,
     };
     let experimental = !dmm.profile().stability.is_verified();
-    format::Output::new(format, layout, experimental, replay_header)
+    format::Output::new(format, layout, experimental, replay_writer)
 }
 
 /// The format a run writes and the note it earns: `--format` when given, else
@@ -566,13 +564,13 @@ fn read_replay(
         options.integrate,
         !replay.markers.is_empty() || options.alarm.is_some(),
         || {
-            format::ReplayHeader {
-                device: replay.listing.id().to_string(),
-                model: replay.model.clone(),
+            dmm_shared::replay::Writer::new(
+                replay.listing.id(),
+                replay.model.clone(),
                 // The link the file recorded: re-exporting a recording must not turn
                 // a Bluetooth session into a cable one.
-                link: replay.link,
-            }
+                replay.link,
+            )
         },
     )
     .with_view(replay.view.clone());
@@ -1338,7 +1336,7 @@ fn read_import(
         markers: !imported.markers.is_empty() || options.alarm.is_some(),
     };
     let experimental = imported.readings.iter().any(|r| r.experimental);
-    let out = format::Output::new(format, layout, experimental, unreachable_replay_header)
+    let out = format::Output::new(format, layout, experimental, unreachable_replay_writer)
         .with_view(imported.view.clone());
     // The readings' gaps are the file's: judged by its median spacing, as
     // the GUI's import does, so a slow file does not break at every point.
@@ -1365,13 +1363,9 @@ fn read_import(
 }
 
 /// `--format replay` is refused for a CSV or JSON import before the output
-/// is built, so its header is never asked for.
-fn unreachable_replay_header() -> format::ReplayHeader {
-    format::ReplayHeader {
-        device: String::new(),
-        model: None,
-        link: None,
-    }
+/// is built, so its writer is never asked for.
+fn unreachable_replay_writer() -> dmm_shared::replay::Writer {
+    dmm_shared::replay::Writer::new(String::new(), None, None)
 }
 
 #[cfg(test)]

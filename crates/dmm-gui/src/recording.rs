@@ -2,7 +2,6 @@ use crate::markers::{Marker, Markers};
 use crate::settings::DEFAULT_MAX_SAMPLES;
 use chrono::{DateTime, Local};
 use dmm_lib::measurement::Measurement;
-use dmm_lib::replay;
 use dmm_shared::export::{CsvLayout, device_comment};
 use std::collections::{HashSet, VecDeque};
 use std::io::Write;
@@ -116,23 +115,14 @@ impl<'a> MarkCursor<'a> {
 }
 
 /// Render samples as a replay file `--replay` can play back, or `None` when
-/// they carry no wire bytes to play.
-///
-/// Every line comes from [`dmm_lib::replay`], which also parses them, so the
-/// GUI's files cannot drift from what reads them.
-///
-/// Offsets are measured from the first sample's frame timestamp — the session
-/// instant the library stamped the frame with — rather than from wall times,
-/// so a recording made on a scaled or preseeded clock plays back at the
-/// spacing its readings actually arrived at. The `# recorded:` line is that
-/// first sample's wall time, which is what pins playback to a clock origin.
+/// they carry no wire bytes to play, through the [`dmm_shared::replay::Writer`]
+/// dmm-cli writes its replays with.
 ///
 /// `link` is what the samples arrived over, so a session played back from the
 /// file is on the link the meter was. `marked` are the markers on buffered
-/// samples, oldest first, as for [`render_csv`]; each is written after its
-/// sample. `view` is the graph's view, saved in a `# view:` line. `model` is
-/// the name the meter gave for itself, as `dmm-cli` writes it; `None` writes
-/// no `# model:` line.
+/// samples, oldest first, as for [`render_csv`]. `view` is the graph's view,
+/// saved in a `# view:` line. `model` is the name the meter gave for itself,
+/// as `dmm-cli` writes it; `None` writes no `# model:` line.
 ///
 /// `None` when any sample has an empty payload: the mock synthesises its
 /// readings, so there is no frame to hand a parser.
@@ -147,26 +137,14 @@ pub(crate) fn render_replay(
     let mut marks = MarkCursor::new(marked);
     let mut rest = samples.peekable();
     let first = *rest.peek()?;
-    let recorded = dmm_shared::replay::recorded_text(first.wall_time);
-    let mut out = replay::header(device_id, &recorded, model, link);
-    if let Some(view) = view {
-        out.push_str(&replay::view_line(view));
-    }
+    let mut writer = dmm_shared::replay::Writer::new(device_id, model.map(str::to_string), link);
+    writer.set_view(view.map(str::to_string));
     // Offset digits and a newline, plus three characters per payload byte.
     // Frame length is fixed per family, so the first sample sizes the rest.
-    out.reserve(rest.len() * (10 + 3 * first.measurement.raw_payload.len()));
+    let mut out =
+        String::with_capacity(rest.len() * (10 + 3 * first.measurement.raw_payload.len()));
     for s in rest {
-        if s.measurement.raw_payload.is_empty() {
-            return None;
-        }
-        let offset = s
-            .measurement
-            .timestamp
-            .saturating_duration_since(first.measurement.timestamp);
-        out.push_str(&replay::sample_line(offset, &s.measurement.raw_payload));
-        if let Some((number, note)) = marks.on(s) {
-            out.push_str(&replay::marker_line(offset, number, note));
-        }
+        writer.push(&mut out, &s.measurement, marks.on(s)).ok()?;
     }
     Some(out)
 }
@@ -1804,6 +1782,41 @@ mod tests {
         );
         assert!(lines[1].starts_with("250 "), "{:?}", lines[1]);
         assert!(lines[2].starts_with("500 "), "{:?}", lines[2]);
+    }
+
+    /// A replay export, byte for byte: header, view line, each frame at its
+    /// offset from the first and each marker after its frame.
+    #[test]
+    fn render_replay_writes_these_bytes() {
+        let (samples, markers) = marked_samples();
+        let marked: Vec<&Marker> = markers.iter().collect();
+        let text = render_replay(
+            samples.iter(),
+            &marked,
+            "ut61eplus",
+            Some("UT61E+"),
+            Some(dmm_lib::transport::Link::Bluetooth),
+            Some("{\"window\":30.0}"),
+        )
+        .expect("frames");
+        let recorded = dmm_shared::replay::recorded_text(samples[0].wall_time);
+        let frame = "02 31 20 20 31 2E 32 33 34 00 00 30 30 30";
+        assert_eq!(
+            text,
+            format!(
+                "# dmm-replay 1\n\
+                 # device: ut61eplus\n\
+                 # recorded: {recorded}\n\
+                 # model: UT61E+\n\
+                 # link: Bluetooth\n\
+                 # view: {{\"window\":30.0}}\n\
+                 0 {frame}\n\
+                 250 {frame}\n\
+                 # marker: 250 4 load on, 2.2 \u{3a9}\n\
+                 500 {frame}\n\
+                 # marker: 500 7 \n"
+            )
+        );
     }
 
     /// The `# model:` line is optional, and a meter that never named itself
