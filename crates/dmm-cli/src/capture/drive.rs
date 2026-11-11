@@ -616,8 +616,9 @@ impl CaptureRun {
         let selected = self.dmm.select(setting, off.id);
         // A failed walk can leave the meter in a mode without this setting
         // (RANGE once flipped a UT61E+ into AC+DC V): nothing to put back, but
-        // the next setting is offered from where the meter is now.
-        let gone_elsewhere = matches!(selected, Err(dmm_lib::error::Error::UnsupportedCommand(_)));
+        // the next setting is offered from where the meter is now. Any other
+        // refusal is a restore that never ran.
+        let gone_elsewhere = matches!(&selected, Err(e) if mode_lacks_it(e));
         let reading = if gone_elsewhere {
             self.dmm.request_measurement()
         } else {
@@ -680,6 +681,41 @@ impl CaptureRun {
             self.driver.fail();
         }
         Ok(None)
+    }
+}
+
+/// Whether `e` refuses a switch because the mode the meter is in has no such
+/// setting or value, rather than for a fault in the driver or the request.
+/// Every reason is listed, so a new one is decided here.
+fn mode_lacks_it(e: &dmm_lib::error::Error) -> bool {
+    use dmm_lib::error::Unsupported as U;
+    let dmm_lib::error::Error::UnsupportedCommand(reason) = e else {
+        return false;
+    };
+    match reason {
+        U::NoRanges { .. }
+        | U::NoSuchRange { .. }
+        | U::RangeNotListed { .. }
+        | U::AutoRangeNotListed { .. }
+        | U::FixedRange { .. }
+        | U::SettingNotInMode { .. }
+        | U::SettingNotInWord { .. }
+        | U::NoSuchState { .. }
+        | U::RefusedInPeak { .. }
+        | U::NoRel { .. } => true,
+        // The family, the link or the request: a restore that never ran.
+        // Positions are a mode switch's, which no restore makes.
+        U::Command(_)
+        | U::Setting(_)
+        | U::NoSuchChoice { .. }
+        | U::SeveralPositions { .. }
+        | U::NoPosition { .. }
+        | U::ModeUnreachable { .. }
+        | U::WordUnreachable { .. }
+        | U::NoButton { .. }
+        | U::RequestLength { .. }
+        | U::Baud { .. }
+        | U::NoWireFormat => false,
     }
 }
 
@@ -1088,6 +1124,9 @@ mod tests {
         /// The meter says no, and the mode it is left in has no such setting
         /// to put back.
         RefusedIntoAnotherMode,
+        /// The meter says no, and the driver refuses the way back for a
+        /// reason of its own: a word the family doesn't take.
+        RefusedThenNoWayBack,
         /// Every value lands, and the display then has no reading for this
         /// many reads, as a UT181A's does after a switch.
         Blanks(usize),
@@ -1209,12 +1248,21 @@ mod tests {
                 Failure::Silent => Err(Error::Timeout),
                 Failure::LinkLost => Err(Error::cable_pulled()),
                 Failure::RefusedIntoAnotherMode if id == RESET_ID => {
-                    Err(Unsupported::Setting(setting).into())
+                    Err(Unsupported::SettingNotInMode {
+                        setting,
+                        mode: "AC+DC V".into(),
+                    }
+                    .into())
+                }
+                Failure::RefusedThenNoWayBack if id == RESET_ID => {
+                    Err(Unsupported::Command("hold".to_string()).into())
                 }
                 Failure::IgnoresReset if id == RESET_ID => Ok(()),
                 _ if id == RESET_ID => self.inner.select(t, setting, id),
                 Failure::IgnoresReset => self.inner.select(t, setting, id),
-                Failure::Refused | Failure::RefusedIntoAnotherMode => Err(Rejected::DidNothing {
+                Failure::Refused
+                | Failure::RefusedIntoAnotherMode
+                | Failure::RefusedThenNoWayBack => Err(Rejected::DidNothing {
                     button: "SELECT",
                     state: "AC V".into(),
                     kind: TextKind::Mode,
@@ -1596,6 +1644,27 @@ mod tests {
         assert_eq!(restore.status, StepStatus::Captured, "{:?}", restore.error);
         assert!(!restore.needs_attention);
         assert_eq!(restore.samples.len(), 1);
+    }
+
+    /// A restore refused for any reason but the mode lacking the setting
+    /// never ran: it is filed as failed and needs attention, not as the
+    /// reading of where the meter went.
+    #[test]
+    fn a_restore_refused_for_another_reason_is_a_failure() {
+        let mut driver = Driver::new(true);
+        driver.prove_command("hold");
+        let (report, _) = swept_by(
+            Fails::boxed(
+                dmm_lib::mock::MockMode::DcV,
+                Setting::Hold,
+                Failure::RefusedThenNoWayBack,
+            ),
+            "dcv",
+            driver,
+        );
+        let restore = filed(&report, "dcv/hold~restore");
+        assert_eq!(restore.status, StepStatus::Error, "{:?}", restore.error);
+        assert!(restore.needs_attention);
     }
 
     /// A link lost at a press is no refusal: the run ends there, with no
