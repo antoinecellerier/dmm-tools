@@ -90,20 +90,21 @@ impl ExportKind {
 }
 
 impl Imported {
-    /// How long after the first reading each was taken, never going back —
-    /// a clock set back mid-file must not send a session's time backwards.
+    /// How long after the first reading each was taken: the sum of each
+    /// reading's gap from the one before. A clock set back mid-file adds no
+    /// time there and keeps the spacing of what follows, rather than sending
+    /// a session's time backwards or piling the next readings onto one instant.
     pub fn offsets(&self) -> Vec<Duration> {
-        let first = self.readings.first().map(|r| r.wall_time);
-        let mut last = Duration::ZERO;
+        let mut previous = self.readings.first().map(|r| r.wall_time);
+        let mut total = Duration::ZERO;
         self.readings
             .iter()
             .map(|r| {
-                let offset = first
-                    .and_then(|first| r.wall_time.duration_since(first).ok())
-                    .unwrap_or_default()
-                    .max(last);
-                last = offset;
-                offset
+                total += previous
+                    .and_then(|p| r.wall_time.duration_since(p).ok())
+                    .unwrap_or_default();
+                previous = Some(r.wall_time);
+                total
             })
             .collect()
     }
@@ -1100,5 +1101,45 @@ mod tests {
         readings[2].wall_time = readings[0].wall_time - Duration::from_secs(60);
         let imported = read_csv(&csv_of(&readings, &marks)).expect("reads");
         assert!(imported.readings[2].wall_time < imported.readings[1].wall_time);
+    }
+
+    /// A file's first reading repeated at `secs` from its wall time.
+    fn imported_at(secs: &[i64]) -> Imported {
+        let (shape, marks) = shapes();
+        let mut imported = read_csv(&csv_of(&shape, &marks)).expect("reads");
+        let first = imported.readings[0].clone();
+        imported.markers.clear();
+        imported.readings = secs
+            .iter()
+            .map(|&s| {
+                let step = Duration::from_secs(s.unsigned_abs());
+                let mut r = first.clone();
+                r.wall_time = if s >= 0 {
+                    first.wall_time + step
+                } else {
+                    first.wall_time - step
+                };
+                r
+            })
+            .collect();
+        imported
+    }
+
+    fn secs(offsets: Vec<Duration>) -> Vec<u64> {
+        offsets.iter().map(Duration::as_secs).collect()
+    }
+
+    #[test]
+    fn offsets_follow_the_wall_clock() {
+        assert_eq!(secs(imported_at(&[0, 1, 2, 4]).offsets()), [0, 1, 2, 4]);
+    }
+
+    /// A clock set back ten minutes adds no time at the step, and the
+    /// readings after it keep their spacing instead of piling onto one
+    /// instant until the clock catches up.
+    #[test]
+    fn a_clock_set_back_keeps_the_spacing_after_it() {
+        let offsets = imported_at(&[0, 1, 2, -598, -597, -596]).offsets();
+        assert_eq!(secs(offsets), [0, 1, 2, 2, 3, 4]);
     }
 }

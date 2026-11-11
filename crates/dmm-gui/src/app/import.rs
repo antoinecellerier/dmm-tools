@@ -105,7 +105,7 @@ pub(super) struct Loaded {
     model: Option<String>,
     link: Option<Link>,
     experimental: bool,
-    /// Stamped `base + offset`, in file order, time never going back, each
+    /// Stamped `base + offset`, in file order (see `Imported::offsets`), each
     /// with how many of its sub-values a scale appended.
     readings: Vec<(Measurement, usize)>,
     /// `(reading index, number, note)`, in reading order.
@@ -267,8 +267,8 @@ pub(super) fn load(path: &Path, base: Instant, limit: usize) -> Result<Loaded, I
 }
 
 /// A CSV or JSON export, stamped by its wall times: each reading at `base`
-/// plus how long after the first it was taken, never earlier than the one
-/// before — a clock set back mid-file must not send time backwards.
+/// plus its [`Imported::offsets`](dmm_shared::export::Imported::offsets)
+/// entry, so a clock set back mid-file adds no time there.
 fn from_export(imported: dmm_shared::export::Imported, base: Instant) -> Loaded {
     let experimental = imported.readings.iter().any(|r| r.experimental);
     let (family_slots, extra_slots) = (imported.family_slots, imported.extra_slots);

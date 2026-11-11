@@ -182,9 +182,9 @@ attaches the spec data. Stamping in one place means the statistics, the graph, t
 the exports follow the clock without knowing it exists. Each reading carries both times, and each
 output uses one: the graph's time axis, the integral and a replay file's offsets measure session
 time, while CSV and JSON rows, file names and a replay's `# recorded:` line carry wall time. A CSV
-or JSON import rebuilds session time from its rows' wall times, never stepping back, and a replay
-import from its offsets. Hardware timeouts, settle delays and bring-up sleeps stay on real time:
-they pace physical USB.
+or JSON import rebuilds session time from the gaps between its rows' wall times, a clock set back
+adding none, and a replay import from its offsets. Hardware timeouts, settle delays and bring-up
+sleeps stay on real time: they pace physical USB.
 
 Before a read, a command or a switch that must see the meter as it is now, `Dmm` drops what the
 meter sent that nobody read (`Protocol::discard_input()`). A streaming meter queues frames the whole
