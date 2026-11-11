@@ -448,7 +448,7 @@ Its **▸** opens three fields:
 | Field | Meaning | Left empty |
 |---|---|---|
 | **Low**, **High** | alarm when the reading crosses this | no limit on that side |
-| **±** (Hysteresis) | how far back inside the reading must come before that limit alarms again: a value, or a percentage of the limit (`1%`) | a few counts of the meter's last digit |
+| **±** (Hysteresis) | how far back inside the reading must come before that limit alarms again: a value, in the limits' unit, or a percentage of the limit (`1%`) | a few counts of the meter's last digit |
 
 **Apply**, or Enter in a field, sets the limits; **Off** stops the alarm and
 keeps them for the next **Apply**. Clicking **Alarm** itself does the same in
@@ -464,9 +464,11 @@ keeps a reading hovering at a limit to one alarm; overloads don't count.
 
 Limits are in the base unit (V, A, Ω, …), as the [scale](#scale)'s factor
 is, or in the scale's unit while one is applied or a scaled file is imported.
-They watch the quantity and unit of the first reading after they are set:
-after a dial turn to another quantity, or on a file's rows in another unit,
-the row reads **idle** until they come back. They last for the session; an
+A limit may carry a unit (`4980 mV`, `10 kohm`), which the band may then
+share; a prefix alone (`4.7k`) only multiplies. They watch the quantity and
+unit of the first reading after they are set, or of the unit typed: on
+another quantity, or on a file's rows in another unit, the row reads
+**idle** until they come back. They last for the session; an
 import or another meter whose readings are in another unit turns the alarm
 off.
 Without a recording, a marker leaves with its reading when the graph clears;

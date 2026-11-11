@@ -90,6 +90,108 @@ pub fn meter_unit(typed: &str) -> Option<String> {
     Some(format!("{prefix}{base}"))
 }
 
+/// `entry` split into its number, as typed, its value and what follows it:
+/// the longest start of it that reads as a finite number. `None` when it
+/// starts with no number.
+pub fn number_and_unit(entry: &str) -> Option<(&str, f64, &str)> {
+    let entry = entry.trim();
+    entry
+        .char_indices()
+        .map(|(i, c)| i + c.len_utf8())
+        .rev()
+        .find_map(|end| {
+            let number = entry[..end].trim();
+            let v = number.parse::<f64>().ok().filter(|v| v.is_finite())?;
+            Some((number, v, entry[end..].trim()))
+        })
+}
+
+/// A unit as typed, in the meter's spelling: spaces dropped ("k Ω"),
+/// "ohm" and "ohms" in any case and the ohm sign are Ω, a Greek mu or a
+/// "u" the micro sign; the `plotted` unit's base in any case ("mv" is mV);
+/// a prefix alone ("k", "m", "u") goes on that base, and stays alone when
+/// there is none (`plotted` ""); any other unit a reading carries in any
+/// case too ([`meter_unit`]). Anything else comes back as typed, which no
+/// reading carries.
+pub fn typed_unit(typed: &str, plotted: &str) -> String {
+    let mut unit: String = typed
+        .chars()
+        .filter(|c| !c.is_whitespace())
+        .map(|c| match c {
+            '\u{3bc}' => '\u{b5}',
+            '\u{2126}' => '\u{3a9}',
+            c => c,
+        })
+        .collect();
+    let lower = unit.to_lowercase();
+    if let Some(word) = ["ohms", "ohm"].into_iter().find(|w| lower.ends_with(w)) {
+        // The word is ASCII, so its length in bytes is the same in `unit`.
+        unit.truncate(unit.len() - word.len());
+        unit.push('\u{3a9}');
+    }
+    let base = base_unit(plotted);
+    if !base.is_empty() && unit.to_lowercase() == base.to_lowercase() {
+        return base.to_string();
+    }
+    let mut chars = unit.chars();
+    if let Some(c) = chars.next()
+        // Not "K" for kilo, as parts are marked: it is kelvin's symbol.
+        && "pnuµmkMG".contains(c)
+    {
+        let rest = chars.as_str();
+        if rest.is_empty() || (!base.is_empty() && rest.to_lowercase() == base.to_lowercase()) {
+            // "u" for micro.
+            let prefix = if c == 'u' { '\u{b5}' } else { c };
+            return format!("{prefix}{base}");
+        }
+    }
+    meter_unit(&unit).unwrap_or(unit)
+}
+
+/// `value` followed by `unit` after a space, or alone when there is none.
+pub fn with_unit(value: f64, unit: &str) -> String {
+    if unit.is_empty() {
+        value.to_string()
+    } else {
+        format!("{value} {unit}")
+    }
+}
+
+/// Why a number typed with a unit ([`read_quantity`]) was refused.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum QuantityError {
+    /// It starts with no number.
+    NotANumber,
+    /// What follows the number is no unit a reading carries.
+    UnknownUnit,
+}
+
+/// A number typed bare or with a unit, read against no plotted unit: its
+/// value in the unit's base and that base ("4980 mV" is 4.98 in "V"), or
+/// with no unit `None`, a prefix alone multiplying it ("4.7k" is 4700).
+/// Units are read as [`typed_unit`] reads them.
+pub fn read_quantity(text: &str) -> Result<(f64, Option<&'static str>), QuantityError> {
+    let (_, v, typed) = number_and_unit(text).ok_or(QuantityError::NotANumber)?;
+    if typed.is_empty() {
+        return Ok((v, None));
+    }
+    let unit = typed_unit(typed, "");
+    let mut chars = unit.chars();
+    if let (Some(c), None) = (chars.next(), chars.next())
+        && let Some(&(_, mult)) = SI_PREFIXES.iter().find(|&&(p, _)| p == c)
+    {
+        // A power of ten, so the rounded log is exact.
+        return Ok((PrefixRatio(mult.log10().round() as i32).apply(v), None));
+    }
+    let (base, power) = prefix_power(&unit);
+    let base = BASE_UNITS
+        .iter()
+        .chain(NO_PREFIX)
+        .find(|b| **b == base && !b.is_empty())
+        .ok_or(QuantityError::UnknownUnit)?;
+    Ok((PrefixRatio(power).apply(v), Some(base)))
+}
+
 /// Split a meter unit into its base unit and the multiplier to that base:
 /// "mV" → ("V", 1e-3), "kΩ" → ("Ω", 1e3), "µA" → ("A", 1e-6).
 ///
@@ -1193,6 +1295,32 @@ mod tests {
         }
         assert_eq!(re_express("V", 2), None, "no prefix is 10²");
         assert_eq!(re_express("°C", 3), None, "no prefix goes on °C");
+    }
+
+    /// A number typed with a unit comes in its base, a prefix alone only
+    /// multiplying it, and a word no reading carries is refused.
+    #[test]
+    fn read_quantity_takes_a_number_into_its_base() {
+        for (typed, value, unit) in [
+            ("5", 5.0, None),
+            ("-5", -5.0, None),
+            ("4980mV", 4.98, Some("V")),
+            ("4980 mv", 4.98, Some("V")),
+            ("-5 mV", -0.005, Some("V")),
+            ("4.7k", 4700.0, None),
+            ("10 kohm", 10000.0, Some("\u{3a9}")),
+            ("2 uA", 0.000002, Some("A")),
+            ("30 %", 30.0, Some("%")),
+            ("25 \u{b0}C", 25.0, Some("\u{b0}C")),
+            ("10 mhz", 0.01, Some("Hz")),
+            ("3 ms", 3.0, Some("ms")),
+        ] {
+            assert_eq!(read_quantity(typed), Ok((value, unit)), "{typed}");
+        }
+        assert_eq!(read_quantity("x"), Err(QuantityError::NotANumber));
+        assert_eq!(read_quantity(""), Err(QuantityError::NotANumber));
+        assert_eq!(read_quantity("5 x"), Err(QuantityError::UnknownUnit));
+        assert_eq!(read_quantity("5 K"), Err(QuantityError::UnknownUnit));
     }
 
     /// A unit typed is read as the meters spell it, in any case, and

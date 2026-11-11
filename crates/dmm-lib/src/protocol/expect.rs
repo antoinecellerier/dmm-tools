@@ -9,7 +9,7 @@
 use crate::flags::Flag;
 use crate::measurement::{MeasuredValue, Measurement};
 use crate::protocol::AUTO_RANGE_LABEL;
-use crate::transform::si_prefix;
+use crate::transform::{si_prefix, with_unit};
 use std::borrow::Cow;
 
 /// Whether the meter should be autoranging.
@@ -310,15 +310,6 @@ fn shown(m: &Measurement) -> Shown {
         MeasuredValue::NoReading(word) => Shown::Text(word.to_string()),
         MeasuredValue::Absent => Shown::NoMainReading,
         _ => Shown::Text(m.value_export_str().into_owned()),
-    }
-}
-
-/// `value` followed by `unit`, or alone when there is none.
-fn with_unit(value: f64, unit: &str) -> String {
-    if unit.is_empty() {
-        value.to_string()
-    } else {
-        format!("{value} {unit}")
     }
 }
 

@@ -6,7 +6,7 @@ use crate::format::OutputFormat;
 use clap::builder::{PossibleValue, PossibleValuesParser, TypedValueParser, ValueParser};
 use clap::{Parser, Subcommand, ValueEnum};
 use clap_complete::Shell;
-use dmm_lib::alarm::{Hysteresis, Limits};
+use dmm_lib::alarm::{self, Hysteresis, Limits};
 use dmm_lib::mock::MockMode;
 use dmm_lib::protocol::Setting;
 use dmm_lib::transform::{FactorError, Transform};
@@ -436,17 +436,19 @@ fn parse_offset(s: &str) -> Result<f64, String> {
 #[derive(clap::Args, Clone)]
 pub(crate) struct AlarmArgs {
     /// Warn when the reading rises above VALUE, in base units (V, A, Ω, …),
-    /// or in the --unit of a scaled reading
-    #[arg(long, value_name = "VALUE", allow_negative_numbers = true, value_parser = parse_limit)]
-    pub(crate) alarm_high: Option<f64>,
+    /// or in the --unit of a scaled reading. A unit (4980mV, 10kohm) also
+    /// limits the alarm to readings of that quantity; a prefix alone (4.7k)
+    /// only multiplies
+    #[arg(long, value_name = "VALUE", allow_hyphen_values = true, value_parser = parse_limit)]
+    pub(crate) alarm_high: Option<(f64, Option<&'static str>)>,
     /// Warn when the reading falls below VALUE, as --alarm-high
-    #[arg(long, value_name = "VALUE", allow_negative_numbers = true, value_parser = parse_limit)]
-    pub(crate) alarm_low: Option<f64>,
+    #[arg(long, value_name = "VALUE", allow_hyphen_values = true, value_parser = parse_limit)]
+    pub(crate) alarm_low: Option<(f64, Option<&'static str>)>,
     /// How far back inside a reading must come before the same limit alarms
     /// again: a value in the limits' unit, or a percentage of the limit
     /// (`1%`) [default: a few counts of the meter's last digit]
-    #[arg(long, value_name = "BAND", allow_negative_numbers = true, value_parser = parse_hysteresis)]
-    pub(crate) alarm_hysteresis: Option<Hysteresis>,
+    #[arg(long, value_name = "BAND", allow_negative_numbers = true)]
+    pub(crate) alarm_hysteresis: Option<String>,
     /// Ring the terminal bell on each alarm
     #[arg(long)]
     pub(crate) alarm_bell: bool,
@@ -459,7 +461,7 @@ impl AlarmArgs {
         let refused = |flags: &str, reason: Cow<'_, str>| {
             tr!(l, "read-flag-refused", flags = flags, reason = reason).into_owned()
         };
-        match Limits::check(self.alarm_low, self.alarm_high) {
+        match Limits::typed(self.alarm_low, self.alarm_high) {
             Ok(limits) if limits.is_empty() && self.alarm_bell => {
                 Err(tr!(l, "read-alarm-bell-needs-limit").into_owned())
             }
@@ -467,12 +469,15 @@ impl AlarmArgs {
                 Err(tr!(l, "read-alarm-hysteresis-needs-limit").into_owned())
             }
             Ok(limits) if limits.is_empty() => Ok(None),
-            Ok(limits) => self
-                .alarm_hysteresis
-                .unwrap_or_default()
-                .check(&limits)
-                .map(|band| Some((limits, band)))
-                .map_err(|_| refused("--alarm-hysteresis", input::percent_of_zero(l))),
+            Ok(limits) => {
+                let text = self.alarm_hysteresis.as_deref().unwrap_or_default();
+                let band = Hysteresis::parse_in(text, limits.unit).map_err(|e| {
+                    refused("--alarm-hysteresis", input::hysteresis_error(l, e, text))
+                })?;
+                band.check(&limits)
+                    .map(|band| Some((limits, band)))
+                    .map_err(|_| refused("--alarm-hysteresis", input::percent_of_zero(l)))
+            }
             Err(e) => Err(refused(
                 "--alarm-low, --alarm-high",
                 input::limit_error(l, e),
@@ -481,19 +486,14 @@ impl AlarmArgs {
     }
 }
 
-/// One alarm limit: a finite number.
-fn parse_limit(s: &str) -> Result<f64, String> {
+/// One alarm limit: a finite number, bare or with a unit, in the unit's
+/// base and that base.
+fn parse_limit(s: &str) -> Result<(f64, Option<&'static str>), String> {
     let l = crate::l10n::get();
-    let value: f64 = s
-        .parse()
-        .map_err(|_| input::not_a_number(l, s).into_owned())?;
-    Limits::check(Some(value), None).map_err(|e| input::limit_error(l, e).into_owned())?;
-    Ok(value)
-}
-
-/// `--alarm-hysteresis`: a value, or a percentage with `%`.
-fn parse_hysteresis(s: &str) -> Result<Hysteresis, String> {
-    Hysteresis::parse(s).map_err(|e| input::hysteresis_error(crate::l10n::get(), e, s).into_owned())
+    let refused = |e| input::limit_parse_error(l, e, s).into_owned();
+    alarm::parse_limit(s)
+        .map_err(refused)?
+        .ok_or_else(|| refused(alarm::LimitParseError::NotAQuantity))
 }
 
 /// What `get` and `set` name on the command line, one word per
@@ -1068,11 +1068,40 @@ mod tests {
         );
         assert!(read_alarm(&["--alarm-bell"]).is_err());
         assert!(read_alarm(&["--alarm-hysteresis", "1%"]).is_err());
-        let msg = flag_error("--alarm-hysteresis", "-1");
+        let msg = read_alarm(&["--alarm-high", "5", "--alarm-hysteresis", "-1"]).unwrap_err();
         assert!(msg.contains("zero or more"), "got {msg}");
         let msg = flag_error("--alarm-high", "nan");
         assert!(msg.contains("'nan' for '--alarm-high"), "got {msg}");
-        assert!(msg.contains("must be a finite number"), "got {msg}");
+        assert!(msg.contains("is not a number"), "got {msg}");
+    }
+
+    /// A limit may carry a unit, a negative one included, and a band then
+    /// may too; the limits' units must agree.
+    #[test]
+    fn clap_parse_read_alarm_limits_with_units() {
+        let (limits, band) = read_alarm(&[
+            "--alarm-low",
+            "-5mV",
+            "--alarm-high",
+            "4980 mV",
+            "--alarm-hysteresis",
+            "10mV",
+        ])
+        .unwrap()
+        .unwrap();
+        assert_eq!(
+            (limits.low, limits.high, limits.unit),
+            (Some(-0.005), Some(4.98), Some("V"))
+        );
+        assert_eq!(band, Hysteresis::Absolute(0.01));
+        let (limits, _) = read_alarm(&["--alarm-high", "4.7k"]).unwrap().unwrap();
+        assert_eq!((limits.high, limits.unit), (Some(4700.0), None));
+        let msg = read_alarm(&["--alarm-low", "1A", "--alarm-high", "5V"]).unwrap_err();
+        assert!(msg.contains("in one unit"), "got {msg}");
+        let msg = read_alarm(&["--alarm-high", "5", "--alarm-hysteresis", "1V"]).unwrap_err();
+        assert!(msg.contains("--alarm-hysteresis"), "got {msg}");
+        let msg = flag_error("--alarm-high", "5 x");
+        assert!(msg.contains("with a unit"), "got {msg}");
     }
 
     /// A zero or non-finite factor would destroy the reading rather than

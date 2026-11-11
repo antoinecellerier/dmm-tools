@@ -5,6 +5,7 @@
 ### GUI
 
 - **Reference values take a unit, kept through an auto-range step and an export** — `1 Ω`, `4.7k` or `10 mohm`; a bare number takes the plotted unit. A value that draws no line is underlined, and the field's hover says why.
+- **Alarm limits take a unit, and then watch only that quantity** — `4980 mV` or `10 kohm`; a bare number stays in the base unit.
 - **Failure notices name the meter picked in Settings and point to Auto-detect** — "No USB cable found" after a meter swap sent you to drivers.
 - **"No USB cable found" says when Bluetooth wasn't searched** — and how to switch the search on.
 - **A refused mode or range switch says to check the dial**
@@ -17,6 +18,7 @@
 ### CLI
 
 - **`--bluetooth` scans Bluetooth for one run, whatever the saved setting**
+- **`--alarm-high` and `--alarm-low` take a unit, and then watch only that quantity** — `4980mV` or `10kohm`; a bare number stays in the base unit.
 - **An unknown `--device` value points to `--help`, which lists the devices**
 - **A mistyped `command` name is answered with the meter's commands**
 - **dmm-cli's connection warnings come in the chosen language** — several USB cables or Bluetooth adapters, a meter naming or sending another model, unknown data.

@@ -21,7 +21,7 @@ use super::toast::Toast;
 use crate::a11y::AnnouncePolicy;
 use crate::display::ReadingState;
 use crate::graph::{LimitSide, WatchedLimits};
-use dmm_lib::alarm::{Alarm, Breach, Hysteresis, LimitError, LimitUnit, Limits};
+use dmm_lib::alarm::{self as lib_alarm, Alarm, Breach, Hysteresis, LimitError, LimitUnit, Limits};
 use dmm_lib::measurement::Measurement;
 use dmm_shared::l10n::Localizer;
 use dmm_shared::{input, tr};
@@ -62,20 +62,24 @@ fn limit_message(l10n: &Localizer, e: LimitError) -> String {
     let reason = input::limit_error(l10n, e);
     match e {
         LimitError::NotFinite => tr!(l10n, "alarm-invalid-limit", reason = reason),
-        LimitError::LowNotBelowHigh => tr!(l10n, "alarm-invalid-limits", reason = reason),
+        LimitError::LowNotBelowHigh | LimitError::UnitsDiffer => {
+            tr!(l10n, "alarm-invalid-limits", reason = reason)
+        }
     }
     .into_owned()
 }
 
-/// The draft for the `side` limit as a limit: blank is no limit, anything
-/// else must be a number.
-fn parse_draft(l10n: &Localizer, text: &str, side: LimitSide) -> Result<Option<f64>, String> {
+/// The draft for the `side` limit as a limit, in its unit's base and that
+/// base: blank is no limit, anything else must be a number, bare or with a
+/// unit.
+fn parse_draft(
+    l10n: &Localizer,
+    text: &str,
+    side: LimitSide,
+) -> Result<Option<(f64, Option<&'static str>)>, String> {
     let text = text.trim();
-    if text.is_empty() {
-        return Ok(None);
-    }
-    text.parse().map(Some).map_err(|_| {
-        let reason = input::not_a_number(l10n, text);
+    lib_alarm::parse_limit(text).map_err(|e| {
+        let reason = input::limit_parse_error(l10n, e, text);
         match side {
             LimitSide::Low => tr!(l10n, "alarm-invalid-low", reason = reason),
             LimitSide::High => tr!(l10n, "alarm-invalid-high", reason = reason),
@@ -94,8 +98,8 @@ fn parse_limits(
 ) -> Result<(Limits, Hysteresis), String> {
     let low = parse_draft(l10n, low, LimitSide::Low)?;
     let high = parse_draft(l10n, high, LimitSide::High)?;
-    let limits = Limits::check(low, high).map_err(|e| limit_message(l10n, e))?;
-    let band = Hysteresis::parse(band).map_err(|e| {
+    let limits = Limits::typed(low, high).map_err(|e| limit_message(l10n, e))?;
+    let band = Hysteresis::parse_in(band, limits.unit).map_err(|e| {
         let reason = input::hysteresis_error(l10n, e, band.trim());
         tr!(l10n, "alarm-invalid-band", reason = reason).into_owned()
     })?;
@@ -246,7 +250,9 @@ impl App {
                     l10n,
                     "alarm-idle.hover",
                     unit = idle,
-                    limits = alarm.and_then(|a| a.bound_unit()).unwrap_or_default(),
+                    limits = alarm
+                        .and_then(|a| a.limits_unit(relabel))
+                        .unwrap_or_default(),
                 ),
             )),
             (None, Some(unit)) => Some((
@@ -363,15 +369,26 @@ impl App {
                 parse_limits(&self.l10n, &editor.low, &editor.high, &editor.band).unwrap_or(fresh)
             }
         };
-        let unit = self.alarm_limit_unit();
-        let value =
-            value.map(|v| dmm_lib::alarm::limit_from_unit(v, self.graph.plotted_unit(), unit));
+        // Limits typed with a unit for another quantity than the one plotted
+        // mean nothing at this height: a fresh alarm starts, as on an idle
+        // one.
+        let plotted = dmm_lib::transform::base_unit(self.graph.plotted_unit());
+        let (current, band) = match current.unit {
+            Some(unit) if unit != plotted => fresh,
+            _ => (current, band),
+        };
+        // Limits typed with a unit are in the base of what is plotted.
+        let unit = match current.unit {
+            Some(_) => LimitUnit::Base,
+            None => self.alarm_limit_unit(),
+        };
+        let value = value.map(|v| lib_alarm::limit_from_unit(v, self.graph.plotted_unit(), unit));
         let (low, high) = match side {
             LimitSide::Low => (value, current.high),
             LimitSide::High => (current.low, value),
         };
         let limits = match Limits::check(low, high) {
-            Ok(limits) => limits,
+            Ok(limits) => limits.in_base(current.unit),
             Err(e) => {
                 self.toast = Some(Toast::error(limit_message(&self.l10n, e)));
                 return;
@@ -382,10 +399,11 @@ impl App {
             return;
         };
         self.set_limits(limits, band);
-        let draft = |v: Option<f64>| v.map_or_else(String::new, |v| v.to_string());
+        // Written back with their unit, so Apply keeps the limits to it.
+        let draft = |v: Option<f64>| v.map_or_else(String::new, |v| limits.written(v));
         self.alarm_editor.low = draft(limits.low);
         self.alarm_editor.high = draft(limits.high);
-        self.alarm_editor.band = band.describe().unwrap_or_default();
+        self.alarm_editor.band = limits.band(band).unwrap_or_default();
     }
 
     /// Judge one reading, as shown, against the limits. `Err` says the
@@ -658,6 +676,68 @@ mod tests {
         assert_eq!(app.alarm_editor.low, "");
         app.set_limit_from_graph(LimitSide::High, None);
         assert!(app.alarm.is_none(), "no limit left");
+    }
+
+    /// Limits typed with a unit are read into its base and watch only that
+    /// quantity; the toast writes them as the alarm reads them, and the
+    /// graph's menu keeps them to the unit.
+    #[test]
+    fn limits_typed_with_a_unit_watch_their_quantity() {
+        assert!(
+            parse_limits("1 A", "5 V", "")
+                .unwrap_err()
+                .contains("one unit"),
+            "two quantities"
+        );
+        assert!(
+            parse_limits("", "5 x", "")
+                .unwrap_err()
+                .contains("high limit")
+        );
+        let mut app = App::from_settings(Settings::default(), dmm_lib::Clock::manual());
+        app.alarm_editor.set_drafts("-5mV", "4980 mv");
+        app.alarm_editor.band = "10 mV".to_string();
+        app.apply_alarm_fields();
+        assert_eq!(
+            app.toast.as_ref().map(|t| t.message.as_str()),
+            Some("Alarm on: above 4.98 V or below -0.005 V, hysteresis 0.01 V")
+        );
+        let ohms = reading(&app, 12.0, "k\u{3a9}");
+        assert!(app.check_alarm(&ohms).is_none());
+        assert_eq!(app.alarm.as_ref().unwrap().idle(), Some("\u{3a9}"));
+        let m = reading(&app, 4900.0, "mV");
+        assert!(app.check_alarm(&m).is_none());
+        app.capture
+            .ingest(m, &app.transform, &mut app.graph, &app.connection);
+        assert_eq!(app.alarm.as_ref().unwrap().bound_unit(), Some("V"));
+
+        app.set_limit_from_graph(LimitSide::High, Some(3290.0));
+        let limits = app.alarm.as_ref().expect("an alarm").limits();
+        assert_eq!((limits.high, limits.unit), (Some(3.29), Some("V")));
+        assert_eq!(
+            (
+                app.alarm_editor.low.as_str(),
+                app.alarm_editor.high.as_str()
+            ),
+            ("-0.005 V", "3.29 V")
+        );
+        assert_eq!(app.alarm_editor.band, "0.01 V");
+    }
+
+    /// On a trace of another quantity than the one typed, the graph's menu
+    /// starts a fresh alarm at the height clicked, as on an idle one.
+    #[test]
+    fn the_graph_starts_afresh_on_another_quantity() {
+        let mut app = App::from_settings(Settings::default(), dmm_lib::Clock::manual());
+        app.alarm_editor.set_drafts("1 V", "5 V");
+        app.apply_alarm_fields();
+        let m = reading(&app, 3.0, "k\u{3a9}");
+        app.capture
+            .ingest(m, &app.transform, &mut app.graph, &app.connection);
+        app.set_limit_from_graph(LimitSide::High, Some(3.29));
+        let limits = app.alarm.as_ref().expect("an alarm").limits();
+        assert_eq!(limits, Limits::check(None, Some(3290.0)).unwrap());
+        assert_eq!(app.alarm_editor.low, "");
     }
 
     /// With the alarm off, the graph's menu keeps the row's other limit and

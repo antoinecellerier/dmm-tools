@@ -16,6 +16,11 @@
 //! unit (a file recorded across a scale change), and never rebinds: limits
 //! typed for volts must not start judging ohms.
 //!
+//! Limits typed with a unit ("4980 mV", "10 kΩ") carry its base ([`Limits::unit`])
+//! and pin the alarm to it: it binds only to readings whose limits' unit is
+//! of that base, and compares them in it, whatever prefix the reading or a
+//! scale's label shows.
+//!
 //! A breach is over once the reading comes back inside by a [`Hysteresis`]
 //! band: a noisy reading hovering at a limit crosses it on every other
 //! sample, and without the band each crossing would be a breach of its own,
@@ -25,7 +30,7 @@
 //! what is a breach and on the note that marks one.
 
 use crate::measurement::{AuxValue, MeasuredValue, Measurement};
-use crate::transform::{RAW_LABEL, si_prefix};
+use crate::transform::{QuantityError, RAW_LABEL, read_quantity, si_prefix, with_unit};
 
 /// The band [`Hysteresis::Auto`] takes, in counts of the reading's last
 /// displayed digit: wider than the one- or two-count flicker of a reading
@@ -56,6 +61,9 @@ pub enum HysteresisError {
     /// A percentage with a limit of zero, of which every percentage is zero:
     /// the band would vanish without a word, so a value is asked for.
     PercentOfZero,
+    /// A unit other than the limits' ([`Limits::unit`]), or one with limits
+    /// typed bare.
+    NotTheLimitsUnit,
 }
 
 impl Hysteresis {
@@ -89,6 +97,27 @@ impl Hysteresis {
             Self::Absolute(v) => Some(format!("{v}")),
             Self::Percent(v) => Some(format!("{v}%")),
         }
+    }
+
+    /// `text` as [`Hysteresis::parse`] reads it, or a value with a unit
+    /// ("10 mV", "2k"): in the limits' `unit` it is a value in its base, and
+    /// a prefix alone multiplies. A unit with limits typed bare (`unit`
+    /// `None`) is refused: what it would be in is not known yet.
+    pub fn parse_in(text: &str, unit: Option<&'static str>) -> Result<Self, HysteresisError> {
+        match Self::parse(text) {
+            Err(HysteresisError::NotANumber) => {}
+            parsed => return parsed,
+        }
+        let v = match read_quantity(text) {
+            Ok((v, None)) => v,
+            Ok((v, typed)) if typed == unit => v,
+            Ok(_) => return Err(HysteresisError::NotTheLimitsUnit),
+            Err(_) => return Err(HysteresisError::NotANumber),
+        };
+        if !v.is_finite() || v < 0.0 {
+            return Err(HysteresisError::NotABand);
+        }
+        Ok(Self::Absolute(v))
     }
 
     /// Whether this band can apply to `limits`: a percentage needs no limit
@@ -134,6 +163,30 @@ pub enum LimitError {
     NotFinite,
     /// The low limit is not below the high one, so every reading breaches one.
     LowNotBelowHigh,
+    /// The two limits were typed in units of different quantities.
+    UnitsDiffer,
+}
+
+/// Why a limit typed as text ([`parse_limit`]) was refused.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LimitParseError {
+    /// Neither a number nor a number with a unit.
+    NotAQuantity,
+    /// A number the limits refuse.
+    Limit(LimitError),
+}
+
+/// One limit as typed: a number, bare or with a unit ([`read_quantity`]),
+/// in its unit's base and that base. Blank is no limit.
+pub fn parse_limit(text: &str) -> Result<Option<(f64, Option<&'static str>)>, LimitParseError> {
+    if text.trim().is_empty() {
+        return Ok(None);
+    }
+    let (v, unit) = read_quantity(text).map_err(|e| match e {
+        QuantityError::NotANumber | QuantityError::UnknownUnit => LimitParseError::NotAQuantity,
+    })?;
+    Limits::check(Some(v), None).map_err(LimitParseError::Limit)?;
+    Ok(Some((v, unit)))
 }
 
 /// Which unit limits are in for a reading, and so how the reading is
@@ -184,11 +237,16 @@ fn raw_reading(m: &Measurement) -> Option<&AuxValue> {
     m.aux_values.iter().rfind(|a| a.label == RAW_LABEL)
 }
 
-/// A high and a low limit, either of them optional, in base units.
+/// A high and a low limit, either of them optional, in base units, or in
+/// the scale's unit for a scaled reading ([`LimitUnit`]).
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub struct Limits {
     pub low: Option<f64>,
     pub high: Option<f64>,
+    /// The base of the unit the limits were typed in, when one was: they
+    /// are in it, and the alarm watches only readings in it (see the module
+    /// doc). `None` for limits typed bare.
+    pub unit: Option<&'static str>,
 }
 
 impl Limits {
@@ -202,7 +260,46 @@ impl Limits {
         {
             return Err(LimitError::LowNotBelowHigh);
         }
-        Ok(Self { low, high })
+        Ok(Self {
+            low,
+            high,
+            unit: None,
+        })
+    }
+
+    /// Check a pair of limits as [`parse_limit`] reads them: one typed with
+    /// a unit puts both in it, a bare one being in it too, and two units
+    /// must name one quantity.
+    pub fn typed(
+        low: Option<(f64, Option<&'static str>)>,
+        high: Option<(f64, Option<&'static str>)>,
+    ) -> Result<Self, LimitError> {
+        let unit = match (low.and_then(|l| l.1), high.and_then(|h| h.1)) {
+            (Some(a), Some(b)) if a != b => return Err(LimitError::UnitsDiffer),
+            (a, b) => a.or(b),
+        };
+        let limits = Self::check(low.map(|l| l.0), high.map(|h| h.0))?;
+        Ok(Self { unit, ..limits })
+    }
+
+    /// These limits, now in `unit` ([`Limits::unit`]).
+    pub fn in_base(self, unit: Option<&'static str>) -> Self {
+        Self { unit, ..self }
+    }
+
+    /// How a reading in `shown`, whose limits are in `limit_unit`, is taken
+    /// into these limits' unit: under a typed unit, into the base of what
+    /// it shows, else as [`LimitUnit`] says.
+    fn mult(&self, shown: &str, limit_unit: LimitUnit) -> f64 {
+        match self.unit {
+            Some(_) => si_prefix(shown).1,
+            None => limit_unit.mult(shown),
+        }
+    }
+
+    /// `v` as the binaries write a limit: with the unit typed after it.
+    pub fn written(&self, v: f64) -> String {
+        with_unit(v, self.unit.unwrap_or_default())
     }
 
     /// Whether neither limit is set, so there is nothing to watch.
@@ -214,25 +311,45 @@ impl Limits {
     /// high limit of 5 into 5000. Under [`LimitUnit::Shown`] readings are
     /// already in the unit the limits are, so they pass through.
     pub fn in_unit(&self, unit: &str, limit_unit: LimitUnit) -> Self {
-        let mult = limit_unit.mult(unit);
+        let mult = self.mult(unit, limit_unit);
         Self {
             low: self.low.map(|v| v / mult),
             high: self.high.map(|v| v / mult),
+            unit: self.unit,
         }
     }
 
     /// `"above 5 or below 3"`, `"above 5, hysteresis 1%"`: what both
     /// binaries say when an alarm starts. The automatic band goes unnamed.
+    /// Limits typed with a unit are written in its base, as the alarm reads
+    /// them: `"above 4.98 V"`, so a slip of case ("mhz") shows.
     pub fn describe(&self, band: Hysteresis) -> String {
         let limits = match (self.high, self.low) {
-            (Some(high), Some(low)) => format!("above {high} or below {low}"),
-            (Some(high), None) => format!("above {high}"),
-            (None, Some(low)) => format!("below {low}"),
+            (Some(high), Some(low)) => {
+                format!(
+                    "above {} or below {}",
+                    self.written(high),
+                    self.written(low)
+                )
+            }
+            (Some(high), None) => format!("above {}", self.written(high)),
+            (None, Some(low)) => format!("below {}", self.written(low)),
             (None, None) => String::new(),
         };
-        match band.describe() {
+        match self.band(band) {
             Some(band) => format!("{limits}, hysteresis {band}"),
             None => limits,
+        }
+    }
+
+    /// `band` as [`Limits::describe`] writes it: a value with the limits'
+    /// typed unit. `None` for the automatic band.
+    pub fn band(&self, band: Hysteresis) -> Option<String> {
+        match band {
+            // A band in `%` reads back as a percentage of the limit: bare,
+            // it is in the limits' unit all the same.
+            Hysteresis::Absolute(v) if self.unit != Some("%") => Some(self.written(v)),
+            band => band.describe(),
         }
     }
 
@@ -418,8 +535,9 @@ impl Alarm {
         self.bound.as_ref()
     }
 
-    /// The unit the limits are in, once a reading has bound the alarm: the
-    /// meter's base unit, or a scaled reading's shown unit.
+    /// The unit the readings are judged in, once a reading has bound the
+    /// alarm: the meter's base unit, or a scaled reading's shown unit. The
+    /// limits are in it, or in its base when typed with a unit.
     pub fn bound_unit(&self) -> Option<&str> {
         self.bound.as_ref().map(Binding::unit)
     }
@@ -450,7 +568,7 @@ impl Alarm {
     /// first scaled reading will bind. `None` before a reading binds
     /// without one.
     pub fn limits_unit<'a>(&'a self, relabel: Option<&'a str>) -> Option<&'a str> {
-        self.bound_unit().or(relabel)
+        self.limits.unit.or(self.bound_unit()).or(relabel)
     }
 
     /// Compare one reading, returning the breach it starts, if any: a
@@ -486,6 +604,18 @@ impl Alarm {
             LimitUnit::Base => base,
         };
         match &self.bound {
+            // Typed for another quantity: wait for one in its unit.
+            None if self
+                .limits
+                .unit
+                .is_some_and(|typed| typed != si_prefix(unit).0) =>
+            {
+                if self.idle.as_deref() != Some(unit) {
+                    self.idle = Some(unit.to_string());
+                }
+                self.reading_zone = None;
+                return None;
+            }
             None => {
                 self.bound = Some(Binding {
                     quantity: base.to_string(),
@@ -508,7 +638,7 @@ impl Alarm {
             // went unwatched, so it is judged afresh.
             self.zone = None;
         }
-        let mult = limit_unit.mult(&m.unit);
+        let mult = self.limits.mult(&m.unit, limit_unit);
         let value = v * mult;
         let now = self.limits.zone_of(value);
         self.reading_zone = Some(now);
@@ -555,7 +685,7 @@ impl Alarm {
                 Some(Breach {
                     zone: out,
                     limit: limit.unwrap_or_default(),
-                    unit: unit.to_string(),
+                    unit: self.limits.unit.unwrap_or(unit).to_string(),
                     crossing,
                 })
             }
@@ -714,7 +844,11 @@ mod tests {
         assert_eq!(Hysteresis::parse("1 %"), Ok(Hysteresis::Percent(1.0)));
         assert_eq!(Hysteresis::parse("-1"), Err(HysteresisError::NotABand));
         assert_eq!(Hysteresis::parse("inf"), Err(HysteresisError::NotABand));
-        assert_eq!(Hysteresis::parse("1V"), Err(HysteresisError::NotANumber));
+        assert_eq!(
+            Hysteresis::parse("1V"),
+            Err(HysteresisError::NotANumber),
+            "see parse_in"
+        );
         assert_eq!(Hysteresis::Percent(1.0).describe().as_deref(), Some("1%"));
     }
 
@@ -833,6 +967,122 @@ mod tests {
         assert_eq!(m.unit, "A");
         assert_eq!(a.check(&m), None);
         assert_eq!(a.idle(), Some("Ω"));
+    }
+
+    /// A limit typed with a unit is read into its base; a unit names the
+    /// quantity of both, a bare one included, and two quantities are
+    /// refused.
+    #[test]
+    fn typed_limits_are_in_their_units_base() {
+        assert_eq!(parse_limit(" "), Ok(None));
+        assert_eq!(parse_limit("4980mV"), Ok(Some((4.98, Some("V")))));
+        assert_eq!(parse_limit("4.7k"), Ok(Some((4700.0, None))));
+        assert_eq!(parse_limit("5 x"), Err(LimitParseError::NotAQuantity));
+        assert_eq!(
+            parse_limit("1e308 GV"),
+            Err(LimitParseError::Limit(LimitError::NotFinite))
+        );
+        let limits = Limits::typed(Some((1.0, None)), Some((4.98, Some("V")))).unwrap();
+        assert_eq!(limits.unit, Some("V"));
+        assert_eq!(
+            Limits::typed(Some((1.0, Some("A"))), Some((4.98, Some("V")))),
+            Err(LimitError::UnitsDiffer)
+        );
+        assert_eq!(
+            limits.describe(Hysteresis::Absolute(0.01)),
+            "above 4.98 V or below 1 V, hysteresis 0.01 V"
+        );
+        // A band in `%` is written bare: "0.5 %" would read back as a
+        // percentage of the limit.
+        let duty = Limits::typed(Some((30.0, Some("%"))), Some((70.0, Some("%")))).unwrap();
+        assert_eq!(duty.band(Hysteresis::Absolute(0.5)).as_deref(), Some("0.5"));
+        assert_eq!(
+            Hysteresis::parse_in("0.5", duty.unit),
+            Ok(Hysteresis::Absolute(0.5))
+        );
+    }
+
+    /// A band typed with a unit must be in the limits' one, and comes in
+    /// its base.
+    #[test]
+    fn a_band_with_a_unit_is_in_the_limits_one() {
+        assert_eq!(
+            Hysteresis::parse_in("10 mV", Some("V")),
+            Ok(Hysteresis::Absolute(0.01))
+        );
+        assert_eq!(
+            Hysteresis::parse_in("1%", Some("V")),
+            Ok(Hysteresis::Percent(1.0))
+        );
+        assert_eq!(
+            Hysteresis::parse_in("2m", None),
+            Ok(Hysteresis::Absolute(0.002))
+        );
+        for (typed, unit) in [("10 mA", Some("V")), ("10 mV", None)] {
+            assert_eq!(
+                Hysteresis::parse_in(typed, unit),
+                Err(HysteresisError::NotTheLimitsUnit),
+                "{typed}"
+            );
+        }
+        assert_eq!(
+            Hysteresis::parse_in("-1 V", Some("V")),
+            Err(HysteresisError::NotABand)
+        );
+        assert_eq!(
+            Hysteresis::parse_in("5 x", Some("V")),
+            Err(HysteresisError::NotANumber)
+        );
+    }
+
+    /// Limits typed in volts wait for a voltage, however many readings of
+    /// another quantity come first, and judge it in its base.
+    #[test]
+    fn a_typed_unit_waits_for_its_quantity() {
+        let t = Instant::now();
+        let limits = Limits::typed(None, Some((5.0, Some("V")))).unwrap();
+        let mut a = Alarm::new(limits, Hysteresis::Auto);
+        assert_eq!(a.check(&reading(12.0, "k\u{3a9}", t)), None);
+        assert_eq!(a.idle(), Some("\u{3a9}"));
+        assert_eq!(a.bound_unit(), None);
+        assert_eq!(a.limits_unit(None), Some("V"));
+        assert_eq!(a.check(&reading(4980.0, "mV", t)), None);
+        assert_eq!((a.idle(), a.bound_unit()), (None, Some("V")));
+        let breach = a.check(&reading(5.02, "V", t)).unwrap();
+        assert_eq!(breach.note(), "Above high limit 5 V");
+        // Bound now: another quantity is a dial turn, as for a bare limit.
+        assert_eq!(a.check(&reading(1.0, "\u{3a9}", t)), None);
+        assert_eq!(a.idle(), Some("\u{3a9}"));
+    }
+
+    /// Under a scale, a typed unit is of the label's quantity, and readings
+    /// are judged in its base whatever prefix the label carries.
+    #[test]
+    fn a_typed_unit_under_a_scale_is_the_labels_quantity() {
+        let t = Instant::now();
+        let limits = Limits::typed(None, Some((0.5, Some("A")))).unwrap();
+        // A 10 mV/A clamp shown in mA: the factor sets the prefix.
+        let clamp = Transform::linear(100_000.0, 0.0, Some("mA".into()));
+        let mut a = Alarm::new(limits, Hysteresis::Auto);
+        let mut m = reading(4.0, "mV", t);
+        clamp.apply(&mut m);
+        assert_eq!(a.check(&m), None, "400 mA is inside 0.5 A");
+        let mut m = reading(6.0, "mV", t);
+        clamp.apply(&mut m);
+        assert_eq!(a.check(&m).unwrap().note(), "Above high limit 0.5 A");
+        assert_eq!(
+            limits.in_unit("mA", LimitUnit::Shown).high,
+            Some(500.0),
+            "the line is drawn at 500 mA"
+        );
+
+        // Shown in °F: no amps to judge.
+        let to_f = Transform::linear(1.8, 32.0, Some("\u{b0}F".into()));
+        let mut a = Alarm::new(limits, Hysteresis::Auto);
+        let mut m = reading(20.0, "\u{b0}C", t);
+        to_f.apply(&mut m);
+        assert_eq!(a.check(&m), None);
+        assert_eq!(a.idle(), Some("\u{b0}F"));
     }
 
     #[test]

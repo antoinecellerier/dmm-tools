@@ -10,7 +10,7 @@
 
 use crate::l10n::Localizer;
 use crate::tr;
-use dmm_lib::alarm::{HysteresisError, LimitError};
+use dmm_lib::alarm::{HysteresisError, LimitError, LimitParseError};
 use dmm_lib::transform::FactorError;
 use std::borrow::Cow;
 
@@ -32,6 +32,15 @@ pub fn limit_error(l: &Localizer, e: LimitError) -> Cow<'_, str> {
     match e {
         LimitError::NotFinite => tr!(l, "input-not-finite"),
         LimitError::LowNotBelowHigh => tr!(l, "input-low-not-below-high"),
+        LimitError::UnitsDiffer => tr!(l, "input-limit-units-differ"),
+    }
+}
+
+/// Why an alarm limit typed as `text` was refused.
+pub fn limit_parse_error<'a>(l: &'a Localizer, e: LimitParseError, text: &str) -> Cow<'a, str> {
+    match e {
+        LimitParseError::NotAQuantity => tr!(l, "input-not-a-quantity", text = text),
+        LimitParseError::Limit(e) => limit_error(l, e),
     }
 }
 
@@ -42,6 +51,7 @@ pub fn hysteresis_error<'a>(l: &'a Localizer, e: HysteresisError, text: &str) ->
         HysteresisError::NotABand | HysteresisError::PercentOfZero => {
             tr!(l, "input-band-negative")
         }
+        HysteresisError::NotTheLimitsUnit => tr!(l, "input-band-not-the-limits-unit"),
     }
 }
 

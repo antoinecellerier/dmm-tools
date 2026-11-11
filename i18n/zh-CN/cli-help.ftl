@@ -54,9 +54,6 @@ read--scale =
 # dmm-cli read --offset
 read--offset =
     .help = 换算后加上 VALUE (--scale 1.8 配合 32 可将 °C 转换为 °F)
-# dmm-cli read --alarm-high
-read--alarm-high =
-    .help = 读数升到 VALUE 以上时报警，VALUE 以基本单位 (V, A, Ω, …) 表示，换算后的读数则以 --unit 为单位
 # dmm-cli read --alarm-low
 read--alarm-low =
     .help = 读数降到 VALUE 以下时报警，写法同 --alarm-high

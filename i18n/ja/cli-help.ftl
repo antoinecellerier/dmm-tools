@@ -54,9 +54,6 @@ read--scale =
 # dmm-cli read --offset
 read--offset =
     .help = スケーリング後に VALUE を加える (--scale 1.8 と組み合わせて 32 を加えると、°C が °F になる)
-# dmm-cli read --alarm-high
-read--alarm-high =
-    .help = 測定値が VALUE を上回ったときに警告する。VALUE は基本単位 (V, A, Ω, …)、スケーリングした測定値では --unit の単位
 # dmm-cli read --alarm-low
 read--alarm-low =
     .help = 測定値が VALUE を下回ったときに警告する (--alarm-high と同様)

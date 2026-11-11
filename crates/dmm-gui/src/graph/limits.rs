@@ -38,6 +38,15 @@ impl Graph {
         if self.current_series.is_some() || self.levels {
             return Vec::new();
         }
+        // Limits typed with a unit, on a trace of another quantity before a
+        // reading has bound them (a paused or ended run): theirs it is not.
+        if watched
+            .limits
+            .unit
+            .is_some_and(|unit| unit != dmm_lib::transform::base_unit(&self.current_unit))
+        {
+            return Vec::new();
+        }
         let limits = watched.limits.in_unit(&self.current_unit, watched.unit);
         [(limits.high, LimitSide::High), (limits.low, LimitSide::Low)]
             .into_iter()
@@ -67,6 +76,24 @@ mod tests {
         assert!(
             g.limit_lines(Some(watched)).is_empty(),
             "no lines on levels"
+        );
+    }
+
+    /// Limits typed in volts draw nothing on an ohms trace, even before a
+    /// reading has bound them.
+    #[test]
+    fn typed_limits_draw_only_on_their_quantity() {
+        let mut g = Graph::new();
+        g.current_unit = "k\u{3a9}".to_string();
+        let watched = WatchedLimits {
+            limits: Limits::check(None, Some(5.0)).unwrap().in_base(Some("V")),
+            unit: LimitUnit::Base,
+        };
+        assert!(g.limit_lines(Some(watched)).is_empty());
+        g.current_unit = "mV".to_string();
+        assert_eq!(
+            g.limit_lines(Some(watched)),
+            vec![(5000.0, LimitSide::High)]
         );
     }
 }

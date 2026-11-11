@@ -244,11 +244,20 @@ input-not-finite = must be a finite number
 input-zero-scale = a scale of zero would erase the reading
 # The alarm's low limit and its high limit.
 input-low-not-below-high = the low limit must be below the high one
+# An alarm limit: a number, or a number with a unit or a prefix such as
+# 4980 mV, 10 kohm or 4.7k (kept as they are). $text is what was typed.
+input-not-a-quantity = “{ $text }” is not a number, or a number with a unit such as 4980 mV or 4.7k
+# The alarm's two limits were typed with units of different quantities,
+# such as volts and amps.
+input-limit-units-differ = the low and high limits must be in one unit
 # The alarm's hysteresis band: a number in the limits' unit, or a percentage
 # of the limit. $text is what was typed, as it was typed.
 input-band-not-a-number = “{ $text }” is not a number or a percentage such as 1%
 # A hysteresis band below zero.
 input-band-negative = must be zero or more
+# A hysteresis band typed with a unit, while the limits were typed in
+# another unit or with none.
+input-band-not-the-limits-unit = a band takes a unit only when the limits are typed in it
 # A percentage band with a limit of 0, of which every percentage is 0.
 input-percent-of-zero = a percentage of a limit of 0 is 0; give a value instead
 

@@ -218,19 +218,25 @@ pub(in crate::app) fn row_field(
     hint: &str,
     focus: bool,
 ) -> (egui::Response, bool) {
-    let width = FIELD_WIDTH * scale;
+    let text_width = |text: RichText| {
+        egui::WidgetText::from(text)
+            .into_galley(
+                ui,
+                Some(egui::TextWrapMode::Extend),
+                f32::INFINITY,
+                egui::TextStyle::Body,
+            )
+            .size()
+            .x
+    };
+    // Wider for what is typed, a limit with its unit ("4980 mV"), so the
+    // field shows all of it, an em to spare for the caret.
+    let typed = text_width(RichText::new(text.as_str()).font(font.clone()));
+    let width = (typed + font.size).clamp(FIELD_WIDTH * scale, 3.0 * FIELD_WIDTH * scale);
     // A caption and its field wrap together: a caption left at the end of a
     // line reads as labelling nothing.
     let caption = RichText::new(caption).font(font.clone());
-    let caption_width = egui::WidgetText::from(caption.clone())
-        .into_galley(
-            ui,
-            Some(egui::TextWrapMode::Extend),
-            f32::INFINITY,
-            egui::TextStyle::Body,
-        )
-        .size()
-        .x;
+    let caption_width = text_width(caption.clone());
     if caption_width + ui.spacing().item_spacing.x + width > ui.available_size_before_wrap().x {
         ui.end_row();
     }

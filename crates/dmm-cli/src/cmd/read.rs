@@ -793,7 +793,9 @@ impl Run {
         // Said on every change of what the readings are in, so an unattended
         // log follows each dial turn, not only the first away.
         if alarm.idle() != self.noted_idle.as_deref() {
-            match (alarm.idle(), alarm.bound_unit()) {
+            // A limit typed with a unit names what is watched before any
+            // reading binds it.
+            match (alarm.idle(), alarm.limits_unit(None)) {
                 (Some(now), Some(watched)) => eprintln!(
                     "{} {}",
                     note_label(),

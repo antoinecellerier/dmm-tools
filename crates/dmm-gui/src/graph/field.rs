@@ -14,7 +14,9 @@
 //! has no prefix yet: what is typed into it is in the one the axis shows.
 
 use super::axes::short_figure;
-use dmm_lib::transform::{PrefixRatio, base_unit, meter_unit, prefix_ratio};
+use dmm_lib::transform::{
+    PrefixRatio, base_unit, meter_unit, number_and_unit, prefix_ratio, typed_unit,
+};
 use std::ops::Range;
 
 /// Digits the fields show when a value is written into them by the graph
@@ -224,61 +226,6 @@ fn written_out(entry: &str, bare_unit: &str) -> String {
     } else {
         entry.to_string()
     }
-}
-
-/// `entry` split into its number, as typed, and what follows it: the
-/// longest start of it that reads as a finite number.
-fn number_and_unit(entry: &str) -> Option<(&str, f64, &str)> {
-    let entry = entry.trim();
-    entry
-        .char_indices()
-        .map(|(i, c)| i + c.len_utf8())
-        .rev()
-        .find_map(|end| {
-            let number = entry[..end].trim();
-            let v = number.parse::<f64>().ok().filter(|v| v.is_finite())?;
-            Some((number, v, entry[end..].trim()))
-        })
-}
-
-/// A unit as typed, in the meter's spelling: spaces dropped ("k Ω"),
-/// "ohm" and "ohms" in any case and the ohm sign are Ω, a Greek mu or a
-/// "u" the micro sign; the plotted unit's base in any case ("mv" is mV); a
-/// prefix alone ("k", "m", "u") goes on that base; any other unit a
-/// reading carries in any case too ([`meter_unit`]).
-fn typed_unit(typed: &str, plotted: &str) -> String {
-    let mut unit: String = typed
-        .chars()
-        .filter(|c| !c.is_whitespace())
-        .map(|c| match c {
-            '\u{3bc}' => '\u{b5}',
-            '\u{2126}' => '\u{3a9}',
-            c => c,
-        })
-        .collect();
-    let lower = unit.to_lowercase();
-    if let Some(word) = ["ohms", "ohm"].into_iter().find(|w| lower.ends_with(w)) {
-        // The word is ASCII, so its length in bytes is the same in `unit`.
-        unit.truncate(unit.len() - word.len());
-        unit.push('\u{3a9}');
-    }
-    let base = base_unit(plotted);
-    if !base.is_empty() && unit.to_lowercase() == base.to_lowercase() {
-        return base.to_string();
-    }
-    let mut chars = unit.chars();
-    if let Some(c) = chars.next()
-        // Not "K" for kilo, as parts are marked: it is kelvin's symbol.
-        && "pnuµmkMG".contains(c)
-    {
-        let rest = chars.as_str();
-        if rest.is_empty() || (!base.is_empty() && rest.to_lowercase() == base.to_lowercase()) {
-            // "u" for micro.
-            let prefix = if c == 'u' { '\u{b5}' } else { c };
-            return format!("{prefix}{base}");
-        }
-    }
-    meter_unit(&unit).unwrap_or(unit)
 }
 
 /// `entry` read against the `plotted` unit, a bare number being in

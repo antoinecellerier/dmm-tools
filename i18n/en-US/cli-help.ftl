@@ -59,7 +59,7 @@ read--unit =
     .help = Label the scaled reading with this unit instead of the meter's base unit. The number is not converted: --scale sets the prefix, so a 10 mV/A clamp in mA is --scale 100000 --unit mA
 # dmm-cli read --alarm-high
 read--alarm-high =
-    .help = Warn when the reading rises above VALUE, in base units (V, A, Ω, …), or in the --unit of a scaled reading
+    .help = Warn when the reading rises above VALUE, in base units (V, A, Ω, …), or in the --unit of a scaled reading. A unit (4980mV, 10kohm) also limits the alarm to readings of that quantity; a prefix alone (4.7k) only multiplies
 # dmm-cli read --alarm-low
 read--alarm-low =
     .help = Warn when the reading falls below VALUE, as --alarm-high

@@ -341,14 +341,16 @@ reading has come back inside by `--alarm-hysteresis`, so a reading hovering
 at a limit raises one alarm. Overloads don't count.
 
 Limits are in the base unit (V, A, Ω, …), as `--scale`'s factor is, or in
-`--unit` for a scaled reading, an imported scaled file's included. They watch
-the quantity and unit of the first reading: after a dial turn to another
-quantity, or on a file's rows in another unit, the alarm is idle until they
-come back, and a stderr note says so.
+`--unit` for a scaled reading, an imported scaled file's included. A limit
+may carry a unit (`4980mV`, `10kohm`), which `--alarm-hysteresis` may then
+share; a prefix alone (`4.7k`) only multiplies. They watch the quantity and
+unit of the first reading, or of the unit typed: on another quantity, or on
+a file's rows in another unit, the alarm is idle until they come back, and a
+stderr note says so.
 
 ```bash
 dmm-cli read --alarm-low 3.0 --format csv -o discharge.csv   # cell run down
-dmm-cli read --alarm-high 5.25 --alarm-bell                  # 5 V rail out of tolerance
+dmm-cli read --alarm-high 5.25V --alarm-bell                 # 5 V rail out of tolerance
 ```
 
 #### Scaling readings in software

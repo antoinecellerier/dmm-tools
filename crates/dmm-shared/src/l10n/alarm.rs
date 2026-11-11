@@ -21,7 +21,7 @@ impl Localizer {
             (None, Some(_)) => "low",
             (None, None) => return String::new(),
         };
-        let number = |v: Option<f64>| v.map(|v| v.to_string()).unwrap_or_default();
+        let number = |v: Option<f64>| v.map(|v| limits.written(v)).unwrap_or_default();
         let watched = tr!(
             self,
             "alarm-limits",
@@ -29,7 +29,7 @@ impl Localizer {
             high = number(limits.high),
             low = number(limits.low),
         );
-        match band.describe() {
+        match limits.band(band) {
             Some(band) => tr!(self, "alarm-hysteresis", limits = watched, band = band).into_owned(),
             None => watched.into_owned(),
         }
@@ -71,13 +71,19 @@ mod tests {
             (None, Some(5.0)),
             (Some(3.0), Some(4.0005)),
         ] {
-            let limits = Limits::check(low, high).expect("valid limits");
-            for band in [
-                Hysteresis::Auto,
-                Hysteresis::Absolute(0.01),
-                Hysteresis::Percent(1.0),
+            for limits in [
+                Limits::check(low, high).expect("valid limits"),
+                Limits::check(low, high)
+                    .expect("valid limits")
+                    .in_base(Some("V")),
             ] {
-                assert_eq!(l.alarm_limits(&limits, band), limits.describe(band));
+                for band in [
+                    Hysteresis::Auto,
+                    Hysteresis::Absolute(0.01),
+                    Hysteresis::Percent(1.0),
+                ] {
+                    assert_eq!(l.alarm_limits(&limits, band), limits.describe(band));
+                }
             }
         }
         for zone in [Zone::Above, Zone::Below, Zone::Inside] {

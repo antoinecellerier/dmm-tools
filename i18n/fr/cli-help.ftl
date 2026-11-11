@@ -54,9 +54,6 @@ read--scale =
 # dmm-cli read --offset
 read--offset =
     .help = Ajouter VALUE après la mise à l’échelle (32 avec --scale 1.8 convertit les °C en °F)
-# dmm-cli read --alarm-high
-read--alarm-high =
-    .help = Avertir quand la mesure dépasse VALUE, en unités de base (V, A, Ω, …), ou dans l’unité --unit d’une mesure mise à l’échelle
 # dmm-cli read --alarm-low
 read--alarm-low =
     .help = Avertir quand la mesure passe sous VALUE, comme pour --alarm-high

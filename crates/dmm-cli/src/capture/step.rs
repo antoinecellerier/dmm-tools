@@ -463,11 +463,7 @@ fn mismatch_line(l: &Localizer, mismatch: &Mismatch) -> String {
                 "capture-mismatch-at-least",
                 shown = kind,
                 value = value,
-                min = if unit.is_empty() {
-                    min.to_string()
-                } else {
-                    format!("{min} {unit}")
-                },
+                min = dmm_lib::transform::with_unit(*min, unit),
             )
         }
     }
