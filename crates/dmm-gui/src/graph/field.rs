@@ -14,7 +14,8 @@
 //! has no prefix yet: what is typed into it is in the one the axis shows.
 
 use super::axes::short_figure;
-use dmm_lib::transform::{PrefixRatio, prefix_ratio};
+use dmm_lib::transform::{PrefixRatio, base_unit, meter_unit, prefix_ratio};
+use std::ops::Range;
 
 /// Digits the fields show when a value is written into them by the graph
 /// rather than typed. Enough to keep a millivolt reading distinct, few
@@ -156,30 +157,52 @@ struct Entry {
     label: String,
 }
 
-/// The entries of `text`: split at commas, semicolons and spaces, a word
-/// that doesn't start a number ("Ω", "kohm") going with the number before
-/// it across a space, so "1 Ω, 4.7k 12" is "1 Ω", "4.7k" and "12". Each as
-/// typed, trimmed.
-fn entries(text: &str) -> Vec<String> {
-    let mut out: Vec<String> = Vec::new();
+/// The words of `s`, as byte ranges: its runs of non-whitespace.
+fn words(s: &str) -> impl Iterator<Item = Range<usize>> + '_ {
+    let mut rest = 0;
+    std::iter::from_fn(move || {
+        let start = rest + s[rest..].find(|c: char| !c.is_whitespace())?;
+        let end = s[start..]
+            .find(char::is_whitespace)
+            .map_or(s.len(), |e| start + e);
+        rest = end;
+        Some(start..end)
+    })
+}
+
+/// Where the entries of `text` are, as byte ranges: split at commas,
+/// semicolons and spaces, a word that doesn't start a number ("Ω", "kohm")
+/// going with the number before it across a space, so "1 Ω, 4.7k 12" is
+/// "1 Ω", "4.7k" and "12".
+fn entry_spans(text: &str) -> Vec<Range<usize>> {
+    let mut out: Vec<Range<usize>> = Vec::new();
+    let mut chunk_start = 0;
     for chunk in text.split([',', ';']) {
         let mut in_chunk = false;
-        for word in chunk.split_whitespace() {
-            let starts_a_number = word
+        for word in words(chunk) {
+            let starts_a_number = chunk[word.clone()]
                 .chars()
                 .next()
                 .is_some_and(|c| c.is_ascii_digit() || matches!(c, '.' | '-' | '+'));
+            let word = chunk_start + word.start..chunk_start + word.end;
             match out.last_mut() {
-                Some(last) if in_chunk && !starts_a_number => {
-                    last.push(' ');
-                    last.push_str(word);
-                }
-                _ => out.push(word.to_string()),
+                Some(last) if in_chunk && !starts_a_number => last.end = word.end,
+                _ => out.push(word),
             }
             in_chunk = true;
         }
+        // Both separators are one byte.
+        chunk_start += chunk.len() + 1;
     }
     out
+}
+
+/// The entries of `text`, each as typed: see [`entry_spans`].
+fn entries(text: &str) -> Vec<String> {
+    entry_spans(text)
+        .into_iter()
+        .map(|r| text[r].to_string())
+        .collect()
 }
 
 /// `v` and its `unit` as an entry writes them, as short as it reads.
@@ -210,7 +233,8 @@ fn number_and_unit(entry: &str) -> Option<(&str, f64, &str)> {
 /// A unit as typed, in the meter's spelling: spaces dropped ("k Ω"),
 /// "ohm" and "ohms" in any case and the ohm sign are Ω, a Greek mu or a
 /// "u" the micro sign; the plotted unit's base in any case ("mv" is mV); a
-/// prefix alone ("k", "m", "u") goes on that base.
+/// prefix alone ("k", "m", "u") goes on that base; any other unit a
+/// reading carries in any case too ([`meter_unit`]).
 fn typed_unit(typed: &str, plotted: &str) -> String {
     let mut unit: String = typed
         .chars()
@@ -227,7 +251,7 @@ fn typed_unit(typed: &str, plotted: &str) -> String {
         unit.truncate(unit.len() - word.len());
         unit.push('\u{3a9}');
     }
-    let base = dmm_lib::transform::base_unit(plotted);
+    let base = base_unit(plotted);
     if !base.is_empty() && unit.to_lowercase() == base.to_lowercase() {
         return base.to_string();
     }
@@ -243,7 +267,7 @@ fn typed_unit(typed: &str, plotted: &str) -> String {
             return format!("{prefix}{base}");
         }
     }
-    unit
+    meter_unit(&unit).unwrap_or(unit)
 }
 
 /// `entry` read against the `plotted` unit, a bare number being in
@@ -261,6 +285,87 @@ fn read_entry(entry: &str, bare_unit: Option<&str>, plotted: &str) -> Option<Ent
         value: ratio.apply(v),
         label: format!("{number} {unit}").trim_end().to_string(),
     })
+}
+
+/// Why an entry of a [`NumberListField`] draws no line.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(super) enum Undrawn {
+    /// It doesn't start with a number ("abc").
+    NotANumber,
+    /// What follows the number is no unit ("5 x").
+    UnknownUnit,
+    /// A unit of another quantity than the plot's ("5 V" on Ω), its base
+    /// unit given ("" for a bare number in a unitless reading's): kept, and
+    /// drawn once that quantity is plotted again.
+    OtherQuantity(String),
+}
+
+/// An entry that draws no line, where it is in the text and why.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(super) struct Mark {
+    pub(super) span: Range<usize>,
+    pub(super) why: Undrawn,
+}
+
+impl Mark {
+    /// Whether the user may still be typing it out: a half-typed number or
+    /// unit reads as neither until it is finished.
+    pub(super) fn may_be_unfinished(&self) -> bool {
+        !matches!(self.why, Undrawn::OtherQuantity(_))
+    }
+
+    /// Whether to say nothing of it yet: it may be unfinished and the
+    /// `caret` (a byte offset into the text, while it is typed in) is in it
+    /// or right after it.
+    pub(super) fn held_back(&self, caret: Option<usize>) -> bool {
+        self.may_be_unfinished()
+            && caret.is_some_and(|c| self.span.start <= c && c <= self.span.end)
+    }
+}
+
+/// What a [`NumberListField`] reads its entries against, apart from its
+/// text, to say which draw no line: see [`NumberListField::marker`].
+pub(super) struct Marker {
+    bare_unit: Option<String>,
+    plotted: Option<String>,
+}
+
+impl Marker {
+    /// The entries of `text` that draw no line. A unit is one of another
+    /// quantity when a reading may carry it ([`meter_unit`]) or `known`
+    /// names it (a meter's own, among the units the graph holds); any other
+    /// word is no unit. Nothing is marked while
+    /// nothing is plotted, nor a bare number still waiting for a unit.
+    pub(super) fn marks(&self, text: &str, known: impl Fn(&str) -> bool) -> Vec<Mark> {
+        let Some(plotted) = self.plotted.as_deref() else {
+            return Vec::new();
+        };
+        entry_spans(text)
+            .into_iter()
+            .filter_map(|span| {
+                let why = match number_and_unit(&text[span.clone()]) {
+                    None => Undrawn::NotANumber,
+                    Some((_, _, "")) => {
+                        let unit = self.bare_unit.as_deref()?;
+                        prefix_ratio(unit, plotted).is_none().then_some(())?;
+                        Undrawn::OtherQuantity(base_unit(unit).to_string())
+                    }
+                    Some((_, _, typed)) => {
+                        let unit = typed_unit(typed, plotted);
+                        if prefix_ratio(&unit, plotted).is_some() {
+                            return None;
+                        }
+                        if meter_unit(&unit).is_some() || known(&unit) {
+                            Undrawn::OtherQuantity(base_unit(&unit).to_string())
+                        } else {
+                            Undrawn::UnknownUnit
+                        }
+                    }
+                };
+                Some(Mark { span, why })
+            })
+            .collect()
+    }
 }
 
 /// A list of values the user types, separated by commas, semicolons or
@@ -289,6 +394,11 @@ impl NumberListField {
     /// The draft, for a text edit to write into.
     pub(super) fn text_mut(&mut self) -> &mut String {
         &mut self.text
+    }
+
+    /// The draft as typed.
+    pub(super) fn text(&self) -> &str {
+        &self.text
     }
 
     /// The values the entries read, in the plotted unit.
@@ -391,6 +501,16 @@ impl NumberListField {
         self.parse(plotted);
     }
 
+    /// What the entries are read against, for [`Marker::marks`] to say
+    /// which draw no line in a text the field doesn't hold yet: the one
+    /// being laid out under the caret.
+    pub(super) fn marker(&self) -> Marker {
+        Marker {
+            bare_unit: self.bare_unit.clone(),
+            plotted: self.plotted.clone(),
+        }
+    }
+
     /// Re-read the draft after an edit, against the `plotted` unit. Entries
     /// that don't read are dropped rather than held, so a trailing separator,
     /// a half-typed number or a unit of another quantity just doesn't draw a
@@ -417,6 +537,83 @@ impl NumberListField {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The entries of `f` that draw no line, as typed, with why.
+    fn marked(f: &NumberListField, known: &[&str]) -> Vec<(String, Undrawn)> {
+        let text = f.text();
+        let marks = f.marker().marks(text, |u| known.contains(&u));
+        marks
+            .into_iter()
+            .map(|m| (text[m.span].to_string(), m.why))
+            .collect()
+    }
+
+    /// Each entry that draws no line is found where it was typed, extra
+    /// spaces in it included, and says why: a unit of another quantity
+    /// (one a reading may carry, in any case, or one the graph holds) from
+    /// no unit, and from no number.
+    #[test]
+    fn an_entry_that_draws_no_line_says_why() {
+        let other = |u: &str| Undrawn::OtherQuantity(u.to_string());
+        let mut f = NumberListField::default();
+        *f.text_mut() = "1 Ω, 4.7k;5  kV 3 x, abc 2 °C, 7 %, 9 mv, 4 Gizmo".into();
+        f.parse(Some("kΩ"));
+        assert_eq!(f.values(), [0.001, 4.7]);
+        assert_eq!(
+            marked(&f, &["Gizmo"]),
+            [
+                ("5  kV".to_string(), other("V")),
+                ("3 x".to_string(), Undrawn::UnknownUnit),
+                ("abc".to_string(), Undrawn::NotANumber),
+                ("2 °C".to_string(), other("°C")),
+                ("7 %".to_string(), other("%")),
+                ("9 mv".to_string(), other("V")),
+                ("4 Gizmo".to_string(), other("Gizmo")),
+            ]
+        );
+        // Nothing is plotted: nothing can be judged.
+        f.follow(None);
+        assert_eq!(marked(&f, &["Gizmo"]), []);
+    }
+
+    /// An entry that may be half typed is held back while the caret is in
+    /// it or right after it; one of another quantity is finished.
+    #[test]
+    fn the_entry_being_typed_is_held_back() {
+        let mut f = NumberListField::default();
+        *f.text_mut() = "1 o, 5 V".into();
+        f.parse(Some("Ω"));
+        let marks = f.marker().marks(f.text(), |_| false);
+        let held = |caret| marks.iter().map(|m| m.held_back(caret)).collect::<Vec<_>>();
+        assert_eq!(held(None), [false, false]);
+        assert_eq!(held(Some(3)), [true, false]);
+        assert_eq!(held(Some(0)), [true, false]);
+        assert_eq!(held(Some(4)), [false, false]);
+        assert_eq!(held(Some(8)), [false, false]);
+    }
+
+    /// A bare number typed in one quantity is marked once another is
+    /// plotted before the field is left; on a unitless reading it says so.
+    #[test]
+    fn a_bare_number_of_another_quantity_is_marked() {
+        let mut f = NumberListField::default();
+        *f.text_mut() = "15".into();
+        f.parse(Some("mV"));
+        assert_eq!(marked(&f, &[]), []);
+        f.follow(Some("Ω"));
+        assert_eq!(
+            marked(&f, &[]),
+            [("15".to_string(), Undrawn::OtherQuantity("V".into()))]
+        );
+        let mut f = NumberListField::default();
+        *f.text_mut() = "40".into();
+        f.parse(Some(""));
+        f.follow(Some("V"));
+        assert_eq!(
+            marked(&f, &[]),
+            [("40".to_string(), Undrawn::OtherQuantity(String::new()))]
+        );
+    }
 
     /// A value added or removed leaves the rest of the draft as typed; a
     /// bare number gets the unit it was typed in once the field is left.

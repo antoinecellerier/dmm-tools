@@ -930,6 +930,21 @@ impl Graph {
             .map(|_| self.current_unit.as_str())
     }
 
+    /// The units of the readings the graph holds or is offered: the
+    /// plotted series', its sub-values' and the traces drawn over it. The
+    /// reference field takes a unit among them for one of another quantity
+    /// rather than no unit, as it does any unit a prefix goes on.
+    pub(super) fn shown_units(&self) -> Vec<String> {
+        let mut units = vec![self.current_unit.clone()];
+        let others = self.series_options.iter().map(|o| &o.unit);
+        for unit in others.chain(self.overlays.iter().map(|o| &o.unit)) {
+            if !units.contains(unit) {
+                units.push(unit.clone());
+            }
+        }
+        units
+    }
+
     /// Unit of the series being plotted. The stats panel captions its
     /// visible-window block with this, which is not the meter's main unit
     /// when a sub-value is plotted.

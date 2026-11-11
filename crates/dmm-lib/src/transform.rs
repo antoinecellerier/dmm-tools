@@ -48,6 +48,48 @@ const BASE_UNITS: &[&str] = &[
     "V", "A", "Ω", "F", "Hz", "S", "W", "VA", "H", "Wh", "Ah", "W/m²", "°", "V·s",
 ];
 
+/// The units the parsers emit that no prefix is read off, "" for a reading
+/// without one. With [`BASE_UNITS`] under their prefixes, every unit a
+/// reading carries: a test holds the two lists to the parsers.
+const NO_PREFIX: &[&str] = &["", "%", "°C", "°F", "β", "s", "ms", "dBm", "dBV"];
+
+/// `typed` in the meters' spelling when it names a unit a reading carries,
+/// prefixed or not: as typed when it is one ("mV", "°C", "ms"), else read in
+/// any case, "u" being micro ("mv" is "mV", "khz" is "kHz", "DBM" is
+/// "dBm"). A prefix keeps its case, so "mhz" is mHz, and "K" is no kilo:
+/// it is kelvin's symbol.
+/// `None` for anything else, "" included.
+pub fn meter_unit(typed: &str) -> Option<String> {
+    if typed.is_empty() {
+        return None;
+    }
+    let base = base_unit(typed);
+    if BASE_UNITS.contains(&base) {
+        return Some(match typed.strip_prefix('u') {
+            Some(rest) if rest == base => format!("µ{base}"),
+            _ => typed.to_string(),
+        });
+    }
+    if NO_PREFIX.contains(&typed) {
+        return Some(typed.to_string());
+    }
+    let same = |a: &str, b: &str| a.to_lowercase() == b.to_lowercase();
+    if let Some(unit) = NO_PREFIX.iter().chain(BASE_UNITS).find(|u| same(u, typed)) {
+        return Some(unit.to_string());
+    }
+    let mut chars = typed.chars();
+    let prefix = match chars.next()? {
+        'u' => 'µ',
+        c => c,
+    };
+    SI_PREFIXES
+        .iter()
+        .any(|&(p, _)| p == prefix)
+        .then_some(())?;
+    let base = BASE_UNITS.iter().find(|b| same(b, chars.as_str()))?;
+    Some(format!("{prefix}{base}"))
+}
+
 /// Split a meter unit into its base unit and the multiplier to that base:
 /// "mV" → ("V", 1e-3), "kΩ" → ("Ω", 1e3), "µA" → ("A", 1e-6).
 ///
@@ -1153,15 +1195,36 @@ mod tests {
         assert_eq!(re_express("°C", 3), None, "no prefix goes on °C");
     }
 
+    /// A unit typed is read as the meters spell it, in any case, and
+    /// nothing else is a unit.
+    #[test]
+    fn meter_unit_reads_a_unit_in_any_case() {
+        for (typed, unit) in [
+            ("mV", "mV"),
+            ("MV", "MV"),
+            ("ms", "ms"),
+            ("mS", "mS"),
+            ("°C", "°C"),
+            ("mv", "mV"),
+            ("v", "V"),
+            ("khz", "kHz"),
+            ("uA", "µA"),
+            ("dbm", "dBm"),
+            ("va", "VA"),
+        ] {
+            assert_eq!(meter_unit(typed).as_deref(), Some(unit), "{typed}");
+        }
+        for typed in ["", "x", "ohm", "mx", "kg", "K", "KHZ"] {
+            assert_eq!(meter_unit(typed), None, "{typed}");
+        }
+    }
+
     #[test]
     fn prefix_for_leaves_units_without_prefixes_alone() {
         for unit in ["°C", "°F", "%", "dBm", "ms", "hFE", ""] {
             assert_eq!(prefix_for(unit, 3), None, "unit {unit}");
         }
     }
-
-    /// Units no prefix is read off.
-    const NO_PREFIX: &[&str] = &["", "%", "°C", "°F", "β", "s", "ms", "dBm", "dBV"];
 
     /// Of those, the ones bm78xbt's table also forms under every prefix ("m%",
     /// "k°C"; its spec §6.4). They stay whole too.

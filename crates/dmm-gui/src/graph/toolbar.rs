@@ -2,12 +2,14 @@
 //! toggles, and the text fields feeding them.
 
 use std::borrow::Cow;
+use std::ops::Range;
 
 use dmm_lib::text::TextKind;
 use dmm_shared::l10n::Localizer;
 use dmm_shared::tr;
 use eframe::egui::{self, Ui};
 
+use super::field::{Mark, Undrawn};
 use super::{AxisRefusal, Graph, MAX_AXES, SeriesOption, TIME_WINDOWS};
 use crate::a11y::ResponseA11yExt;
 use crate::theme::ThemeColors;
@@ -149,20 +151,146 @@ fn text_field(
     hint: &str,
     hover: &str,
 ) -> egui::Response {
-    let resp = ui.add(
-        egui::TextEdit::singleline(text)
-            .id(id)
-            .desired_width(width)
-            // The buttons' padding rather than egui's 2 pt, so a field
-            // showing up beside them doesn't make its row taller and shift
-            // the graph below.
-            .margin(ui.spacing().button_padding)
-            .hint_text(hint),
-    );
+    let resp = ui.add(text_edit(id, text, width, hint, ui));
+    field_cues(ui, resp, hover)
+}
+
+/// The edit [`text_field`] draws, for a field that lays its text out itself.
+fn text_edit<'t>(
+    id: egui::Id,
+    text: &'t mut String,
+    width: f32,
+    hint: &str,
+    ui: &Ui,
+) -> egui::TextEdit<'t> {
+    egui::TextEdit::singleline(text)
+        .id(id)
+        .desired_width(width)
+        // The buttons' padding rather than egui's 2 pt, so a field
+        // showing up beside them doesn't make its row taller and shift
+        // the graph below.
+        .margin(ui.spacing().button_padding)
+        .hint_text(hint)
+}
+
+/// The focus ring and hover text every toolbar field has.
+fn field_cues(ui: &Ui, resp: egui::Response, hover: &str) -> egui::Response {
     // egui's own focused frame is invisible under a pinned Accent; the ring
     // is the field's only keyboard cue then (`a11y::paint_focus_ring`).
     crate::a11y::paint_focus_ring(ui, &resp);
     resp.on_hover_text(hover)
+}
+
+/// `text` laid out as the reference field shows it: an entry of another
+/// quantity greyed, as kept for when that quantity is plotted again. The
+/// rest takes the edit's own colour (`PLACEHOLDER`), font and line height,
+/// as egui's own single-line layout gives them.
+fn marked_job(ui: &Ui, text: &str, marks: &[Mark], weak: egui::Color32) -> egui::text::LayoutJob {
+    let font_id = egui::TextStyle::Body.resolve(ui.style());
+    let line_height =
+        ui.fonts_mut(|f| f.row_height(&font_id)) + ui.spacing().extra_text_line_spacing;
+    let format = |color| egui::TextFormat {
+        font_id: font_id.clone(),
+        color,
+        line_height: Some(line_height),
+        ..Default::default()
+    };
+    // Left-aligned, as egui's own: the edit scrolls to the caret by its
+    // place in the galley, which another alignment moves.
+    let mut job = egui::text::LayoutJob {
+        keep_trailing_whitespace: true,
+        ..Default::default()
+    };
+    let mut at = 0;
+    for m in marks.iter().filter(|m| !m.may_be_unfinished()) {
+        job.append(
+            &text[at..m.span.start],
+            0.0,
+            format(egui::Color32::PLACEHOLDER),
+        );
+        job.append(&text[m.span.clone()], 0.0, format(weak));
+        at = m.span.end;
+    }
+    job.append(&text[at..], 0.0, format(egui::Color32::PLACEHOLDER));
+    job
+}
+
+/// Underline the entries of the reference field that draw no line: a
+/// squiggle in the error colour under one that is no number or no unit,
+/// dots in `weak` under one of another quantity.
+fn underline_marks(
+    ui: &Ui,
+    output: &egui::text_edit::TextEditOutput,
+    text: &str,
+    marks: &[Mark],
+    error: egui::Color32,
+    weak: egui::Color32,
+) {
+    let galley = &output.galley;
+    if galley.text() != text {
+        return;
+    }
+    let Some(row) = galley.rows.first() else {
+        return;
+    };
+    let origin = output.galley_pos - egui::vec2(galley.rect.left(), 0.0) + row.pos.to_vec2();
+    // From the ink of the entry's first glyph to that of its last, rather
+    // than from caret to caret: a caret stop sits a side bearing away from
+    // the ink, and the line looked to start under the space before.
+    let ink = |span: &Range<usize>| {
+        let first = text[..span.start].chars().count();
+        let glyphs = row
+            .row
+            .glyphs
+            .get(first..first + text[span.clone()].chars().count())?;
+        let left = |g: &egui::epaint::text::Glyph| g.pos.x + g.uv_rect.offset.x;
+        let (start, end) = (glyphs.first()?, glyphs.last()?);
+        Some((
+            origin.x + left(start),
+            origin.x + left(end) + end.uv_rect.size.x,
+        ))
+    };
+    let y = origin.y + row.row.size.y - 1.5;
+    let painter = ui.painter_at(output.text_clip_rect);
+    for m in marks {
+        let Some((start, end)) = ink(&m.span) else {
+            continue;
+        };
+        if m.may_be_unfinished() {
+            let mut points = Vec::new();
+            let mut x = start;
+            let mut up = true;
+            while x < end {
+                points.push(egui::pos2(x, if up { y - 1.0 } else { y + 1.0 }));
+                x += 2.0;
+                up = !up;
+            }
+            points.push(egui::pos2(end, y));
+            painter.add(egui::Shape::line(points, egui::Stroke::new(1.0, error)));
+        } else {
+            let line = [egui::pos2(start, y), egui::pos2(end, y)];
+            painter.extend(egui::Shape::dotted_line(&line, weak, 3.0, 0.75));
+        }
+    }
+}
+
+/// The hover text's line for an entry that draws no line, saying why.
+fn mark_text(l10n: &Localizer, text: &str, m: &Mark) -> String {
+    let entry = &text[m.span.clone()];
+    match &m.why {
+        Undrawn::NotANumber => tr!(l10n, "graph-ref-not-a-number", entry = entry).into_owned(),
+        Undrawn::UnknownUnit => tr!(l10n, "graph-ref-unknown-unit", entry = entry).into_owned(),
+        Undrawn::OtherQuantity(unit) if unit.is_empty() => {
+            tr!(l10n, "graph-ref-other-quantity-unitless", entry = entry).into_owned()
+        }
+        Undrawn::OtherQuantity(unit) => tr!(
+            l10n,
+            "graph-ref-other-quantity",
+            entry = entry,
+            unit = unit.as_str()
+        )
+        .into_owned(),
+    }
 }
 
 /// The toolbar fields' ids. Those a decade step re-expresses say by their
@@ -380,20 +508,45 @@ impl Graph {
                 let plotted = self.plotted_unit_if_any().map(str::to_string);
                 self.ref_lines.flush(plotted.as_deref());
             }
-            let resp = text_field(
-                ui,
-                id,
-                self.ref_lines.text_mut(),
-                120.0,
-                &tr!(l10n, "graph-ref-values"),
-                &tr!(l10n, "graph-ref-values.hover"),
-            );
-            if std::mem::take(&mut self.focus_ref_field) {
-                resp.request_focus();
-            }
-            if resp.changed() {
+            let units = self.shown_units();
+            let known = |unit: &str| units.iter().any(|u| u == unit);
+            let marker = self.ref_lines.marker();
+            let weak = ui.visuals().weak_text_color();
+            let mut layouter = |ui: &Ui, text: &dyn egui::TextBuffer, _wrap: f32| {
+                let marks = marker.marks(text.as_str(), known);
+                let job = marked_job(ui, text.as_str(), &marks, weak);
+                ui.fonts_mut(|f| f.layout_job(job))
+            };
+            let hint = tr!(l10n, "graph-ref-values");
+            let output = text_edit(id, self.ref_lines.text_mut(), 120.0, &hint, ui)
+                .layouter(&mut layouter)
+                .show(ui);
+            if output.response.changed() {
                 let plotted = self.plotted_unit_if_any().map(str::to_string);
                 self.ref_lines.parse(plotted.as_deref());
+            }
+            let text = self.ref_lines.text();
+            // The entry the caret is in may be half typed: nothing is said
+            // of it until it is finished, under the text or in the hover.
+            let caret = output
+                .cursor_range
+                .filter(|_| output.response.has_focus())
+                .map(|r| {
+                    text.char_indices()
+                        .nth(r.primary.index.0)
+                        .map_or(text.len(), |(b, _)| b)
+                });
+            let mut marks = self.ref_lines.marker().marks(text, known);
+            marks.retain(|m| !m.held_back(caret));
+            underline_marks(ui, &output, text, &marks, tc.status_error(), weak);
+            let mut hover = tr!(l10n, "graph-ref-values.hover").into_owned();
+            for m in &marks {
+                hover.push('\n');
+                hover.push_str(&mark_text(l10n, text, m));
+            }
+            let resp = field_cues(ui, output.response.response, &hover);
+            if std::mem::take(&mut self.focus_ref_field) {
+                resp.request_focus();
             }
             toggle_chip(
                 ui,

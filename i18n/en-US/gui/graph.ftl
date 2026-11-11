@@ -119,6 +119,17 @@ graph-ref = Ref
 # what to type, kept as they are.
 graph-ref-values = Reference values
     .hover = Reference values, comma- or semicolon-separated, with a unit or in the plotted one (e.g. 3.3, 5 V, 4.7k)
+# Lines added to the reference values' hover, one for each value that draws
+# no line. $entry is the value as typed ("abc").
+graph-ref-not-a-number = { $entry }: not a number
+# $entry is the value as typed, with a word after it that is no unit ("3 x").
+graph-ref-unknown-unit = { $entry }: unknown unit
+# $entry is the value as typed ("5 V"), in a unit of another quantity than the
+# graph shows; $unit is that quantity's unit ("V"), on whose readings it draws.
+graph-ref-other-quantity = { $entry }: draws on { $unit } readings
+# $entry is a number typed while a reading without a unit (a transistor's
+# gain) was plotted, now that one with a unit is.
+graph-ref-other-quantity-unitless = { $entry }: draws on readings without a unit
 # A chip, after the reference values, that marks where the trace crosses a
 # reference line.
 graph-triggers = Triggers
