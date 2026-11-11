@@ -1,6 +1,7 @@
 //! The graph's toolbar: the **Plot:** and **Show:** chip groups, the analysis
 //! toggles, and the text fields feeding them.
 
+use crate::l10n::key_name;
 use std::borrow::Cow;
 
 use dmm_lib::text::TextKind;
@@ -98,11 +99,11 @@ pub(super) fn overlay_chip_label<'a>(l10n: &'a Localizer, label: &str) -> Cow<'a
 
 /// A graph key as the hovers that name one write it: `M`, `[`, `End`.
 ///
-/// A named key in the window's language ([`crate::app::key_name`]), else
+/// A named key in the window's language ([`crate::l10n::key_name`]), else
 /// its symbol where it has one, not `ctx.format_shortcut`: away from macOS
 /// that spells a bare key by name, so `[` would read "OpenBracket".
 fn graph_key(l10n: &Localizer, key: egui::Key) -> std::borrow::Cow<'_, str> {
-    crate::app::key_name(l10n, key).unwrap_or(std::borrow::Cow::Borrowed(key.symbol_or_name()))
+    key_name(l10n, key).unwrap_or(std::borrow::Cow::Borrowed(key.symbol_or_name()))
 }
 
 /// The two keys that step through the time windows, as their hovers say.

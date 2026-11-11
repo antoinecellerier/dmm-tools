@@ -31,7 +31,6 @@ mod plot_input;
 mod recording_panel;
 mod shortcut_help;
 mod shortcuts;
-pub(crate) use shortcuts::key_name;
 mod stats_panel;
 mod system_fonts;
 mod task;

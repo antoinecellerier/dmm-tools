@@ -466,5 +466,5 @@ Protocol families are in [protocol.md](protocol.md); each family's internals are
 | `theme/` | The palette: preset colour tables (`presets.rs`), named themes and the themes folder (`named.rs`), linked colours (`links.rs`) |
 | `a11y.rs` | AccessKit helpers |
 | `changelog.rs` | The embedded changelog |
-| `l10n.rs` | The resources dmm-gui shows and the localizers built from them |
+| `l10n.rs` | The resources dmm-gui shows, the localizers built from them, and key names in the window's language |
 | `desktop_entry.rs` | The Linux desktop entry dmm-gui installs for itself |

@@ -3,6 +3,7 @@
 //! that keeps it usable in a short window, and the focus bookkeeping that
 //! returns the caret to the button that opened it.
 
+use crate::l10n::key_name;
 use dmm_shared::l10n::Localizer;
 use dmm_shared::tr;
 use eframe::egui::{self, Key, RichText};
@@ -117,7 +118,7 @@ fn help_section<K: Into<String>, A: Into<String>>(
 
 fn graph_keys(ui: &mut egui::Ui, l10n: &Localizer) {
     // Named keys in the window's language, as the General table writes them.
-    let name = |key| shortcuts::key_name(l10n, key).unwrap_or_default();
+    let name = |key| key_name(l10n, key).unwrap_or_default();
     let rows = [
         ("[ / ]".into(), tr!(l10n, "shortcuts-graph-window")),
         (

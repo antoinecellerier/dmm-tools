@@ -12,6 +12,7 @@
 
 use std::borrow::Cow;
 
+use crate::l10n::key_name;
 use dmm_shared::l10n::Localizer;
 use dmm_shared::tr;
 use eframe::egui::{self, Key, Modifiers};
@@ -431,24 +432,6 @@ pub(crate) fn shortcut_text(
         (None, None) => text.push_str(key.name()),
     }
     text
-}
-
-/// A named key as this language writes it — Space, Esc, the arrows, Home,
-/// End, Plus, Minus, and `?` as itself rather than egui's "Questionmark" —
-/// or `None` for one written as egui names it (a letter, a digit, F1).
-pub(crate) fn key_name(l10n: &Localizer, key: Key) -> Option<Cow<'_, str>> {
-    Some(match key {
-        Key::Questionmark => Cow::Borrowed("?"),
-        Key::Space => tr!(l10n, "shortcuts-key-space"),
-        Key::Escape => tr!(l10n, "shortcuts-key-escape"),
-        Key::ArrowLeft => tr!(l10n, "shortcuts-key-left"),
-        Key::ArrowRight => tr!(l10n, "shortcuts-key-right"),
-        Key::Home => tr!(l10n, "shortcuts-key-home"),
-        Key::End => tr!(l10n, "shortcuts-key-end"),
-        Key::Plus => tr!(l10n, "shortcuts-key-plus"),
-        Key::Minus => tr!(l10n, "shortcuts-key-minus"),
-        _ => return None,
-    })
 }
 
 /// The command modifier as this machine renders it, followed by whatever

@@ -1,4 +1,5 @@
-//! The resources dmm-gui shows, and the localizers built from them.
+//! The resources dmm-gui shows, the localizers built from them, and how a
+//! key is written in the window's language.
 //!
 //! `main` builds the session's first localizer ([`startup`]) before it
 //! parses the command line, so `--help` and the errors before the window
@@ -6,6 +7,9 @@
 //! [`App`](crate::app::App) as a handle, swapped in `app/language.rs`.
 
 use dmm_shared::l10n::{Localizer, Options, Resource};
+use dmm_shared::tr;
+use eframe::egui;
+use std::borrow::Cow;
 use std::sync::{Arc, OnceLock};
 
 /// dmm-gui's own messages, one file per screen area under
@@ -130,6 +134,25 @@ pub(crate) fn startup(setting: &str) -> Localizer {
         &resources(),
         &Options::from_env(),
     )
+}
+
+/// A named key as this language writes it — Space, Esc, the arrows, Home,
+/// End, Plus, Minus, and `?` as itself rather than egui's "Questionmark" —
+/// or `None` for one written as egui names it (a letter, a digit, F1).
+pub(crate) fn key_name(l10n: &Localizer, key: egui::Key) -> Option<Cow<'_, str>> {
+    use egui::Key;
+    Some(match key {
+        Key::Questionmark => Cow::Borrowed("?"),
+        Key::Space => tr!(l10n, "shortcuts-key-space"),
+        Key::Escape => tr!(l10n, "shortcuts-key-escape"),
+        Key::ArrowLeft => tr!(l10n, "shortcuts-key-left"),
+        Key::ArrowRight => tr!(l10n, "shortcuts-key-right"),
+        Key::Home => tr!(l10n, "shortcuts-key-home"),
+        Key::End => tr!(l10n, "shortcuts-key-end"),
+        Key::Plus => tr!(l10n, "shortcuts-key-plus"),
+        Key::Minus => tr!(l10n, "shortcuts-key-minus"),
+        _ => return None,
+    })
 }
 
 /// [`resources`] in en-US only: what a test that makes up its own
