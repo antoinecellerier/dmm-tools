@@ -6,6 +6,7 @@
 use super::{called_off, setup_ctrlc};
 use crate::open::open_with_help;
 use console::style;
+use dmm_lib::error::ErrorKind;
 use dmm_lib::protocol::registry::Selection;
 use dmm_lib::stream::{MeasurementStream, StreamEvent};
 use dmm_shared::tr;
@@ -94,15 +95,21 @@ pub(crate) fn cmd_debug(
                     style(tr!(l, "debug-timeout")).red()
                 );
             }
-            // A read Ctrl+C cut short: the flag it raises ends the run.
-            Err(e) if e.is_interrupted() => break,
-            Err(e) => {
+            // A read Ctrl+C cut short: the flag it raises ends the run,
+            // whatever error the read came back with.
+            Err(e) if e.is_interrupted() || stop.load(Ordering::SeqCst) => break,
+            // One frame that didn't read: the next may, and showing it is
+            // what `debug` is for.
+            Err(e) if matches!(e.kind(), ErrorKind::Protocol | ErrorKind::Timeout) => {
                 eprintln!(
                     "{} {}",
                     style(format!("[{i}]")).dim(),
                     style(tr!(l, "debug-frame-error", error = l.error(&e))).red()
                 );
             }
+            // The link is gone: every read after fails at once, so going on
+            // would only flood the terminal.
+            Err(e) => return Err(e.into()),
         }
         i += 1;
     }
