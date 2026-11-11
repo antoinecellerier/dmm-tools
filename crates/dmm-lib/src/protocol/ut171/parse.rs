@@ -302,8 +302,8 @@ fn shown(float: f32, display: u8, main: bool, mode: u8) -> (MeasuredValue, Optio
 /// A number shown with `places` decimals, or as the shortest decimal that
 /// round-trips to the f32 — the wire value, with no precision it didn't
 /// carry — when no count is known. A float that is no number is reported and
-/// shows `?`: only the display byte's state says OL (D-5 in
-/// `MeasuredValue::Overload`'s sense).
+/// shows `?`: only the display byte's state says OL, the one sign of an
+/// overload [`MeasuredValue::Overload`] takes.
 fn number(float: f32, places: Option<u8>, mode: u8) -> (MeasuredValue, Option<String>) {
     if !float.is_finite() {
         report_float(float, mode);
@@ -817,8 +817,8 @@ raw_payload=11"#
         );
     }
 
-    /// D-5: a float that is no number is no overload unless the display byte
-    /// says OL.
+    /// A float that is no number is no overload unless the display byte says
+    /// OL.
     #[test]
     fn a_non_finite_float_is_reported_and_unrecognised() {
         for value in [f32::NAN, f32::INFINITY, f32::NEG_INFINITY] {
