@@ -179,8 +179,12 @@ tick stays on the schedule.
 
 `Dmm::request_measurement` stamps every reading with the session `Clock` and its `wall_time`, and
 attaches the spec data. Stamping in one place means the statistics, the graph, the recording and
-the exports follow the clock without knowing it exists. Hardware timeouts, settle delays and
-bring-up sleeps stay on real time: they pace physical USB.
+the exports follow the clock without knowing it exists. Each reading carries both times, and each
+output uses one: the graph's time axis, the integral and a replay file's offsets measure session
+time, while CSV and JSON rows, file names and a replay's `# recorded:` line carry wall time. A CSV
+or JSON import rebuilds session time from its rows' wall times, never stepping back, and a replay
+import from its offsets. Hardware timeouts, settle delays and bring-up sleeps stay on real time:
+they pace physical USB.
 
 Before a read, a command or a switch that must see the meter as it is now, `Dmm` drops what the
 meter sent that nobody read (`Protocol::discard_input()`). A streaming meter queues frames the whole
@@ -209,10 +213,12 @@ Code: `replay.rs`, `mock/`.
 
 ### Exports and settings
 
-`dmm-shared` holds one builder and one reader per export format, and the default file name that
-the GUI's Export… and `dmm-cli read -o` given no file name both use. So the two binaries write the
-same files, and a field added to a reading reaches both at once. The settings file is shared the
-same way (see **One settings type for both binaries**).
+`dmm-shared` holds the cells and lines of each export format, one reader per format, and the
+default file name that the GUI's Export… and `dmm-cli read -o` given no file name both use. Each
+binary assembles the file from them, the CLI a reading at a time as it streams and the GUI from
+its whole buffer. So the two binaries write the same files, and a field added to a reading reaches
+both at once. The settings file is shared the same way (see **One settings type for both
+binaries**).
 
 Code: `crates/dmm-shared/src/lib.rs`, `export/`.
 
