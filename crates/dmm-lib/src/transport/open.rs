@@ -10,6 +10,7 @@ use crate::transport::{BluetoothPeers, Transport, ble, bu86x, ch9325, ch9329, cp
 use crate::{BLUETOOTH, BLUETOOTH_SUPPORTED, DeviceInfo, OpenOptions};
 use log::info;
 use std::ffi::CString;
+use std::sync::{Mutex, MutexGuard, PoisonError};
 
 /// Descriptor for a known USB-HID transport bridge.
 pub(crate) struct KnownTransport {
@@ -270,12 +271,14 @@ fn open_hid_transport(
     meter: Option<&SelectableDevice>,
     adapter: Option<&str>,
 ) -> Result<(Box<dyn Transport>, &'static str)> {
-    let api = hidapi::HidApi::new().map_err(Error::Hid)?;
-
-    let (device, kt) = match adapter {
-        Some(adapter) => open_with_adapter(&api, adapter),
-        None => open_first_match(&api, preferred),
-    }?;
+    let (device, kt) = {
+        let _bus = hid_bus();
+        let api = hidapi::HidApi::new().map_err(Error::Hid)?;
+        match adapter {
+            Some(adapter) => open_with_adapter(&api, adapter),
+            None => open_first_match(&api, preferred),
+        }?
+    };
     if let Some(meter) = meter {
         check_cable(meter, kt.name)?;
     }
@@ -284,6 +287,20 @@ fn open_hid_transport(
         kt.name, kt.vid, kt.pid
     );
     Ok(((kt.init)(device)?, kt.name))
+}
+
+/// One call into hidapi's process-wide state at a time: listing the bus and
+/// opening a device by serial, ids or path. The C library is not thread-safe
+/// there — on macOS every listing re-targets one shared `IOHIDManager`, and
+/// the last error is a global string each call frees and replaces — while
+/// hidapi-rs locks only its own `hid_init`. Two threads listing at once (the
+/// GUI asking what is plugged in while a session reopens) can crash the
+/// process. Reads and writes on an open device keep to that device and need
+/// no lock.
+static HID_BUS: Mutex<()> = Mutex::new(());
+
+fn hid_bus() -> MutexGuard<'static, ()> {
+    HID_BUS.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
 /// The serial number of a cable just opened, for
@@ -379,6 +396,7 @@ fn open_first_match(
 
 /// The connected USB adapters, for [`crate::list_devices`].
 pub(crate) fn list_usb() -> Result<Vec<DeviceInfo>> {
+    let _bus = hid_bus();
     let api = hidapi::HidApi::new().map_err(Error::Hid)?;
     let mut devices = Vec::new();
 
@@ -413,6 +431,26 @@ mod tests {
         assert!(!can_pin(""));
         // A build with no radio has nothing to send it to.
         assert_eq!(can_pin("12:34:56:78:9A:BC"), !cfg!(feature = "bluetooth"));
+    }
+
+    /// Listings on several threads at once take turns: unserialised, they
+    /// race inside hidapi and take the process down (macOS CI died on
+    /// SIGTRAP with the GUI's tests listing in parallel). Whatever the
+    /// machine has plugged in, each listing returns.
+    #[test]
+    fn listings_on_several_threads_at_once_take_turns() {
+        let threads: Vec<_> = (0..8)
+            .map(|_| {
+                std::thread::spawn(|| {
+                    for _ in 0..3 {
+                        let _ = list_usb();
+                    }
+                })
+            })
+            .collect();
+        for thread in threads {
+            thread.join().unwrap();
+        }
     }
 
     /// A typo in an entry's `links` would silently degrade to the old fixed
