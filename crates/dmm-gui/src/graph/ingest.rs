@@ -4,22 +4,22 @@
 //! evicting the oldest points.
 
 use std::collections::VecDeque;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use dmm_lib::transform::{PrefixRatio, prefix_ratio};
 
 use super::breaks::Breaks;
 use super::minimap::MinimapDrag;
 use super::{
-    GAP_MINIMUM_SECS, GAP_MULTIPLIER, Graph, MAX_OVERLAYS, OverlayPoint, OverlaySeries, PlotSample,
-    SERIES_DROP_FRAMES, pattern,
+    Graph, MAX_OVERLAYS, OverlayPoint, OverlaySeries, PlotSample, SERIES_DROP_FRAMES, pattern,
 };
 
 impl Graph {
-    /// Update gap detection threshold based on sample interval.
+    /// Judge gaps by a sample interval of `ms`, as the session integral
+    /// does (`dmm_lib::stats::gap_threshold`).
     pub fn set_sample_interval_ms(&mut self, ms: u32) {
-        let interval_secs = (ms as f64 / 1000.0).max(0.1); // 0ms → use ~100ms wire time
-        let threshold = (interval_secs * GAP_MULTIPLIER).max(GAP_MINIMUM_SECS);
+        let threshold =
+            dmm_lib::stats::gap_threshold(Duration::from_millis(u64::from(ms))).as_secs_f64();
         // The history keeps its breaks: each was decided when its silence
         // ended, against the threshold then in force.
         self.gap_threshold_secs = threshold;

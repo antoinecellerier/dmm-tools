@@ -653,14 +653,14 @@ fn a_swap_hands_each_trace_its_run_of_missing_frames() {
     let t0 = Instant::now();
     let at = |ms: u64| t0 + Duration::from_millis(ms);
     push_acdc(&mut g, at(0), Some(1.0), Some(0.1));
-    push_acdc(&mut g, at(300), None, Some(0.1));
-    push_acdc(&mut g, at(600), None, Some(0.1));
-    push_acdc_plotting_ac(&mut g, at(900), None, Some(0.1));
-    push_acdc_plotting_ac(&mut g, at(1200), None, Some(0.1));
-    push_acdc_plotting_ac(&mut g, at(1500), Some(1.0), Some(0.1));
+    push_acdc(&mut g, at(500), None, Some(0.1));
+    push_acdc(&mut g, at(1000), None, Some(0.1));
+    push_acdc_plotting_ac(&mut g, at(1500), None, Some(0.1));
+    push_acdc_plotting_ac(&mut g, at(2000), None, Some(0.1));
+    push_acdc_plotting_ac(&mut g, at(2500), Some(1.0), Some(0.1));
     assert_eq!(
         g.overlay_segments("DC"),
-        vec![vec![[0.0, 1.0]], vec![[1.5, 1.0]]],
+        vec![vec![[0.0, 1.0]], vec![[2.5, 1.0]]],
         "DC stopped for the hold"
     );
 }
@@ -804,6 +804,8 @@ fn a_selection_is_dropped_once_its_label_stays_unoffered() {
         assert_eq!(g.selected_series(), Some("T2"), "dropped after {i} frames");
     }
     g.set_series_options(&[("Frequency", "Hz")], at(1200));
+    assert_eq!(g.selected_series(), Some("T2"), "1.1 s unoffered is no gap");
+    g.set_series_options(&[("Frequency", "Hz")], at(2200));
     assert_eq!(g.selected_series(), None);
     assert_eq!(g.series_option_labels(), vec!["Frequency"]);
 }

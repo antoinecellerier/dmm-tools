@@ -900,6 +900,28 @@ fn gap_detection() {
     assert!(g.visible_gaps().is_empty());
 }
 
+/// The graph breaks its trace where the session integral stops bridging:
+/// a silence of a second and a half is continuous to both, one of two and a
+/// half is a gap to both, at the default interval and a fast one alike.
+#[test]
+fn the_graph_and_the_integral_agree_on_a_gap() {
+    for interval_ms in [0, 200] {
+        let mut g = Graph::new();
+        g.set_sample_interval_ms(interval_ms);
+        let mut integral = dmm_lib::stats::Integrator::new();
+        integral.set_sample_interval(Duration::from_millis(u64::from(interval_ms)));
+        let t0 = Instant::now();
+        for ms in [0, 200, 1700, 1900, 4400] {
+            let at = t0 + Duration::from_millis(ms);
+            g.push(1.0, at, "DC V", "V", None);
+            integral.push(1.0, at);
+        }
+        let gaps: Vec<(f64, f64)> = g.visible_gaps().iter().map(|&(a, b, _)| (a, b)).collect();
+        assert_eq!(gaps, [(1.9, 4.4)], "at {interval_ms} ms");
+        assert_eq!(integral.skipped_intervals, 1, "at {interval_ms} ms");
+    }
+}
+
 /// Every value a decade step must re-express, found by naming each of the
 /// graph's fields: a field added later fails to compile here until it is
 /// placed among them, and a value-bearing one checked. The structs a field

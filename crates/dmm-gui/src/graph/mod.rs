@@ -59,7 +59,7 @@ use dmm_shared::tr;
 use eframe::egui::{self, Ui};
 use std::borrow::Cow;
 use std::collections::{HashSet, VecDeque};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use crate::markers::{Marker, Markers};
 use crate::settings::DEFAULT_MAX_SAMPLES;
@@ -123,11 +123,6 @@ enum AxisRefusal {
     /// The window is too narrow for its axis.
     Narrow,
 }
-
-/// Gap threshold multiplier: gap = max(interval * multiplier, minimum), the
-/// same multiple the session integral bridges.
-const GAP_MULTIPLIER: f64 = dmm_lib::stats::GAP_INTERVALS;
-const GAP_MINIMUM_SECS: f64 = 1.0;
 
 /// Why the trace is interrupted over a stretch of time.
 ///
@@ -589,6 +584,7 @@ pub struct Graph {
 
 impl Graph {
     pub fn new() -> Self {
+        let gap_secs = dmm_lib::stats::gap_threshold(Duration::ZERO).as_secs_f64();
         Self {
             // Not the bound: half a million points is 24 MB claimed up front
             // for a session that may last a minute. The deque doubles a
@@ -602,8 +598,9 @@ impl Graph {
             breaks: Breaks::default(),
             silences: VecDeque::new(),
             last_heard: None,
-            gap_threshold_secs: GAP_MINIMUM_SECS,
-            silence_threshold_secs: GAP_MINIMUM_SECS,
+            // As fast as the meter answers, until told the sample interval.
+            gap_threshold_secs: gap_secs,
+            silence_threshold_secs: gap_secs,
             main_missing_frames: 0,
             current_mode: None,
             current_unit: String::new(),

@@ -99,16 +99,20 @@ impl Default for RunningStats {
     }
 }
 
-/// Default maximum interval (seconds) for the integrator to bridge.
-/// Intervals larger than this are treated as gaps (pause, disconnect).
-/// ~20× the typical 10 Hz sample interval, and the floor under
-/// [`Integrator::set_sample_interval`].
-const DEFAULT_MAX_DT_SECS: f64 = 2.0;
+/// How many sample intervals without a reading make a gap.
+const GAP_INTERVALS: u32 = 5;
 
-/// How many sample intervals without a reading make a gap: where the GUI's
-/// graph breaks its trace, and where the integral stops bridging, so the
-/// two agree on what is continuous.
-pub const GAP_INTERVALS: f64 = 5.0;
+/// The shortest silence that is a gap, at any sample interval: at an
+/// interval of its own, a streaming meter's readings come a frame early or
+/// late, so a limit near the interval would break at half of them.
+const GAP_MINIMUM: Duration = Duration::from_secs(2);
+
+/// How long readings must stop for at a sample interval of `interval` to
+/// make a gap: where the GUI's graph breaks its trace, and where the
+/// integral stops bridging, so the two agree on what is continuous.
+pub fn gap_threshold(interval: Duration) -> Duration {
+    interval.saturating_mul(GAP_INTERVALS).max(GAP_MINIMUM)
+}
 
 /// Tracks the time-integral of a measurement series using the trapezoidal rule.
 ///
@@ -145,20 +149,18 @@ impl Integrator {
             count: 0,
             overload_gaps: 0,
             skipped_intervals: 0,
-            max_dt_secs: DEFAULT_MAX_DT_SECS,
+            max_dt_secs: gap_threshold(Duration::ZERO).as_secs_f64(),
             carried_max_dt_secs: 0.0,
             first_time: None,
             last_time: None,
         }
     }
 
-    /// Bridge up to [`GAP_INTERVALS`] sample intervals between readings, and
-    /// never less than the 2 s default: at a sample interval of its own, a
-    /// streaming meter's readings come a frame early or late, so a fixed
-    /// limit near the interval skipped half of them.
+    /// Bridge the intervals between readings up to the [`gap_threshold`] of
+    /// a sample interval of `interval`.
     pub fn set_sample_interval(&mut self, interval: Duration) {
         self.carried_max_dt_secs = self.carried_max_dt_secs.max(self.max_dt_secs);
-        self.max_dt_secs = (interval.as_secs_f64() * GAP_INTERVALS).max(DEFAULT_MAX_DT_SECS);
+        self.max_dt_secs = gap_threshold(interval).as_secs_f64();
     }
 
     /// The longest interval between readings that is integrated, in seconds.
@@ -924,6 +926,17 @@ mod tests {
         // Added: (1 + 1) / 2 * 1 = 1.0
         assert!((i.value() - 2.0).abs() < 1e-9);
         assert_eq!(i.count, 4); // 4 normal pushes total
+    }
+
+    /// A gap is five sample intervals without a reading, and never less
+    /// than 2 s.
+    #[test]
+    fn the_gap_threshold_is_five_intervals_from_two_seconds() {
+        let ms = |ms| Duration::from_millis(ms);
+        assert_eq!(gap_threshold(ms(0)), ms(2000));
+        assert_eq!(gap_threshold(ms(200)), ms(2000));
+        assert_eq!(gap_threshold(ms(400)), ms(2000));
+        assert_eq!(gap_threshold(ms(1000)), ms(5000));
     }
 
     /// The limit follows the sample interval, never below 2 s, and a

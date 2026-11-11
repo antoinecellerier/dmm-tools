@@ -2574,7 +2574,7 @@ mod tests {
 
         // The meter stops sending the frequency: once the graph gives the
         // selection up, the voltage comes back with its past.
-        for i in 5..=20 {
+        for i in 5..=30 {
             app.deliver(frame(i * 100, None));
         }
         assert_eq!(app.graph.plotted_unit(), "V");

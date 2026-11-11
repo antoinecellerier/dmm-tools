@@ -322,11 +322,11 @@ fn a_shorter_interval_keeps_the_history_unbroken() {
     // The stretch across the change began at 2 s, and is judged by it.
     g.push(1.0, t0 + Duration::from_secs(10), "DC V", "V", None);
     assert!(g.visible_gaps().is_empty(), "{:?}", g.visible_gaps());
-    g.push(1.0, t0 + Duration::from_secs(12), "DC V", "V", None);
+    g.push(1.0, t0 + Duration::from_secs(13), "DC V", "V", None);
     assert_eq!(
         g.visible_gaps().len(),
         1,
-        "2 s of silence at 100 ms is a gap"
+        "3 s of silence at 100 ms is a gap"
     );
 }
 

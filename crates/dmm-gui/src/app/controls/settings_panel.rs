@@ -148,8 +148,8 @@ fn interval_tooltip(l10n: &Localizer, ms: u32) -> String {
 /// the memory the graph and the sample buffer take, and how long the bound
 /// lasts at the current sample interval.
 fn buffer_cost(n: usize, overlays: usize, aux: usize, interval_ms: u32) -> (String, String) {
-    // The same wire-time floor `Graph::set_sample_interval_ms` assumes for a
-    // 0 ms interval, so the row and the gap detector agree on the rate.
+    // A 0 ms interval reads as fast as the meter answers: about 100 ms of
+    // wire time a reading.
     let interval_secs = (interval_ms as f64 / 1000.0).max(0.1);
     let hours = n as f64 * interval_secs / 3600.0;
     let span = if hours < 10.0 {
