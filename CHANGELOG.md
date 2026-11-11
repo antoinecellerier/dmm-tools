@@ -4,7 +4,7 @@
 
 ### GUI
 
-- **Reference values take a unit and keep it when the meter auto-ranges** — `1 Ω`, `4.7k` or `10 mohm`; a bare number takes the plotted unit. A value that draws no line is underlined, and the field's hover says why.
+- **Reference values take a unit, kept through an auto-range step and an export** — `1 Ω`, `4.7k` or `10 mohm`; a bare number takes the plotted unit. A value that draws no line is underlined, and the field's hover says why.
 - **Failure notices name the meter picked in Settings and point to Auto-detect** — "No USB cable found" after a meter swap sent you to drivers.
 - **"No USB cable found" says when Bluetooth wasn't searched** — and how to switch the search on.
 - **A refused mode or range switch says to check the dial**

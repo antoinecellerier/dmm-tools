@@ -34,9 +34,15 @@ pub(crate) struct ViewState {
     /// The Min/Max envelope's window, seconds, when it is shown.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) envelope: Option<f64>,
-    /// The reference values, and whether their lines are shown.
+    /// The reference values, in `unit`, and whether their lines are shown.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub(crate) references: Vec<f64>,
+    /// The reference entries as typed, each with its unit ("1 Ω", "5 mV"),
+    /// those that draw no line on this trace included. Read in place of
+    /// `references` when present; a version from before them reads
+    /// `references`.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub(crate) reference_entries: Vec<String>,
     #[serde(skip_serializing_if = "is_false")]
     pub(crate) references_shown: bool,
     /// The trigger markers; absent keeps the graph's own default.
@@ -116,6 +122,7 @@ impl Graph {
             histogram: self.show_histogram,
             envelope: self.show_envelope.then(|| self.envelope_window.value()),
             references: self.ref_lines.values().to_vec(),
+            reference_entries: self.ref_lines.saved_entries(),
             references_shown: self.show_ref_line,
             triggers: Some(self.show_crossings),
             cursors: self.cursors.active.then_some(Cursors {
@@ -190,13 +197,18 @@ impl Graph {
             self.envelope_window.restore(window);
         }
         if step.is_some() {
-            let references: Vec<f64> = view
-                .references
-                .iter()
-                .filter_map(|&v| here(v))
-                .filter(|v| v.is_finite())
-                .collect();
-            self.ref_lines.set(&references, &self.current_unit);
+            if view.reference_entries.is_empty() {
+                let references: Vec<f64> = view
+                    .references
+                    .iter()
+                    .filter_map(|&v| here(v))
+                    .filter(|v| v.is_finite())
+                    .collect();
+                self.ref_lines.set(&references, &self.current_unit);
+            } else {
+                self.ref_lines
+                    .restore_entries(&view.reference_entries, &self.current_unit);
+            }
             self.show_ref_line = view.references_shown;
         }
         if let Some(triggers) = view.triggers {
@@ -333,6 +345,45 @@ mod tests {
         assert_eq!(ac.ref_lines.values(), [1.2]);
     }
 
+    /// References go back as they were typed, each in its unit, those of
+    /// another quantity included; a file without the entries reads the
+    /// values.
+    #[test]
+    fn references_go_back_as_typed() {
+        let t0 = Instant::now();
+        let mut g = Graph::new();
+        g.push(4.7, t0, "\u{3a9}", "k\u{3a9}", None);
+        *g.ref_lines.text_mut() = "1 \u{3a9}, 5 mV, 4.7k 2".into();
+        g.ref_lines.flush(Some("k\u{3a9}"));
+        let view = g.view_state(t0);
+        assert_eq!(
+            view.reference_entries,
+            ["1 \u{3a9}", "5 mV", "4.7k", "2 k\u{3a9}"]
+        );
+        assert_eq!(view.references, [0.001, 4.7, 2.0]);
+        let saved = serde_json::to_string(&view).expect("serialises");
+
+        // Played back at a reading a decade up.
+        let mut h = Graph::new();
+        h.push(0.0047, t0, "\u{3a9}", "M\u{3a9}", None);
+        h.apply_view_state(&serde_json::from_str(&saved).expect("reads back"), t0);
+        assert_eq!(h.ref_lines.text(), "1 \u{3a9}, 5 mV, 4.7k, 2 k\u{3a9}");
+        assert_eq!(
+            h.ref_lines.labels().collect::<Vec<_>>(),
+            ["1 \u{3a9}", "4.7 k\u{3a9}", "2 k\u{3a9}"]
+        );
+
+        // A file from before the entries were saved.
+        let old = ViewState {
+            reference_entries: Vec::new(),
+            ..view
+        };
+        let mut h = Graph::new();
+        h.push(4.7, t0, "\u{3a9}", "k\u{3a9}", None);
+        h.apply_view_state(&old, t0);
+        assert_eq!(h.ref_lines.values(), [0.001, 4.7, 2.0]);
+    }
+
     /// Times count from the file's first reading, not the graph's origin: a
     /// graph that restarted part-way through the file shifts them back.
     #[test]
@@ -400,6 +451,7 @@ mod screenshot_views {
             histogram: true,
             envelope: Some(1.0),
             references: vec![1.0],
+            reference_entries: vec!["1 V".into()],
             references_shown: true,
             triggers: Some(true),
             cursors: Some(Cursors {

@@ -215,6 +215,17 @@ fn is_bare(entry: &str) -> bool {
     number_and_unit(entry).is_some_and(|(_, _, unit)| unit.is_empty())
 }
 
+/// `entry` with `bare_unit` written after it when it is a bare number, the
+/// unit it is in; as it is otherwise, or when that unit is "" (a unitless
+/// reading's).
+fn written_out(entry: &str, bare_unit: &str) -> String {
+    if is_bare(entry) && !bare_unit.is_empty() {
+        format!("{entry} {bare_unit}")
+    } else {
+        entry.to_string()
+    }
+}
+
 /// `entry` split into its number, as typed, and what follows it: the
 /// longest start of it that reads as a finite number.
 fn number_and_unit(entry: &str) -> Option<(&str, f64, &str)> {
@@ -485,13 +496,7 @@ impl NumberListField {
         if written {
             self.text = pieces
                 .iter()
-                .map(|e| {
-                    if is_bare(e) {
-                        format!("{e} {bare_unit}")
-                    } else {
-                        e.clone()
-                    }
-                })
+                .map(|e| written_out(e, &bare_unit))
                 .collect::<Vec<_>>()
                 .join(", ");
         }
@@ -499,6 +504,24 @@ impl NumberListField {
             self.bare_unit = plotted.map(str::to_string);
         }
         self.parse(plotted);
+    }
+
+    /// The entries as an export saves them: as typed, those that draw no
+    /// line included, a bare number with the unit it is in after it.
+    pub(super) fn saved_entries(&self) -> Vec<String> {
+        let bare_unit = self.bare_unit.as_deref().unwrap_or_default();
+        entries(&self.text)
+            .iter()
+            .map(|e| written_out(e, bare_unit))
+            .collect()
+    }
+
+    /// Put back entries an export saved ([`saved_entries`](Self::saved_entries)),
+    /// read against the `plotted` unit: a bare number left in them is in it.
+    pub(super) fn restore_entries(&mut self, saved: &[String], plotted: &str) {
+        self.text = saved.join(", ");
+        self.bare_unit = Some(plotted.to_string());
+        self.parse(Some(plotted));
     }
 
     /// What the entries are read against, for [`Marker::marks`] to say
