@@ -118,18 +118,23 @@ fn a_decade_step_re_expresses_the_fixed_range_and_reference_lines() {
     g.y_axis.user_set = true;
     g.y_axis.min.set(100.0);
     g.y_axis.max.set(1500.0);
-    *g.ref_lines.text_mut() = "200, 950 x".to_string();
-    g.ref_lines.parse();
+    *g.ref_lines.text_mut() = "200, 950, x".to_string();
+    g.ref_lines.parse(Some(&g.current_unit.clone()));
     g.push(1.05, Instant::now(), "\u{3a9}", "k\u{3a9}", None);
     assert!(g.y_axis.fixed && g.y_axis.user_set);
     assert_eq!((g.y_axis.min.value(), g.y_axis.max.value()), (0.1, 1.5));
     assert_eq!(g.ref_lines.values(), [0.2, 0.95]);
-    // The text follows once the toolbar draws the fields with no caret in
-    // them.
+    // The Y fields' text follows once the toolbar draws them with no caret
+    // in them; the references keep their numbers, now with the unit they
+    // were typed in.
     g.show_ref_line = true;
     graph_frame(&mut g, &crate::app::styled_context(), Vec::new());
     assert_eq!((g.y_axis.min.text(), g.y_axis.max.text()), ("0.1", "1.5"));
-    assert_eq!(g.ref_lines.text_mut().as_str(), "0.2, 0.95, x");
+    assert_eq!(
+        g.ref_lines.text_mut().as_str(),
+        "200 \u{3a9}, 950 \u{3a9}, x"
+    );
+    assert_eq!(g.ref_lines.values(), [0.2, 0.95]);
 }
 
 /// A field hidden through a step shows its text in the new prefix the first
@@ -924,7 +929,7 @@ fn a_decade_step_reaches_every_value_bearing_field() {
     g.y_axis.user_set = true;
     g.y_axis.min.set(900.0);
     g.y_axis.max.set(1000.0);
-    g.ref_lines.set(&[920.0]);
+    g.ref_lines.set(&[920.0], &g.current_unit.clone());
     g.y_axis.pins.insert("Hz".into(), (900.0, 1100.0));
     let epoch = g.history_epoch;
     push(&mut g, 1, 1.01, "V", &after);

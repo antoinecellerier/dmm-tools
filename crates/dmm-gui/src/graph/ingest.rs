@@ -148,6 +148,8 @@ impl Graph {
             // drop the trace each time the leads lift.
             if self.current_mode.as_deref() != Some(mode) {
                 self.restart_trace(now, mode, unit, sample.series);
+                let plotted = self.plotted_unit_if_any().map(str::to_string);
+                self.ref_lines.follow(plotted.as_deref());
             }
             return;
         }
@@ -196,6 +198,9 @@ impl Graph {
                 None => self.restart_trace(now, mode, unit, sample.series),
             }
         }
+        // The reference lines keep the units they were typed in.
+        let plotted = self.plotted_unit_if_any().map(str::to_string);
+        self.ref_lines.follow(plotted.as_deref());
         // The plotted axis is framed by the Y fields, never a pin: one a
         // kept trace left under the unit now plotted would frame that trace
         // again once another series is plotted.
@@ -307,9 +312,10 @@ impl Graph {
     }
 
     /// Re-express the plotted trace in `unit`, the prefix `ratio` takes its
-    /// unit to: the meter auto-ranged a decade (Ω→kΩ). Everything drawn
-    /// against the plotted axis follows — the fixed Y range and the typed
-    /// reference lines — so the view keeps framing the same readings. A kept
+    /// unit to: the meter auto-ranged a decade (Ω→kΩ). The fixed Y range
+    /// follows, so the view keeps framing the same readings; the reference
+    /// lines, which keep the units they were typed in, are read again in
+    /// `push_sample`, as after any change of the plotted unit. A kept
     /// trace's step is [`Graph::follow_unit`]'s; what either has to reach,
     /// `a_decade_step_reaches_every_value_bearing_field` lists.
     fn rescale(&mut self, ratio: PrefixRatio, unit: &str) {
@@ -329,7 +335,6 @@ impl Graph {
         }
         self.y_axis.min.rescale(ratio);
         self.y_axis.max.rescale(ratio);
-        self.ref_lines.rescale(ratio);
         // The same readings, numbered as before, but every figure cached on
         // them and every bucket of the minimap is in the old prefix.
         self.history_epoch += 1;

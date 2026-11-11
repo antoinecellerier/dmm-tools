@@ -922,6 +922,14 @@ impl Graph {
         self.current_mode.as_deref()
     }
 
+    /// The plotted unit while a reading is plotted, `None` before one: a
+    /// unitless reading's "" is a unit, the absence of a reading is not.
+    fn plotted_unit_if_any(&self) -> Option<&str> {
+        self.current_mode
+            .as_ref()
+            .map(|_| self.current_unit.as_str())
+    }
+
     /// Unit of the series being plotted. The stats panel captions its
     /// visible-window block with this, which is not the meter's main unit
     /// when a sub-value is plotted.

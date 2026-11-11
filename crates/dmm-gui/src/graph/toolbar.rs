@@ -377,13 +377,14 @@ impl Graph {
         if self.show_ref_line {
             let id = egui::Id::unique(REF_FIELD);
             if !ui.memory(|m| m.has_focus(id)) {
-                self.ref_lines.flush();
+                let plotted = self.plotted_unit_if_any().map(str::to_string);
+                self.ref_lines.flush(plotted.as_deref());
             }
             let resp = text_field(
                 ui,
                 id,
                 self.ref_lines.text_mut(),
-                80.0,
+                120.0,
                 &tr!(l10n, "graph-ref-values"),
                 &tr!(l10n, "graph-ref-values.hover"),
             );
@@ -391,7 +392,8 @@ impl Graph {
                 resp.request_focus();
             }
             if resp.changed() {
-                self.ref_lines.parse();
+                let plotted = self.plotted_unit_if_any().map(str::to_string);
+                self.ref_lines.parse(plotted.as_deref());
             }
             toggle_chip(
                 ui,
@@ -659,14 +661,14 @@ impl Graph {
     /// would bring them. The caret stays where it was: the value is chosen.
     pub(super) fn add_ref_line(&mut self, v: f64) {
         if !self.ref_lines.values().contains(&v) {
-            self.ref_lines.push(v);
+            self.ref_lines.push(v, &self.current_unit);
         }
         self.show_ref_line = true;
     }
 
     /// Stop drawing the reference line at `v`: the plot's menu.
     pub(super) fn remove_ref_line(&mut self, v: f64) {
-        self.ref_lines.remove(v);
+        self.ref_lines.remove(v, &self.current_unit);
     }
 
     /// A **Show:** chip was clicked: flip its trace, and leave the choice for

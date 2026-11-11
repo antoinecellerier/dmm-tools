@@ -196,7 +196,7 @@ impl Graph {
                 .filter_map(|&v| here(v))
                 .filter(|v| v.is_finite())
                 .collect();
-            self.ref_lines.set(&references);
+            self.ref_lines.set(&references, &self.current_unit);
             self.show_ref_line = view.references_shown;
         }
         if let Some(triggers) = view.triggers {
@@ -238,7 +238,7 @@ mod tests {
         g.show_mean = true;
         g.show_envelope = true;
         g.envelope_window.set(5.0);
-        g.ref_lines.set(&[1.5, 3.0]);
+        g.ref_lines.set(&[1.5, 3.0], &g.current_unit.clone());
         g.show_ref_line = true;
         g.show_crossings = false;
         g.y_axis.fixed = true;
@@ -273,7 +273,7 @@ mod tests {
         g.y_axis.fixed = true;
         g.y_axis.min.set(0.5);
         g.y_axis.max.set(1.5);
-        g.ref_lines.set(&[1.2]);
+        g.ref_lines.set(&[1.2], &g.current_unit.clone());
         let view = g.view_state(t0);
         assert_eq!(
             (
@@ -296,7 +296,7 @@ mod tests {
 
         let mut ac = Graph::new();
         ac.push(0.95, t0, "AC V", "V", None);
-        ac.ref_lines.set(&[3.0]);
+        ac.ref_lines.set(&[3.0], &ac.current_unit.clone());
         ac.y_axis.fixed = true;
         ac.y_axis.min.set(0.0);
         ac.apply_view_state(&view, t0);

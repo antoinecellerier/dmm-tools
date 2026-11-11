@@ -257,7 +257,7 @@ fn the_menu_adds_a_reference_line_where_clicked() {
         (v - height_at(&g, at)).abs() <= pixel,
         "{v} is where clicked"
     );
-    assert_eq!(g.ref_lines.text_mut().as_str(), v.to_string());
+    assert_eq!(g.ref_lines.text_mut().as_str(), format!("{v} V"));
     assert!(g.take_menu_action().is_none());
 }
 
@@ -265,7 +265,7 @@ fn the_menu_adds_a_reference_line_where_clicked() {
 #[test]
 fn a_line_added_brings_back_the_hidden_ones() {
     let (mut g, _) = graph_over(30);
-    g.ref_lines.set(&[0.5]);
+    g.ref_lines.set(&[0.5], &g.current_unit.clone());
     let ctx = open_menu(&mut g, |plot| plot.center());
     pick_entry(&mut g, &ctx, |l| l.starts_with("Add reference line at "));
     assert!(g.show_ref_line);
@@ -282,7 +282,7 @@ fn the_menu_removes_the_reference_line_under_the_pointer() {
     menu_frame(&mut g, &ctx, vec![]);
     let at = egui::pos2(400.0, 250.0);
     let v = height_at(&g, at);
-    g.ref_lines.set(&[v, v + 1000.0]);
+    g.ref_lines.set(&[v, v + 1000.0], &g.current_unit.clone());
 
     let ctx = open_menu(&mut g, |_| at + egui::vec2(0.0, 3.0));
     let entries = menu_entries(&mut g, &ctx);
@@ -290,9 +290,13 @@ fn the_menu_removes_the_reference_line_under_the_pointer() {
         .iter()
         .filter(|l| l.starts_with("Remove reference line"))
         .collect();
-    assert_eq!(remove, [&format!("Remove reference line {v} V")]);
+    let entry = crate::graph::axes::short_figure(v);
+    assert_eq!(remove, [&format!("Remove reference line {entry} V")]);
     pick_entry(&mut g, &ctx, |l| l.starts_with("Remove reference line"));
-    assert_eq!(g.ref_lines.values(), [v + 1000.0]);
+    let &[kept] = g.ref_lines.values() else {
+        panic!("one line left: {:?}", g.ref_lines.values());
+    };
+    assert!((kept - (v + 1000.0)).abs() < 1e-6, "{kept}");
 
     // A line added from the menu: right-clicked again in the same place,
     // the menu offers no second one at its height.

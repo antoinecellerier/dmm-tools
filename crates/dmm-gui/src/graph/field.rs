@@ -14,7 +14,7 @@
 //! has no prefix yet: what is typed into it is in the one the axis shows.
 
 use super::axes::short_figure;
-use dmm_lib::transform::PrefixRatio;
+use dmm_lib::transform::{PrefixRatio, prefix_ratio};
 
 /// Digits the fields show when a value is written into them by the graph
 /// rather than typed. Enough to keep a millivolt reading distinct, few
@@ -148,14 +148,141 @@ impl NumberField {
 /// What separates the numbers of a [`NumberListField`].
 const SEPARATORS: [char; 3] = [',', ';', ' '];
 
-/// A list of numbers the user types, separated by commas, semicolons or
-/// spaces.
+/// One entry of a [`NumberListField`] read: its value in the plotted unit,
+/// and the entry as the line's label writes it ("4.7 kΩ").
+#[derive(Debug, Clone, PartialEq)]
+struct Entry {
+    value: f64,
+    label: String,
+}
+
+/// The entries of `text`: split at commas, semicolons and spaces, a word
+/// that doesn't start a number ("Ω", "kohm") going with the number before
+/// it across a space, so "1 Ω, 4.7k 12" is "1 Ω", "4.7k" and "12". Each as
+/// typed, trimmed.
+fn entries(text: &str) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    for chunk in text.split([',', ';']) {
+        let mut in_chunk = false;
+        for word in chunk.split_whitespace() {
+            let starts_a_number = word
+                .chars()
+                .next()
+                .is_some_and(|c| c.is_ascii_digit() || matches!(c, '.' | '-' | '+'));
+            match out.last_mut() {
+                Some(last) if in_chunk && !starts_a_number => {
+                    last.push(' ');
+                    last.push_str(word);
+                }
+                _ => out.push(word.to_string()),
+            }
+            in_chunk = true;
+        }
+    }
+    out
+}
+
+/// `v` and its `unit` as an entry writes them, as short as it reads.
+fn entry_text(v: f64, unit: &str) -> String {
+    format!("{} {unit}", short_figure(v)).trim_end().to_string()
+}
+
+/// Whether `entry` is a number with no unit after it.
+fn is_bare(entry: &str) -> bool {
+    number_and_unit(entry).is_some_and(|(_, _, unit)| unit.is_empty())
+}
+
+/// `entry` split into its number, as typed, and what follows it: the
+/// longest start of it that reads as a finite number.
+fn number_and_unit(entry: &str) -> Option<(&str, f64, &str)> {
+    let entry = entry.trim();
+    entry
+        .char_indices()
+        .map(|(i, c)| i + c.len_utf8())
+        .rev()
+        .find_map(|end| {
+            let number = entry[..end].trim();
+            let v = number.parse::<f64>().ok().filter(|v| v.is_finite())?;
+            Some((number, v, entry[end..].trim()))
+        })
+}
+
+/// A unit as typed, in the meter's spelling: spaces dropped ("k Ω"),
+/// "ohm" and "ohms" in any case and the ohm sign are Ω, a Greek mu or a
+/// "u" the micro sign; the plotted unit's base in any case ("mv" is mV); a
+/// prefix alone ("k", "m", "u") goes on that base.
+fn typed_unit(typed: &str, plotted: &str) -> String {
+    let mut unit: String = typed
+        .chars()
+        .filter(|c| !c.is_whitespace())
+        .map(|c| match c {
+            '\u{3bc}' => '\u{b5}',
+            '\u{2126}' => '\u{3a9}',
+            c => c,
+        })
+        .collect();
+    let lower = unit.to_lowercase();
+    if let Some(word) = ["ohms", "ohm"].into_iter().find(|w| lower.ends_with(w)) {
+        // The word is ASCII, so its length in bytes is the same in `unit`.
+        unit.truncate(unit.len() - word.len());
+        unit.push('\u{3a9}');
+    }
+    let base = dmm_lib::transform::base_unit(plotted);
+    if !base.is_empty() && unit.to_lowercase() == base.to_lowercase() {
+        return base.to_string();
+    }
+    let mut chars = unit.chars();
+    if let Some(c) = chars.next()
+        // Not "K" for kilo, as parts are marked: it is kelvin's symbol.
+        && "pnuµmkMG".contains(c)
+    {
+        let rest = chars.as_str();
+        if rest.is_empty() || (!base.is_empty() && rest.to_lowercase() == base.to_lowercase()) {
+            // "u" for micro.
+            let prefix = if c == 'u' { '\u{b5}' } else { c };
+            return format!("{prefix}{base}");
+        }
+    }
+    unit
+}
+
+/// `entry` read against the `plotted` unit, a bare number being in
+/// `bare_unit`: `None` for a draft that is no number yet, or a unit of
+/// another quantity.
+fn read_entry(entry: &str, bare_unit: Option<&str>, plotted: &str) -> Option<Entry> {
+    let (number, v, typed) = number_and_unit(entry)?;
+    let unit = if typed.is_empty() {
+        bare_unit?.to_string()
+    } else {
+        typed_unit(typed, plotted)
+    };
+    let ratio = prefix_ratio(&unit, plotted)?;
+    Some(Entry {
+        value: ratio.apply(v),
+        label: format!("{number} {unit}").trim_end().to_string(),
+    })
+}
+
+/// A list of values the user types, separated by commas, semicolons or
+/// spaces, each with a unit or bare: the reference lines. An entry keeps
+/// the unit it was typed in through an auto-range step — 1 Ω stays 1 Ω
+/// while the plot reads MΩ — and a bare number is in the unit plotted when
+/// it was typed, written after it once the field is left. Bare numbers
+/// share one unit until then: one typed after a step, before the field is
+/// left, is in the draft's.
 #[derive(Debug, Default)]
 pub(super) struct NumberListField {
     text: String,
+    /// What reads of the entries, in order.
+    read: Vec<Entry>,
+    /// The values of `read`, in the plotted unit.
     values: Vec<f64>,
-    /// The text is in an earlier prefix: this takes it to the values'.
-    pending: Option<PrefixRatio>,
+    /// The unit a bare number in the text is in; `None` while none was
+    /// plotted since it was typed, until a reading names one.
+    bare_unit: Option<String>,
+    /// The plotted unit the entries were last read against, `None` while
+    /// nothing is plotted.
+    plotted: Option<String>,
 }
 
 impl NumberListField {
@@ -164,97 +291,126 @@ impl NumberListField {
         &mut self.text
     }
 
+    /// The values the entries read, in the plotted unit.
     pub(super) fn values(&self) -> &[f64] {
         &self.values
     }
 
-    /// Write `values` into both halves, as the graph shows them.
-    pub(super) fn set(&mut self, values: &[f64]) {
-        self.values = values.to_vec();
-        self.pending = None;
-        self.text = values
+    /// The entry that reads `v`, as its line's label writes it.
+    pub(super) fn label_of(&self, v: f64) -> Option<&str> {
+        self.read
             .iter()
-            .map(|v| v.to_string())
-            .collect::<Vec<_>>()
-            .join(", ");
+            .find(|e| e.value == v)
+            .map(|e| e.label.as_str())
     }
 
-    /// Add `v` at the end of the draft, keeping what is typed there as it
-    /// is typed.
-    pub(super) fn push(&mut self, v: f64) {
-        self.flush();
+    /// The entries as the lines' labels write them, beside [`values`](Self::values).
+    pub(super) fn labels(&self) -> impl Iterator<Item = &str> {
+        self.read.iter().map(|e| e.label.as_str())
+    }
+
+    /// Write `values`, in the `plotted` unit, with it after each.
+    pub(super) fn set(&mut self, values: &[f64], plotted: &str) {
+        self.text = values
+            .iter()
+            .map(|&v| entry_text(v, plotted))
+            .collect::<Vec<_>>()
+            .join(", ");
+        self.bare_unit = Some(plotted.to_string());
+        self.parse(Some(plotted));
+    }
+
+    /// Add `v`, in the `plotted` unit, at the end of the draft, keeping
+    /// what is typed there as it is typed.
+    pub(super) fn push(&mut self, v: f64, plotted: &str) {
+        self.flush(Some(plotted));
         let kept = self.text.trim_end_matches(SEPARATORS);
+        let added = entry_text(v, plotted);
         self.text = if kept.is_empty() {
-            v.to_string()
+            added
         } else {
-            format!("{kept}, {v}")
+            format!("{kept}, {added}")
         };
-        self.parse();
+        self.parse(Some(plotted));
     }
 
     /// Take every entry that reads `v` out of the draft, keeping the others
-    /// as they are typed, unparsed ones included.
-    pub(super) fn remove(&mut self, v: f64) {
-        self.flush();
-        self.text = self
-            .text
-            .split(SEPARATORS)
-            .map(str::trim)
-            .filter(|s| !s.is_empty() && s.parse::<f64>().ok() != Some(v))
+    /// as they are typed, unread ones included.
+    pub(super) fn remove(&mut self, v: f64, plotted: &str) {
+        self.flush(Some(plotted));
+        let (bare, kept) = (self.bare_unit.as_deref(), entries(&self.text));
+        self.text = kept
+            .iter()
+            .filter(|e| read_entry(e, bare, plotted).map(|e| e.value) != Some(v))
+            .cloned()
             .collect::<Vec<_>>()
             .join(", ");
-        self.parse();
+        self.parse(Some(plotted));
     }
 
-    /// Re-express every number in another prefix of its unit. The text
-    /// follows at [`flush`](Self::flush).
-    pub(super) fn rescale(&mut self, ratio: PrefixRatio) {
-        self.pending = if holds_a_number(&self.text) {
-            compose(self.pending, ratio)
-        } else {
-            None
-        };
-        // From the text, as the flushed text will read, so that the menu
-        // finds each line by the number it shows.
-        self.parse();
-    }
-
-    /// Bring the text to the values' prefix after a step, now that nobody
-    /// is typing in it, keeping the entries that don't read as a number as
-    /// they are typed, as [`push`](Self::push) and [`remove`](Self::remove)
-    /// do.
-    pub(super) fn flush(&mut self) {
-        let Some(ratio) = self.pending.take() else {
-            return;
-        };
-        self.text = self
-            .text
-            .split(SEPARATORS)
-            .map(str::trim)
-            .filter(|s| !s.is_empty())
-            .map(|s| rescaled_text(s, ratio).unwrap_or_else(|| s.to_string()))
-            .collect::<Vec<_>>()
-            .join(", ");
-        self.parse();
-    }
-
-    /// Re-read the draft after an edit. Entries that don't parse are dropped
-    /// rather than held, so a trailing separator or a half-typed number just
-    /// doesn't draw a line yet. A draft typed before a step is read in its
-    /// prefix, each number as the flushed text will show it.
-    pub(super) fn parse(&mut self) {
-        if !holds_a_number(&self.text) {
-            self.pending = None;
+    /// Read the entries against `plotted` again if it moved: an auto-range
+    /// step, another quantity plotted, or none (`None`). The text stays as
+    /// typed.
+    pub(super) fn follow(&mut self, plotted: Option<&str>) {
+        if self.plotted.as_deref() != plotted {
+            self.parse(plotted);
         }
-        let pending = self.pending;
-        self.values = self
-            .text
-            .split(SEPARATORS)
-            .filter_map(|s| match pending {
-                Some(ratio) => rescaled_text(s, ratio)?.parse().ok(),
-                None => s.trim().parse::<f64>().ok(),
-            })
-            .collect();
+    }
+
+    /// Write the unit after each bare number, the unit it was typed in, now
+    /// that nobody is typing in the field: from now on they are read as
+    /// typed whatever is plotted.
+    pub(super) fn flush(&mut self, plotted: Option<&str>) {
+        let pieces = entries(&self.text);
+        let any_bare = pieces.iter().any(|e| is_bare(e));
+        if !any_bare && self.bare_unit.as_deref() == plotted && self.plotted.as_deref() == plotted {
+            // Drawn every frame the field is shown: nothing to do.
+            return;
+        }
+        // A unitless reading's bare numbers (an hFE) have no unit to write,
+        // and stay in it: they draw on no other quantity. Typed with
+        // nothing plotted, they wait for a reading to name theirs.
+        let bare_unit = self.bare_unit.clone().unwrap_or_default();
+        let written = !bare_unit.is_empty() && any_bare;
+        if written {
+            self.text = pieces
+                .iter()
+                .map(|e| {
+                    if is_bare(e) {
+                        format!("{e} {bare_unit}")
+                    } else {
+                        e.clone()
+                    }
+                })
+                .collect::<Vec<_>>()
+                .join(", ");
+        }
+        if written || !any_bare {
+            self.bare_unit = plotted.map(str::to_string);
+        }
+        self.parse(plotted);
+    }
+
+    /// Re-read the draft after an edit, against the `plotted` unit. Entries
+    /// that don't read are dropped rather than held, so a trailing separator,
+    /// a half-typed number or a unit of another quantity just doesn't draw a
+    /// line.
+    pub(super) fn parse(&mut self, plotted: Option<&str>) {
+        let pieces = entries(&self.text);
+        if self.bare_unit.is_none() || !pieces.iter().any(|e| is_bare(e)) {
+            // No unit named yet, or no bare number left in an earlier one:
+            // the next one typed is in what is plotted now.
+            self.bare_unit = plotted.map(str::to_string);
+        }
+        self.plotted = plotted.map(str::to_string);
+        self.read = match plotted {
+            Some(plotted) => pieces
+                .iter()
+                .filter_map(|e| read_entry(e, self.bare_unit.as_deref(), plotted))
+                .collect(),
+            None => Vec::new(),
+        };
+        self.values = self.read.iter().map(|e| e.value).collect();
     }
 }
 
@@ -262,20 +418,121 @@ impl NumberListField {
 mod tests {
     use super::*;
 
-    /// A value added or removed leaves the rest of the draft as typed.
+    /// A value added or removed leaves the rest of the draft as typed; a
+    /// bare number gets the unit it was typed in once the field is left.
     #[test]
     fn a_list_keeps_its_draft_around_an_edit() {
         let mut f = NumberListField::default();
-        f.push(3.29);
-        assert_eq!(f.text_mut().as_str(), "3.29");
-        f.text_mut().push_str("; 5.00 x, ");
-        f.parse();
-        f.push(12.0);
-        assert_eq!(f.text_mut().as_str(), "3.29; 5.00 x, 12");
+        f.push(3.29, "V");
+        assert_eq!(f.text_mut().as_str(), "3.29 V");
+        f.text_mut().push_str("; 5.00, x, ");
+        f.parse(Some("V"));
+        assert_eq!(f.values(), [3.29, 5.0]);
+        f.push(12.0, "V");
+        assert_eq!(f.text_mut().as_str(), "3.29 V, 5.00 V, x, 12 V");
         assert_eq!(f.values(), [3.29, 5.0, 12.0]);
-        f.remove(5.0);
-        assert_eq!(f.text_mut().as_str(), "3.29, x, 12");
+        f.remove(5.0, "V");
+        assert_eq!(f.text_mut().as_str(), "3.29 V, x, 12 V");
         assert_eq!(f.values(), [3.29, 12.0]);
+    }
+
+    /// An entry keeps the unit it was typed in, Latin spellings of ohms and
+    /// a bare prefix included, whatever is plotted; one of another quantity
+    /// draws nothing.
+    #[test]
+    fn an_entry_keeps_its_unit_through_a_step() {
+        let mut f = NumberListField::default();
+        *f.text_mut() = "1 ohm, 4.7k, 10 mOhms, 2 V".to_string();
+        f.parse(Some("\u{3a9}"));
+        assert_eq!(f.values(), [1.0, 4700.0, 0.01]);
+        let labels: Vec<_> = f.labels().collect();
+        assert_eq!(labels, ["1 \u{3a9}", "4.7 k\u{3a9}", "10 m\u{3a9}"]);
+        f.follow(Some("M\u{3a9}"));
+        assert_eq!(
+            f.text_mut().as_str(),
+            "1 ohm, 4.7k, 10 mOhms, 2 V",
+            "as typed"
+        );
+        let close = |a: &[f64], b: &[f64]| {
+            a.len() == b.len()
+                && a.iter()
+                    .zip(b)
+                    .all(|(x, y)| (x - y).abs() <= 1e-15 * y.abs())
+        };
+        assert!(close(f.values(), &[1e-6, 0.0047, 1e-8]), "{:?}", f.values());
+        assert_eq!(f.label_of(f.values()[0]), Some("1 \u{3a9}"));
+    }
+
+    /// The spellings a keyboard gives: spaces inside, the Greek mu and the
+    /// ohm sign, a lowercase base, "u" for micro. Not an uppercase K for
+    /// kilo, kelvin's symbol.
+    #[test]
+    fn units_are_read_as_keyboards_type_them() {
+        let ohm = "\u{3a9}";
+        assert_eq!(typed_unit("K", ohm), "K");
+        assert_eq!(typed_unit("k \u{2126}", ohm), format!("k{ohm}"));
+        assert_eq!(typed_unit("\u{3bc}F", "nF"), "\u{b5}F");
+        assert_eq!(typed_unit("u", "nF"), "\u{b5}F");
+        assert_eq!(typed_unit("mv", "V"), "mV");
+        assert_eq!(typed_unit("v", "mV"), "V");
+        assert_eq!(typed_unit("MHz", "Hz"), "MHz");
+        let mut f = NumberListField::default();
+        *f.text_mut() = "4.7 k, 2 k ohm, 1e3 \u{2126}, 3 K".to_string();
+        f.parse(Some(ohm));
+        assert_eq!(f.values(), [4700.0, 2000.0, 1000.0]);
+    }
+
+    /// Typed before any reading, a bare number takes the first reading's
+    /// unit; typed on a unitless reading (an hFE), it stays unitless and
+    /// draws on no other quantity.
+    #[test]
+    fn a_bare_number_waits_for_a_unit_or_stays_unitless() {
+        let mut f = NumberListField::default();
+        *f.text_mut() = "5".to_string();
+        f.parse(None);
+        assert!(f.values().is_empty(), "nothing plotted");
+        f.follow(Some("V"));
+        assert_eq!(f.values(), [5.0]);
+        f.flush(Some("V"));
+        assert_eq!(f.text_mut().as_str(), "5 V");
+
+        let mut f = NumberListField::default();
+        *f.text_mut() = "100".to_string();
+        f.parse(Some(""));
+        assert_eq!(f.values(), [100.0]);
+        f.flush(Some(""));
+        f.follow(Some("V"));
+        f.flush(Some("V"));
+        assert_eq!(f.text_mut().as_str(), "100");
+        assert!(f.values().is_empty(), "an hFE is no voltage");
+    }
+
+    /// A bare number is in the unit plotted when it was typed, through a
+    /// step while it is being typed, and is written with it once left.
+    #[test]
+    fn a_bare_number_is_in_the_unit_it_was_typed_in() {
+        let mut f = NumberListField::default();
+        *f.text_mut() = "15".to_string();
+        f.parse(Some("mV"));
+        f.follow(Some("V"));
+        assert_eq!(f.values(), [0.015]);
+        f.text_mut().push_str(", 2");
+        f.parse(Some("V"));
+        assert_eq!(f.values(), [0.015, 0.002], "still the draft's mV");
+        f.flush(Some("V"));
+        assert_eq!(f.text_mut().as_str(), "15 mV, 2 mV");
+        f.text_mut().push_str(", 3");
+        f.parse(Some("V"));
+        assert_eq!(f.values(), [0.015, 0.002, 3.0], "typed after: in V");
+
+        // A draft with no number yet takes what is plotted when it gets one.
+        let mut f = NumberListField::default();
+        *f.text_mut() = "-".to_string();
+        f.parse(Some("mV"));
+        f.follow(Some("V"));
+        f.text_mut().push('5');
+        f.parse(Some("V"));
+        assert_eq!(f.values(), [-5.0]);
     }
 
     /// The value the graph draws from only moves when the draft is a number:
@@ -322,19 +579,6 @@ mod tests {
         let to_mv = prefix_ratio("V", "mV").expect("one base unit");
         let to_kohm = prefix_ratio("\u{3a9}", "k\u{3a9}").expect("one base unit");
 
-        let mut f = NumberListField::default();
-        *f.text_mut() = "3.29; 0.1 x, -".to_string();
-        f.parse();
-        f.rescale(to_mv);
-        assert_eq!(f.values(), [3290.0, 100.0]);
-        f.flush();
-        assert_eq!(f.text_mut().as_str(), "3290, 100, x, -");
-        assert_eq!(f.values(), [3290.0, 100.0]);
-        f.rescale(to_kohm);
-        f.flush();
-        assert_eq!(f.text_mut().as_str(), "3.29, 0.1, x, -");
-        assert_eq!(f.values(), [3.29, 0.1], "back to the numbers typed");
-
         let mut f = NumberField::new("-1", -1.0);
         f.set(219.87);
         f.rescale(to_kohm);
@@ -365,20 +609,6 @@ mod tests {
         f.rescale(to_kv);
         f.flush();
         assert_eq!(f.text(), "0.00015");
-
-        let mut f = NumberListField::default();
-        *f.text_mut() = "3.29, 12".to_string();
-        f.parse();
-        f.rescale(to_v);
-        f.text_mut().push_str(", 5");
-        f.parse();
-        assert_eq!(f.values(), [0.00329, 0.012, 0.005]);
-        // A line added from the menu, in the values' prefix, flushes first.
-        f.push(0.02);
-        assert_eq!(f.text_mut().as_str(), "0.00329, 0.012, 0.005, 0.02");
-        f.rescale(to_kv);
-        f.remove(0.000012);
-        assert_eq!(f.text_mut().as_str(), "0.00000329, 0.000005, 0.00002");
     }
 
     /// A draft with no number in it has no prefix: what is typed after a
@@ -408,21 +638,13 @@ mod tests {
         f.rescale(to_mv);
         f.flush();
         assert_eq!(f.text(), "219.8700", "back where it was, untouched");
-
-        let mut f = NumberListField::default();
-        *f.text_mut() = "-".to_string();
-        f.parse();
-        f.rescale(to_v);
-        f.text_mut().push('5');
-        f.parse();
-        assert_eq!(f.values(), [-5.0]);
     }
 
     #[test]
     fn a_list_takes_any_of_the_three_separators() {
         let mut f = NumberListField::default();
         *f.text_mut() = "3.3, 5; 12 -1".to_string();
-        f.parse();
+        f.parse(Some("V"));
         assert_eq!(f.values(), [3.3, 5.0, 12.0, -1.0]);
     }
 
@@ -431,10 +653,10 @@ mod tests {
     fn a_half_typed_entry_does_not_drop_the_finished_ones() {
         let mut f = NumberListField::default();
         *f.text_mut() = "3.3, ".to_string();
-        f.parse();
+        f.parse(Some("V"));
         assert_eq!(f.values(), [3.3]);
         *f.text_mut() = "3.3, -".to_string();
-        f.parse();
+        f.parse(Some("V"));
         assert_eq!(f.values(), [3.3]);
     }
 }

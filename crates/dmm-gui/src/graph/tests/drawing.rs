@@ -239,9 +239,10 @@ fn patterned_graph(samples: u32) -> (Graph, Instant) {
     g.time_window_secs = 10.0;
     g.show_envelope = true;
     g.show_ref_line = true;
-    g.ref_lines.set(&[0.25]);
     let t0 = Instant::now();
     push_patterned(&mut g, t0, 0, samples);
+    // Set as a saved view puts it back: on the readings' unit.
+    g.ref_lines.set(&[0.25], &g.current_unit.clone());
     // After the first sample, whose new mode lets go of a pinned axis.
     g.y_axis.fixed = true;
     g.y_axis.user_set = true;

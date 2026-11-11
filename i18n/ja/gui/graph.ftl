@@ -118,7 +118,6 @@ graph-ref = 基準
 # the field while it is empty; the numbers in the hover are an example of
 # what to type, kept as they are.
 graph-ref-values = 基準値
-    .hover = コンマまたはセミコロン区切りの基準値 (例: 3.3, 5, 12)
 # A chip, after the reference values, that marks where the trace crosses a
 # reference line.
 graph-triggers = トリガー

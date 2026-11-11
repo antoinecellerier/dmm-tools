@@ -125,6 +125,20 @@ pub(super) fn short_figure(v: f64) -> String {
     }
 }
 
+/// A value set at a height — a reference line, an alarm limit — as it was
+/// typed: in the prefix that fits it, whatever the meter has stepped to
+/// since (1 Ω, not 0.0000 MΩ), as short as it reads.
+pub(super) fn set_value_text(v: f64, unit: &str) -> String {
+    let fitting = (v.is_finite() && v != 0.0)
+        .then(|| prefix_for(unit, v.abs().log10().floor() as i32))
+        .flatten();
+    let (v, unit) = match &fitting {
+        Some((prefixed, ratio)) => (ratio.apply(v), prefixed.as_str()),
+        None => (v, unit),
+    };
+    format!("{} {unit}", short_figure(v)).trim_end().to_string()
+}
+
 /// `value` in `unit`, written in the axis's `prefix` where it has one.
 pub(super) fn in_prefix<'a>(
     prefix: Option<&'a (String, PrefixRatio)>,

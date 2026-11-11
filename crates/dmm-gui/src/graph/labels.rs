@@ -442,6 +442,9 @@ pub(super) struct OverlayLabelData {
     pub(super) mean_value: Option<f64>,
     pub(super) show_ref: bool,
     pub(super) ref_values: Vec<f64>,
+    /// Each reference as its entry in the Ref field writes it, beside
+    /// `ref_values`.
+    pub(super) ref_labels: Vec<String>,
     /// The alarm limits drawn, in the plotted unit, with their names.
     pub(super) limit_lines: Vec<(f64, super::LimitSide)>,
     pub(super) cursors: MeasureCursors,
@@ -607,14 +610,11 @@ impl Graph {
             })
         };
 
-        // In the prefix the left axis writes its ticks in, beside them.
+        // An alarm limit, a height: in the axis's prefix, as its ticks are.
         let bounds = transform.bounds();
         let prefix = super::axes::axis_prefix(&data.overlay_unit, bounds.min()[1], bounds.max()[1]);
-        let in_axis = |v: f64| super::axes::in_prefix(prefix.as_ref(), &data.overlay_unit, v);
-        // A height the user put there, a reference or a limit: in the
-        // axis's prefix, as typed.
         let level_text = |v: f64| {
-            let (v, unit) = in_axis(v);
+            let (v, unit) = super::axes::in_prefix(prefix.as_ref(), &data.overlay_unit, v);
             let v = match prefix {
                 Some(_) => super::axes::short_figure(v),
                 None => format!("{v:.prec$}", prec = data.other_decimals),
@@ -673,10 +673,18 @@ impl Graph {
             levels.push((avg, label.into_owned(), data.mean_color));
         }
         if data.show_ref {
-            let mut refs = data.ref_values.clone();
-            refs.sort_by(|a, b| b.total_cmp(a));
-            refs.dedup();
-            levels.extend(refs.into_iter().map(|v| (v, level_text(v), data.ref_color)));
+            let mut refs: Vec<(f64, &String)> = data
+                .ref_values
+                .iter()
+                .copied()
+                .zip(&data.ref_labels)
+                .collect();
+            refs.sort_by(|a, b| b.0.total_cmp(&a.0));
+            refs.dedup_by(|a, b| a.0 == b.0);
+            levels.extend(
+                refs.into_iter()
+                    .map(|(v, label)| (v, label.clone(), data.ref_color)),
+            );
         }
         levels.extend(data.limit_lines.iter().map(|&(v, side)| {
             let side = super::menu::side_arg(side);

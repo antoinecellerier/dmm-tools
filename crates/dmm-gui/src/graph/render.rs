@@ -943,6 +943,7 @@ impl Graph {
         let x_axis = self.time_axis(ui, &in_view, (view_min, view_max));
 
         let ref_values = self.ref_lines.values().to_vec();
+        let ref_labels: Vec<String> = self.ref_lines.labels().map(str::to_string).collect();
         let crossings = if self.show_ref_line && self.show_crossings && !ref_values.is_empty() {
             self.find_crossings(&ref_values, view_min, view_max)
         } else {
@@ -956,6 +957,7 @@ impl Graph {
             mean_value: self.visible_stats().and_then(|s| s.avg()),
             show_ref: self.show_ref_line,
             ref_values,
+            ref_labels,
             limit_lines: self.limit_lines(limits),
             cursors,
             cursor_va: cursors

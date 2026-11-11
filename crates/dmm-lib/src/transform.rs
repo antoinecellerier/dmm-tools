@@ -73,6 +73,11 @@ pub(crate) fn si_prefix(unit: &str) -> (&str, f64) {
     }
 }
 
+/// `unit`'s base unit: "kΩ" is "Ω", and a unit no prefix goes on is itself.
+pub fn base_unit(unit: &str) -> &str {
+    si_prefix(unit).0
+}
+
 /// The factor that re-expresses a figure from one prefix of a unit in
 /// another — mV → V is 10⁻³, Ω → kΩ is 10⁻³ — held as its power of ten, so
 /// the factor itself is never rounded.

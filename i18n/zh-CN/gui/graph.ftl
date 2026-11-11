@@ -118,7 +118,6 @@ graph-ref = 参考
 # the field while it is empty; the numbers in the hover are an example of
 # what to type, kept as they are.
 graph-ref-values = 参考值
-    .hover = 参考值，以逗号或分号分隔 (例如 3.3, 5, 12)
 # A chip, after the reference values, that marks where the trace crosses a
 # reference line.
 graph-triggers = 触发

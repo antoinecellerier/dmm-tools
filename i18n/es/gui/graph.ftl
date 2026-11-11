@@ -118,7 +118,6 @@ graph-ref = Ref.
 # the field while it is empty; the numbers in the hover are an example of
 # what to type, kept as they are.
 graph-ref-values = Valores
-    .hover = Valores de referencia separados por comas o punto y coma (p. ej. 3.3, 5, 12)
 # A chip, after the reference values, that marks where the trace crosses a
 # reference line.
 graph-triggers = Disparos

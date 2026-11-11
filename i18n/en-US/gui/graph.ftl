@@ -114,11 +114,11 @@ graph-histogram = Histogram
 # in the field after it. Short for reference.
 graph-ref = Ref
     .hover = Draw horizontal reference lines at the values in the next field ({ $keys })
-# The field after Ref, about 80 pixels wide. The text shows greyed inside
+# The field after Ref, about 120 pixels wide. The text shows greyed inside
 # the field while it is empty; the numbers in the hover are an example of
 # what to type, kept as they are.
 graph-ref-values = Reference values
-    .hover = Reference values, comma- or semicolon-separated (e.g. 3.3, 5, 12)
+    .hover = Reference values, comma- or semicolon-separated, with a unit or in the plotted one (e.g. 3.3, 5 V, 4.7k)
 # A chip, after the reference values, that marks where the trace crosses a
 # reference line.
 graph-triggers = Triggers

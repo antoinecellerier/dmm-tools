@@ -65,6 +65,8 @@ pub(super) struct MenuPoint {
     y: f64,
     /// The reference line under the pointer.
     ref_line: Option<f64>,
+    /// That line as its entry in the Ref field writes it ("1 Ω").
+    ref_label: Option<String>,
     /// The number of the marker whose line is under the pointer.
     marker: Option<u32>,
     /// The cursor whose line is under the pointer.
@@ -296,7 +298,10 @@ fn add_entries(
             let (short, spoken) = plain(tr!(
                 l10n,
                 "graph-menu-remove-ref",
-                height = with_unit(v, unit, menu.prefix.as_ref())
+                height = menu
+                    .ref_label
+                    .clone()
+                    .unwrap_or_else(|| super::axes::set_value_text(v, unit))
             ));
             entry(ui, true, short, spoken, Pick::RemoveRefLine(v));
         }
@@ -529,6 +534,9 @@ impl Graph {
             reading,
             y: round_to_pixel(at.y, units_per_px, self.levels),
             ref_line,
+            ref_label: ref_line
+                .and_then(|v| self.ref_lines.label_of(v))
+                .map(str::to_string),
             marker,
             cursor,
             scope: MenuScope::Plot,

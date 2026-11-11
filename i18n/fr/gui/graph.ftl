@@ -118,7 +118,6 @@ graph-ref = Réf.
 # the field while it is empty; the numbers in the hover are an example of
 # what to type, kept as they are.
 graph-ref-values = Valeurs
-    .hover = Valeurs de référence, séparées par des virgules ou des points-virgules (p. ex. 3.3, 5, 12)
 # A chip, after the reference values, that marks where the trace crosses a
 # reference line.
 graph-triggers = Déclencheurs
