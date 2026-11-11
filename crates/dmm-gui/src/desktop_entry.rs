@@ -42,7 +42,7 @@ fn render(template: &str, exe: &str, comments: &[(String, String)]) -> String {
     for line in template.lines() {
         if line.starts_with("Exec=") {
             out.push_str("Exec=");
-            out.push_str(exe);
+            out.push_str(&escape(&exec_arg(exe)));
         } else {
             out.push_str(line);
         }
@@ -54,6 +54,40 @@ fn render(template: &str, exe: &str, comments: &[(String, String)]) -> String {
         }
     }
     out
+}
+
+/// `path` as the program of an `Exec` line, before the string escape every
+/// value takes: in double quotes when it holds a character the spec reserves,
+/// such as a space, with `"`, `` ` ``, `$` and `\` backslashed inside them,
+/// and every `%` doubled, as `%` starts a field code. A plain path is
+/// written as it is, so an entry already installed is left alone.
+fn exec_arg(path: &str) -> Cow<'_, str> {
+    const RESERVED: &[char] = &[
+        ' ', '\t', '\n', '"', '\'', '\\', '>', '<', '~', '|', '&', ';', '$', '*', '?', '#', '(',
+        ')', '`',
+    ];
+    let quote = path.contains(RESERVED);
+    if !quote && !path.contains('%') {
+        return Cow::Borrowed(path);
+    }
+    let mut out = String::with_capacity(path.len() + 4);
+    if quote {
+        out.push('"');
+    }
+    for c in path.chars() {
+        match c {
+            '%' => out.push_str("%%"),
+            '"' | '`' | '$' | '\\' if quote => {
+                out.push('\\');
+                out.push(c);
+            }
+            c => out.push(c),
+        }
+    }
+    if quote {
+        out.push('"');
+    }
+    Cow::Owned(out)
 }
 
 /// A desktop-entry string value: backslash, newline, tab and carriage
@@ -138,6 +172,31 @@ mod tests {
             assert!(keys.contains(&key), "no {key} in {entry:?}");
         }
         assert!(entry.contains(&format!("\nExec={EXE}\n")), "{entry:?}");
+    }
+
+    /// A path the `Exec` line would split or read as a field code is quoted
+    /// and escaped as the Desktop Entry spec asks, the string escape last:
+    /// a backslash quoted for `Exec` is doubled again in the file.
+    #[test]
+    fn an_awkward_path_is_quoted_on_the_exec_line() {
+        let exec = |path: &str| {
+            let entry = render(SHIPPED, path, &[]);
+            keys(&entry);
+            entry
+                .lines()
+                .find_map(|l| l.strip_prefix("Exec="))
+                .expect("an Exec line")
+                .to_string()
+        };
+        assert_eq!(exec(EXE), EXE, "a plain path as it is");
+        assert_eq!(
+            exec("/home/u/My Apps/dmm-gui"),
+            r#""/home/u/My Apps/dmm-gui""#
+        );
+        assert_eq!(exec("/opt/100%/dmm-gui"), "/opt/100%%/dmm-gui");
+        assert_eq!(exec("/opt/$x/dmm-gui"), r#""/opt/\\$x/dmm-gui""#);
+        assert_eq!(exec(r#"/opt/a"b/dmm-gui"#), r#""/opt/a\\"b/dmm-gui""#);
+        assert_eq!(exec(r"/opt/a\b/dmm-gui"), r#""/opt/a\\\\b/dmm-gui""#);
     }
 
     #[test]

@@ -556,9 +556,15 @@ fn install_desktop_integration() {
         .ok()
         .and_then(|p| fs::canonicalize(p).ok());
     if let Some(exe_path) = exe {
-        let desktop = desktop_entry::contents(&exe_path.display().to_string());
-        let desktop_path = data_dir.join("applications/dmm-tools.desktop");
-        write_if_changed(&desktop_path, desktop.as_bytes());
+        // A path that isn't UTF-8 can't be written into the entry as it is.
+        match exe_path.to_str() {
+            Some(exe) => {
+                let desktop = desktop_entry::contents(exe);
+                let desktop_path = data_dir.join("applications/dmm-tools.desktop");
+                write_if_changed(&desktop_path, desktop.as_bytes());
+            }
+            None => log::debug!("no desktop entry: {} isn't UTF-8", exe_path.display()),
+        }
     }
 
     // Update the GTK icon cache so GNOME can find the icon without a session
