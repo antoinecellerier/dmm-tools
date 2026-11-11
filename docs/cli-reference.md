@@ -887,7 +887,7 @@ own steps. Plan steps never act as gate steps, and the report goes to
 | `expect.flags` | | Flags by report name (`hold`, `rel`, `auto_range`, …), each `true` or `false`. |
 | `expect.range` | | `auto` or `manual`. |
 | `expect.value` | | `overload`, `negative`, `finite`, `ncv` or `zero`. |
-| `expect.at_least` | | Magnitude a numeric reading must reach, sign aside. |
+| `expect.at_least` | | Magnitude a numeric reading must reach, sign aside, in the mode's base unit (V, A, Ω, …). |
 
 Any other key, unknown name or repeated id is an error naming the file and
 step.

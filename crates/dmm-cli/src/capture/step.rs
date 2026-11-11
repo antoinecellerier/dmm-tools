@@ -456,14 +456,18 @@ fn mismatch_line(l: &Localizer, mismatch: &Mismatch) -> String {
                 },
             )
         }
-        Mismatch::AtLeast { got, min } => {
+        Mismatch::AtLeast { got, min, unit } => {
             let (kind, value) = shown(got);
             tr!(
                 l,
                 "capture-mismatch-at-least",
                 shown = kind,
                 value = value,
-                min = min.to_string(),
+                min = if unit.is_empty() {
+                    min.to_string()
+                } else {
+                    format!("{min} {unit}")
+                },
             )
         }
     }

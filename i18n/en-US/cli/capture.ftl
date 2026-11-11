@@ -226,8 +226,9 @@ capture-mismatch-value =
         [zero] a reading of zero
        *[finite] a numeric reading
     }
-# $value and $shown as in capture-mismatch-value. $min is the smallest
-# number the step wants, positive or negative, e.g. 1.
+# $value and $shown as in capture-mismatch-value, $value with its unit. $min
+# is the smallest number the step wants, positive or negative, with the
+# mode's base unit, e.g. 1 V.
 capture-mismatch-at-least =
     meter shows: value is { $shown ->
         [absent] no main reading

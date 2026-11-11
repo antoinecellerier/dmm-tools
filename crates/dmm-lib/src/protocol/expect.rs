@@ -9,6 +9,7 @@
 use crate::flags::Flag;
 use crate::measurement::{MeasuredValue, Measurement};
 use crate::protocol::AUTO_RANGE_LABEL;
+use crate::transform::si_prefix;
 use std::borrow::Cow;
 
 /// Whether the meter should be autoranging.
@@ -82,8 +83,9 @@ pub struct Expect {
     pub range: Option<RangeExpect>,
     /// The class the reading must fall into.
     pub value: Option<ValueExpect>,
-    /// The magnitude a numeric reading must reach, in the mode's base unit:
-    /// what tells a battery on the probes from open-lead noise.
+    /// The magnitude a numeric reading must reach, in the mode's base unit
+    /// whatever prefix the meter shows: what tells a battery on the probes
+    /// from open-lead noise, which reads millivolts.
     pub at_least: Option<f64>,
 }
 
@@ -133,7 +135,8 @@ impl Expect {
         self
     }
 
-    /// Require a numeric reading of at least `magnitude`, sign aside.
+    /// Require a numeric reading of at least `magnitude`, sign aside, in the
+    /// mode's base unit.
     pub const fn at_least(mut self, magnitude: f64) -> Self {
         self.at_least = Some(magnitude);
         self
@@ -187,12 +190,23 @@ impl Expect {
         }
 
         if let Some(min) = self.at_least {
+            let (base, mult) = si_prefix(&m.unit);
             let big_enough = match m.value {
-                MeasuredValue::Normal(v) => v.is_finite() && v.abs() >= min,
+                MeasuredValue::Normal(v) => v.is_finite() && (v * mult).abs() >= min,
                 _ => false,
             };
             if !big_enough {
-                return Err(Mismatch::AtLeast { got: shown(m), min });
+                let got = match (&m.value, shown(m)) {
+                    (MeasuredValue::Normal(_), Shown::Text(text)) if !m.unit.is_empty() => {
+                        Shown::Text(format!("{text} {}", m.unit))
+                    }
+                    (_, got) => got,
+                };
+                return Err(Mismatch::AtLeast {
+                    got,
+                    min,
+                    unit: base.to_string(),
+                });
             }
         }
 
@@ -217,8 +231,10 @@ pub enum Mismatch {
     Range { got: RangeShown, want: RangeExpect },
     /// The value, `got`, is not in `want`'s class.
     Value { got: Shown, want: ValueExpect },
-    /// The value, `got`, is not a number of at least `min` either way.
-    AtLeast { got: Shown, min: f64 },
+    /// The value, `got`, is not a number of at least `min` either way, `min`
+    /// being in `unit`, the mode's base unit ("" for a reading without
+    /// one). A number in `got` carries the reading's own unit.
+    AtLeast { got: Shown, min: f64, unit: String },
 }
 
 /// The range as a failed check names it.
@@ -280,7 +296,8 @@ impl std::fmt::Display for Mismatch {
             Mismatch::Value { got, want } => {
                 write!(f, "value is {got}, want {}", want.describe())
             }
-            Mismatch::AtLeast { got, min } => {
+            Mismatch::AtLeast { got, min, unit } => {
+                let min = with_unit(*min, unit);
                 write!(f, "value is {got}, want at least {min} either way")
             }
         }
@@ -293,6 +310,15 @@ fn shown(m: &Measurement) -> Shown {
         MeasuredValue::NoReading(word) => Shown::Text(word.to_string()),
         MeasuredValue::Absent => Shown::NoMainReading,
         _ => Shown::Text(m.value_export_str().into_owned()),
+    }
+}
+
+/// `value` followed by `unit`, or alone when there is none.
+fn with_unit(value: f64, unit: &str) -> String {
+    if unit.is_empty() {
+        value.to_string()
+    } else {
+        format!("{value} {unit}")
     }
 }
 
@@ -508,13 +534,32 @@ mod tests {
         let overload = make_test_measurement(0x06, 0x01, b"     OL", (0, 0), (0, 0, 0));
         let want = Expect::new().value(ValueExpect::Negative).at_least(1.0);
         assert_eq!(want.check(&battery), Ok(()));
+        // Noise on the millivolt rung is still millivolts, however big its
+        // digits.
+        let millivolts = Measurement {
+            value: MeasuredValue::Normal(-5.2),
+            unit: "mV".into(),
+            display_raw: Some("-5.2".to_string()),
+            ..noise.clone()
+        };
+        assert_eq!(
+            reason(want.check(&millivolts)),
+            Err("value is -5.2 mV, want at least 1 V either way".to_string())
+        );
+        let kilovolt = Measurement {
+            value: MeasuredValue::Normal(-0.0016),
+            unit: "kV".into(),
+            display_raw: Some("-0.0016".to_string()),
+            ..noise.clone()
+        };
+        assert_eq!(want.check(&kilovolt), Ok(()));
         assert_eq!(
             reason(want.check(&noise)),
-            Err("value is -0.0013, want at least 1 either way".to_string())
+            Err("value is -0.0013 V, want at least 1 V either way".to_string())
         );
         assert_eq!(
             reason(Expect::new().at_least(1.0).check(&overload)),
-            Err("value is OL, want at least 1 either way".to_string())
+            Err("value is OL, want at least 1 Ω either way".to_string())
         );
     }
 
@@ -560,12 +605,13 @@ mod tests {
             checked,
             Err(Mismatch::AtLeast {
                 got: Shown::NoMainReading,
-                min: 1.0
+                min: 1.0,
+                unit: "V".to_string(),
             })
         );
         assert_eq!(
             reason(checked),
-            Err("value is no main reading, want at least 1 either way".to_string())
+            Err("value is no main reading, want at least 1 V either way".to_string())
         );
     }
 

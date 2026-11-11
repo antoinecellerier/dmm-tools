@@ -43,6 +43,7 @@
 - **A right axis keeps its fixed range when the plotted reading auto-ranges**
 - **A file's Y range and reference lines keep to the trace they framed** — an export after a mode change put them on another.
 - **Markers start at 1 when dmm-gui connects after an import** — the first one took the number after the imported file's last marker.
+- **A capture plan's `at_least` is in the mode's base unit, whatever prefix the meter shows** — lead noise shown in mV passed a floor of 1.
 - **A cable pulled at `capture`'s meter check asks for no report** — it saved a no-response report and asked you to attach it.
 - **The mock ignores HOLD, REL, MIN/MAX and Peak where a UT61E+ does**
 
