@@ -283,6 +283,15 @@ impl Graph {
         self.silence_threshold_secs = self.gap_threshold_secs;
     }
 
+    /// Whether nothing has been heard for longer than the gap threshold by
+    /// `now`: a gap, though no frame has come yet to end it.
+    pub fn quiet_past_a_gap(&self, now: Instant) -> bool {
+        self.last_heard.is_some_and(|last| {
+            now.checked_duration_since(last)
+                .is_some_and(|d| d.as_secs_f64() > self.gap_threshold_secs)
+        })
+    }
+
     /// Whether a silence (see `silences`) falls between the frames at `from`
     /// and `to`.
     pub(super) fn silent_between(&self, from: Instant, to: Instant) -> bool {

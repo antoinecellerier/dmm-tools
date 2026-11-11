@@ -289,6 +289,34 @@ fn a_gap_in_a_recording_does_not_print_the_no_response_help() {
     assert!(stdout.contains(&timestamp(6000)), "got {stdout}");
 }
 
+/// A recording logged every 10 s integrates across every interval: its gaps
+/// are judged by its own spacing, and its pauses, played back as a timeout a
+/// second, break nothing on their own.
+#[test]
+fn a_slow_recording_integrates_every_interval() {
+    let dir = dir_for("slow");
+    let path = recording_of(
+        &dir,
+        &RECORDING
+            .replace("\n100 ", "\n10000 ")
+            .replace("\n200 ", "\n20000 "),
+    );
+    let (stdout, stderr, ok) = run(&[
+        "read",
+        "--replay",
+        path.to_str().expect("utf-8 path"),
+        "--format",
+        "csv",
+        "--integrate",
+        "--mock-clock-scale",
+        "max",
+    ]);
+    assert!(ok, "replay failed: {stderr}");
+    // (1.6109 − 0.5137) / 2 × 10 s, then (−0.5137 + 0) / 2 × 10 s.
+    assert!(stdout.ends_with(",2.917500,V·s,,,\n"), "got {stdout}");
+    assert!(!stderr.contains("skipped"), "got {stderr}");
+}
+
 /// A recording written from a recording is the same session: the copy carries
 /// the frames and the time they were recorded at, so both play back alike.
 #[test]

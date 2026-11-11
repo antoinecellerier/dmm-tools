@@ -928,6 +928,19 @@ impl App {
     /// stays.
     fn on_waiting_for_meter(&mut self, count: u32) {
         self.connection.waiting_timeouts = count;
+        // A recording plays its pauses back as timeouts, and they break
+        // nothing on their own: its spacing judges its gaps, for the graph and
+        // the integral alike (`gap_interval_ms`). A pause past that is a gap,
+        // marked as a meter's outage is, so an over-range band stops where
+        // the recording did. Nor is it a quiet meter: there is no device
+        // selection to check, no USB mode to switch on, and the file carries
+        // on by itself once the pause is over.
+        if self.source.replay.is_some() {
+            if self.graph.quiet_past_a_gap(self.clock.now()) {
+                self.mark_data_loss();
+            }
+            return;
+        }
         // No reading for a read timeout: nothing to integrate across, whatever
         // the interval.
         self.capture.session.integrator.push_gap();
@@ -939,11 +952,8 @@ impl App {
         if count >= dmm_lib::stream::NO_RESPONSE_TIMEOUTS {
             self.mark_data_loss();
         }
-        // Crossing the threshold is a failure, recorded once. A gap in a
-        // recording plays back as timeouts and reaches it too. It is not a
-        // quiet meter: there is no device selection to check, no USB mode to
-        // switch on, and the file carries on by itself once the gap is over.
-        if count == dmm_lib::stream::NO_RESPONSE_TIMEOUTS && self.source.replay.is_none() {
+        // Crossing the threshold is a failure, recorded once.
+        if count == dmm_lib::stream::NO_RESPONSE_TIMEOUTS {
             // The log stays English.
             error!(
                 "UI: error: {}",
@@ -1582,6 +1592,97 @@ mod tests {
         source.replay = Arc::new(dmm_lib::replay::Replay::parse(&text).expect("a recording"));
         app.source.replay = Some(source);
         assert_eq!(app.gap_interval_ms(200), 3000);
+    }
+
+    /// A recording plays its pauses back as timeouts, and they break neither
+    /// the integral nor the graph: its spacing judges its gaps. A meter's
+    /// timeouts break both.
+    #[test]
+    fn a_replays_pause_is_judged_by_its_spacing() {
+        let after_a_pause = |replaying: bool| {
+            let mut app = test_app();
+            if replaying {
+                let mut source = crate::ReplaySource::fixture();
+                let mut text =
+                    "# dmm-replay 1\n# device: ut61eplus\n# recorded: 2026-09-02T10:00:00Z\n"
+                        .to_string();
+                for ms in [0, 10_000, 20_000] {
+                    text.push_str(&format!("{ms} 02 30 20 31 2E 36 31 30 39 03 02 30 30 30\n"));
+                }
+                source.replay = Arc::new(dmm_lib::replay::Replay::parse(&text).expect("parses"));
+                app.source.replay = Some(source);
+            }
+            // 10 s is under the threshold either way (50 s): only the
+            // timeouts can break it.
+            app.settings.sample_interval_ms = 10_000;
+            app.apply_sample_interval();
+            let t0 = std::time::Instant::now();
+            let reading = |s| {
+                let mut m = Measurement::test_fixture(
+                    MeasuredValue::Normal(1.0),
+                    "V",
+                    dmm_lib::flags::StatusFlags::default(),
+                );
+                m.timestamp = t0 + Duration::from_secs(s);
+                DmmMessage::Measurement(m)
+            };
+            app.deliver(reading(0));
+            // A second a timeout, past the no-response threshold.
+            for count in 1..=9 {
+                app.deliver(DmmMessage::WaitingForMeter(count));
+            }
+            app.deliver(reading(10));
+            (
+                app.capture.session.integral_display().map(|(v, _)| v),
+                app.graph.visible_gaps().len(),
+            )
+        };
+        assert_eq!(after_a_pause(true), (Some(10.0), 0));
+        assert_eq!(after_a_pause(false), (Some(0.0), 1));
+    }
+
+    /// A recording's pause past its gap threshold is a gap: an over-range
+    /// band stops where the recording did rather than claiming the pause. A
+    /// shorter pause stays part of the band.
+    #[test]
+    fn a_replays_long_pause_ends_an_over_range_band() {
+        let gaps_after_a_pause = |pause_secs: u64| {
+            let clock = dmm_lib::Clock::manual();
+            let mut app = App::from_settings(Default::default(), clock.clone());
+            let mut source = crate::ReplaySource::fixture();
+            let mut text =
+                "# dmm-replay 1\n# device: ut61eplus\n# recorded: 2026-09-02T10:00:00Z\n"
+                    .to_string();
+            for ms in [0, 10_000, 20_000] {
+                text.push_str(&format!("{ms} 02 30 20 31 2E 36 31 30 39 03 02 30 30 30\n"));
+            }
+            source.replay = Arc::new(dmm_lib::replay::Replay::parse(&text).expect("parses"));
+            app.source.replay = Some(source);
+            // A 50 s gap threshold, from the recording's 10 s spacing.
+            app.apply_sample_interval();
+            let t0 = clock.now();
+            let reading = |s, value| {
+                let mut m =
+                    Measurement::test_fixture(value, "V", dmm_lib::flags::StatusFlags::default());
+                m.timestamp = t0 + Duration::from_secs(s);
+                DmmMessage::Measurement(m)
+            };
+            app.deliver(reading(0, MeasuredValue::Normal(1.0)));
+            app.deliver(reading(10, MeasuredValue::Overload));
+            for count in 1..=pause_secs as u32 {
+                clock.advance(Duration::from_secs(1));
+                app.deliver(DmmMessage::WaitingForMeter(count));
+            }
+            app.deliver(reading(10 + pause_secs, MeasuredValue::Normal(1.0)));
+            app.graph
+                .visible_gaps()
+                .into_iter()
+                .map(|(_, _, kind)| kind)
+                .collect::<Vec<_>>()
+        };
+        use crate::graph::GapKind;
+        assert_eq!(gaps_after_a_pause(30), [GapKind::Overload]);
+        assert_eq!(gaps_after_a_pause(80), [GapKind::Overload, GapKind::NoData]);
     }
 
     /// A replay's markers go back on their readings as playback reaches

@@ -308,7 +308,7 @@ fn read_meter(
                 reopen,
                 interval: dmm_shared::RECONNECT_INTERVAL,
             }),
-            Vec::new(),
+            None,
         )
     } else {
         let dmm = open_mock_device(selection, mock_mode, clock)?;
@@ -336,16 +336,7 @@ fn read_meter(
             .map_or_else(|| selection_id(selection), crate::open::meter_name);
         // No timeout to warn about, and no link to lose: the mock always
         // answers.
-        run_read_loop(
-            stop,
-            dmm,
-            interval_ms,
-            options,
-            out,
-            meter_name,
-            None,
-            Vec::new(),
-        )
+        run_read_loop(stop, dmm, interval_ms, options, out, meter_name, None, None)
     }
 }
 
@@ -608,7 +599,10 @@ fn read_replay(
         // cable to enable data transmission on. Nor is there a link to
         // reopen: the file ends the run.
         None,
-        replay.markers.clone(),
+        Some(Recording {
+            markers: replay.markers.clone(),
+            spacing: replay.cadence(),
+        }),
     )
 }
 
@@ -677,7 +671,8 @@ impl Run {
         options: RunOptions,
         meter_name: &str,
         out: format::Output,
-        tick: Duration,
+        // How far apart readings come, which the integral judges its gaps by.
+        spacing: Duration,
         next_marker: u32,
     ) -> Result<Self, crate::l10n::Failure> {
         let RunOptions {
@@ -714,7 +709,7 @@ impl Run {
         // and re-expresses them across an auto-range step, so the closing
         // summary only ever covers one comparable series.
         let mut session = dmm_lib::stats::SeriesStats::new(integrate);
-        session.integrator.set_sample_interval(tick);
+        session.integrator.set_sample_interval(spacing);
         Ok(Self {
             writer,
             out,
@@ -1054,6 +1049,14 @@ struct Meter<T: dmm_lib::transport::Transport> {
     interval: Duration,
 }
 
+/// What `run_read_loop` plays back from a recording besides its frames.
+struct Recording {
+    /// In offset order.
+    markers: Vec<dmm_lib::replay::ReplayMarker>,
+    /// How far apart its readings came (`Replay::cadence`).
+    spacing: Duration,
+}
+
 /// Shared measurement loop for meters, the mock and recordings. `stop` is the
 /// Ctrl+C flag: raised, it ends the run.
 #[expect(
@@ -1070,8 +1073,8 @@ fn run_read_loop<T: dmm_lib::transport::Transport>(
     meter_name: &str,
     // A real meter's; `None` for the mock and a recording.
     meter: Option<Meter<T>>,
-    // A recording's markers, in offset order; none for a meter.
-    markers: Vec<dmm_lib::replay::ReplayMarker>,
+    // A recording's; `None` for a meter and the mock.
+    recording: Option<Recording>,
 ) -> Result<(), crate::l10n::Failure> {
     let count = options.count;
     let (device, mut reopen) = match meter {
@@ -1086,6 +1089,9 @@ fn run_read_loop<T: dmm_lib::transport::Transport>(
     // `--interval-ms` or `--count` skips passes its marker on rather than
     // losing it — the rule the GUI plays by.
     let start = dmm.clock().wall_origin().map(|(start, _)| start);
+    let replaying = recording.is_some();
+    let (markers, recorded_spacing) =
+        recording.map_or_else(Default::default, |r| (r.markers, r.spacing));
     let mut markers: std::collections::VecDeque<_> = markers.into();
     let tick = Duration::from_millis(interval_ms);
     let first_marker = next_marker_number(markers.iter().map(|m| m.number));
@@ -1094,7 +1100,11 @@ fn run_read_loop<T: dmm_lib::transport::Transport>(
     if stop.load(Ordering::SeqCst) {
         return Ok(());
     }
-    let mut run = Run::open(options, meter_name, out, tick, first_marker)?;
+    // A recording's readings come no more often than it has them, whatever
+    // `--interval-ms` asks: judged by the tick alone, one spaced wider than
+    // the gap threshold broke at every point.
+    let spacing = tick.max(recorded_spacing);
+    let mut run = Run::open(options, meter_name, out, spacing, first_marker)?;
 
     let mut i = 0usize;
     let mut protocol_errors = 0usize;
@@ -1131,7 +1141,11 @@ fn run_read_loop<T: dmm_lib::transport::Transport>(
             Ok(StreamEvent::Timeout { consecutive }) => {
                 log::warn!("measurement timeout, retrying");
                 // Nothing was read for a read timeout: no interval to bridge.
-                run.gap();
+                // A recording plays its pauses back as timeouts, and the
+                // integral judges those by the recording's spacing instead.
+                if !replaying {
+                    run.gap();
+                }
                 if consecutive == NO_RESPONSE_TIMEOUTS
                     && let Some(d) = device
                 {
@@ -1756,7 +1770,7 @@ mod tests {
             out,
             "UNI-T UT61E+",
             Some(meter),
-            Vec::new(),
+            None,
         )
         .expect("a lost link that comes back is not a failure");
         std::fs::read_to_string(&path).ok()
