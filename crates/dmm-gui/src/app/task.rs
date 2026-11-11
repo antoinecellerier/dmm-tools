@@ -35,10 +35,15 @@ impl<T: Send + 'static> Task<T> {
                 ctx.request_repaint();
             });
         if let Err(e) = spawned {
-            let _ = tx.send(Err(format!("could not start a thread: {e}")));
+            let _ = tx.send(Err(spawn_refused(&e)));
         }
         Self { rx }
     }
+}
+
+/// Why a thread the system refused to start gives no answer.
+pub(super) fn spawn_refused(e: &std::io::Error) -> String {
+    format!("could not start a thread: {e}")
 }
 
 impl<T> Task<T> {

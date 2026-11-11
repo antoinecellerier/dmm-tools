@@ -122,8 +122,9 @@ connection-other-meter-recording = Recording stopped: { $meter } answered instea
 # Any other failure to connect or to keep reading. The error itself
 # follows, then connection-click-connect.
 connection-failed = Connection failed
-# The reading thread crashed. $detail is the crash's own text, which stays
-# English. Followed by connection-click-connect.
+# The reading thread crashed, or the system refused to start it. $detail is
+# the crash's or the system's own text, which stays English. Followed by
+# connection-click-connect.
 connection-internal-error = Internal error: { $detail }
 
 # A meter that stopped answering in the middle of a session. $title is the

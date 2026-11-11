@@ -735,7 +735,7 @@ impl App {
                     error!("UI: error: {e}");
                     self.connection.last_error = Some(self.issue_from(e));
                 }
-                DmmMessage::Panicked(msg) => {
+                DmmMessage::Internal(msg) => {
                     error!("UI: error: internal error: {msg}");
                     self.connection.last_error = Some(ConnectionIssue::Internal(msg));
                     clear_channel = true;
@@ -1516,7 +1516,7 @@ mod tests {
     #[test]
     fn a_panic_ends_a_connected_session_at_once() {
         let mut app = connected_app();
-        app.deliver(DmmMessage::Panicked("index out of bounds".into()));
+        app.deliver(DmmMessage::Internal("index out of bounds".into()));
         assert_eq!(app.connection.state, ConnectionState::Disconnected);
         assert!(app.connection.worker.is_none(), "the thread is let go");
         let notice = app.connection_notice().expect("a notice");

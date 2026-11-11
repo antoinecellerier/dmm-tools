@@ -38,8 +38,9 @@ pub(crate) enum ConnectionIssue {
     SeveralCables(SeveralCables),
     /// The acquisition thread ended without saying why.
     Stopped,
-    /// The acquisition thread panicked, with the panic's own text, which
-    /// stays English; the lead-in is worded where it is drawn.
+    /// The acquisition thread panicked, with the panic's own text, or could
+    /// not be started. The text stays English; the lead-in is worded where
+    /// it is drawn.
     Internal(String),
 }
 

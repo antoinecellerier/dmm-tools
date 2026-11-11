@@ -302,8 +302,9 @@ pub(crate) enum DmmMessage {
     /// A frame the meter sent could not be read. The link is fine and the
     /// thread reads on; the next good frame clears it.
     BadFrame(dmm_lib::error::Error),
-    /// The thread panicked, with the panic's own text, and has ended.
-    Panicked(String),
+    /// The thread panicked, with the panic's own text, and has ended — or
+    /// it never started, with the system's reason.
+    Internal(String),
     /// A command the user sent was refused or could not be sent. Shown as a
     /// toast, not as a connection issue: the link is fine and the meter is
     /// still streaming, so neither the help text nor a reconnect applies.
@@ -872,8 +873,9 @@ fn new_stream<'a, T: Transport>(
         .with_wake(move || wake.load(Ordering::SeqCst))
 }
 
-/// Run [`run_device_thread`] on a thread of its own, turning a panic in it
-/// into an error message for the UI rather than a silently dead channel.
+/// Run [`run_device_thread`] on a thread of its own, named `acquisition`,
+/// turning a panic in it — or a thread the system refused to start — into
+/// an error message for the UI rather than a silently dead channel.
 pub(super) fn spawn_acquisition<T, F>(open_fn: F, thread_ctx: ThreadContext)
 where
     T: Transport + Send + 'static,
@@ -881,16 +883,25 @@ where
         + Send
         + 'static,
 {
-    std::thread::spawn(move || {
-        let panic_tx = thread_ctx.msg_tx.clone();
-        let panic_ctx = thread_ctx.ctx.clone();
-        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            run_device_thread(open_fn, thread_ctx);
-        }));
-        if let Err(panic) = result {
-            handle_thread_panic(panic, &panic_tx, &panic_ctx);
-        }
-    });
+    let failed_tx = thread_ctx.msg_tx.clone();
+    let failed_ctx = thread_ctx.ctx.clone();
+    let spawned = std::thread::Builder::new()
+        .name("acquisition".to_owned())
+        .spawn(move || {
+            let panic_tx = thread_ctx.msg_tx.clone();
+            let panic_ctx = thread_ctx.ctx.clone();
+            let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                run_device_thread(open_fn, thread_ctx);
+            }));
+            if let Err(panic) = result {
+                handle_thread_panic(panic, &panic_tx, &panic_ctx);
+            }
+        });
+    if let Err(e) = spawned {
+        // Logged where it is received, as a failed open is.
+        let _ = failed_tx.send(DmmMessage::Internal(super::task::spawn_refused(&e)));
+        failed_ctx.request_repaint();
+    }
 }
 
 /// A caught panic's message, for the log and the user.
@@ -911,7 +922,7 @@ fn handle_thread_panic(
 ) {
     let msg = panic_text(panic.as_ref());
     error!("background thread panicked: {msg}");
-    let _ = tx.send(DmmMessage::Panicked(msg));
+    let _ = tx.send(DmmMessage::Internal(msg));
     ctx.request_repaint();
 }
 
@@ -1317,6 +1328,28 @@ mod tests {
             reopen: None,
             after: None,
         }
+    }
+
+    /// The acquisition thread carries its name, for a debugger and a panic
+    /// message.
+    #[test]
+    fn the_acquisition_thread_is_named() {
+        let (msg_tx, _msg_rx) = mpsc::channel();
+        let (_ctrl_tx, ctrl_rx) = mpsc::channel();
+        let (_cmd_tx, cmd_rx) = mpsc::channel();
+        type Opened = dmm_lib::error::Result<(dmm_lib::Dmm<Box<dyn Transport>>, Option<Detected>)>;
+        let (name_tx, name_rx) = mpsc::channel();
+        spawn_acquisition(
+            move |_: Option<&ReopenPin>| -> Opened {
+                let _ = name_tx.send(std::thread::current().name().map(str::to_owned));
+                Err(dmm_lib::error::Error::Cancelled)
+            },
+            thread_context(msg_tx, ctrl_rx, cmd_rx),
+        );
+        let name = name_rx
+            .recv_timeout(Duration::from_secs(10))
+            .expect("the open runs");
+        assert_eq!(name.as_deref(), Some("acquisition"));
     }
 
     /// A command queued while the link was down is dropped once it is back:
