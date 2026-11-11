@@ -40,6 +40,7 @@
 - **dmm-gui's mode and range readouts switch only a connected meter** — a pick made while reconnecting went to whichever meter answered next.
 - **A ZOTEK meter's current, °C/°F and zero keys follow what it shows now** — paused or at a slow sample interval, they followed an older screen.
 - **dmm-gui stays paused when a device or mock mode picked in Settings reconnects it** — it started reading again.
+- **Clicking the colour preset already in use keeps your custom colours** — it cleared them in both dark and light.
 - **dmm-cli detects the meter when the settings file names a device it doesn't know** — every command stopped, `list` and `completions` too.
 - **Alarms judge an imported scaled file in its own unit** — a limit of 5 on a kV file meant 5 V.
 - **dmm-gui turns an alarm off when an import or another meter is in another unit** — the same numbers judged the new unit.

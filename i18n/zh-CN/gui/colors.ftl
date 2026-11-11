@@ -160,8 +160,9 @@ colors-preset-colorblind =
        *[plain] 色盲友好
     }
     .hover = 红色盲和绿色盲用户也能分辨的配色
-# After the chips while there are changes a click would lose.
-colors-preset-clears = 选择预设将清除自定义颜色
+# After the chips while there are changes a click on another preset would
+# lose; the preset in use clicked again keeps them.
+colors-other-preset-clears = 选择其他预设将清除自定义颜色
 
 ## The Customize colors section, folded under its header until opened.
 

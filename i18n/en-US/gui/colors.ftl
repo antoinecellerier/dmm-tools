@@ -162,8 +162,9 @@ colors-preset-colorblind =
        *[plain] Colorblind
     }
     .hover = Palette that stays distinguishable for protan/deutan vision
-# After the chips while there are changes a click would lose.
-colors-preset-clears = Selecting a preset will clear customizations
+# After the chips while there are changes a click on another preset would
+# lose; the preset in use clicked again keeps them.
+colors-other-preset-clears = Selecting another preset will clear customizations
 
 ## The Customize colors section, folded under its header until opened.
 

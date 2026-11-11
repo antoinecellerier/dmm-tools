@@ -1420,6 +1420,35 @@ mod tests {
         assert!(run.app.reading_state().announce.focus_only);
     }
 
+    /// Clicking the preset in use keeps its customizations in both modes;
+    /// picking another clears them, as the caption under the chips says.
+    #[test]
+    fn the_preset_in_use_clicked_again_keeps_its_colours() {
+        let mut run = SettingsRun::new(1200.0, 900.0);
+        run.ctx.enable_accesskit();
+        let custom = Some(crate::settings::HexColor(egui::Color32::from_rgb(
+            0x12, 0x34, 0x56,
+        )));
+        run.app.settings.color_overrides.dark.background = custom;
+        run.app.settings.color_overrides.light.background = custom;
+        run.frame(vec![]);
+        let frame = run.frame(vec![]);
+        let b = node_bounds(&frame, "Default (customized)");
+        run.click(to_rect(b).center());
+        assert_eq!(run.app.settings.color_overrides.dark.background, custom);
+        assert_eq!(run.app.settings.color_overrides.light.background, custom);
+
+        let frame = run.frame(vec![]);
+        let b = node_bounds(&frame, "High Contrast");
+        run.click(to_rect(b).center());
+        assert_eq!(
+            run.app.settings.color_preset,
+            crate::settings::ColorPreset::HighContrast
+        );
+        assert_eq!(run.app.settings.color_overrides.dark.background, None);
+        assert_eq!(run.app.settings.color_overrides.light.background, None);
+    }
+
     /// With English alone there is nothing to pick: no Language row.
     #[test]
     fn the_language_row_hides_with_one_language() {

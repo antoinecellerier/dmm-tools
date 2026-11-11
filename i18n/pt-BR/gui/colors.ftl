@@ -162,8 +162,9 @@ colors-preset-colorblind =
        *[plain] Daltonismo
     }
     .hover = Paleta com cores distinguíveis para quem tem deficiência protan ou deutan
-# After the chips while there are changes a click would lose.
-colors-preset-clears = Escolher uma predefinição apaga as personalizações
+# After the chips while there are changes a click on another preset would
+# lose; the preset in use clicked again keeps them.
+colors-other-preset-clears = Escolher outra predefinição apaga as personalizações
 
 ## The Customize colors section, folded under its header until opened.
 

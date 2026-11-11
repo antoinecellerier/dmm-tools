@@ -154,8 +154,9 @@ colors-preset-colorblind =
        *[plain] 色覚サポート
     }
     .hover = P 型/D 型色覚でも区別しやすいパレット
-# After the chips while there are changes a click would lose.
-colors-preset-clears = プリセットを選択すると、カスタマイズした色は消去されます。
+# After the chips while there are changes a click on another preset would
+# lose; the preset in use clicked again keeps them.
+colors-other-preset-clears = 別のプリセットを選択すると、カスタマイズした色は消去されます。
 
 ## The Customize colors section, folded under its header until opened.
 

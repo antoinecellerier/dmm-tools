@@ -162,8 +162,9 @@ colors-preset-colorblind =
        *[plain] Daltonien
     }
     .hover = Palette dont les couleurs restent distinctes en vision protan ou deutan
-# After the chips while there are changes a click would lose.
-colors-preset-clears = Choisir un préréglage efface vos personnalisations
+# After the chips while there are changes a click on another preset would
+# lose; the preset in use clicked again keeps them.
+colors-other-preset-clears = Choisir un autre préréglage efface vos personnalisations
 
 ## The Customize colors section, folded under its header until opened.
 

@@ -162,8 +162,9 @@ colors-preset-colorblind =
        *[plain] Daltonismo
     }
     .hover = Paleta cuyos colores se distinguen bien con daltonismo protán o deután
-# After the chips while there are changes a click would lose.
-colors-preset-clears = Elegir una paleta predefinida borra las personalizaciones
+# After the chips while there are changes a click on another preset would
+# lose; the preset in use clicked again keeps them.
+colors-other-preset-clears = Elegir otra paleta predefinida borra las personalizaciones
 
 ## The Customize colors section, folded under its header until opened.
 

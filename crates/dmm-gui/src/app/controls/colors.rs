@@ -173,7 +173,11 @@ impl App {
                 }
             });
             let caption = tr!(l10n, "colors-colors");
-            if let Some(preset) = chip_row(ui, &caption, chips) {
+            // The preset in use clicked again keeps its customizations: only
+            // a switch to another preset clears them.
+            if let Some(preset) = chip_row(ui, &caption, chips)
+                && preset != self.settings.color_preset
+            {
                 self.settings.color_preset = preset;
                 // Clear the presets' overrides when switching presets.
                 self.settings.color_overrides.dark = PaletteOverrides::default();
@@ -182,7 +186,7 @@ impl App {
             }
             if has_overrides {
                 ui.label(
-                    RichText::new(tr!(l10n, "colors-preset-clears"))
+                    RichText::new(tr!(l10n, "colors-other-preset-clears"))
                         .small()
                         .color(ui.visuals().weak_text_color()),
                 );
