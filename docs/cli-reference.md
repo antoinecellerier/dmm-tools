@@ -252,7 +252,8 @@ frequency, duty, period, REL reference, AC and DC parts) report those **sub-valu
 output and in an `aux` array in JSON. CSV adds one
 `auxN_label,auxN_value,auxN_unit` group per sub-value the meter family can
 send (four for the UT181A, two for the UT171, one for the UT61E+), left empty when
-a reading uses fewer, so every row lines up.
+a reading uses fewer, so every row lines up. The time a sub-value carries (the
+UT181A's MIN/MAX times) is in text and JSON only.
 Single-display meters keep the six base columns. With `--integrate`, the
 `integral` columns come before the aux groups.
 
