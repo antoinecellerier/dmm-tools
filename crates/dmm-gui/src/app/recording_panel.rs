@@ -768,7 +768,8 @@ impl App {
 mod tests {
     use super::*;
     use crate::app::test_support::{
-        a11y, click_frames, focused_rect, headless_frame, key_tap, node_rect, test_app, to_rect,
+        a11y, click_frames, focused_rect, headless_frame, key_tap, key_tap_with, node_rect,
+        test_app, to_rect,
     };
     use eframe::egui::{Pos2, Rect, vec2};
     use std::time::Instant;
@@ -1986,6 +1987,37 @@ mod tests {
         assert!(run.shows_widget("Discard recording"), "the prompt is up");
         run.key(Key::N);
         assert!(run.app.markers.is_empty());
+    }
+
+    /// The keys that act on the session wait for the discard prompt too:
+    /// Ctrl+R would swap its question for Record's, Ctrl+L clear behind it.
+    #[test]
+    fn session_keys_wait_for_the_discard_prompt() {
+        let mut run = run_with_stopped_recording(2);
+        // Cleared since, so Discard has samples to ask about.
+        run.app.clear_session();
+        run.app.connection.state = crate::app::ConnectionState::Connected;
+        run.click(run.node_rect("Discard").center());
+        assert_eq!(
+            run.app.recording_panel.pending_discard,
+            Some(DiscardFor::Discard)
+        );
+        for key in [Key::R, Key::L, Key::O] {
+            run.frame(1.0, key_tap_with(key, egui::Modifiers::COMMAND));
+            run.frame(1.0, vec![]);
+            assert_eq!(
+                run.app.recording_panel.pending_discard,
+                Some(DiscardFor::Discard),
+                "{key:?}"
+            );
+            assert_eq!(
+                run.app.connection.state,
+                crate::app::ConnectionState::Connected,
+                "{key:?}"
+            );
+        }
+        assert!(!run.app.capture.recording.is_active());
+        assert_eq!(run.app.capture.recording.recording_samples().len(), 2);
     }
 
     /// The marker's number is a button: pressing it brings the marker into

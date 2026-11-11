@@ -528,6 +528,14 @@ impl App {
                 // would change what the prompt is asking about.
                 Shortcut::AddMarker => !ctx.text_edit_focused() && self.no_modal(ctx),
                 Shortcut::AddMarkerAndNote => self.no_modal(ctx),
+                // Nor do the keys that act on the session reach past the
+                // discard prompt: they would swap its question for their
+                // own, or stop, clear or disconnect behind it. Export stays,
+                // as saving the recording answers the prompt.
+                Shortcut::ToggleRecording
+                | Shortcut::ClearSession
+                | Shortcut::ConnectToggle
+                | Shortcut::ImportFile => self.recording_panel_idle(),
                 _ => true,
             };
             if !ours {
