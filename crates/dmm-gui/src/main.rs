@@ -11,6 +11,7 @@ mod markers;
 mod recording;
 mod settings;
 mod specs;
+mod text_marks;
 mod theme;
 
 use clap::builder::{PossibleValue, ValueParser};

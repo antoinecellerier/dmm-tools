@@ -103,6 +103,11 @@ alarm-no-limit = none
 alarm-band = auto
     .hover = How far back the reading must come before a limit alarms again: a value, or a percentage such as 1%. Blank: automatic
 # After the limits, the unit they are in, e.g. V; this is its hover.
+# A line added to the Low or High field's hover when its limit is typed in a
+# unit of another quantity than the reading on screen: it is kept, and the
+# alarm watches only readings of that quantity. $entry is the limit as typed
+# ("5 kΩ"); $unit is its quantity's unit ("Ω").
+alarm-limit-other-quantity = { $entry }: alarms on { $unit } readings
 alarm-unit =
     .hover = The unit the limits are in
 # The same before an alarm is on: the unit taken from the reading on

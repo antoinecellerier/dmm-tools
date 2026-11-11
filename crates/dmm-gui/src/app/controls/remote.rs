@@ -7,6 +7,7 @@ use dmm_shared::tr;
 use eframe::egui::{self, RichText, Ui};
 
 use crate::a11y::ResponseA11yExt;
+use crate::text_marks::{Judge, show_judged};
 
 use crate::app::App;
 
@@ -203,9 +204,26 @@ const SPLIT_GAP: f32 = 1.0;
 /// Width of each field in a split chip's row, in points before zoom.
 const FIELD_WIDTH: f32 = 50.0;
 
+/// What a [`row_field`] shows beside the text typed into it.
+pub(in crate::app) struct RowField<'a> {
+    /// The caption before the field ("Low", "×").
+    pub(in crate::app) caption: &'a str,
+    /// The placeholder while the field is empty.
+    pub(in crate::app) hint: &'a str,
+    /// Put the caret in it this frame.
+    pub(in crate::app) focus: bool,
+    /// The hover text, before the line saying why the entry is marked.
+    pub(in crate::app) hover: Option<&'a str>,
+    /// What marks the entry ([`crate::text_marks`]).
+    pub(in crate::app) judge: Judge<'a>,
+    /// The colour of the squiggle under an entry that doesn't read.
+    pub(in crate::app) error: egui::Color32,
+}
+
 /// One captioned field in a split chip's row (**Scale**'s factor, **Alarm**'s
-/// limits), in a `horizontal_wrapped` row at `scale`: the field's response,
-/// and whether Enter committed it this frame.
+/// limits), in a `horizontal_wrapped` row at `scale`, its entry marked when
+/// it won't be used as typed: the field's response, and whether Enter
+/// committed it this frame.
 ///
 /// Enter, never `.changed()`: a value taken per keystroke would rescale the
 /// readings, or raise an alarm at 1, on the way to typing 12.
@@ -213,10 +231,8 @@ pub(in crate::app) fn row_field(
     ui: &mut Ui,
     font: &egui::FontId,
     scale: f32,
-    caption: &str,
     text: &mut String,
-    hint: &str,
-    focus: bool,
+    field: RowField<'_>,
 ) -> (egui::Response, bool) {
     let text_width = |text: RichText| {
         egui::WidgetText::from(text)
@@ -235,20 +251,28 @@ pub(in crate::app) fn row_field(
     let width = (typed + font.size).clamp(FIELD_WIDTH * scale, 3.0 * FIELD_WIDTH * scale);
     // A caption and its field wrap together: a caption left at the end of a
     // line reads as labelling nothing.
-    let caption = RichText::new(caption).font(font.clone());
+    let caption = RichText::new(field.caption).font(font.clone());
     let caption_width = text_width(caption.clone());
     if caption_width + ui.spacing().item_spacing.x + width > ui.available_size_before_wrap().x {
         ui.end_row();
     }
     ui.label(caption);
-    let resp = ui.add(
-        egui::TextEdit::singleline(text)
-            .desired_width(width)
-            .font(font.clone())
-            .hint_text(RichText::new(hint).font(font.clone())),
+    let hint = RichText::new(field.hint).font(font.clone());
+    let (output, why) = show_judged(
+        ui,
+        text,
+        |edit| edit.desired_width(width).font(font.clone()).hint_text(hint),
+        font,
+        field.error,
+        field.judge,
     );
-    if focus {
+    let mut resp = output.response.response;
+    if field.focus {
         resp.request_focus();
+    }
+    let hover: Vec<&str> = field.hover.into_iter().chain(why.as_deref()).collect();
+    if !hover.is_empty() {
+        resp = resp.on_hover_text(hover.join("\n"));
     }
     // egui's own focused frame is invisible under a pinned Accent; the ring
     // is the field's only keyboard cue then.

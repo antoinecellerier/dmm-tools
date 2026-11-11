@@ -15,14 +15,16 @@
 
 use super::App;
 use super::appearance::SMALL_TEXT_SIZE;
-use super::controls::remote::{SplitChip, row_field};
+use super::controls::remote::{RowField, SplitChip, row_field};
 use super::marker_list::log_line;
 use super::toast::Toast;
 use crate::a11y::AnnouncePolicy;
 use crate::display::ReadingState;
 use crate::graph::{LimitSide, WatchedLimits};
+use crate::text_marks::MarkStyle;
 use dmm_lib::alarm::{self as lib_alarm, Alarm, Breach, Hysteresis, LimitError, LimitUnit, Limits};
 use dmm_lib::measurement::Measurement;
+use dmm_lib::transform::base_unit;
 use dmm_shared::l10n::Localizer;
 use dmm_shared::{input, tr};
 use eframe::egui::{self, RichText, Ui};
@@ -105,6 +107,56 @@ fn parse_limits(
     })?;
     let band = band.check(&limits).map_err(|_| percent_of_zero(l10n))?;
     Ok((limits, band))
+}
+
+/// How the row marks the limit draft `text` ([`crate::text_marks`]): one
+/// that doesn't read; the later of two typed in different quantities
+/// (`later`, with `other` the other limit's draft); or one typed in a unit
+/// of another quantity than `reading`, the unit a limit is in for the
+/// reading on screen, which it waits for.
+fn limit_mark(
+    l10n: &Localizer,
+    text: &str,
+    other: &str,
+    later: bool,
+    reading: Option<&str>,
+) -> Option<(MarkStyle, String)> {
+    let typed = match lib_alarm::parse_limit(text) {
+        Err(e) => {
+            let why = input::limit_parse_error(l10n, e, text.trim());
+            return Some((MarkStyle::Unread, why.into_owned()));
+        }
+        Ok(parsed) => parsed?.1?,
+    };
+    if later
+        && let Ok(Some((_, Some(first)))) = lib_alarm::parse_limit(other)
+        && first != typed
+    {
+        let why = input::limit_error(l10n, LimitError::UnitsDiffer);
+        return Some((MarkStyle::Unread, why.into_owned()));
+    }
+    (base_unit(reading?) != typed).then(|| {
+        let why = tr!(
+            l10n,
+            "alarm-limit-other-quantity",
+            entry = text.trim(),
+            unit = typed
+        );
+        (MarkStyle::Waiting, why.into_owned())
+    })
+}
+
+/// How the row marks the band draft `text`, a band that doesn't read with
+/// the limit drafts `low` and `high`.
+fn band_mark(l10n: &Localizer, text: &str, low: &str, high: &str) -> Option<(MarkStyle, String)> {
+    let (Ok(low), Ok(high)) = (lib_alarm::parse_limit(low), lib_alarm::parse_limit(high)) else {
+        return None;
+    };
+    let unit = Limits::typed(low, high).ok()?.unit;
+    Hysteresis::parse_in(text, unit).err().map(|e| {
+        let why = input::hysteresis_error(l10n, e, text.trim());
+        (MarkStyle::Unread, why.into_owned())
+    })
 }
 
 /// Why a percentage band can't go with the limits.
@@ -280,32 +332,74 @@ impl App {
         // the editor's fields.
         let mut apply = false;
         let mut off = false;
+        // The unit a limit is in for the reading on screen, which a limit
+        // typed in another quantity's waits for.
+        let reading = self
+            .last_measurement
+            .as_ref()
+            .and_then(|m| lib_alarm::limit_unit(m))
+            .map(str::to_string);
+        let reading = reading.as_deref();
+        let error = tc.status_error();
         let editor = &mut self.alarm_editor;
+        // As they were at the frame's start: each field is judged against
+        // the others.
+        let (low, high) = (editor.low.clone(), editor.high.clone());
         ui.horizontal_wrapped(|ui| {
             ui.spacing_mut().item_spacing.x = 3.0 * scale;
-            let mut field = |ui: &mut Ui, caption: &str, text, hint: &str, focus| {
-                let (resp, committed) = row_field(ui, &font, scale, caption, text, hint, focus);
-                apply |= committed;
-                resp
-            };
             let focus = std::mem::take(&mut editor.focus);
             let none = tr!(l10n, "alarm-no-limit");
-            field(ui, &tr!(l10n, "alarm-low"), &mut editor.low, &none, focus);
-            field(ui, &tr!(l10n, "alarm-high"), &mut editor.high, &none, false);
+            apply |= row_field(
+                ui,
+                &font,
+                scale,
+                &mut editor.low,
+                RowField {
+                    caption: &tr!(l10n, "alarm-low"),
+                    hint: &none,
+                    focus,
+                    hover: None,
+                    judge: &|t| limit_mark(l10n, t, &high, false, reading),
+                    error,
+                },
+            )
+            .1;
+            apply |= row_field(
+                ui,
+                &font,
+                scale,
+                &mut editor.high,
+                RowField {
+                    caption: &tr!(l10n, "alarm-high"),
+                    hint: &none,
+                    focus: false,
+                    hover: None,
+                    judge: &|t| limit_mark(l10n, t, &low, true, reading),
+                    error,
+                },
+            )
+            .1;
             // Right after the limits it qualifies, so a wrapped row keeps the
             // unit on their line.
             if let Some((text, color, hover)) = status {
                 ui.label(RichText::new(text).font(font.clone()).color(color))
                     .on_hover_text(hover);
             }
-            field(
+            apply |= row_field(
                 ui,
-                "\u{b1}",
+                &font,
+                scale,
                 &mut editor.band,
-                &tr!(l10n, "alarm-band"),
-                false,
+                RowField {
+                    caption: "\u{b1}",
+                    hint: &tr!(l10n, "alarm-band"),
+                    focus: false,
+                    hover: Some(&tr!(l10n, "alarm-band.hover")),
+                    judge: &|t| band_mark(l10n, t, &low, &high),
+                    error,
+                },
             )
-            .on_hover_text(tr!(l10n, "alarm-band.hover"));
+            .1;
             apply |= ui
                 .add(egui::Button::new(
                     RichText::new(tr!(l10n, "alarm-apply")).font(font.clone()),
@@ -572,6 +666,39 @@ mod tests {
         assert!(message.contains("low limit"), "{message}");
         assert!(parse_limits("", "inf", "").is_err());
         assert!(parse_limits("", "5", "-1").is_err());
+    }
+
+    /// The row marks a limit that doesn't read, the later of two in
+    /// different quantities, and one waiting for its quantity; a bare
+    /// number, or one in the reading's quantity, is left alone.
+    #[test]
+    fn the_row_marks_limits_it_wont_use_as_typed() {
+        use crate::text_marks::MarkStyle::{Unread, Waiting};
+        let l = english();
+        let mark = |text, other, later, reading| {
+            super::limit_mark(&l, text, other, later, reading).map(|(style, _)| style)
+        };
+        assert_eq!(mark("5", "", false, Some("V")), None);
+        assert_eq!(mark("4980 mV", "", false, Some("V")), None);
+        assert_eq!(mark("5 x", "", false, Some("V")), Some(Unread));
+        assert_eq!(mark("abc", "", false, None), Some(Unread));
+        assert_eq!(mark("5 k\u{3a9}", "", false, Some("V")), Some(Waiting));
+        assert_eq!(mark("5 k\u{3a9}", "", false, None), None, "no reading");
+        assert_eq!(mark("5 A", "1 V", true, Some("V")), Some(Unread));
+        assert_eq!(mark("1 V", "5 A", false, Some("V")), None, "the earlier");
+        assert_eq!(
+            mark("500 mA", "", false, Some("mA")),
+            None,
+            "a scale's label"
+        );
+        let (_, why) = super::limit_mark(&l, "5 k\u{3a9}", "", false, Some("V")).unwrap();
+        assert_eq!(why, "5 k\u{3a9}: alarms on \u{3a9} readings");
+
+        let band = |text, low, high| super::band_mark(&l, text, low, high).map(|(s, _)| s);
+        assert_eq!(band("10 mV", "1 V", "5 V"), None);
+        assert_eq!(band("10 mV", "1", "5"), Some(Unread));
+        assert_eq!(band("1%", "1", "5"), None);
+        assert_eq!(band("x", "1", "5"), Some(Unread));
     }
 
     /// A reading already out when the limits are set is said in a toast,

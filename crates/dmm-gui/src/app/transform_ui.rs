@@ -19,8 +19,9 @@ use eframe::egui::{self, RichText, Ui};
 
 use super::App;
 use super::appearance::SMALL_TEXT_SIZE;
-use super::controls::remote::{SplitChip, row_field};
+use super::controls::remote::{RowField, SplitChip, row_field};
 use super::toast::Toast;
+use crate::text_marks::MarkStyle;
 
 /// Draft text for the three fields, kept apart from the applied
 /// [`Transform`]: the row commits on Apply or Enter only, so a half-typed
@@ -106,6 +107,24 @@ fn parse_field(
     check(value).map_err(|e| field.invalid(l10n, input::factor_error(l10n, e)))
 }
 
+/// How the row marks a factor or offset draft `text` that doesn't read as
+/// a number `check` takes ([`crate::text_marks`]).
+fn number_mark(
+    l10n: &Localizer,
+    text: &str,
+    check: fn(f64) -> Result<f64, FactorError>,
+) -> Option<(MarkStyle, String)> {
+    let text = text.trim();
+    if text.is_empty() {
+        return None;
+    }
+    let why = match text.parse::<f64>() {
+        Err(_) => input::not_a_number(l10n, text),
+        Ok(v) => input::factor_error(l10n, check(v).err()?),
+    };
+    Some((MarkStyle::Unread, why.into_owned()))
+}
+
 impl App {
     /// The **Scale** chip: filled while a scale is active. Styled like the
     /// remote buttons, which is why a caller sitting it next to them draws a
@@ -186,33 +205,58 @@ impl App {
         let mut off = false;
         let focus = std::mem::take(&mut self.transform_editor.focus);
         let l10n = &self.l10n;
+        let error = self
+            .settings
+            .theme_colors(ui.visuals().dark_mode)
+            .status_error();
         ui.horizontal_wrapped(|ui| {
             ui.spacing_mut().item_spacing.x = 3.0 * scale;
             let editor = &mut self.transform_editor;
-            let mut field = |ui: &mut Ui, sign, text, hint: &str, focus| {
-                apply |= row_field(ui, &font, scale, sign, text, hint, focus).1;
-            };
-            field(
+            apply |= row_field(
                 ui,
-                "\u{D7}",
+                &font,
+                scale,
                 &mut editor.scale,
-                &tr!(l10n, "scale-factor"),
-                focus,
-            );
-            field(
+                RowField {
+                    caption: "\u{D7}",
+                    hint: &tr!(l10n, "scale-factor"),
+                    focus,
+                    hover: None,
+                    judge: &|t| number_mark(l10n, t, Transform::check_scale),
+                    error,
+                },
+            )
+            .1;
+            apply |= row_field(
                 ui,
-                "+",
+                &font,
+                scale,
                 &mut editor.offset,
-                &tr!(l10n, "scale-offset"),
-                false,
-            );
-            field(
+                RowField {
+                    caption: "+",
+                    hint: &tr!(l10n, "scale-offset"),
+                    focus: false,
+                    hover: None,
+                    judge: &|t| number_mark(l10n, t, Transform::check_offset),
+                    error,
+                },
+            )
+            .1;
+            apply |= row_field(
                 ui,
-                "\u{2192}",
+                &font,
+                scale,
                 &mut editor.unit,
-                &tr!(l10n, "scale-unit"),
-                false,
-            );
+                RowField {
+                    caption: "\u{2192}",
+                    hint: &tr!(l10n, "scale-unit"),
+                    focus: false,
+                    hover: None,
+                    judge: &|_| None,
+                    error,
+                },
+            )
+            .1;
             apply |= ui
                 .add(egui::Button::new(
                     RichText::new(tr!(l10n, "scale-apply")).font(font.clone()),
@@ -293,6 +337,22 @@ impl App {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The row marks a factor or offset that isn't a number, or one the
+    /// scale refuses; blank is the default.
+    #[test]
+    fn the_row_marks_a_number_it_wont_use() {
+        let l = crate::l10n::english();
+        let mark = |text, check| super::number_mark(&l, text, check).map(|(_, why)| why);
+        assert_eq!(mark(" ", Transform::check_scale), None);
+        assert_eq!(mark("100", Transform::check_scale), None);
+        assert_eq!(
+            mark("abc", Transform::check_scale).as_deref(),
+            Some("\u{201c}abc\u{201d} is not a number")
+        );
+        assert!(mark("0", Transform::check_scale).is_some());
+        assert_eq!(mark("0", Transform::check_offset), None);
+    }
     use crate::app::controls::remote::SCALE_RULE_WIDTH;
     use crate::app::test_support::{a11y, connected_app, headless_frame, test_app};
     use crate::settings::Settings;

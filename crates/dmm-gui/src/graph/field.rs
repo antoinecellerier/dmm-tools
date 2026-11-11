@@ -14,6 +14,7 @@
 //! has no prefix yet: what is typed into it is in the one the axis shows.
 
 use super::axes::short_figure;
+use crate::text_marks::{MarkStyle, TextMark};
 use dmm_lib::transform::{
     PrefixRatio, base_unit, meter_unit, number_and_unit, prefix_ratio, typed_unit,
 };
@@ -266,18 +267,16 @@ pub(super) struct Mark {
 }
 
 impl Mark {
-    /// Whether the user may still be typing it out: a half-typed number or
-    /// unit reads as neither until it is finished.
-    pub(super) fn may_be_unfinished(&self) -> bool {
-        !matches!(self.why, Undrawn::OtherQuantity(_))
-    }
-
-    /// Whether to say nothing of it yet: it may be unfinished and the
-    /// `caret` (a byte offset into the text, while it is typed in) is in it
-    /// or right after it.
-    pub(super) fn held_back(&self, caret: Option<usize>) -> bool {
-        self.may_be_unfinished()
-            && caret.is_some_and(|c| self.span.start <= c && c <= self.span.end)
+    /// How the field marks it: one of another quantity waits for it, any
+    /// other doesn't read, and may still be half typed.
+    pub(super) fn text_mark(&self) -> TextMark {
+        TextMark {
+            span: self.span.clone(),
+            style: match self.why {
+                Undrawn::OtherQuantity(_) => MarkStyle::Waiting,
+                Undrawn::NotANumber | Undrawn::UnknownUnit => MarkStyle::Unread,
+            },
+        }
     }
 }
 
@@ -554,7 +553,12 @@ mod tests {
         *f.text_mut() = "1 o, 5 V".into();
         f.parse(Some("Ω"));
         let marks = f.marker().marks(f.text(), |_| false);
-        let held = |caret| marks.iter().map(|m| m.held_back(caret)).collect::<Vec<_>>();
+        let held = |caret| {
+            marks
+                .iter()
+                .map(|m| m.text_mark().held_back(caret))
+                .collect::<Vec<_>>()
+        };
         assert_eq!(held(None), [false, false]);
         assert_eq!(held(Some(3)), [true, false]);
         assert_eq!(held(Some(0)), [true, false]);
