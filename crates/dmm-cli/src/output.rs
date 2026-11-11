@@ -32,6 +32,9 @@ pub(crate) struct Writer {
     sink: Sink,
     /// Set for a bare `-o` only.
     auto: Option<Auto>,
+    /// The reader at the other end of a pipe went away, as `head` does once
+    /// it has its lines: what is written from then on goes nowhere.
+    reader_gone: bool,
 }
 
 enum Sink {
@@ -98,7 +101,28 @@ impl Writer {
                 }),
             ),
         };
-        Ok(Self { sink, auto })
+        Ok(Self {
+            sink,
+            auto,
+            reader_gone: false,
+        })
+    }
+
+    /// Whether the reader of a pipe this run writes into has gone away, so
+    /// the run can stop as if it had been asked to.
+    pub(crate) fn reader_gone(&self) -> bool {
+        self.reader_gone
+    }
+
+    /// `result`, or nothing wrong once the pipe's reader went away.
+    fn unless_reader_gone<T>(&mut self, result: io::Result<T>, gone: T) -> io::Result<T> {
+        match result {
+            Err(e) if e.kind() == io::ErrorKind::BrokenPipe => {
+                self.reader_gone = true;
+                Ok(gone)
+            }
+            other => other,
+        }
     }
 
     /// Take in a reading before it is written: the first one names a bare
@@ -145,11 +169,17 @@ impl Writer {
 
     /// Close the run and say where the readings ended up.
     pub(crate) fn finish(self) -> io::Result<Wrote> {
-        let Self { sink, auto } = self;
+        let Self {
+            sink,
+            auto,
+            reader_gone,
+        } = self;
         // Closed before the rename below: Windows refuses to rename a file
         // that is still open.
         if let Sink::Open(mut open) = sink {
-            open.flush()?;
+            if !reader_gone {
+                open.flush()?;
+            }
             drop(open);
         }
         let Some(auto) = auto else {
@@ -184,18 +214,26 @@ impl Writer {
 
 impl Write for Writer {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        match &mut self.sink {
+        if self.reader_gone {
+            return Ok(buf.len());
+        }
+        let wrote = match &mut self.sink {
             Sink::Open(open) => open.write(buf),
             Sink::Unnamed(pending) => pending.write(buf),
-        }
+        };
+        self.unless_reader_gone(wrote, buf.len())
     }
 
     fn flush(&mut self) -> io::Result<()> {
-        match &mut self.sink {
+        if self.reader_gone {
+            return Ok(());
+        }
+        let flushed = match &mut self.sink {
             Sink::Open(open) => open.flush(),
             // Nothing to flush to yet: the file is still unnamed.
             Sink::Unnamed(_) => Ok(()),
-        }
+        };
+        self.unless_reader_gone(flushed, ())
     }
 }
 
@@ -284,10 +322,63 @@ mod tests {
         ));
     }
 
+    /// A pipe whose reader has gone away, as `head` closes its end.
+    struct ClosedPipe;
+
+    impl Write for ClosedPipe {
+        fn write(&mut self, _: &[u8]) -> io::Result<usize> {
+            Err(io::ErrorKind::BrokenPipe.into())
+        }
+
+        fn flush(&mut self) -> io::Result<()> {
+            Err(io::ErrorKind::BrokenPipe.into())
+        }
+    }
+
+    /// The reader going away is the end of the run, not a failure: the
+    /// writer says so and takes the rest without error, and the run still
+    /// closes.
+    #[test]
+    fn a_closed_pipe_ends_the_run_without_an_error() {
+        let mut writer = Writer {
+            sink: Sink::Open(Box::new(ClosedPipe)),
+            auto: None,
+            reader_gone: false,
+        };
+        assert!(!writer.reader_gone());
+        writer.write_all(b"1.6109 V\n").expect("no error");
+        assert!(writer.reader_gone());
+        writer.write_all(b"1.6110 V\n").expect("still none");
+        writer.flush().expect("nor on a flush");
+        assert!(matches!(writer.finish().expect("closes"), Wrote::AsAsked));
+    }
+
+    /// Any other write error is still one.
+    #[test]
+    fn a_full_disk_is_still_an_error() {
+        struct Full;
+        impl Write for Full {
+            fn write(&mut self, _: &[u8]) -> io::Result<usize> {
+                Err(io::ErrorKind::StorageFull.into())
+            }
+            fn flush(&mut self) -> io::Result<()> {
+                Ok(())
+            }
+        }
+        let mut writer = Writer {
+            sink: Sink::Open(Box::new(Full)),
+            auto: None,
+            reader_gone: false,
+        };
+        assert!(writer.write_all(b"1.6109 V\n").is_err());
+        assert!(!writer.reader_gone());
+    }
+
     /// A writer whose file is already named after `in_name`, without
     /// touching the disk.
     fn named(in_name: Option<&str>) -> Writer {
         Writer {
+            reader_gone: false,
             sink: Sink::Unnamed(Vec::new()),
             auto: Some(Auto {
                 meter: "UT61E+".to_string(),

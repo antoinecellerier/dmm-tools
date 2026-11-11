@@ -7,9 +7,11 @@ use super::{called_off, setup_ctrlc};
 use crate::open::open_with_help;
 use console::style;
 use dmm_lib::error::ErrorKind;
+use dmm_lib::measurement::Measurement;
 use dmm_lib::protocol::registry::Selection;
 use dmm_lib::stream::{MeasurementStream, StreamEvent};
 use dmm_shared::tr;
+use std::io::{self, Write};
 use std::sync::atomic::Ordering;
 use std::time::Duration;
 
@@ -49,6 +51,7 @@ pub(crate) fn cmd_debug(
     let cancel = stop.clone();
     let mut stream =
         MeasurementStream::new(&mut dmm, tick).with_cancel(move || cancel.load(Ordering::SeqCst));
+    let mut out = io::stdout().lock();
 
     while !stop.load(Ordering::SeqCst) && (count == 0 || i < count) {
         match stream.tick() {
@@ -67,21 +70,10 @@ pub(crate) fn cmd_debug(
                             .flatten()
                     })
                     .unwrap_or("(none)");
-                println!(
-                    "{} mode_raw={:04X} display={:?} progress={:?} flags={} raw={:02X?} \u{2192} {}",
-                    style(format!("[{i}]")).dim(),
-                    m.mode_raw,
-                    display,
-                    m.progress,
-                    m.flags,
-                    m.raw_payload,
-                    style(format!("{m}")).green(),
-                );
-                // The secondary displays a UT181A or UT171 sends alongside
-                // the reading; nothing else in the debug line shows them. A
-                // frame without a main reading printed them after the arrow.
-                if !m.aux_values.is_empty() && !absent {
-                    println!("    {} {}", style("sub-values:").dim(), m.aux_summary());
+                match print_frame(&mut out, i, &m, display, absent) {
+                    // Piped into `head`, which has its lines.
+                    Err(e) if e.kind() == io::ErrorKind::BrokenPipe => break,
+                    printed => printed?,
                 }
             }
             // Only a replay ends, and `debug` reads a meter.
@@ -114,5 +106,39 @@ pub(crate) fn cmd_debug(
         i += 1;
     }
 
+    Ok(())
+}
+
+/// One frame's line on stdout: the raw frame beside what it decoded to, and
+/// `display`, the digits it showed.
+fn print_frame(
+    out: &mut impl Write,
+    i: usize,
+    m: &Measurement,
+    display: &str,
+    absent: bool,
+) -> io::Result<()> {
+    writeln!(
+        out,
+        "{} mode_raw={:04X} display={:?} progress={:?} flags={} raw={:02X?} \u{2192} {}",
+        style(format!("[{i}]")).dim(),
+        m.mode_raw,
+        display,
+        m.progress,
+        m.flags,
+        m.raw_payload,
+        style(format!("{m}")).green(),
+    )?;
+    // The secondary displays a UT181A or UT171 sends alongside the reading;
+    // nothing else in the debug line shows them. A frame without a main
+    // reading printed them after the arrow.
+    if !m.aux_values.is_empty() && !absent {
+        writeln!(
+            out,
+            "    {} {}",
+            style("sub-values:").dim(),
+            m.aux_summary()
+        )?;
+    }
     Ok(())
 }

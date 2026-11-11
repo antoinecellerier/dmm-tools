@@ -1132,6 +1132,11 @@ fn run_read_loop<T: dmm_lib::transport::Transport>(
                 }
                 run.take(m, 0, marker.as_ref().map(|k| (k.number, k.note.as_str())))?;
                 i += 1;
+                // Piped into `head`, which has its lines: the run ends as
+                // Ctrl+C ends it, with the summary.
+                if run.writer.reader_gone() {
+                    break;
+                }
             }
             // A replay's last frame is behind us: the run ends with the file.
             Ok(StreamEvent::Ended) => break,
@@ -1359,6 +1364,9 @@ fn read_import(
             file_extra,
             marker.map(|m| (m.number, m.note.as_str())),
         )?;
+        if run.writer.reader_gone() {
+            break;
+        }
     }
     run.close(0, None)
 }

@@ -296,3 +296,29 @@ fn the_zt5b_mock_opens_as_its_own_device() {
         "got {stderr}"
     );
 }
+
+/// Piped into a reader that goes away, as `head` does once it has its lines,
+/// an endless run ends as Ctrl+C ends it: with the summary and success,
+/// not "Broken pipe".
+#[test]
+fn read_ends_with_its_summary_when_the_pipe_closes() {
+    let mut child = dmm_cli()
+        .args([
+            "--device",
+            "mock",
+            "read",
+            "--count",
+            "0",
+            "--interval-ms",
+            "10",
+        ])
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .expect("run dmm-cli");
+    drop(child.stdout.take());
+    let out = child.wait_with_output().expect("the run ends");
+    let stderr = String::from_utf8(out.stderr).expect("utf-8 stderr");
+    assert!(out.status.success(), "{:?}: {stderr}", out.status);
+    assert!(stderr.contains("| Min:"), "got {stderr}");
+}
