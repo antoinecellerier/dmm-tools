@@ -1082,6 +1082,7 @@ fn a_decade_step_reaches_every_value_bearing_field() {
         menu: _,
         // Rebuilt from the values above every frame.
         axis_maps: _,
+        cursor_readout: _,
         plot_transform: _,
         // Times, counts, pixels and words: no plotted unit.
         plot_rect: _,

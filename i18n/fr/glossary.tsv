@@ -186,7 +186,7 @@ viewport (minimap bracket)	fenêtre d'affichage	n. f.	colors-swatch-viewport, sh
 statistics	statistiques	n. f. pl.	stats-heading, settings-statistics	MS Terminology Statistics => Statistiques	
 mean	moyenne	n. f.	stats-mean, graph-mean, read-summary	MS Terminology AVERAGE => MOYENNE; Voltsoft FR PDF p.85 «valeur moyenne»	Depends on the pending English Mean-vs-Avg checkpoint: either way French is «Moyenne» (caption «Moy. :» if the column is too wide).
 standard deviation / σ	écart-type / σ	n. m.	stats-sd, graph-histogram-a11y-sd, hovers	IEV 103-08-13 «écart-type, m» (search index); MS Terminology standard deviation => écart type (no hyphen)	Decided: sources differ on the hyphen. Recommended «écart-type» (IEV).
-readings (count of)	mesures	n. f. pl.	stats-count, graph-readout-count, read-summary, graph-histogram-a11y*	Voltcraft VC925 FR PDF p.156 «mesure» (see reading)	Ruling: the statistics say how many readings, not "Count": «Mesures : 12», read-out «Mesures=12».
+readings (count of)	mesures	n. f. pl.	stats-count, read-summary, graph-histogram-a11y*	Voltcraft VC925 FR PDF p.156 «mesure» (see reading)	Ruling: the statistics say how many readings, not "Count": «Mesures : 12».
 integral	intégrale	n. f.	stats-integral, read-integral, --integrate help	MS Terminology integral => intégrale	
 Visible (block of figures)	Visible	adj.	stats-visible	no approved source	Same word.
 Reset (statistics)	Réinitialiser	v.	stats-reset	MS Terminology reset => réinitialiser	

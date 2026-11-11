@@ -195,7 +195,7 @@ in a narrow graph.
 | **Histogram** | How the visible readings spread; see [Histogram](#histogram) |
 | **Ref** | Horizontal lines at the values typed (`3.3, 5 V, 4.7k`); one that draws none is underlined |
 | **Triggers** | Diamonds where the trace crosses a reference line (needs Ref) |
-| **Cursors** | Click to place cursor A, again for B; reads ΔT, ΔV, ∫ (current and voltage modes) and the average, σ and count of the readings from A to B |
+| **Cursors** | Click to place cursor A, again for B; reads ΔT and Δ beside the chip, and the rest in [Statistics](#statistics)' **A–B** group, or beside the chip too while Statistics is hidden |
 
 ![The same session with the boot sequence picked off the minimap instead of the live end: a diamond at each crossing of the 1 mA reference line, and a 60 s Min/Max envelope holding the boot's 108 mA peak](../assets/gui-graph-triggers.webp)
 
@@ -323,6 +323,7 @@ or V·s) for each group:
 |---|---|
 | **Session** | The meter's main reading since the last Reset, in the ranges the meter showed |
 | **Visible** | The readings the graph shows, in the series it plots; while the graph is shown |
+| **A–B** | The readings from cursor A to cursor B, with **Δ** between the two; while **Cursors** is on |
 
 Each group's name is followed by how long its readings span and how many
 there are (`1m 49s #1103`).

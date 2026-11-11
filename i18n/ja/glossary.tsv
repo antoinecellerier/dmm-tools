@@ -186,7 +186,7 @@ viewport (minimap bracket)	ビューポート	n.	colors-swatch-viewport, shortcu
 statistics	統計	n.	stats-heading, settings-statistics	no approved source found (MS-T Statistics is a product name)	
 mean	平均値	n.	stats-mean, graph-mean, read-summary	Sanwa PC7000 JP PDF p.2 “平均値”; Fluke 289 JP PDF p.27 “読み値の平均値”	Caption «平均値:».
 standard deviation / σ	標準偏差 / σ	n.	stats-sd, graph-histogram-a11y-sd, hovers	MS-T standard deviation => 標準偏差	
-readings (count of)	測定値の数	n.	stats-count, graph-readout-count, read-summary, graph-histogram-a11y*	as reading	"Statistics caption ""Readings: 12"" → «測定値: 12 件»; read-out «測定値=12»."
+readings (count of)	測定値の数	n.	stats-count, read-summary, graph-histogram-a11y*	as reading	"Statistics caption ""Readings: 12"" → «測定値: 12 件»."
 integral	積分	n.	stats-integral, read-integral, --integrate help	MS-T integral => 積分	
 Visible (block of figures)	表示範囲	n.	stats-visible	no approved source found	
 Reset (statistics)	リセット	n.	stats-reset	MS-T reset => リセット	

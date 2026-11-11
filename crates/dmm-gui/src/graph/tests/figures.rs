@@ -54,33 +54,27 @@ fn the_spoken_histogram_follows_the_language() {
     assert_ne!(*spoken, english, "rebuilt in the new language");
 }
 
-/// The cursor readout covers the readings at both cursors and between
-/// them, whichever cursor is placed first.
+/// The cursors measure the readings at both of them and between them,
+/// whichever is placed first.
 #[test]
-fn the_cursor_readout_covers_the_readings_between_the_cursors() {
+fn the_cursors_measure_the_readings_between_them() {
     let mut g = graph_with_a_minute_of_data();
     g.cursors.active = true;
     g.cursors.a = Some(2.0);
-    assert_eq!(
-        g.cursor_readout(&crate::l10n::english()),
-        None,
-        "one cursor placed"
-    );
+    assert!(g.cursor_measure().is_none(), "one cursor placed");
     g.cursors.b = Some(1.0);
-    let figures = g
-        .cursor_readout(&crate::l10n::english())
-        .expect("both cursors placed");
-    assert_eq!(figures[0], "\u{0394}T=1.00 s");
-    assert_eq!(
-        figures[figures.len() - 3..],
-        ["Mean=1.5000 V", "\u{3c3}=331.66 mV", "Readings=11"]
-    );
+    let m = g.cursor_measure().expect("both cursors placed");
+    assert_eq!(m.dt, 1.0);
+    assert_eq!(m.stats.count, 11);
+    assert_eq!(m.stats.avg(), Some(1.5));
+    let sd = m.stats.std_dev().expect("a spread");
+    assert!((sd - 0.331_66).abs() < 1e-5, "{sd}");
 }
 
-/// Over megohms held in Ω, the readout writes its figures in MΩ, as the
-/// axis beside it does.
+/// Over megohms followed by a reading in Ω, the trace is held in Ω, and so
+/// are the cursors' figures: writing them in MΩ is the panel's to do.
 #[test]
-fn the_cursor_readout_follows_the_axis_prefix() {
+fn the_cursors_measure_in_the_axis_prefix() {
     let mut g = Graph::new();
     g.time_window_secs = 10.0;
     let t0 = Instant::now();
@@ -104,31 +98,12 @@ fn the_cursor_readout_follows_the_axis_prefix() {
     g.cursors.active = true;
     g.cursors.a = Some(1.0);
     g.cursors.b = Some(3.0);
-    let figures = g
-        .cursor_readout(&crate::l10n::english())
-        .expect("both cursors");
-    assert_eq!(figures[1], "\u{0394}=2.0000 M\u{3a9}");
-    assert_eq!(figures[figures.len() - 3], "Mean=6.0000 M\u{3a9}");
-}
-
-/// The readout writes its integral as the statistics panel does: a second at
-/// 1 µA is well under what four decimals of a mAh could show.
-#[test]
-fn the_cursor_readout_writes_the_integral_in_a_readable_prefix() {
-    let mut g = Graph::new();
-    let t0 = Instant::now();
-    g.push(0.001, t0, "DC A", "mA", None);
-    g.push(0.001, t0 + Duration::from_secs(1), "DC A", "mA", None);
-    g.cursors.active = true;
-    g.cursors.a = Some(0.0);
-    g.cursors.b = Some(1.0);
-    let figures = g
-        .cursor_readout(&crate::l10n::english())
-        .expect("both cursors placed");
-    assert!(
-        figures.contains(&"\u{222b}=277.78 pAh".to_string()),
-        "{figures:?}"
-    );
+    let m = g.cursor_measure().expect("both cursors");
+    assert_eq!(g.plotted_unit(), "\u{3a9}");
+    let delta = m.delta.expect("a reading at each cursor");
+    assert!((delta - 2.0e6).abs() < 1e-3, "{delta}");
+    let mean = m.stats.avg().expect("readings between them");
+    assert!((mean - 6.0e6).abs() < 1e-3, "{mean}");
 }
 
 /// Over-range readings count with the readings they fell between: after a

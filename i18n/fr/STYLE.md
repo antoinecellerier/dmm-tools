@@ -81,8 +81,8 @@ Imprimerie nationale typography would put the narrow U+202F before ; ! ? and ins
 
 **Writing it in `.ftl` files.** Fluent's syntax counts only U+0020 as blank (fluent-syntax), so a literal U+00A0 is ordinary text and survives parsing, including next to a placeable: `{ $series } : { $value }` with U+00A0 before the colon. Type it literally. The `{" "}` escape is legal Fluent but unreadable.
 
-**Where the rule bends.** A space before the colon is still French punctuation, so keep it in compact captions: «Min :», «Max :», «Moy. :», «σ :», «Appareil :», «Tracer :», «Afficher :». The exceptions are notation, which follows the English exactly:
-- `Mean={ $value }` → `Moy.={ $value }`, `Readings=` → `Mesures=`, `ΔT=`, `σ=`, `∫:` (graph-readout-*, stats-integral; their comments say "no spaces around =" and "stay as they are");
+**Where the rule bends.** A space before the colon is still French punctuation, so keep it in compact captions: «Appareil :», «Tracer :», «Afficher :». The Statistics table's captions (stats-min, stats-max, stats-mean, stats-sd) head columns and rows and take no colon at all, as in English. The exceptions are notation, which follows the English exactly:
+- the symbols `ΔT`, `Δ`, `σ`, `∫` and `#` (the cursor readout and stats-delta, stats-sd, stats-integral, stats-count: "stay as they are");
 - `Y:Fixed` / `Y:Auto` → «Y:fixe», «Y:auto»: chips set in a tight row;
 - ratios such as `{ $ratio }:1` (colors-issue-low-contrast);
 - the meter's menu paths (`SETUP -> Communication -> ON`) and anything else the meter prints.

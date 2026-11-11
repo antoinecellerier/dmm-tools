@@ -31,6 +31,14 @@ stats-integral = ∫
 stats-session = Session
 # The name of the figures of the samples the graph shows.
 stats-visible = Visible
+# The name of the figures of the samples between the graph's two cursors,
+# which the graph labels A and B; the dash is an en dash. The screen
+# reader's name says it in words.
+stats-cursors = A–B
+    .a11y = Between cursors A and B
+# The caption of how far apart the readings at the two cursors are; Δ is
+# its usual symbol.
+stats-delta = Δ
 # How many readings a group's figures cover, after how long they span (e.g.
 # "1m 49s #1103"); # marks a count, $count is the number. A screen reader
 # says both in words; $span is written like "1m 49s" or "59 s".

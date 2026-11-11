@@ -534,22 +534,22 @@ impl Graph {
         }
     }
 
-    /// The cursors' readout beside their chip, or how to place them until
-    /// both are.
+    /// The cursors' readout beside their chip, in their colour and written
+    /// as Statistics' wrapped lines are, or how to place them until both are.
     fn show_cursor_readout(&mut self, ui: &mut Ui, l10n: &Localizer, tc: &ThemeColors) {
-        if let Some(figures) = self.cursor_readout(l10n) {
+        if !self.cursor_readout.is_empty() {
             let color = tc.graph_cursor_delta();
             const GAP: f32 = 6.0;
-            let galleys: Vec<_> = figures
-                .into_iter()
+            let galleys: Vec<_> = self
+                .cursor_readout
+                .iter()
                 .map(|text| {
-                    egui::WidgetText::from(egui::RichText::new(text).color(color).strong())
-                        .into_galley(
-                            ui,
-                            Some(egui::TextWrapMode::Extend),
-                            f32::INFINITY,
-                            egui::TextStyle::Body,
-                        )
+                    egui::WidgetText::from(egui::RichText::new(text).color(color)).into_galley(
+                        ui,
+                        Some(egui::TextWrapMode::Extend),
+                        f32::INFINITY,
+                        egui::TextStyle::Monospace,
+                    )
                 })
                 .collect();
             // The readout stays together: on the chips' row while it fits
@@ -558,11 +558,14 @@ impl Graph {
             let between = GAP + 2.0 * ui.spacing().item_spacing.x;
             let width = galleys.iter().map(|g| g.size().x).sum::<f32>()
                 + between * galleys.len().saturating_sub(1) as f32;
-            if width > ui.available_size_before_wrap().x {
+            // Set off from the chip by the gap between two figures, while it
+            // shares the chip's row.
+            let own_row = width + between > ui.available_size_before_wrap().x;
+            if own_row {
                 ui.end_row();
             }
             for (k, galley) in galleys.into_iter().enumerate() {
-                if k > 0 {
+                if k > 0 || !own_row {
                     ui.add_space(GAP);
                 }
                 ui.add(egui::Label::new(galley));
@@ -574,51 +577,6 @@ impl Graph {
                     .color(ui.visuals().weak_text_color()),
             );
         }
-    }
-
-    /// The cursor readout: ΔT and Δ between the cursors, the integral where
-    /// the unit has one, then the mean, σ and count of the readings from A
-    /// to B, written as Statistics writes the visible window's. `None` until
-    /// both cursors are placed.
-    pub(super) fn cursor_readout(&mut self, l10n: &Localizer) -> Option<Vec<String>> {
-        let (ta, tb) = (self.cursors.a?, self.cursors.b?);
-        let (stats, integral) = self.cursor_figures()?;
-        let unit = &self.current_unit;
-        // Figures of the readings, as Statistics writes them: each in a
-        // prefix that fits it, to five digits, so a spread of a few ohms
-        // beside megohms keeps its digits; a level's to its own decimals.
-        let figure_with = |v: f64, decimals: usize| {
-            let (number, unit) = if self.levels {
-                (format!("{v:.decimals$}"), unit.as_str().into())
-            } else {
-                dmm_shared::stat_figure(v, unit, None)
-            };
-            format!("{number} {unit}").trim_end().to_string()
-        };
-        let dv = match (self.nearest_point(ta), self.nearest_point(tb)) {
-            (Some((_, a)), Some((_, b))) => figure_with((b - a).abs(), self.decimals(true)),
-            _ => crate::NO_DATA.to_string(),
-        };
-        let mean_decimals = self.decimals(false);
-        let figure = |v: Option<f64>| match v {
-            Some(v) => figure_with(v, mean_decimals),
-            None => crate::NO_DATA.to_string(),
-        };
-        let integral = integral
-            .and_then(|raw| dmm_lib::stats::integral_display(raw, unit))
-            .map(|(value, disp_unit)| {
-                let (number, disp_unit) = dmm_shared::stat_figure(value, disp_unit, None);
-                format!("\u{222b}={number} {disp_unit}")
-            });
-        let figures = [
-            Some(format!("\u{0394}T={:.2} s", (tb - ta).abs())),
-            Some(format!("\u{0394}={dv}")),
-            integral,
-            Some(tr!(l10n, "graph-readout-mean", value = figure(stats.avg())).into_owned()),
-            Some(format!("\u{3c3}={}", figure(stats.std_dev()))),
-            Some(tr!(l10n, "graph-readout-count", count = stats.count).into_owned()),
-        ];
-        Some(figures.into_iter().flatten().collect())
     }
 
     /// Chips choosing which series the graph plots: the meter's main reading

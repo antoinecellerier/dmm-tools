@@ -128,13 +128,6 @@ graph-cursors = 光标
     .hover = 单击图表放置两个光标 ({ $keys })
 # Small text after Cursors until both are placed.
 graph-cursors-hint = 单击图表放置光标
-# After Cursors once both are placed, among figures such as ΔT=12.50 s and
-# σ=0.0012 V: the mean of the readings from A to B. $value is a number with
-# its unit, e.g. 3.2401 V. Keep it short, with no spaces around =. ΔT=,
-# Δ= and σ= beside it are notation and stay as they are in every language.
-graph-readout-mean = 平均值={ $value }
-# The same row: how many readings lie from A to B. $count is that number.
-graph-readout-count = 读数={ $count }
 
 ## The plot: the readout by the pointer, the labels on its lines, and the
 ## flags of markers along its bottom edge.

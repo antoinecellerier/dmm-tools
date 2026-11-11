@@ -186,7 +186,7 @@ viewport (minimap bracket)	área visible	s. f.	colors-swatch-viewport, shortcuts
 statistics	estadísticas	s. f. pl.	stats-heading, settings-statistics	MS-T «Statistics» → «Estadísticas»	
 mean	media	s. f.	stats-mean, graph-mean, read-summary	no approved source for «media» (MS-T «AVERAGE» → «PROMEDIO»; Fluke 80 Series V PDF p.8 «AVG (promedio)»)	Statistics' mean: «media» (caption «Media:»); the meter's AVG: «promedio».
 standard deviation / σ	desviación estándar / σ	s. f.	stats-sd, graph-histogram-a11y-sd, hovers	MS-T «standard deviation» → «desviación estándar»	Spain also says «desviación típica»; «estándar» is understood everywhere.
-readings (count of)	lecturas	s. f. pl.	stats-count, graph-readout-count, read-summary, graph-histogram-a11y*	Fluke 80 Series V PDF p.8 «las lecturas MAX, MIN, AVG»	The statistics say how many readings: «Lecturas: 12», read-out «Lecturas=12».
+readings (count of)	lecturas	s. f. pl.	stats-count, read-summary, graph-histogram-a11y*	Fluke 80 Series V PDF p.8 «las lecturas MAX, MIN, AVG»	The statistics say how many readings: «Lecturas: 12».
 integral	integral	s. f.	stats-integral, read-integral, --integrate help	MS-T «integral» → «integral»	
 Visible (block of figures)	Visible	adj.	stats-visible	no approved source	Same word.
 Reset (statistics)	Restablecer	v.	stats-reset	MS-T «reset» → «restablecer»	

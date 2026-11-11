@@ -118,6 +118,13 @@ units, so a longer translation has room either side; the span ends on the
 numbers' edge and the count starts on the units', so the line under a
 group's name reads as part of the table rather than a caption beside it.
 
+**The cursors' figures are a group of the table, in their colour.** While
+Cursors is on, an A–B group follows Visible, so it moves nothing before it,
+drawn as one block in the colour of the cursor lines (its name, span,
+count, figures, and any caption that heads its figures alone, Δ's
+included); the toolbar keeps ΔT and Δ, and
+writes every figure only while Statistics is hidden.
+
 **Reset sits beside Session's name.** It starts Session's figures over and
 nothing else, so it stands by them in every shape, as a small ↺ that fits
 the line at any width the table takes.

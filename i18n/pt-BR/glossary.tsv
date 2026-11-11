@@ -184,9 +184,9 @@ crosshair	retícula	s. f.	colors-swatch-crosshair	no approved source found
 gap (in recorded data)	lacuna	s. f.	stats-gaps, colors-swatch-gap, read-skipped-intervals	no approved source found	MS-T «gap» has only acronyms.
 viewport (minimap bracket)	área visível	s. f.	colors-swatch-viewport, shortcuts-mouse-minimap	no approved source found	MS-T «viewport» → «visor»: a display device to most readers, so rejected here.
 statistics	estatísticas	s. f. pl.	stats-heading, settings-statistics	MS-T «statistics» → «Estatísticas»	
-mean	média	s. f.	stats-mean, graph-mean, read-summary	MS-T «average» → «média»; Minipa ET-2990 PDF p.23 «Modo Máximo/Mínimo/Média»	Caption «Média:»; the read-out keeps `Mean=` notation as «Média=».
+mean	média	s. f.	stats-mean, graph-mean, read-summary	MS-T «average» → «média»; Minipa ET-2990 PDF p.23 «Modo Máximo/Mínimo/Média»	Caption «Média:».
 standard deviation / σ	desvio padrão / σ	s. m.	stats-sd, graph-histogram-a11y-sd, hovers	MS-T «standard deviation» → «desvio padrão» (masc.)	No hyphen (2009 spelling, MS-T).
-readings (count of)	leituras	s. f. pl.	stats-count, graph-readout-count, read-summary, graph-histogram-a11y*	Minipa ET-2517A/2615A PDF p.13 «20 leituras por segundo»	"""Readings: 12"" → «Leituras: 12»; read-out «Leituras=12»."
+readings (count of)	leituras	s. f. pl.	stats-count, read-summary, graph-histogram-a11y*	Minipa ET-2517A/2615A PDF p.13 «20 leituras por segundo»	"""Readings: 12"" → «Leituras: 12»."
 integral	integral	s. f.	stats-integral, read-integral, --integrate help	MS-T «integral» → «integral»	Feminine in the mathematical sense («a integral»); MS-T marks its entry masculine.
 Visible (block of figures)	Visível	adj.	stats-visible	no approved source found	
 Reset (statistics)	Redefinir	v.	stats-reset	MS-T «reset» → «redefinir»	

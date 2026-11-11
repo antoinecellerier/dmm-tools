@@ -315,6 +315,13 @@ impl MeasureCursors {
         };
     }
 
+    /// Switch the cursors on with both placed, at `a` and `b`, as a test
+    /// outside the graph would have clicked them.
+    #[cfg(test)]
+    pub(crate) fn place_both(&mut self, a: f64, b: f64) {
+        self.restore(Some(a), Some(b));
+    }
+
     /// Place the next cursor at `t`; the click after places the other.
     fn place(&mut self, t: f64) {
         if self.next_is_b {
@@ -544,9 +551,15 @@ pub struct Graph {
     /// the data: see [`pattern`].
     dash_phases: pattern::DashPhases,
 
+    /// The figures the toolbar writes after **Cursors**, each ending in its
+    /// separator but the last: written by the app as Statistics writes the
+    /// cursors' group, and set before each frame. Empty until both cursors
+    /// are placed, when the toolbar says how to place them.
+    pub(crate) cursor_readout: Vec<String>,
+
     // -- Caches, redone when what they cover changes --
-    /// The cursor readout's figures and the visible window's, computed
-    /// again only when the readings they cover change.
+    /// The cursors' figures and the visible window's, computed again only
+    /// when the readings they cover change.
     cursor_figures: Option<RangeFigures>,
     visible_figures: Option<RangeFigures>,
     /// This frame's bins, cut by `update_histogram` over its Y range.
@@ -641,6 +654,7 @@ impl Graph {
             plot_transform: None,
             dash_phases: pattern::DashPhases::default(),
             cursor_figures: None,
+            cursor_readout: Vec::new(),
             visible_figures: None,
             histogram: None,
             minimap_level: None,
@@ -1152,7 +1166,7 @@ impl Graph {
         limits: Option<WatchedLimits>,
         digits: ReadingDigits,
     ) {
-        let view_before = self.view_readings_key();
+        let before = self.figures_key();
         self.handle_keyboard(ui.ctx());
         // Before the toolbar, whose Show: chips say which units have no axis.
         let width = ui.available_width();
@@ -1211,7 +1225,7 @@ impl Graph {
             self.paint_histogram(ui, l10n, area, tc, limits);
             self.histogram_divider(ui, l10n, rect, p);
         }
-        if self.view_readings_key() != view_before {
+        if self.figures_key() != before {
             ui.ctx().request_repaint();
         }
     }

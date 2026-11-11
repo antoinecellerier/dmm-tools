@@ -695,6 +695,18 @@ impl App {
     }
 
     /// Render the graph+recording area with a resizable drag separator between them.
+    /// Draw the graph, its cursor readout brought up to this frame first,
+    /// and take what it asked of the app.
+    fn show_graph(&mut self, ui: &mut Ui, tc: &crate::theme::ThemeColors) {
+        self.update_cursor_readout();
+        let limits = self.watched_limits();
+        let recording = &self.capture.recording;
+        let digits = |at, label: Option<&str>| reading_digits(recording, at, label);
+        self.graph
+            .show(ui, &self.l10n, tc, &self.markers, limits, &digits);
+        self.take_graph_actions(ui.ctx());
+    }
+
     pub(super) fn show_graph_recording_split(&mut self, ui: &mut Ui, compact: bool) {
         // Built before `self.graph` is borrowed mutably below: the palette
         // reads `self.settings`, which the borrow checker would otherwise
@@ -706,13 +718,8 @@ impl App {
             let graph_height = (total - self.settings.recording_height).max(80.0);
 
             ui.allocate_ui(egui::vec2(ui.available_width(), graph_height), |ui| {
-                let limits = self.watched_limits();
-                let recording = &self.capture.recording;
-                let digits = |at, label: Option<&str>| reading_digits(recording, at, label);
-                self.graph
-                    .show(ui, &self.l10n, &tc, &self.markers, limits, &digits);
+                self.show_graph(ui, &tc);
             });
-            self.take_graph_actions(ui.ctx());
 
             let sep = ui.separator();
             let sep_id = ui.scope_id().with("rec_resize");
@@ -752,12 +759,7 @@ impl App {
 
             self.show_recording_section(ui, compact);
         } else if self.settings.show_graph {
-            let limits = self.watched_limits();
-            let recording = &self.capture.recording;
-            let digits = |at, label: Option<&str>| reading_digits(recording, at, label);
-            self.graph
-                .show(ui, &self.l10n, &tc, &self.markers, limits, &digits);
-            self.take_graph_actions(ui.ctx());
+            self.show_graph(ui, &tc);
         } else if self.settings.show_recording {
             self.show_recording_section(ui, compact);
         }

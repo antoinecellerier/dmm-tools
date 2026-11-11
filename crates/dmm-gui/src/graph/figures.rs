@@ -19,6 +19,14 @@ use crate::theme::ThemeColors;
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub(super) struct ReadingsKey(u64, u64, u64);
 
+/// What the cursors measure: see [`Graph::cursor_measure`].
+pub(crate) struct CursorMeasure {
+    pub(crate) dt: f64,
+    pub(crate) delta: Option<f64>,
+    pub(crate) stats: RunningStats,
+    pub(crate) integral: Option<f64>,
+}
+
 /// What a histogram is binned from: the visible readings, those between the
 /// cursors, the Y range, the bins it is cut into, the decimals it writes,
 /// and the language a screen reader hears it in.
@@ -124,14 +132,39 @@ impl Graph {
         )
     }
 
-    /// The readings the view covers. The Statistics panel reads the visible
-    /// window's figures before the graph is drawn, so a pan or a zoom shows
-    /// there a frame later: [`Graph::show`] asks for that frame when this
-    /// moves, which nothing else would while the meter is paused.
+    /// The readings the view covers.
     pub(super) fn view_readings_key(&self) -> ReadingsKey {
         let (x_min, x_max) = self.view_bounds();
         let (start, end) = self.visible_index_range(x_min, x_max);
         self.readings_key(start..end)
+    }
+
+    /// What the Statistics panel's visible and cursor groups are read
+    /// from. The panel reads them before the graph is drawn, so a pan, a
+    /// zoom or a cursor moved shows there a frame later: [`Graph::show`]
+    /// asks for that frame when this moves, which nothing else would while
+    /// the meter is paused.
+    pub(super) fn figures_key(&self) -> (ReadingsKey, Option<(f64, f64)>) {
+        (self.view_readings_key(), self.cursors.pair())
+    }
+
+    /// What the cursors measure, once both are placed: the time between
+    /// them, the readings at them apart (in the plotted unit; `None` where
+    /// one has no reading), and the readings from A to B with their
+    /// integral (in the plotted unit·seconds).
+    pub(crate) fn cursor_measure(&mut self) -> Option<CursorMeasure> {
+        let (ta, tb) = self.cursors.pair()?;
+        let (stats, integral) = self.cursor_figures()?;
+        let delta = match (self.nearest_point(ta), self.nearest_point(tb)) {
+            (Some((_, a)), Some((_, b))) => Some((b - a).abs()),
+            _ => None,
+        };
+        Some(CursorMeasure {
+            dt: (tb - ta).abs(),
+            delta,
+            stats,
+            integral,
+        })
     }
 
     /// The history readings between the cursors, both included, once both

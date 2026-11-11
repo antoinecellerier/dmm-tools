@@ -82,10 +82,19 @@ enum Stat {
     Mean,
     Sd,
     Integral,
+    /// The readings at the two cursors apart: the cursors' group only.
+    Delta,
 }
 
 impl Stat {
-    const ALL: [Stat; 5] = [Stat::Min, Stat::Max, Stat::Mean, Stat::Sd, Stat::Integral];
+    const ALL: [Stat; 6] = [
+        Stat::Min,
+        Stat::Max,
+        Stat::Mean,
+        Stat::Sd,
+        Stat::Integral,
+        Stat::Delta,
+    ];
 
     fn caption(self, l10n: &Localizer) -> Cow<'_, str> {
         match self {
@@ -94,6 +103,7 @@ impl Stat {
             Stat::Mean => tr!(l10n, "stats-mean"),
             Stat::Sd => tr!(l10n, "stats-sd"),
             Stat::Integral => tr!(l10n, "stats-integral"),
+            Stat::Delta => tr!(l10n, "stats-delta"),
         }
     }
 }
@@ -105,6 +115,8 @@ enum Group {
     Session,
     /// The readings the graph shows, in the unit it plots.
     Visible,
+    /// The readings from cursor A to cursor B, while the Cursors tool is on.
+    Cursors,
 }
 
 impl Group {
@@ -112,6 +124,16 @@ impl Group {
         match self {
             Group::Session => tr!(l10n, "stats-session"),
             Group::Visible => tr!(l10n, "stats-visible"),
+            Group::Cursors => tr!(l10n, "stats-cursors"),
+        }
+    }
+
+    /// What a screen reader calls the group: `A–B` is said as the
+    /// cursors it lies between.
+    fn spoken(self, l10n: &Localizer) -> Cow<'_, str> {
+        match self {
+            Group::Cursors => tr!(l10n, "stats-cursors.a11y"),
+            _ => self.name(l10n),
         }
     }
 }
@@ -145,8 +167,12 @@ struct FormattedStatsGroup {
     sd: Figure,
     /// `None` when the unit has no integral.
     integral: Option<Figure>,
+    /// The cursors' group's Δ, `None` for the other groups.
+    delta: Option<Figure>,
     count: u64,
-    /// Seconds from the first to the last reading the figures cover.
+    /// Seconds from the first to the last reading the figures cover; the
+    /// cursors' group's are the time between them, `None` until both are
+    /// placed.
     span: Option<f64>,
 }
 
@@ -156,6 +182,7 @@ impl FormattedStatsGroup {
     /// The integral arrives already scaled to its display unit (see
     /// [`stats::integral_display`]) as `(value, display_unit)`, and is
     /// written by [`dmm_shared::stat_figure`] to five significant digits.
+    /// `delta`, the cursors' group's only, is written as a point is.
     fn new(
         group: Group,
         stats: &RunningStats,
@@ -163,6 +190,18 @@ impl FormattedStatsGroup {
         style: FigureStyle<'_>,
         integral: Option<(f64, &str)>,
         span: Option<f64>,
+    ) -> Self {
+        Self::with_delta(group, stats, unit, style, integral, span, None)
+    }
+
+    fn with_delta(
+        group: Group,
+        stats: &RunningStats,
+        unit: &str,
+        style: FigureStyle<'_>,
+        integral: Option<(f64, &str)>,
+        span: Option<f64>,
+        delta: Option<Option<f64>>,
     ) -> Self {
         let (point, mean, shown) = match style {
             FigureStyle::AsShown(shown) => (None, None, Some(shown)),
@@ -199,6 +238,7 @@ impl FormattedStatsGroup {
             avg: figure(stats.avg(), mean),
             sd: figure(stats.std_dev(), mean),
             integral,
+            delta: delta.map(|d| figure(d, point)),
             count: stats.count,
             span,
         }
@@ -212,6 +252,19 @@ impl FormattedStatsGroup {
             Stat::Mean => Some(&self.avg),
             Stat::Sd => Some(&self.sd),
             Stat::Integral => self.integral.as_ref(),
+            Stat::Delta => self.delta.as_ref(),
+        }
+    }
+
+    /// The span as the group writes it: the cursors' to the hundredth of a
+    /// second, as a short pulse is measured; the others' whole.
+    fn span_text(&self) -> String {
+        match (self.group, self.span) {
+            // Rounded first: 59.997 s is a minute, not "60.00 s".
+            (Group::Cursors, Some(secs)) if secs.is_finite() && (secs * 100.0).round() < 6000.0 => {
+                format!("{secs:.2} s")
+            }
+            _ => span_text(self.span),
         }
     }
 
@@ -225,6 +278,86 @@ impl FormattedStatsGroup {
             && self.sd == other.sd
             && self.integral == other.integral
     }
+}
+
+/// How the graph's figures are written: as a level, as the meter showed
+/// the main reading, or to five significant digits for a sub-value.
+///
+/// The visible and cursors' groups take the session's ranges, so a window
+/// lying wholly before a range the meter has since left may be written in a
+/// range it did not show itself; accepted, as the groups then read alike.
+fn plotted_style<'a>(graph: &crate::graph::Graph, shown: &'a ShownDigits) -> FigureStyle<'a> {
+    if graph.plots_levels() {
+        FigureStyle::Level
+    } else if graph.plots_main() {
+        FigureStyle::AsShown(shown)
+    } else {
+        FigureStyle::Significant
+    }
+}
+
+/// The cursors' group while their tool is on: what they measure, or
+/// dashes until both are placed.
+fn cursor_group(
+    graph: &mut crate::graph::Graph,
+    shown: &ShownDigits,
+) -> Option<FormattedStatsGroup> {
+    if !graph.cursors.active {
+        return None;
+    }
+    let measure = graph.cursor_measure();
+    let unit = graph.plotted_unit().to_string();
+    let style = plotted_style(graph, shown);
+    Some(match measure {
+        Some(m) => FormattedStatsGroup::with_delta(
+            Group::Cursors,
+            &m.stats,
+            &unit,
+            style,
+            m.integral
+                .and_then(|raw| stats::integral_display(raw, &unit)),
+            Some(m.dt),
+            Some(m.delta),
+        ),
+        None => FormattedStatsGroup::with_delta(
+            Group::Cursors,
+            &RunningStats::new(),
+            &unit,
+            style,
+            None,
+            None,
+            Some(None),
+        ),
+    })
+}
+
+/// The cursor readout's figures from their group: `ΔT 2.37 s`, `Δ 0.03 mA`
+/// and, `full`, the rest, each but the last ending in the separator, as
+/// the wrapped lines write them. Empty until both cursors are placed.
+fn cursor_readout(l10n: &Localizer, g: &FormattedStatsGroup, full: bool) -> Vec<String> {
+    if g.span.is_none() {
+        return Vec::new();
+    }
+    let figure = |s: Stat| {
+        g.figure(s)
+            .map(|f| format!("{} {}", s.caption(l10n), f.text()))
+    };
+    // ΔT is notation, as Δ and σ are.
+    let mut figures = vec![format!("\u{394}T {}", g.span_text())];
+    figures.extend(figure(Stat::Delta));
+    if full {
+        figures.extend(
+            [Stat::Integral, Stat::Mean, Stat::Sd]
+                .into_iter()
+                .filter_map(figure),
+        );
+        figures.push(tr!(l10n, "stats-count", count = g.count).into_owned());
+    }
+    let last = figures.len().saturating_sub(1);
+    for f in &mut figures[..last] {
+        f.push_str(SEPARATOR.trim_end());
+    }
+    figures
 }
 
 /// A span as the graph's time axis writes one: `59 s`, `1m 49s`, `2h 05m`.
@@ -321,6 +454,10 @@ impl StatsWidths {
                 self.number = self.number.max(chars(&f.number));
                 self.integral_unit = self.integral_unit.max(chars(&f.unit));
             }
+            if let Some(f) = &g.delta {
+                self.number = self.number.max(chars(&f.number));
+                self.unit = self.unit.max(chars(&f.unit));
+            }
             self.count = self.count.max(g.count.to_string().len());
         }
         self.fit_key() != before
@@ -416,6 +553,8 @@ struct Metrics {
     text: Color32,
     weak: Color32,
     heading: Color32,
+    /// The cursors' colour, their group's name and figures.
+    cursor: Color32,
 }
 
 impl Metrics {
@@ -715,62 +854,7 @@ impl App {
         place: StatsPlace,
         scale: f32,
     ) -> Shape {
-        // The unit the figures are read in, not the latest reading's: a word
-        // the meter shows instead of a reading, or an overload in another
-        // decade ("OL MΩ" between kΩ readings), leaves the series alone, so
-        // the figures still belong to the readings before it.
-        // Blank without a reading: `clear_session` drops `last_measurement`
-        // but `SeriesStats::reset` keeps its series, and the integral's row
-        // should vanish with the reading it describes.
-        let session = &self.capture.session;
-        let unit = match self.last_measurement {
-            Some(_) => session.unit().unwrap_or(""),
-            None => "",
-        };
-        let integral = self
-            .last_measurement
-            .as_ref()
-            .and_then(|_| session.integral_display());
-        let session_stats = session.stats();
-        let shown = session.shown();
-        let mut groups = vec![FormattedStatsGroup::new(
-            Group::Session,
-            &session_stats,
-            unit,
-            FigureStyle::AsShown(shown),
-            integral,
-            session.span_secs(),
-        )];
-        // The visible group reports what the graph draws, which is not the
-        // main reading's unit when a sub-value is plotted; there whenever the
-        // graph is, so panning over an empty stretch leaves the table as it is.
-        let graph_shown =
-            self.settings.show_graph && self.big_meter_mode == super::BigMeterMode::Off;
-        if graph_shown {
-            let (visible_stats, visible_raw) = self.graph.visible_figures();
-            let visible_unit = self.graph.plotted_unit();
-            let visible_integral =
-                visible_raw.and_then(|raw| stats::integral_display(raw, visible_unit));
-            // The visible group takes the session's ranges too, so a window
-            // lying wholly before a range the meter has since left may be
-            // written in a range it did not show itself; accepted, as the two
-            // groups then read alike.
-            let style = if self.graph.plots_levels() {
-                FigureStyle::Level
-            } else if self.graph.plots_main() {
-                FigureStyle::AsShown(shown)
-            } else {
-                FigureStyle::Significant
-            };
-            groups.push(FormattedStatsGroup::new(
-                Group::Visible,
-                &visible_stats,
-                visible_unit,
-                style,
-                visible_integral,
-                self.graph.visible_data_span_secs(),
-            ));
-        }
+        let groups = self.stats_groups();
         // A column that widened may change the shape, and with it the height
         // the big meter fitted its reading to with the old widths: another
         // frame fits again.
@@ -804,6 +888,69 @@ impl App {
         shape
     }
 
+    /// The groups the table draws: the session's, the visible window's
+    /// while the graph is shown, and the cursors' while their tool is on
+    /// there too, in that order, so a group that appears moves none before
+    /// it.
+    fn stats_groups(&mut self) -> Vec<FormattedStatsGroup> {
+        // The unit the figures are read in, not the latest reading's: a word
+        // the meter shows instead of a reading, or an overload in another
+        // decade ("OL MΩ" between kΩ readings), leaves the series alone, so
+        // the figures still belong to the readings before it.
+        // Blank without a reading: `clear_session` drops `last_measurement`
+        // but `SeriesStats::reset` keeps its series, and the integral's row
+        // should vanish with the reading it describes.
+        let session = &self.capture.session;
+        let unit = match self.last_measurement {
+            Some(_) => session.unit().unwrap_or(""),
+            None => "",
+        };
+        let integral = self
+            .last_measurement
+            .as_ref()
+            .and_then(|_| session.integral_display());
+        let shown = session.shown();
+        let mut groups = vec![FormattedStatsGroup::new(
+            Group::Session,
+            &session.stats(),
+            unit,
+            FigureStyle::AsShown(shown),
+            integral,
+            session.span_secs(),
+        )];
+        // The visible group reports what the graph draws, which is not the
+        // main reading's unit when a sub-value is plotted; there whenever the
+        // graph is, so panning over an empty stretch leaves the table as it is.
+        if self.settings.show_graph && self.big_meter_mode == super::BigMeterMode::Off {
+            let (visible_stats, visible_raw) = self.graph.visible_figures();
+            let visible_unit = self.graph.plotted_unit();
+            let visible_integral =
+                visible_raw.and_then(|raw| stats::integral_display(raw, visible_unit));
+            let style = plotted_style(&self.graph, shown);
+            groups.push(FormattedStatsGroup::new(
+                Group::Visible,
+                &visible_stats,
+                visible_unit,
+                style,
+                visible_integral,
+                self.graph.visible_data_span_secs(),
+            ));
+            groups.extend(cursor_group(&mut self.graph, shown));
+        }
+        groups
+    }
+
+    /// Hand the graph its cursor readout for this frame: ΔT and Δ while
+    /// Statistics shows the rest in the cursors' group, every figure while
+    /// it is hidden, written as that group writes them.
+    pub(super) fn update_cursor_readout(&mut self) {
+        let group = cursor_group(&mut self.graph, self.capture.session.shown());
+        let full = !self.settings.show_stats;
+        self.graph.cursor_readout = group
+            .map(|g| cursor_readout(&self.l10n, &g, full))
+            .unwrap_or_default();
+    }
+
     fn stats_metrics(
         &self,
         ui: &Ui,
@@ -820,7 +967,7 @@ impl App {
         let count_template = widths.count_template(l10n);
         let span_w = groups
             .iter()
-            .map(|g| text_width(ui, &span_text(g.span), &sub))
+            .map(|g| text_width(ui, &g.span_text(), &sub))
             .fold(text_width(ui, SPAN_TEMPLATE, &sub), f32::max);
         let icon = FontId::proportional(RESET_ICON_SIZE * scale);
         let reset_w = text_width(ui, RESET_ICON, &icon) + 2.0 * ui.spacing().button_padding.x;
@@ -867,6 +1014,10 @@ impl App {
             text: visuals.text_color(),
             weak: visuals.weak_text_color(),
             heading: self.settings.theme_colors(visuals.dark_mode).heading(),
+            cursor: self
+                .settings
+                .theme_colors(visuals.dark_mode)
+                .graph_cursor_delta(),
             main,
             sub,
             mono,
@@ -875,7 +1026,8 @@ impl App {
     }
 
     /// The colour of `group`'s figures: dimmed while the visible window
-    /// repeats the session's.
+    /// repeats the session's, the cursors' own for theirs, as their lines
+    /// and readout are drawn.
     fn figure_color(
         m: &Metrics,
         groups: &[FormattedStatsGroup],
@@ -883,7 +1035,37 @@ impl App {
     ) -> Color32 {
         match g.group {
             Group::Visible if g.repeats(&groups[0]) => m.weak,
+            Group::Cursors => m.cursor,
             _ => m.text,
+        }
+    }
+
+    /// The colour of `group`'s name: the heading's, the cursors' for theirs.
+    fn name_color(m: &Metrics, g: &FormattedStatsGroup) -> Color32 {
+        Self::name_color_or(m, g, m.heading)
+    }
+
+    /// The cursors' colour for anything of their group alone (its name,
+    /// span, count, and captions where they head its figures only), so the
+    /// group reads as one block in their colour; `other` for the rest.
+    fn name_color_or(m: &Metrics, g: &FormattedStatsGroup, other: Color32) -> Color32 {
+        match g.group {
+            Group::Cursors => m.cursor,
+            _ => other,
+        }
+    }
+
+    /// The colour of a group's span and count: weak, the cursors' for theirs.
+    fn meta_color(m: &Metrics, g: &FormattedStatsGroup) -> Color32 {
+        Self::name_color_or(m, g, m.weak)
+    }
+
+    /// The colour of a caption over or beside several groups: `other`, but
+    /// the cursors' for Δ, which only their group has.
+    fn caption_color(m: &Metrics, stat: Stat, other: Color32) -> Color32 {
+        match stat {
+            Stat::Delta => m.cursor,
+            _ => other,
         }
     }
 
@@ -894,7 +1076,7 @@ impl App {
             l10n,
             "stats-count.a11y",
             count = g.count,
-            span = span_text(g.span)
+            span = g.span_text()
         )
         .into_owned()
     }
@@ -973,7 +1155,14 @@ impl App {
         let mut said = vec![heading.to_string()];
         for ((s, centre), w) in stats.iter().zip(&centres).zip(&m.stat_captions) {
             let caption = s.caption(l10n);
-            row.put(m, centre - w / 2.0, &caption, *w, &m.sub, m.heading);
+            row.put(
+                m,
+                centre - w / 2.0,
+                &caption,
+                *w,
+                &m.sub,
+                Self::caption_color(m, *s, m.heading),
+            );
             said.push(caption.into_owned());
         }
         self.stats_line(ui, m, row, &said.join(", "));
@@ -985,14 +1174,21 @@ impl App {
             let name = g.group.name(l10n);
             let summary = Self::group_summary(l10n, g);
             let mut row = RowJob::new();
-            row.put_left(m, ui, 0.0, &name, &m.main, m.heading);
+            row.put_left(m, ui, 0.0, &name, &m.main, Self::name_color(m, g));
             if g.group == Group::Session {
                 row.reset_slot(m, m.session_w + m.small);
             }
-            row.put_right(m, ui, span_edge, &span_text(g.span), &m.sub, m.weak);
+            row.put_right(
+                m,
+                ui,
+                span_edge,
+                &g.span_text(),
+                &m.sub,
+                Self::meta_color(m, g),
+            );
             let count = tr!(l10n, "stats-count", count = g.count);
-            row.put_right(m, ui, count_edge, &count, &m.sub, m.weak);
-            let mut said = vec![format!("{name}, {summary}")];
+            row.put_right(m, ui, count_edge, &count, &m.sub, Self::meta_color(m, g));
+            let mut said = vec![format!("{}, {summary}", g.group.spoken(l10n))];
             for (s, edge) in stats.iter().zip(&edges) {
                 let Some(f) = g.figure(*s) else { continue };
                 row.put_right(m, ui, *edge, &f.number, &m.mono, color);
@@ -1038,15 +1234,22 @@ impl App {
                 _ => name_w,
             };
             let name_at = column.centre - whole / 2.0;
-            names.put(m, name_at, &name, name_w, &m.sub, m.heading);
+            names.put(m, name_at, &name, name_w, &m.sub, Self::name_color(m, g));
             if g.group == Group::Session {
                 names.reset_slot(m, name_at + name_w + m.small);
             }
-            meta.put_right(m, ui, *edge, &span_text(g.span), &m.sub, m.weak);
+            meta.put_right(m, ui, *edge, &g.span_text(), &m.sub, Self::meta_color(m, g));
             let count = tr!(l10n, "stats-count", count = g.count);
-            meta.put_left(m, ui, edge + m.digit, &count, &m.sub, m.weak);
+            meta.put_left(
+                m,
+                ui,
+                edge + m.digit,
+                &count,
+                &m.sub,
+                Self::meta_color(m, g),
+            );
             let summary = Self::group_summary(l10n, g);
-            said.push(format!("{name}, {summary}"));
+            said.push(format!("{}, {summary}", g.group.spoken(l10n)));
         }
         let named = format!("{heading}: {}", said.join("; "));
         self.stats_line(ui, m, names, &named);
@@ -1054,7 +1257,14 @@ impl App {
         for s in stats {
             let caption = s.caption(l10n);
             let mut row = RowJob::new();
-            row.put_left(m, ui, 0.0, &caption, &m.main, m.text);
+            row.put_left(
+                m,
+                ui,
+                0.0,
+                &caption,
+                &m.main,
+                Self::caption_color(m, *s, m.text),
+            );
             let mut said = Vec::new();
             for (g, edge) in groups.iter().zip(&edges) {
                 let Some(f) = g.figure(*s) else { continue };
@@ -1065,7 +1275,7 @@ impl App {
                 }
                 said.push(format!(
                     "{} {}",
-                    g.group.name(l10n),
+                    g.group.spoken(l10n),
                     Self::spoken_figure(l10n, f)
                 ));
             }
@@ -1085,13 +1295,24 @@ impl App {
     ) {
         self.stats_heading(ui, l10n, m);
         // Session's line holds its name, Reset, then its span ending on the
-        // numbers' edge: the caption column widens if they would meet.
+        // numbers' edge: the caption column widens if they would meet. A
+        // count wider than the units would then run past a narrow panel:
+        // the span and count go on a line of their own instead, ending where
+        // the units do.
         let number = m.number_w.max(m.span_w);
+        let unit_col = m.unit_column(stats);
         let reset_end = m.session_w + 2.0 * m.small + m.reset_w;
-        let caption_col = m
+        let inline_col = m
             .caption_w
             .max(m.name_w)
             .max(reset_end + m.span_w - m.gap - number);
+        let own_line =
+            inline_col + m.gap + number + m.digit + unit_col.max(m.count_w) > ui.available_width();
+        let caption_col = if own_line {
+            m.caption_w.max(m.name_w)
+        } else {
+            inline_col
+        };
         let edge = caption_col + m.gap + number;
         for (i, g) in groups.iter().enumerate() {
             if i > 0 {
@@ -1101,25 +1322,47 @@ impl App {
             let name = g.group.name(l10n);
             let summary = Self::group_summary(l10n, g);
             let mut row = RowJob::new();
-            row.put_left(m, ui, 0.0, &name, &m.main, m.heading);
+            row.put_left(m, ui, 0.0, &name, &m.main, Self::name_color(m, g));
             if g.group == Group::Session {
                 row.reset_slot(m, m.session_w + m.small);
             }
-            row.put_right(m, ui, edge, &span_text(g.span), &m.sub, m.weak);
             let count = tr!(l10n, "stats-count", count = g.count);
-            row.put_left(m, ui, edge + m.digit, &count, &m.sub, m.weak);
-            let said = format!("{name}, {summary}");
-            self.stats_line(ui, m, row, &said);
+            let meta = Self::meta_color(m, g);
+            let said = format!("{}, {summary}", g.group.spoken(l10n));
+            if own_line {
+                self.stats_line(ui, m, row, &g.group.spoken(l10n));
+                let end = edge + m.digit + unit_col;
+                let count_w = text_width(ui, &count, &m.sub);
+                let mut row = RowJob::new();
+                row.put_right(m, ui, end - count_w - m.small, &g.span_text(), &m.sub, meta);
+                row.put_right(m, ui, end, &count, &m.sub, meta);
+                self.stats_line(ui, m, row, &summary);
+            } else {
+                row.put_right(m, ui, edge, &g.span_text(), &m.sub, meta);
+                row.put_left(m, ui, edge + m.digit, &count, &m.sub, meta);
+                self.stats_line(ui, m, row, &said);
+            }
             for s in stats {
                 let Some(f) = g.figure(*s) else { continue };
                 let caption = s.caption(l10n);
                 let mut row = RowJob::new();
-                row.put_left(m, ui, 0.0, &caption, &m.main, m.text);
+                row.put_left(
+                    m,
+                    ui,
+                    0.0,
+                    &caption,
+                    &m.main,
+                    Self::name_color_or(m, g, m.text),
+                );
                 row.put_right(m, ui, edge, &f.number, &m.mono, color);
                 if !f.unit.is_empty() {
                     row.put_left(m, ui, edge + m.digit, &f.unit, &m.mono, color);
                 }
-                let said = format!("{name} {caption}: {}", Self::spoken_figure(l10n, f));
+                let said = format!(
+                    "{} {caption}: {}",
+                    g.group.spoken(l10n),
+                    Self::spoken_figure(l10n, f)
+                );
                 self.stats_line(ui, m, row, &said);
             }
         }
@@ -1161,7 +1404,7 @@ impl App {
             let name = g.group.name(l10n);
             let summary = Self::group_summary(l10n, g);
             let count = tr!(l10n, "stats-count", count = g.count);
-            let meta = format!("{}{sep}{count}", span_text(g.span));
+            let meta = format!("{}{sep}{count}", g.span_text());
             // Line breaks from template widths: the span and count first,
             // then each figure.
             let first_room = available - lead;
@@ -1180,11 +1423,11 @@ impl App {
                 let mut said = Vec::new();
                 let mut x = m.indent;
                 if i == 0 {
-                    row.put_left(m, ui, 0.0, &name, &m.main, m.heading);
+                    row.put_left(m, ui, 0.0, &name, &m.main, Self::name_color(m, g));
                     if g.group == Group::Session {
                         row.reset_slot(m, m.session_w + m.small);
                     }
-                    said.push(format!("{name}, {summary}"));
+                    said.push(format!("{}, {summary}", g.group.spoken(l10n)));
                     x = lead;
                 }
                 let figures: Vec<String> = line
@@ -1205,7 +1448,7 @@ impl App {
                     } else {
                         format!("{meta}{}", sep.trim_end())
                     };
-                    row.put_left(m, ui, x, &text, &m.mono, m.weak);
+                    row.put_left(m, ui, x, &text, &m.mono, Self::meta_color(m, g));
                     x = row.x + m.space_in(&m.mono);
                 }
                 if !figures.is_empty() {
@@ -1613,6 +1856,7 @@ mod tests {
                 avg: f("20.95", "mA"),
                 sd: f("35.53", "mA"),
                 integral: Some(f("187.24", "\u{b5}Ah")),
+                delta: None,
                 count: 325,
                 span: Some(32.0),
             };
@@ -1687,6 +1931,7 @@ mod tests {
             avg: Figure::absent(),
             sd: Figure::absent(),
             integral: None,
+            delta: None,
             count,
             span: None,
         };
@@ -1709,35 +1954,68 @@ mod tests {
         assert_eq!(widths.number(), MIN_NUMBER_CHARS, "the graph hidden");
     }
 
-    /// Nothing on the line of spans and counts overlaps at the narrowest
-    /// the columns take, with a five-digit count and long spans: ohms, with
-    /// no integral, keep the unit column narrow, and a window over the whole
-    /// session gives the visible group a long span too.
+    /// A count running past its unit slot moves the next column clear, so
+    /// that column's span still ends on its numbers' edge rather than being
+    /// pushed off it. Ohms, with no integral, keep the unit column narrow; a
+    /// window over the whole session and cursors far apart give the visible
+    /// and cursors' groups long spans, and the cursors' column follows the
+    /// visible one with no Reset between them to hold it off.
     #[test]
     fn a_long_count_keeps_clear_of_the_next_column() {
         let mut app = test_app();
         app.graph.time_window_secs = 3600.0;
         push_in(&mut app, &sine(20_000), "\u{3a9}", "\u{3a9}");
+        app.graph.cursors.place_both(10.0, 1990.0);
         // The narrowest the columns take, where nothing is spread.
         let width = (150..400)
             .map(|w| w as f32)
             .find(|w| draw(&mut app, StatsPlace::Column, *w, 2).0 == Shape::Columns)
             .expect("columns at some width");
-        let (shape, drawn) = draw(&mut app, StatsPlace::Column, width, 2);
-        assert_eq!(shape, Shape::Columns);
+        let (_, drawn) = draw(&mut app, StatsPlace::Column, width, 2);
         let meta = drawn
             .iter()
             .find(|d| d.text.contains("#20000"))
             .expect("the spans and counts");
-        // Glyphs sit on whole pixels, so a neighbour may start a fraction
-        // of one inside the advance before it.
-        for pair in meta.glyphs.windows(2) {
-            let ((x0, w0), (x1, _)) = (pair[0], pair[1]);
+        let max = line(&drawn, "Max");
+        // The cursors' span, the third: "33m 19s #20000 33m 19s #20000 33m 00s #19801".
+        let parts: Vec<&str> = meta.text.split(" #").collect();
+        let span = parts[2]
+            .split_once(' ')
+            .map(|(_, span)| span)
+            .expect("three spans");
+        let (_, span_end) = meta.span_of(span);
+        let number = max.text.rsplit(' ').nth(1).expect("a last figure");
+        let start = max.text.rfind(number).expect("its number");
+        let first = max.text[..start].chars().count();
+        let (x, advance) = max.glyphs[first + number.chars().count() - 1];
+        let number_end = x + advance;
+        assert!(
+            (span_end - number_end).abs() < 1.0,
+            "{span:?} ends at {span_end}, its numbers at {number_end}: {:?}",
+            meta.text
+        );
+    }
+
+    /// At the narrowest panel, with wide figures and a six-digit count, the
+    /// stacked shape gives each span and count a line of their own rather
+    /// than running past the panel's edge.
+    #[test]
+    fn the_stacked_shape_stays_inside_a_narrow_panel() {
+        let mut app = test_app();
+        app.l10n = std::sync::Arc::new(crate::l10n::startup("fr"));
+        let values: Vec<f64> = (0..120_000)
+            .map(|i| 399.0 * (f64::from(i) / 9.0).sin())
+            .collect();
+        push_in(&mut app, &values, "DC mV", "mV");
+        let (shape, drawn) = draw(&mut app, StatsPlace::Column, 164.0, 2);
+        assert_eq!(shape, Shape::Stacked);
+        assert!(drawn.iter().any(|d| d.text.contains("#120000")));
+        for d in &drawn {
             assert!(
-                x1 >= x0 + w0 - 1.0,
-                "{:?} overlaps: {:?}",
-                meta.text,
-                meta.glyphs
+                d.rect.right() <= 164.5,
+                "{:?} ends at {}",
+                d.text,
+                d.rect.right()
             );
         }
     }
@@ -1905,6 +2183,76 @@ mod tests {
                 "{place:?} at {width}: not reset"
             );
         }
+    }
+
+    /// The cursors' group, while their tool is on, follows Visible with a
+    /// Δ row in the cursors' colour; until both are placed its figures are
+    /// dashes and the toolbar says how to place them.
+    #[test]
+    fn the_cursors_join_the_table_while_their_tool_is_on() {
+        let mut app = app_with(&sine(60));
+        let (_, drawn) = draw(&mut app, StatsPlace::Strip, 766.0, 2);
+        assert!(drawn.iter().all(|d| !d.text.starts_with("A\u{2013}B")));
+        app.graph.cursors.active = true;
+        let (_, drawn) = draw(&mut app, StatsPlace::Strip, 766.0, 2);
+        let ab = line(&drawn, "A\u{2013}B");
+        assert!(ab.text.contains(crate::NO_DATA), "{}", ab.text);
+        assert!(line(&drawn, "Visible").rect.top() < ab.rect.top());
+        app.update_cursor_readout();
+        assert!(app.graph.cursor_readout.is_empty(), "the hint until placed");
+
+        app.graph.cursors.place_both(1.0, 3.0);
+        let (_, drawn) = draw(&mut app, StatsPlace::Strip, 766.0, 2);
+        let captions = line(&drawn, "Statistics");
+        assert!(captions.text.contains("\u{394}"), "{}", captions.text);
+        assert!(
+            line(&drawn, "A\u{2013}B")
+                .text
+                .starts_with("A\u{2013}B 2.00 s #21 ")
+        );
+    }
+
+    /// With Statistics shown, the toolbar keeps ΔT and Δ; hidden, it writes
+    /// every figure, as the table would, a separator after each but the last.
+    #[test]
+    fn the_cursor_readout_is_short_beside_the_table() {
+        let mut app = app_with(&sine(60));
+        app.graph.cursors.active = true;
+        app.graph.cursors.place_both(1.0, 3.0);
+        app.update_cursor_readout();
+        let short = app.graph.cursor_readout.clone();
+        assert_eq!(short.len(), 2, "{short:?}");
+        assert_eq!(short[0], "\u{394}T 2.00 s \u{b7}");
+        assert!(short[1].starts_with("\u{394} "), "{short:?}");
+        app.settings.show_stats = false;
+        app.update_cursor_readout();
+        let full = &app.graph.cursor_readout;
+        assert_eq!(full[0], short[0]);
+        assert_eq!(
+            full[1],
+            format!("{} \u{b7}", short[1]),
+            "Δ, a separator after it now"
+        );
+        assert!(full.iter().any(|f| f.starts_with("\u{222b} ")), "{full:?}");
+        assert!(full.iter().any(|f| f.starts_with("Mean ")), "{full:?}");
+        assert_eq!(full.last().map(String::as_str), Some("#21"));
+    }
+
+    /// The readout writes its integral as the panel does: a second at 1 µA
+    /// is well under what four decimals of a mAh could show.
+    #[test]
+    fn the_cursor_readout_writes_the_integral_in_a_readable_prefix() {
+        let mut app = test_app();
+        push_in(&mut app, &[0.001, 0.001], "DC A", "mA");
+        app.graph.cursors.active = true;
+        app.graph.cursors.place_both(0.0, 0.1);
+        app.settings.show_stats = false;
+        app.update_cursor_readout();
+        let readout = &app.graph.cursor_readout;
+        assert!(
+            readout.iter().any(|f| f.starts_with("\u{222b} 27.778 pAh")),
+            "{readout:?}"
+        );
     }
 
     /// One skipped gap is one gap.
