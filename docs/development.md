@@ -189,7 +189,9 @@ It prints four sections:
 (see [Golden file tests](#golden-file-tests)). `--timeline` adds each
 step's frames in order, and `--timeline=<step>,<step>` only those steps'. It shows each reading with its payload, the keys and the
 bytes back, and what the library logged at each frame. Identical readings
-fold into one line.
+fold into one line. The full timeline starts with the connect, decoded
+as the run's open and its check made it: what was sent, and the name or
+reading that came back.
 
 The kinds of finding:
 - `[error]`, `[timeout]` and `[attention]` repeat what the capture filed.

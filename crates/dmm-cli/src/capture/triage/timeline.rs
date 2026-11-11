@@ -1,17 +1,29 @@
 //! `--timeline`: each step's frames in order as the protocol decoded them,
 //! the keys the capture pressed in place, repeats folded.
 
-use super::decode::{Event, EventKind, Wire};
+use super::decode::{Event, EventKind, Part, Wire};
 use super::{Triage, describe};
 use crate::capture::report::{FrameDir, FrameRecord, SampleData, hex_string};
 use std::collections::HashSet;
 
 /// The timelines of the steps named in `only`, or of every step when it is
-/// empty, after the init and detection frames as recorded.
+/// empty, after the connect, decoded, and the detection check's frames as
+/// recorded.
 pub(super) fn render(triage: &Triage, only: &[String]) -> String {
     let mut out = String::from("\nTimeline\n");
     if only.is_empty() {
-        raw("init frames", &triage.report.init_frames, &mut out);
+        match triage.connect() {
+            Some(wire) => {
+                out.push_str("  connect\n");
+                for line in setup(&triage.report.init_frames, wire.t0)
+                    .into_iter()
+                    .chain(lines(&wire))
+                {
+                    out.push_str(&format!("    {line}\n"));
+                }
+            }
+            None => raw("init frames", &triage.report.init_frames, &mut out),
+        }
         if let Some(d) = &triage.report.detection {
             raw("detection frames", &d.frames, &mut out);
         }
@@ -41,19 +53,30 @@ fn raw(title: &str, frames: &[FrameRecord], out: &mut String) {
     };
     out.push_str(&format!("  {title}\n"));
     for f in frames {
-        let dir = match f.dir {
-            FrameDir::Tx => "TX",
-            FrameDir::Rx => "RX",
-        };
-        let what = match f.baud {
-            Some(baud) => format!("baud {baud}"),
-            None => f.hex.clone(),
-        };
-        out.push_str(&format!(
-            "    {} {dir} {what}\n",
-            offset(f.at_ms.saturating_sub(t0))
-        ));
+        out.push_str(&format!("    {}\n", raw_line(f, t0)));
     }
+}
+
+/// The link's set-up among `frames` (a baud rate, a bridge's feature
+/// report), which no protocol reads: as recorded, timed from `t0`.
+fn setup(frames: &[FrameRecord], t0: u64) -> Vec<String> {
+    frames
+        .iter()
+        .filter(|f| f.feature || f.baud.is_some())
+        .map(|f| raw_line(f, t0))
+        .collect()
+}
+
+fn raw_line(f: &FrameRecord, t0: u64) -> String {
+    let dir = match f.dir {
+        FrameDir::Tx => "TX",
+        FrameDir::Rx => "RX",
+    };
+    let what = match f.baud {
+        Some(baud) => format!("baud {baud}"),
+        None => f.hex.clone(),
+    };
+    format!("{} {dir} {what}", offset(f.at_ms.saturating_sub(t0)))
 }
 
 fn offset(ms: u64) -> String {
@@ -104,8 +127,7 @@ impl Run {
 }
 
 fn lines(wire: &Wire) -> Vec<String> {
-    let t0 = wire.records.first().map_or(0, |r| r.at_ms);
-    let at = |record: usize| offset(wire.at_ms(record).saturating_sub(t0));
+    let at = |record: usize| offset(wire.at_ms(record).saturating_sub(wire.t0));
     let hex = hex_string;
     let indent = " ".repeat(11);
 
@@ -125,7 +147,8 @@ fn lines(wire: &Wire) -> Vec<String> {
             wire.records[*i].dir == FrameDir::Rx && !stamped.contains(i) && !unread.contains(i)
         })
         .collect();
-    if passed.len() <= stamped.len() {
+    // The connect's are few, and each is worth seeing.
+    if passed.len() <= stamped.len() || wire.part != Part::Step {
         entries.extend(passed.into_iter().map(|i| ((i, 1), Entry::Passed(i))));
     }
     for e in &wire.events {
@@ -159,9 +182,25 @@ fn lines(wire: &Wire) -> Vec<String> {
             Entry::Key(i) => {
                 let reply = super::stats::reply_delay(wire, i)
                     .map_or(String::new(), |d| format!(" (bytes back after {d} ms)"));
+                let what = match wire.part {
+                    Part::Step => "TX key",
+                    Part::Connect { by_detection: true } => "TX probe",
+                    // Not this build's open: another build's, or a step's
+                    // key the report filed early.
+                    Part::Connect {
+                        by_detection: false,
+                    } => "TX other",
+                };
                 Run::flush(&mut run, &mut out);
-                out.push(format!("{}{reply}", line(i, "TX key")));
+                out.push(format!("{}{reply}", line(i, what)));
                 after_key = true;
+                continue;
+            }
+            // The connect's few writes are what it sent the meter: each is
+            // shown, a stream start too.
+            Entry::Poll(i) if wire.part != Part::Step => {
+                Run::flush(&mut run, &mut out);
+                out.push(line(i, "TX"));
                 continue;
             }
             Entry::Poll(i) => {
@@ -177,8 +216,13 @@ fn lines(wire: &Wire) -> Vec<String> {
                 continue;
             }
             Entry::Passed(i) => {
+                // Nothing asked the connect for a reading.
+                let what = match wire.part {
+                    Part::Step => "RX no reading",
+                    Part::Connect { .. } => "RX",
+                };
                 Run::flush(&mut run, &mut out);
-                out.push(line(i, "RX no reading"));
+                out.push(line(i, what));
                 continue;
             }
             Entry::Event(e) => e,
@@ -189,6 +233,12 @@ fn lines(wire: &Wire) -> Vec<String> {
                 after_key = false;
                 let s = SampleData::from_measurement(m);
                 format!("RX {} [{}]", describe(&s), s.raw_hex)
+            }
+            EventKind::Name { name, by_detection } => {
+                after_key = false;
+                let to = if *by_detection { " (to detection)" } else { "" };
+                // Debug quotes it and escapes what a reporter's file could hide.
+                format!("RX name {name:?}{to}")
             }
             EventKind::Error(e) => format!("error: {e}"),
             EventKind::Timeout if wire.polled => "no reply to the request".to_string(),
@@ -230,10 +280,53 @@ fn lines(wire: &Wire) -> Vec<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::super::decode::{decode, tests::frames};
+    use super::super::decode::{decode, decode_connect, tests::frames};
     use super::*;
     use dmm_lib::protocol::registry::find_device;
     use dmm_lib::transport::Link;
+
+    /// The connect shows what the open sent and the name it got back, and
+    /// says when that name was the detection probe's.
+    #[test]
+    fn the_connect_shows_its_writes_and_the_name() {
+        let recorded = frames(&[
+            (0, "tx", "AB CD 03 5F 01 DA"),
+            (80, "rx", "AB CD 04 FF 00 02 7B"),
+            (190, "rx", "AB CD 08 55 54 36 31 45 2B 03 00"),
+        ]);
+        let ut61eplus = find_device("ut61eplus").unwrap();
+        for (by_detection, name) in [
+            (false, r#"+190 ms RX name "UT61E+""#),
+            (true, r#"+190 ms RX name "UT61E+" (to detection)"#),
+        ] {
+            let wire = decode_connect(
+                &recorded,
+                ut61eplus,
+                Some(Link::UsbCable),
+                None,
+                by_detection,
+                by_detection,
+            );
+            let lines: Vec<String> = lines(&wire).iter().map(|l| l.trim().to_string()).collect();
+            assert_eq!(
+                lines[..3],
+                [
+                    "+0 ms TX AB CD 03 5F 01 DA".to_string(),
+                    "+80 ms RX AB CD 04 FF 00 02 7B".to_string(),
+                    name.to_string(),
+                ],
+                "{lines:#?}"
+            );
+        }
+    }
+
+    /// A link's set-up, which no protocol reads, is shown as recorded.
+    #[test]
+    fn the_connect_keeps_the_links_set_up() {
+        let mut recorded = frames(&[(5, "tx", ""), (40, "rx", "B0 B0")]);
+        recorded[0].baud = Some(2400);
+        assert_eq!(setup(&recorded, 0), ["      +5 ms TX baud 2400"]);
+    }
 
     /// The request that went out before the key's reply came back is shown,
     /// the reply too, and identical readings fold into one line.

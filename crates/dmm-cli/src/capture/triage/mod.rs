@@ -57,6 +57,10 @@ struct Triage<'a> {
     /// plan's, or the device's own in this build. `None` for a plan run
     /// whose plan was not given, whose ids may mean other steps here.
     definitions: Option<Vec<CaptureStep>>,
+    /// The link the run was on, and the device information it read:
+    /// what the frames are replayed with.
+    link: Link,
+    info: Option<Vec<u8>>,
     steps: Vec<StepView<'a>>,
 }
 
@@ -152,8 +156,26 @@ impl<'a> Triage<'a> {
             report,
             device,
             definitions,
+            link,
+            info,
             steps,
         }
+    }
+
+    /// The frames before the first step, decoded as the run's open made them.
+    fn connect(&self) -> Option<Wire> {
+        let device = self
+            .device
+            .filter(|_| !self.report.init_frames.is_empty())?;
+        let detection = self.report.detection.as_ref().filter(|d| d.at_open);
+        Some(decode::decode_connect(
+            &self.report.init_frames,
+            device,
+            Some(self.link),
+            self.info.as_deref(),
+            detection.is_some(),
+            detection.is_some_and(|d| d.reported_name.is_some()),
+        ))
     }
 
     /// The entry the meter's own name names when it is not the one the

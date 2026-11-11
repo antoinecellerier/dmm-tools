@@ -7,21 +7,25 @@ use crate::capture::report::{FrameDir, FrameRecord};
 use dmm_lib::error::Error;
 use dmm_lib::measurement::Measurement;
 use dmm_lib::protocol::registry::SelectableDevice;
-use dmm_lib::protocol::{Delivery, capture_reports};
+use dmm_lib::protocol::{Delivery, Protocol, capture_reports};
 use dmm_lib::transport::Link;
 
 /// Readings in a row that served nothing new before the decode gives up on
 /// a protocol that never runs dry; real ones hold a few frames at most.
 const MAX_IDLE_READINGS: usize = 64;
 
-/// A step's frames as its protocol read them.
+/// A step's frames, or a run's opening ones, as its protocol read them.
 pub(super) struct Wire {
+    /// When the frames start: offsets are measured from it.
+    pub t0: u64,
     pub records: Vec<Record>,
     pub events: Vec<Event>,
+    /// What the frames were: a step's, or the run's connect.
+    pub part: Part,
     /// Whether the meter answered requests rather than streaming.
     pub polled: bool,
     /// Recorded transmissions the protocol never writes itself: the keys
-    /// the capture pressed.
+    /// the capture pressed, or in the connect a detection probe's.
     pub commands: Vec<usize>,
     /// Recorded requests the protocol's own requests matched.
     pub polls: Vec<usize>,
@@ -39,8 +43,24 @@ pub(super) struct Event {
     pub logs: Vec<String>,
 }
 
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(super) enum Part {
+    Step,
+    /// The frames before the first step. `by_detection`: the run opened
+    /// through detection, whose probe is among them.
+    Connect {
+        by_detection: bool,
+    },
+}
+
 pub(super) enum EventKind {
     Reading(Box<Measurement>),
+    /// The name the meter gave. `by_detection`: to the detection probe the
+    /// run opened through, so the open itself asked nothing.
+    Name {
+        name: String,
+        by_detection: bool,
+    },
     Error(String),
     /// No reading came before the frames paused: on a polled meter, a
     /// request nothing answered.
@@ -96,10 +116,27 @@ pub(super) fn decode(
     let polled = protocol.delivery() == Delivery::Polled;
     replay.open(polled);
     replay.take_progress();
+    read_until_dry(protocol.as_mut(), &replay, &mut events);
 
+    let (commands, polls, unread) = sorted_transfers(&records, &replay);
+    drop(replay);
+    Wire {
+        t0: records.first().map_or(0, |r| r.at_ms),
+        records,
+        events,
+        part: Part::Step,
+        polled,
+        commands,
+        polls,
+        unread,
+    }
+}
+
+/// Readings until the frames run dry, each an event.
+fn read_until_dry(protocol: &mut dyn Protocol, replay: &Replay, events: &mut Vec<Event>) {
     let mut idle = 0;
     loop {
-        let (result, reports) = capture_reports(|| protocol.request_measurement(&replay));
+        let (result, reports) = capture_reports(|| protocol.request_measurement(replay));
         let logs = log::take();
         let progressed = replay.take_progress();
         let record = replay.last_served();
@@ -140,7 +177,144 @@ pub(super) fn decode(
             }),
         }
     }
+}
 
+/// `frames` from before a run's first step decoded as the run made them:
+/// detection's probe when the run opened through it, [`dmm_lib::Dmm`]'s open
+/// (the name first, for a protocol that wants it before `init`, then
+/// `init`), then capture's check that the meter answers (its name, else a
+/// reading), then whatever else the cable delivered, as a no-response run
+/// files it.
+///
+/// `by_detection`: the run opened through detection. `named_by_detection`:
+/// its probe got the name, so neither the open nor the check asked again.
+pub(super) fn decode_connect(
+    frames: &[FrameRecord],
+    device: &SelectableDevice,
+    link: Option<Link>,
+    info: Option<&[u8]>,
+    by_detection: bool,
+    named_by_detection: bool,
+) -> Wire {
+    let records = records(frames);
+    let replay = Replay::new(&records, link, info);
+    let mut protocol = (device.new_protocol)();
+    let mut events = Vec::new();
+
+    // A name asked before `init` is a request and its reply, and so is a
+    // probe of a meter that answers requests; a streaming meter's frames
+    // after a probe are served past the probes' writes. Otherwise `init`
+    // reads nothing, as for a step, so a purge there cannot eat the check's
+    // reply.
+    let asks_first = protocol.name_before_init(&replay);
+    let opened = by_detection || asks_first;
+    if opened {
+        replay.open(asks_first || protocol.delivery() == Delivery::Polled);
+    }
+    let mut named = named_by_detection;
+    if by_detection {
+        if named_by_detection {
+            ask_name(protocol.as_mut(), &replay, true, &mut events);
+        } else {
+            read_once(protocol.as_mut(), &replay, &mut events);
+        }
+    }
+    if !named && asks_first {
+        named = ask_name(protocol.as_mut(), &replay, false, &mut events);
+    }
+    let (init, reports) = capture_reports(|| protocol.init(&replay));
+    let logs = log::take();
+    replay.take_progress();
+    if let Err(e) = init {
+        events.push(Event {
+            record: at(&replay),
+            kind: EventKind::Error(format!("init: {e}")),
+            reports,
+            logs,
+        });
+    }
+    let polled = protocol.delivery() == Delivery::Polled;
+    if !opened {
+        replay.open(polled);
+    }
+    if !named && !ask_name(protocol.as_mut(), &replay, false, &mut events) {
+        read_once(protocol.as_mut(), &replay, &mut events);
+    }
+    if !replay.exhausted() {
+        read_until_dry(protocol.as_mut(), &replay, &mut events);
+    }
+
+    let (commands, _, unread) = sorted_transfers(&records, &replay);
+    // Every write is shown in the connect: the protocol's own, a stream
+    // start included, whether or not it released a reply.
+    let polls = (0..records.len())
+        .filter(|i| records[*i].dir == FrameDir::Tx && !commands.contains(i))
+        .collect();
+    drop(replay);
+    Wire {
+        t0: frames.first().map_or(0, |f| f.at_ms),
+        records,
+        events,
+        part: Part::Connect { by_detection },
+        polled,
+        commands,
+        polls,
+        unread,
+    }
+}
+
+/// Where an event happened: the last record served, or the last request
+/// written when that came later, so an unanswered one follows its request.
+fn at(replay: &Replay) -> Option<usize> {
+    replay.last_served().max(replay.polls().last().copied())
+}
+
+/// One reading asked for, as an event.
+fn read_once(protocol: &mut dyn Protocol, replay: &Replay, events: &mut Vec<Event>) {
+    let (result, reports) = capture_reports(|| protocol.request_measurement(replay));
+    let logs = log::take();
+    replay.take_progress();
+    events.push(Event {
+        record: at(replay),
+        kind: match result {
+            Ok(m) => EventKind::Reading(Box::new(m)),
+            Err(Error::Timeout) => EventKind::Timeout,
+            Err(e) => EventKind::Error(e.to_string()),
+        },
+        reports,
+        logs,
+    });
+}
+
+/// The protocol's name query over `replay`, as an event; whether it gave a
+/// name. A family with no query gives none and leaves no event.
+fn ask_name(
+    protocol: &mut dyn Protocol,
+    replay: &Replay,
+    by_detection: bool,
+    events: &mut Vec<Event>,
+) -> bool {
+    let (result, reports) = capture_reports(|| protocol.get_name(replay));
+    let logs = log::take();
+    replay.take_progress();
+    let record = at(replay);
+    let (kind, named) = match result {
+        Ok(Some(name)) => (EventKind::Name { name, by_detection }, true),
+        Ok(None) => return false,
+        Err(e) => (EventKind::Error(format!("name: {e}")), false),
+    };
+    events.push(Event {
+        record,
+        kind,
+        reports,
+        logs,
+    });
+    named
+}
+
+/// The recorded transmissions this protocol never wrote, the requests its
+/// writes matched, and the replies a request skipped unread.
+fn sorted_transfers(records: &[Record], replay: &Replay) -> (Vec<usize>, Vec<usize>, Vec<usize>) {
     // A request a build that asked differently wrote is matched by
     // position, so it is in `polls` with bytes this protocol never wrote.
     let polls = replay.polls();
@@ -154,16 +328,7 @@ pub(super) fn decode(
         })
         .map(|(i, _)| i)
         .collect();
-    let unread = replay.unread();
-    drop(replay);
-    Wire {
-        records,
-        events,
-        polled,
-        commands,
-        polls,
-        unread,
-    }
+    (commands, polls, replay.unread())
 }
 
 #[cfg(test)]
@@ -290,9 +455,6 @@ pub(super) mod tests {
         assert!(wire.commands.is_empty());
     }
 
-    /// The ZT-5B streams, scrambled: the key's frame and its acknowledgement
-    /// are passed over, and a blank-display packet is skipped with the line
-    /// the library logs for it.
     /// A UT217A's step opened under the CMS101's entry (#45): with the
     /// FFF2 value its link read, the backlog of whole frames each step
     /// starts on decodes as the live run read it, every frame a reading.
@@ -318,6 +480,182 @@ pub(super) mod tests {
         assert!(wire.readings().all(|(_, m)| m.mode == "Ω"));
     }
 
+    const GET_NAME: &str = "AB CD 03 5F 01 DA";
+    const NAMED_UT61EPLUS: &str = "AB CD 08 55 54 36 31 45 2B 03 00";
+
+    fn names(wire: &Wire) -> Vec<(String, bool)> {
+        wire.events
+            .iter()
+            .filter_map(|e| match &e.kind {
+                EventKind::Name { name, by_detection } => Some((name.clone(), *by_detection)),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// A UT61E+ on its cable is asked its name by capture's check, after
+    /// an `init` that sends nothing; the ack before the name is no reading.
+    #[test]
+    fn a_cable_connect_decodes_the_name_the_check_asked() {
+        let recorded = frames(&[
+            (0, "tx", GET_NAME),
+            (80, "rx", ACK),
+            (190, "rx", NAMED_UT61EPLUS),
+        ]);
+        let ut61eplus = find_device("ut61eplus").unwrap();
+        let wire = decode_connect(
+            &recorded,
+            ut61eplus,
+            Some(Link::UsbCable),
+            None,
+            false,
+            false,
+        );
+        assert_eq!(names(&wire), [("UT61E+".to_string(), false)]);
+        assert_eq!(wire.events.len(), 1, "no reading is asked once named");
+        assert_eq!(wire.polls, [0]);
+        assert!(wire.commands.is_empty());
+    }
+
+    /// A run opened through detection had the name from the probe: the
+    /// frames decode as the name query, said to be the probe's.
+    #[test]
+    fn a_detected_connect_names_the_probe() {
+        let recorded = frames(&[
+            (0, "tx", GET_NAME),
+            (80, "rx", ACK),
+            (190, "rx", NAMED_UT61EPLUS),
+        ]);
+        let ut61eplus = find_device("ut61eplus").unwrap();
+        let wire = decode_connect(&recorded, ut61eplus, Some(Link::UsbCable), None, true, true);
+        assert_eq!(names(&wire), [("UT61E+".to_string(), true)]);
+        assert_eq!(wire.part, Part::Connect { by_detection: true });
+    }
+
+    /// A UT60BT over Bluetooth is asked its name before `init` starts its
+    /// stream (family spec §6.4), and the stream start is the open's own
+    /// write, not a key.
+    #[test]
+    fn a_name_before_init_decodes_ahead_of_the_stream_start() {
+        // "UT60BT", its sum 0x0325.
+        let named = "AB CD 08 55 54 36 30 42 54 03 25";
+        let start_stream = "AB CD 03 5D 01 D8";
+        let recorded = frames(&[
+            (0, "tx", GET_NAME),
+            (120, "rx", named),
+            (300, "tx", start_stream),
+            (400, "rx", ACK),
+        ]);
+        let ut60bt = find_device("ut60bt").unwrap();
+        let wire = decode_connect(&recorded, ut60bt, Some(Link::Bluetooth), None, false, false);
+        assert_eq!(names(&wire), [("UT60BT".to_string(), false)]);
+        assert_eq!(wire.events[0].record, Some(1));
+        assert_eq!(wire.polls, [0, 2]);
+        assert!(wire.commands.is_empty(), "{:?}", wire.commands);
+        assert!(!wire.polled, "streaming once started");
+    }
+
+    /// A run opened through detection whose meter gave no name: the probe
+    /// was a reading, and the check asked for another.
+    #[test]
+    fn an_unnamed_detection_decodes_the_probe_then_the_check() {
+        let reply = [
+            "00 01 11 F8 A0 DA A9 A0",
+            "01 00 7E BF A0 A0 04 00",
+            "86 86 86 86 00 00 00 00",
+        ];
+        let mut list = Vec::new();
+        for start in [0, 500] {
+            list.push((start, "tx", "00 86 66"));
+            for (k, part) in reply.iter().enumerate() {
+                list.push((start + 10 * (k as u64 + 1), "rx", *part));
+            }
+        }
+        let bm86x = find_device("bm86x").unwrap();
+        let wire = decode_connect(
+            &frames(&list),
+            bm86x,
+            Some(Link::UsbCable),
+            None,
+            true,
+            false,
+        );
+        assert_eq!(shown(&wire), ["AC V 312.71", "AC V 312.71"]);
+        assert_eq!(wire.polls, [0, 4]);
+        assert!(wire.commands.is_empty(), "{:?}", wire.commands);
+    }
+
+    /// A meter that never answered: each unanswered request is placed
+    /// after it, not before the first frame.
+    #[test]
+    fn an_unanswered_connect_places_each_silence_after_its_request() {
+        let recorded = frames(&[(0, "tx", GET_NAME), (2001, "tx", POLL)]);
+        let ut61eplus = find_device("ut61eplus").unwrap();
+        let wire = decode_connect(
+            &recorded,
+            ut61eplus,
+            Some(Link::UsbCable),
+            None,
+            false,
+            false,
+        );
+        let last = wire.events.last().unwrap();
+        assert!(matches!(last.kind, EventKind::Timeout));
+        assert_eq!(last.record, Some(1));
+    }
+
+    /// What a no-response run filed is everything the cable delivered: it is
+    /// all decoded, not only the check's reading.
+    #[test]
+    fn a_connect_decodes_every_frame_the_cable_delivered() {
+        let packet = "B0 B0 B0 B0 B0 31 B9 B0 34 0D 8A";
+        let recorded = frames(&[(0, "rx", packet), (500, "rx", packet), (1000, "rx", packet)]);
+        let ut804 = find_device("ut804").unwrap();
+        let wire = decode_connect(&recorded, ut804, Some(Link::UsbCable), None, false, false);
+        assert_eq!(wire.readings().count(), 3);
+    }
+
+    /// A streaming meter opened through detection: the probes written for
+    /// other families stand between its frames, which are all read.
+    #[test]
+    fn a_detected_streaming_meter_reads_past_the_probes() {
+        let packet = "B0 B0 B0 B0 B0 31 B9 B0 34 0D 8A";
+        let recorded = frames(&[
+            (0, "tx", GET_NAME),
+            (100, "rx", packet),
+            (600, "rx", packet),
+            (700, "tx", "00 86 66"),
+            (1100, "rx", packet),
+        ]);
+        let ut804 = find_device("ut804").unwrap();
+        let wire = decode_connect(&recorded, ut804, Some(Link::UsbCable), None, true, false);
+        assert_eq!(wire.readings().count(), 3);
+        assert_eq!(wire.commands, [0, 3]);
+    }
+
+    /// A family with no name query is checked with a reading.
+    #[test]
+    fn a_connect_without_a_name_query_decodes_the_checks_reading() {
+        let reply = [
+            "00 01 11 F8 A0 DA A9 A0",
+            "01 00 7E BF A0 A0 04 00",
+            "86 86 86 86 00 00 00 00",
+        ];
+        let recorded = frames(&[
+            (0, "tx", "00 86 66"),
+            (10, "rx", reply[0]),
+            (20, "rx", reply[1]),
+            (30, "rx", reply[2]),
+        ]);
+        let bm86x = find_device("bm86x").unwrap();
+        let wire = decode_connect(&recorded, bm86x, Some(Link::UsbCable), None, false, false);
+        assert!(names(&wire).is_empty());
+        assert_eq!(shown(&wire), ["AC V 312.71"]);
+    }
+
+    /// The ZT-5B streams, scrambled: the key's frame and its acknowledgement
+    /// are passed over, and a blank-display packet is skipped with the line
+    /// the library logs for it.
     #[test]
     fn a_streamed_step_decodes_past_a_key() {
         super::log::install();
