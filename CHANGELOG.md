@@ -43,6 +43,7 @@
 - **Clicking the colour preset already in use keeps your custom colours** — it cleared them in both dark and light.
 - **`Ctrl+R`, `Ctrl+L`, `Ctrl+O` and `Ctrl+I` wait while the discard prompt is open** — they changed its question or acted behind it.
 - **dmm-gui keeps its Linux launcher and icon when installed in a folder whose name has a space**
+- **dmm-gui keeps the settings a newer version saved** — an older version run in between deleted them at its next save.
 - **dmm-cli detects the meter when the settings file names a device it doesn't know** — every command stopped, `list` and `completions` too.
 - **Alarms judge an imported scaled file in its own unit** — a limit of 5 on a kV file meant 5 V.
 - **dmm-gui turns an alarm off when an import or another meter is in another unit** — the same numbers judged the new unit.

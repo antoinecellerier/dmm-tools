@@ -483,6 +483,16 @@ pub struct Settings {
     /// is detected). The first frame tells the user.
     #[serde(skip)]
     pub(crate) unknown_saved_device: Option<String>,
+    /// Keys this build doesn't know, from a newer build or a development
+    /// one, kept so a save writes them back rather than deleting them. Last,
+    /// so the fields above and the shared ones have taken theirs first. A
+    /// newer build's key inside a nested group, such as the colours, is
+    /// still lost, and a value this build can't read still fails the file.
+    /// Kept as they were: a key a newer build reads alongside a field this
+    /// build changed, and a key retired since, which a new key must not
+    /// reuse under its old name.
+    #[serde(flatten)]
+    pub(crate) unknown: serde_json::Map<String, serde_json::Value>,
 }
 
 /// A settings file that could not be loaded: where it is, and where a copy
@@ -559,6 +569,7 @@ impl Default for Settings {
             user_themes: Arc::default(),
             load_problem: None,
             unknown_saved_device: None,
+            unknown: serde_json::Map::new(),
         }
     }
 }
@@ -826,6 +837,25 @@ impl DeferredSave {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A key a newer build wrote survives this build's save, written once;
+    /// the shared keys and this build's own still land in their fields.
+    #[test]
+    fn a_save_keeps_the_keys_a_newer_build_wrote() {
+        let s: Settings = serde_json::from_str(
+            r#"{"theme":"Light","device_family":"ut61eplus","future_key":{"a":1}}"#,
+        )
+        .unwrap();
+        assert_eq!(s.theme, ThemeMode::Light);
+        assert_eq!(s.shared.device_family, "ut61eplus");
+        assert_eq!(s.unknown.keys().collect::<Vec<_>>(), ["future_key"]);
+
+        let saved = s.file_contents().unwrap();
+        let back: serde_json::Value = serde_json::from_str(&saved).unwrap();
+        assert_eq!(back["future_key"], serde_json::json!({"a": 1}));
+        assert_eq!(saved.matches("\"theme\"").count(), 1, "{saved}");
+        assert_eq!(saved.matches("\"device_family\"").count(), 1, "{saved}");
+    }
 
     /// A folder of its own under the system's temp folder, removed again
     /// when the test ends.
@@ -1140,9 +1170,12 @@ mod tests {
             user_themes: Arc::default(),
             load_problem: None,
             unknown_saved_device: None,
+            unknown: serde_json::Map::from_iter([("future".to_string(), serde_json::json!(1))]),
         };
         let json = serde_json::to_string(&s).unwrap();
         let deserialized: Settings = serde_json::from_str(&json).unwrap();
+        // Every field this build writes is one it reads back as its own.
+        assert_eq!(deserialized.unknown, s.unknown);
         assert_eq!(deserialized.hidden_series, s.hidden_series);
         assert_eq!(deserialized.graph_lines, GraphLines::Solid);
         assert_eq!(deserialized.theme, ThemeMode::Light);
