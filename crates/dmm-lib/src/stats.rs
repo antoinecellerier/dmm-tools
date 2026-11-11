@@ -428,6 +428,10 @@ pub struct SeriesStats {
     /// series began or was reset, so a series that began on an overload in a
     /// decade the meter only names out of range takes its readings' own.
     anchor: Option<String>,
+    /// When the first and the latest value of the figures arrived, for
+    /// [`SeriesStats::span_secs`].
+    first_at: Option<Instant>,
+    last_at: Option<Instant>,
 }
 
 impl SeriesStats {
@@ -445,6 +449,8 @@ impl SeriesStats {
             unit_unread: false,
             shown: ShownDigits::default(),
             anchor: None,
+            first_at: None,
+            last_at: None,
         }
     }
 
@@ -524,6 +530,8 @@ impl SeriesStats {
             self.integrator.reset();
             self.shown.clear();
             self.anchor = None;
+            self.first_at = None;
+            self.last_at = None;
             self.series = Some((m.mode.to_string(), m.unit.to_string()));
             self.unit_unread = overload;
         } else if !overload {
@@ -542,6 +550,8 @@ impl SeriesStats {
                     ratio.map_or(*v, |r| r.apply(*v))
                 };
                 self.stats.push(held);
+                self.first_at.get_or_insert(m.timestamp);
+                self.last_at = Some(m.timestamp);
                 if let Some(display) = m.display_raw.as_deref() {
                     self.shown.record(*v, &m.unit, display);
                 }
@@ -571,6 +581,24 @@ impl SeriesStats {
         self.integrator.reset();
         self.shown.clear();
         self.anchor = None;
+        self.first_at = None;
+        self.last_at = None;
+    }
+
+    /// When the first value the figures hold arrived, `None` before it: a
+    /// reset or a new series starts it again, which is how a reader that
+    /// keeps something per series sees the figures start over.
+    pub fn started_at(&self) -> Option<Instant> {
+        self.first_at
+    }
+
+    /// Seconds from the first to the latest value the figures hold, or
+    /// `None` before the first. Kept apart from the integrator's, which
+    /// runs only for a unit with an integral.
+    pub fn span_secs(&self) -> Option<f64> {
+        let first = self.first_at?;
+        let last = self.last_at?;
+        Some(last.checked_duration_since(first)?.as_secs_f64())
     }
 
     /// Min/max/avg and the spread, in [`SeriesStats::unit`].
@@ -1060,6 +1088,28 @@ mod tests {
         assert_eq!(s.mode(), Some("DC V"));
         assert_eq!(s.unit(), Some("V"));
         assert_eq!(s.stats().count, 1);
+    }
+
+    /// The span runs from the first to the latest value, in a unit with no
+    /// integral too, and starts again with the figures: on a reset, and on
+    /// a new series from the reading that began it.
+    #[test]
+    fn the_span_covers_the_values_the_figures_hold() {
+        let t0 = Instant::now();
+        let at = |ms| t0 + Duration::from_millis(ms);
+        let mut s = SeriesStats::new(true);
+        assert_eq!(s.span_secs(), None);
+        s.push(&reading("Ω", "Ω", 219.8, at(0)));
+        assert_eq!(s.span_secs(), Some(0.0));
+        s.push(&reading("Ω", "Ω", 219.9, at(1500)));
+        assert_eq!(s.span_secs(), Some(1.5));
+        let started = s.started_at();
+        s.reset();
+        assert_eq!(s.span_secs(), None);
+        assert_ne!(s.started_at(), started, "a reset starts the figures again");
+        s.push(&reading("Ω", "Ω", 219.7, at(2000)));
+        s.push(&reading("DC V", "V", 1.2, at(2600)));
+        assert_eq!(s.span_secs(), Some(0.0), "the dial turn began a series");
     }
 
     /// A mode whose readings move to another quantity, as a frequency mode

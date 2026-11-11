@@ -78,6 +78,26 @@ fn visible_figures_follow_the_readings_in_view() {
     assert_eq!((s.count, s.max), (4, Some(4.0)));
 }
 
+/// The view's readings key, which asks for the frame that brings the
+/// Statistics panel up to a pan, moves only when other readings come into
+/// view.
+#[test]
+fn the_view_key_moves_with_the_readings_in_view() {
+    let mut g = Graph::new();
+    let t0 = Instant::now();
+    for i in 0..30 {
+        g.push(1.0, t0 + Duration::from_secs(i), "DC V", "V", None);
+    }
+    g.live = false;
+    g.time_window_secs = 10.0;
+    g.view_center = 10.5;
+    let key = g.view_readings_key();
+    g.view_center = 10.7;
+    assert_eq!(g.view_readings_key(), key, "the same readings in view");
+    g.view_center = 20.0;
+    assert_ne!(g.view_readings_key(), key, "panned to others");
+}
+
 #[test]
 fn visible_stats_none_when_window_holds_no_sample() {
     let mut g = Graph::new();

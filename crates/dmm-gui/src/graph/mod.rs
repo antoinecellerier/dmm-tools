@@ -1152,6 +1152,7 @@ impl Graph {
         limits: Option<WatchedLimits>,
         digits: ReadingDigits,
     ) {
+        let view_before = self.view_readings_key();
         self.handle_keyboard(ui.ctx());
         // Before the toolbar, whose Show: chips say which units have no axis.
         let width = ui.available_width();
@@ -1209,6 +1210,9 @@ impl Graph {
             );
             self.paint_histogram(ui, l10n, area, tc, limits);
             self.histogram_divider(ui, l10n, rect, p);
+        }
+        if self.view_readings_key() != view_before {
+            ui.ctx().request_repaint();
         }
     }
 

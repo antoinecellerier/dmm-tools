@@ -100,6 +100,28 @@ control.
 connection problem replaces the reading's placeholder with its title, and the
 steps go in its hover text.
 
+**Statistics is one table that takes the shape its width allows.** Each
+caption is written once over every group, so a figure is read across
+groups, not hunted for in two blocks. A row per group where it fits,
+else a column per group, else stacked. Over a narrow window's graph, where
+height counts, it becomes a line of figures per group (`app/stats_panel.rs`).
+
+**Statistics columns only widen until Reset.** They are as wide as the
+widest figure since then, so a figure ticking from 9.99 to 10.00 never
+moves a column or flips the table's shape. The shape is picked at the
+tightest spacing; room the panel has to spare then spreads the columns, up
+to a limit, so a narrow panel stays compact and a wide one is airy.
+
+**Headers centre on their figures, spans and counts follow their edges.**
+A group's name or a statistic's caption is centred over its numbers and
+units, so a longer translation has room either side; the span ends on the
+numbers' edge and the count starts on the units', so the line under a
+group's name reads as part of the table rather than a caption beside it.
+
+**Reset sits beside Session's name.** It starts Session's figures over and
+nothing else, so it stands by them in every shape, as a small ↺ that fits
+the line at any width the table takes.
+
 ## Reading display
 
 **The meter's own digits.** The reading is the meter's display string in

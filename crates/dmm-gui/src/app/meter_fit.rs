@@ -164,6 +164,9 @@ pub(super) struct FitInputs {
     /// The language the badges, the placeholder and a notice's hint are
     /// written in, whose words differ in length.
     pub(super) language: &'static str,
+    /// The Statistics columns' widths: one that widens can change the
+    /// table's shape, and with it the height left for the reading.
+    pub(super) stats_widths: [usize; 4],
 }
 
 impl FitInputs {
@@ -256,6 +259,7 @@ mod tests {
             alarm_set: false,
             notice_kind: None,
             language: "en-US",
+            stats_widths: [7, 2, 3, 4],
         }
     }
 
@@ -582,6 +586,10 @@ mod tests {
         });
         mutations.push(FitInputs {
             language: "fr",
+            ..inputs()
+        });
+        mutations.push(FitInputs {
+            stats_widths: [8, 2, 3, 4],
             ..inputs()
         });
         for (i, m) in mutations.iter().enumerate() {

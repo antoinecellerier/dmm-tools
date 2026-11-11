@@ -315,26 +315,32 @@ A thin strip below the main plot showing the full capture history.
 
 ## Statistics
 
-- **Min**, **Max**, **Mean** and **σ** (sample standard deviation) in monospace
-  with fixed-width formatting, in the ranges the meter showed
-- **Count** — number of samples
-- **Int** — cumulative time-integral (shown only for current and voltage modes).
-  For current modes, displays charge (Ah, mAh, …). For voltage modes, V·s
-  (mV·s, …).
-  Resets with the Reset button.
+One table of **Min**, **Max**, **Mean**, **σ** (sample standard deviation)
+and **∫** (the time-integral, for current and voltage: charge in Ah, mAh, …
+or V·s) for each group:
+
+| Group | Covers |
+|---|---|
+| **Session** | The meter's main reading since the last Reset, in the ranges the meter showed |
+| **Visible** | The readings the graph shows, in the series it plots; while the graph is shown |
+
+Each group's name is followed by how long its readings span and how many
+there are (`1m 49s #1103`).
+
+- **↺** (Reset) beside **Session** — clears the session's figures, integral and alarm counts
 - **Alarms** — crossings of each [alarm limit](#alarm), while limits are
   set
-- **Reset** button — clears statistics, integral and alarm counts
 - Stats persist across reconnects to the same meter (use Clear for full reset)
 - Stats and ∫ carry across an auto-range step (Ω→kΩ); turning the dial
   starts them again
-- A second row shows **visible window stats** — the same figures over the
-  current graph viewport only
-- Min/Max/Mean/σ/Count/∫ track the meter's main reading whatever the graph is
-  plotting; the visible-window row follows the plotted series and is
-  captioned with its unit
 - With a software [scale](#scale) active, all of these follow the scaled
   reading, and ∫ its unit: a clamp relabelled to `A` gives charge in Ah
+
+The table takes the shape the panel's width allows: a row per group where it
+fits, else a column per group, else the groups one under another. Over the
+graph in a narrow window it is a row per group or, narrower still, a line of
+figures per group. Its columns are as wide as the widest figure since the
+last Reset, so figures that change never move them.
 
 ## Recording
 

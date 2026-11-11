@@ -1,43 +1,39 @@
-### The Statistics panel (assets/gui-wide-layout.webp): in a wide window, the
-### figures of the meter's main reading since the last Reset, one per row
-### under a heading, then those of the samples the graph shows, under
-### Visible; in a narrow one, each block on a line of its own over the
-### graph. Then the marker list under the Record row: each marker's reading
-### with its number, its note and a button deleting it, among the recorded
-### samples while recording.
+### The Statistics panel (assets/gui-wide-layout.webp): the figures of the
+### meter's main reading since the last Reset (Session), and of the samples
+### the graph shows (Visible), as one table. Then the marker list under the
+### Record row: each marker's reading with its number, its note and a
+### button deleting it, among the recorded samples while recording.
 ###
 ### A sample is one reading the meter sent. A marker is a numbered flag on
 ### a reading, with a note, drawn on the graph and listed under the Record
-### row. Figures ($value) come written with their padding, e.g.
-### "    4.4957"; units ($unit) are symbols, e.g. V or V·s: keep both as
-### they are and phrase around them.
+### row.
 
-## The Statistics panel. The captions sit in a monospace column, right
-## aligned to the widest of stats-min, stats-max, stats-mean and stats-sd,
-## so the figures after them line up: keep them short.
+## The Statistics panel. Its table has a column per group in the reading
+## column (a row per group where the window is wide enough), each group
+## under its name, how long its readings span and how many there are; a
+## narrow window writes each group as a line, "Min 0.00 mA · Max …". The
+## captions name a column or a row of figures: keep them short, without a
+## colon.
 
-# The panel's heading in a wide window.
+# The panel's heading.
 stats-heading = 統計
 # The caption of the lowest reading.
-stats-min = 最小値:
+stats-min = 最小値
 # The caption of the highest reading.
-stats-max = 最大値:
+stats-max = 最大値
 # The caption of the mean (average) of the readings.
-stats-mean = 平均値:
+stats-mean = 平均値
 # The caption of the standard deviation; σ is its usual symbol.
-stats-sd = σ:
-# How many readings the figures above cover; $count is that number. On a
-# row of its own in a wide window; a narrow one shows the number alone, in
-# brackets.
-stats-count = 測定値: { $count } 件
-# The integral of the readings over time: ∫ is its symbol, $value the
-# figure, $unit its unit (e.g. V·s or mAh), $seconds how long it covers in
-# whole seconds; the s after it is the symbol for seconds.
-stats-integral = ∫:{ $value } { $unit } ({ $seconds }s)
-# The same, while the time it covers is unknown; $value and $unit as in
-# stats-integral.
-stats-integral-untimed = ∫:{ $value } { $unit }
-# Under the integral when readings stopped for a while: a warning that the
+stats-sd = σ
+# The caption of the integral of the readings over time; ∫ is its symbol.
+stats-integral = ∫
+# The name of the figures of the samples the graph shows.
+stats-visible = 表示範囲
+# How many readings a group's figures cover, after how long they span (e.g.
+# "1m 49s #1103"); # marks a count, $count is the number. A screen reader
+# says both in words; $span is written like "1m 49s" or "59 s".
+stats-count = #{ $count }
+# Under the table when readings stopped for a while: a warning that the
 # integral left those stretches out. $count is how many; $limit the longest
 # stretch still bridged, in seconds, e.g. 2; the s after it is the symbol
 # for seconds. ⚠ is part of it. The hover explains it: 5 and 2 are fixed
@@ -55,15 +51,11 @@ stats-alarm-counts =
        *[low] アラーム: 下限 { $low } 回
     }
     .hover = 測定値が各制限値を超えた回数 (超えた箇所はグラフにマーク)
-# A small button that starts the figures over. σ is the standard deviation.
+# What a screen reader calls the small ↺ button beside Session, which starts
+# the session's figures over; its hover says what it clears. σ is the
+# standard deviation.
 stats-reset = リセット
     .hover = 最小値/最大値/平均値/σ/積分値とアラームのカウンターをリセットする
-# The heading of the figures of the samples the graph shows, in a wide
-# window. They are drawn in a fainter colour, as their own block.
-stats-visible = 表示範囲
-# The same, as the caption at the start of their line in a narrow window,
-# before stats-min.
-stats-visible-caption = 表示範囲:
 
 ## The marker list under the Record row, and what N, Ctrl+N and a click on
 ## a marker's flag say at the top right. Notes are written in the list,

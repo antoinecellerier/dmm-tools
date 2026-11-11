@@ -124,6 +124,16 @@ impl Graph {
         )
     }
 
+    /// The readings the view covers. The Statistics panel reads the visible
+    /// window's figures before the graph is drawn, so a pan or a zoom shows
+    /// there a frame later: [`Graph::show`] asks for that frame when this
+    /// moves, which nothing else would while the meter is paused.
+    pub(super) fn view_readings_key(&self) -> ReadingsKey {
+        let (x_min, x_max) = self.view_bounds();
+        let (start, end) = self.visible_index_range(x_min, x_max);
+        self.readings_key(start..end)
+    }
+
     /// The history readings between the cursors, both included, once both
     /// are placed.
     pub(super) fn cursor_range(&self) -> Option<std::ops::Range<usize>> {

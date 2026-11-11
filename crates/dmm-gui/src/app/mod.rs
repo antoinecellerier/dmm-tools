@@ -541,6 +541,9 @@ pub struct App {
     /// The export waiting on its save dialog or its write, if any.
     export: Option<PendingExport>,
     meter_fit: MeterFit,
+    /// How wide the Statistics columns have been drawn since its figures
+    /// started over.
+    stats_widths: stats_panel::StatsWidths,
     /// Transient big meter mode (not persisted to settings).
     big_meter_mode: BigMeterMode,
     shortcut_help: ShortcutHelp,
@@ -668,6 +671,7 @@ impl App {
             theme_save: Default::default(),
             export: None,
             meter_fit: MeterFit::new(),
+            stats_widths: stats_panel::StatsWidths::default(),
             big_meter_mode: BigMeterMode::Off,
             shortcut_help: ShortcutHelp::default(),
             whats_new: WhatsNew::default(),
@@ -929,6 +933,7 @@ impl App {
                 alarm_set: self.alarm.is_some(),
                 notice_kind: notice.as_ref().map(|n| n.kind),
                 language: self.l10n.language().id,
+                stats_widths: self.stats_widths.fit_key(),
             };
             let needs_recalc = self.meter_fit.needs_recalc(&fit_inputs);
 
@@ -994,7 +999,7 @@ impl App {
                         if self.settings.show_stats {
                             ui.add_space(12.0 * scale);
                             ui.separator();
-                            self.show_stats_section(ui, false, scale);
+                            self.show_stats_section(ui, stats_panel::StatsPlace::Column, scale);
                         }
                     }
 
@@ -1538,8 +1543,9 @@ mod tests {
     /// [`dmm_shared::l10n::is_units_only`] reads it, except for a lone
     /// letter: an SI prefix or a one-letter unit (M, k, F, S) alone is more
     /// likely a key's name than a unit, so it counts only right after a
-    /// number or the `---` of a missing one ("5 V", "2 M", "--- V"), or as
-    /// the whole text when it is a unit (a reading's "V").
+    /// number or the `---` of a missing one ("5 V", "2 M", "--- V"), after
+    /// the `·` of a compound unit (an integral's "V·s"), or as the whole
+    /// text when it is a unit (a reading's "V").
     fn units_only(text: &str) -> bool {
         const PREFIXES: [&str; 8] = ["p", "n", "\u{b5}", "u", "m", "k", "M", "G"];
         let mut words = Vec::new();
@@ -1558,7 +1564,7 @@ mod tests {
         }
         let lone = |word: &str, before: Option<char>| {
             word.chars().count() == 1
-                && !before.is_some_and(|c| c.is_ascii_digit() || c == '-')
+                && !before.is_some_and(|c| c.is_ascii_digit() || c == '-' || c == '\u{b7}')
                 && !(text.trim() == word && !PREFIXES.contains(&word))
         };
         dmm_shared::l10n::is_units_only(text) && !words.iter().any(|&(w, b)| lone(w, b))
@@ -1567,7 +1573,15 @@ mod tests {
     #[test]
     fn a_lone_letter_is_a_unit_only_after_a_number() {
         for units in [
-            "22V", "5 V", "0.5 s", "2 M", "100kHz", "\u{b0}C", "V", "--- V",
+            "22V",
+            "5 V",
+            "0.5 s",
+            "2 M",
+            "100kHz",
+            "\u{b0}C",
+            "V",
+            "--- V",
+            "24.5 V\u{b7}s",
         ] {
             assert!(units_only(units), "{units}");
         }

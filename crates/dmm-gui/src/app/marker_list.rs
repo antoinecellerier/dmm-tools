@@ -711,6 +711,9 @@ impl App {
 
         if let Some(at) = reveal {
             self.graph.reveal(at);
+            // The graph and the visible window's figures were drawn this
+            // frame before the view moved: another frame shows them there.
+            ui.ctx().request_repaint();
         }
         if let Some(number) = delete {
             self.markers.remove(number);

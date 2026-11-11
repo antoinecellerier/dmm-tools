@@ -8,6 +8,7 @@ use dmm_lib::specs::{ModeSpecInfo, SpecInfo};
 use dmm_shared::tr;
 use eframe::egui::{self, RichText, Ui};
 
+use super::stats_panel::StatsPlace;
 use super::{App, BigMeterMode};
 use crate::a11y::ResponseA11yExt;
 use crate::display;
@@ -109,8 +110,11 @@ impl App {
 
         if self.settings.show_stats {
             ui.separator();
-            let compact = matches!(layout, ContentLayout::Narrow);
-            self.show_stats_section(ui, compact, 1.0);
+            let place = match layout {
+                ContentLayout::Wide => StatsPlace::Column,
+                ContentLayout::Narrow => StatsPlace::Strip,
+            };
+            self.show_stats_section(ui, place, 1.0);
         }
 
         // Wide keeps the graph in its own centre panel next to this column.
