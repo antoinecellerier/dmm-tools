@@ -483,15 +483,17 @@ Nothing is sent to the meter. Its **▸** opens three fields:
 |---|---|---|
 | **×** (Scale factor) | multiply the reading by this | ×1 |
 | **+** (Offset) | add this afterwards | +0 |
-| **→** (Unit label) | show this unit instead of the base unit | no relabel |
+| **→** (Unit label) | show this unit instead of the base unit, without converting the number | no relabel |
 
 **Apply**, or Enter in a field, commits; **Off** turns scaling off and keeps
 the fields for the next **Apply**. Clicking **Scale** itself does the same in
 one click, on and off; with nothing typed, it opens the fields.
 
 The reading is converted to its base unit (V, A, Ω, …) before scaling, so a
-factor survives auto-ranging: a 10 mV/A clamp is `× 100 → A`. With no unit
-label the reading shows in the base unit. Under REL the reading is a
+factor survives auto-ranging: a 10 mV/A clamp is `× 100 → A`. The unit
+label doesn't convert the number, so the factor sets the prefix: the same
+clamp in mA is `× 100000 → mA`. With no unit label the reading shows in the
+base unit. Under REL the reading is a
 difference, so it is scaled but takes no offset: a +2.0 °C REL reading is
 +3.6 °F.
 

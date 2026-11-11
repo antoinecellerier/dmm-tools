@@ -54,9 +54,6 @@ read--scale =
 # dmm-cli read --offset
 read--offset =
     .help = スケーリング後に VALUE を加える (--scale 1.8 と組み合わせて 32 を加えると、°C が °F になる)
-# dmm-cli read --unit
-read--unit =
-    .help = スケーリングした測定値に、マルチメーターの基本単位の代わりにこの単位を付ける
 # dmm-cli read --alarm-high
 read--alarm-high =
     .help = 測定値が VALUE を上回ったときに警告する。VALUE は基本単位 (V, A, Ω, …)、スケーリングした測定値では --unit の単位

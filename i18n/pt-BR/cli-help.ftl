@@ -54,9 +54,6 @@ read--scale =
 # dmm-cli read --offset
 read--offset =
     .help = Somar VALUE após o ajuste de escala (32 com --scale 1.8 converte °C em °F)
-# dmm-cli read --unit
-read--unit =
-    .help = Rotular a leitura ajustada com esta unidade em vez da unidade de base do multímetro
 # dmm-cli read --alarm-high
 read--alarm-high =
     .help = Avisar quando a leitura ultrapassar VALUE, em unidades de base (V, A, Ω, …), ou na --unit de uma leitura ajustada

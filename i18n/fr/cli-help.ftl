@@ -54,9 +54,6 @@ read--scale =
 # dmm-cli read --offset
 read--offset =
     .help = Ajouter VALUE après la mise à l’échelle (32 avec --scale 1.8 convertit les °C en °F)
-# dmm-cli read --unit
-read--unit =
-    .help = Étiqueter la mesure mise à l’échelle avec cette unité au lieu de l’unité de base du multimètre
 # dmm-cli read --alarm-high
 read--alarm-high =
     .help = Avertir quand la mesure dépasse VALUE, en unités de base (V, A, Ω, …), ou dans l’unité --unit d’une mesure mise à l’échelle

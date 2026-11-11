@@ -372,7 +372,9 @@ pub(crate) struct TransformArgs {
     /// Add VALUE after scaling (32 with --scale 1.8 turns °C into °F)
     #[arg(long, value_name = "VALUE", allow_negative_numbers = true, value_parser = parse_offset)]
     pub(crate) offset: Option<f64>,
-    /// Label the scaled reading with this unit instead of the meter's base unit
+    /// Label the scaled reading with this unit instead of the meter's base
+    /// unit. The number is not converted: --scale sets the prefix, so a
+    /// 10 mV/A clamp in mA is --scale 100000 --unit mA
     #[arg(long, value_name = "LABEL")]
     pub(crate) unit: Option<String>,
 }

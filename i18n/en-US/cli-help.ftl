@@ -56,7 +56,7 @@ read--offset =
     .help = Add VALUE after scaling (32 with --scale 1.8 turns °C into °F)
 # dmm-cli read --unit
 read--unit =
-    .help = Label the scaled reading with this unit instead of the meter's base unit
+    .help = Label the scaled reading with this unit instead of the meter's base unit. The number is not converted: --scale sets the prefix, so a 10 mV/A clamp in mA is --scale 100000 --unit mA
 # dmm-cli read --alarm-high
 read--alarm-high =
     .help = Warn when the reading rises above VALUE, in base units (V, A, Ω, …), or in the --unit of a scaled reading

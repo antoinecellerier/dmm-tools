@@ -224,7 +224,7 @@ dmm-cli read [OPTIONS]
 | `--integrate` | off | Show cumulative time-integral. For current modes, this computes charge (Ah, mAh, …). For voltage modes, V·s (mV·s, …). Adds `integral` and `integral_unit` columns to CSV/JSON output. |
 | `--scale <FACTOR>` | `1` | Multiply the reading, taken in base units, by FACTOR. See [Scaling readings in software](#scaling-readings-in-software). |
 | `--offset <VALUE>` | `0` | Add VALUE after scaling. |
-| `--unit <LABEL>` | | Label the scaled reading with LABEL instead of the meter's base unit. |
+| `--unit <LABEL>` | | Label the scaled reading with LABEL instead of the meter's base unit, without converting the number. |
 | `--alarm-high <VALUE>` | | Alarm when the reading rises above VALUE. See [Alarms](#alarms). |
 | `--alarm-low <VALUE>` | | Alarm when the reading falls below VALUE. |
 | `--alarm-hysteresis <BAND>` | a few counts of the meter's last digit | How far back inside the reading must come before that limit alarms again: a value, or a percentage of the limit (`1%`). |
@@ -359,8 +359,10 @@ probe divider, °C to °F. Nothing is sent to the meter.
 
 The reading is converted to its base unit (V, A, Ω, …) before scaling, so a
 factor survives auto-ranging between mV and V: a 10 mV/A clamp is
-`--scale 100`. Then `--offset` is added and `--unit` relabels the result;
-without `--unit` the reading is shown in the base unit. Under REL the reading
+`--scale 100`. Then `--offset` is added, in the same unit, and `--unit`
+relabels the result without converting it: the factor sets the prefix, so
+the same clamp in mA is `--scale 100000 --unit mA`. Without `--unit` the
+reading is shown in the base unit. Under REL the reading
 is a difference, so it is scaled but takes no offset: a +2.0 °C REL reading
 is +3.6 °F.
 
