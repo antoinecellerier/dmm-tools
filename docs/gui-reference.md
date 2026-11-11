@@ -537,7 +537,7 @@ from the default layout again, remove `window_size`, `window_maximized`,
 
 ### Wide Layout (≥ 900px)
 
-Two-column layout with a resizable left sidebar (180–400px):
+Two-column layout with a resizable left sidebar (180–480px):
 
 - **Left column:** reading display, remote controls, connection help,
   specifications, statistics

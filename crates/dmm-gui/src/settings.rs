@@ -35,10 +35,13 @@ pub(crate) const DEFAULT_WINDOW_SIZE: [f32; 2] = [960.0, 640.0];
 pub(crate) const MIN_WINDOW_SIZE: [f32; 2] = [200.0, 150.0];
 
 /// The reading panel's width in the wide layout (points): its default and
-/// the range its drag handle allows.
+/// the range its drag handle allows. The widest fits the Statistics table's
+/// three columns (Session, Visible, A–B) with the widest figures in every
+/// shipped language, and still leaves the graph about 400 points (420 less
+/// the panels' margins) at the narrowest window the wide layout takes.
 pub(crate) const SIDE_PANEL_DEFAULT_WIDTH: f32 = 240.0;
 pub(crate) const SIDE_PANEL_MIN_WIDTH: f32 = 180.0;
-pub(crate) const SIDE_PANEL_MAX_WIDTH: f32 = 400.0;
+pub(crate) const SIDE_PANEL_MAX_WIDTH: f32 = 480.0;
 
 /// The recording panel's height under the graph (points): its default and
 /// the floor its divider stops at.
