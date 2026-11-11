@@ -569,7 +569,9 @@ mod tests {
     /// A CH9325 whose meter is between packets when the listen starts: each
     /// read takes ~12 ms, the bridge's idle report interval, and carries
     /// nothing until `silent_for` has passed since the first read. Then
-    /// `packet` arrives one byte per read.
+    /// `packet` arrives in one read: a read per byte made the test hang on
+    /// a dozen real-time sleeps fitting the window's slack on a loaded CI
+    /// runner, and `the_ch9325_window_writes_nothing` covers single bytes.
     struct PacedStream {
         silent_for: Duration,
         packet: RefCell<VecDeque<u8>>,
@@ -591,13 +593,12 @@ mod tests {
             if first.elapsed() < self.silent_for {
                 return Ok(0);
             }
-            match self.packet.borrow_mut().pop_front() {
-                Some(byte) => {
-                    buf[0] = byte;
-                    Ok(1)
-                }
-                None => Ok(0),
+            let mut packet = self.packet.borrow_mut();
+            let len = packet.len().min(buf.len());
+            for (slot, byte) in buf.iter_mut().zip(packet.drain(..len)) {
+                *slot = byte;
             }
+            Ok(len)
         }
     }
 
