@@ -1567,6 +1567,23 @@ mod tests {
         app.disconnect();
     }
 
+    /// A recording whose link handed readings over in pairs at one instant
+    /// is judged by the pairs' spacing, as an import of it is: judged by the
+    /// zero within a pair it broke at every point.
+    #[test]
+    fn a_replay_in_pairs_is_judged_by_the_pairs() {
+        let mut app = test_app();
+        let mut source = crate::ReplaySource::fixture();
+        let mut text =
+            "# dmm-replay 1\n# device: ut61eplus\n# recorded: 2026-09-02T10:00:00Z\n".to_string();
+        for ms in [0, 0, 3000, 3000, 6000, 6000] {
+            text.push_str(&format!("{ms} 02 30 20 31 2E 36 31 30 39 03 02 30 30 30\n"));
+        }
+        source.replay = Arc::new(dmm_lib::replay::Replay::parse(&text).expect("a recording"));
+        app.source.replay = Some(source);
+        assert_eq!(app.gap_interval_ms(200), 3000);
+    }
+
     /// A replay's markers go back on their readings as playback reaches
     /// them, under their own numbers: each on the first reading played at or
     /// after its offset, one per reading, so a marker whose frame never plays

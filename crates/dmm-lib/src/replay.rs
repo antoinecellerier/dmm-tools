@@ -63,15 +63,6 @@ const MAGIC: &str = "# dmm-replay 1";
 /// cannot see it.
 const GAP_SLICE: Duration = Duration::from_secs(1);
 
-/// Floor under the cadence derived from a file's own sample spacing, so a
-/// burst of frames recorded milliseconds apart does not spin the tail.
-const MIN_CADENCE: Duration = Duration::from_millis(50);
-
-/// Cadence for a file with a single sample, which has no spacing of its own.
-/// About what the polled families answer at, so a one-frame file plays back
-/// as a steady reading rather than a stutter.
-const LONE_SAMPLE_CADENCE: Duration = Duration::from_millis(500);
-
 /// The `# link:` value for a cable recording. Files carry it, so it is part
 /// of the format: it stays spelled this way whatever the apps call the link.
 const LINK_USB_CABLE: &str = "USB cable";
@@ -139,7 +130,7 @@ pub struct Replay {
     /// An `Arc<Vec>` rather than an `Arc<[_]>`: converting to a slice copies
     /// every slot while the file text is still alive, raising the load peak.
     samples: Arc<Vec<(Duration, Vec<u8>)>>,
-    /// The [`cadence`], worked out when first asked rather than in `parse`,
+    /// The [`Replay::cadence`], worked out when first asked rather than in `parse`,
     /// where its gap list would sit on top of the file text.
     cadence: OnceLock<Duration>,
 }
@@ -303,7 +294,9 @@ impl Replay {
     /// it: what a player measures its gaps against, rather than a viewer's
     /// own interval.
     pub fn cadence(&self) -> Duration {
-        *self.cadence.get_or_init(|| cadence(&self.samples))
+        *self.cadence.get_or_init(|| {
+            crate::stats::median_spacing(self.samples.iter().map(|(offset, _)| *offset))
+        })
     }
 
     /// How far into the session the last sample was recorded.
@@ -499,24 +492,6 @@ fn parse_sample(
         return Err(at(line_no, "sample has no payload".to_string()));
     }
     Ok((offset, payload))
-}
-
-/// The recording's usual spacing: its median gap, floored.
-///
-/// The median rather than the mean, so one pause in an otherwise steady
-/// recording does not stretch it.
-fn cadence(samples: &[(Duration, Vec<u8>)]) -> Duration {
-    let mut gaps: Vec<Duration> = samples
-        .iter()
-        .zip(samples.iter().skip(1))
-        .map(|((before, _), (after, _))| after.saturating_sub(*before))
-        .collect();
-    if gaps.is_empty() {
-        return LONE_SAMPLE_CADENCE;
-    }
-    // The element a sort would put in the middle, without the sort.
-    let middle = gaps.len() / 2;
-    (*gaps.select_nth_unstable(middle).1).max(MIN_CADENCE)
 }
 
 /// The refusal every command path answers with, in one place so the two
@@ -1201,36 +1176,6 @@ mod tests {
         assert_eq!(Arc::strong_count(&replay.samples), 2);
         drop(dmm);
         assert_eq!(Arc::strong_count(&replay.samples), 1);
-    }
-
-    /// The cadence is the median gap, odd or even in number, and the
-    /// same element a sort would pick.
-    #[test]
-    fn the_cadence_is_the_median_gap() {
-        let at = |ms: &[u64]| -> Vec<(Duration, Vec<u8>)> {
-            ms.iter()
-                .map(|&ms| (Duration::from_millis(ms), Vec::new()))
-                .collect()
-        };
-        let sorted_median = |samples: &[(Duration, Vec<u8>)]| {
-            let mut gaps: Vec<Duration> = samples
-                .windows(2)
-                .map(|w| w[1].0.saturating_sub(w[0].0))
-                .collect();
-            gaps.sort_unstable();
-            gaps[gaps.len() / 2].max(MIN_CADENCE)
-        };
-        // Gaps 300, 100, 200: odd count.
-        let odd = at(&[0, 300, 400, 600]);
-        assert_eq!(cadence(&odd), Duration::from_millis(200));
-        assert_eq!(cadence(&odd), sorted_median(&odd));
-        // Gaps 400, 100, 300, 200: even count, the upper middle.
-        let even = at(&[0, 400, 500, 800, 1000]);
-        assert_eq!(cadence(&even), Duration::from_millis(300));
-        assert_eq!(cadence(&even), sorted_median(&even));
-        // A dense recording is floored.
-        assert_eq!(cadence(&at(&[0, 1, 2, 3])), MIN_CADENCE);
-        assert_eq!(cadence(&at(&[0])), LONE_SAMPLE_CADENCE);
     }
 
     /// A meter that went quiet for two seconds reads back as one: the caller

@@ -296,7 +296,7 @@ fn from_export(imported: dmm_shared::export::Imported, base: Instant) -> Loaded 
             .into_iter()
             .map(|m| (m.reading, m.number, m.note))
             .collect(),
-        cadence: dmm_shared::export::median_spacing(&offsets),
+        cadence: dmm_lib::stats::median_spacing(offsets.iter().copied()),
         family_slots,
         extra_slots,
         view: imported.view,
@@ -370,7 +370,7 @@ fn load_replay(text: &str, base: Instant, limit: usize) -> Result<Loaded, Unread
         experimental,
         readings,
         markers,
-        cadence: dmm_shared::export::median_spacing(&offsets),
+        cadence: dmm_lib::stats::median_spacing(offsets.iter().copied()),
         family_slots,
         extra_slots: 0,
         left_out,

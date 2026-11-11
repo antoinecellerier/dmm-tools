@@ -628,6 +628,37 @@ pub fn integral_display(raw: f64, unit: &str) -> Option<(f64, &'static str)> {
     integral_unit_info(unit).map(|(display_unit, divisor)| (raw / divisor, display_unit))
 }
 
+/// Floor under [`median_spacing`], so a burst of frames recorded
+/// milliseconds apart does not read as a fast meter.
+const MIN_CADENCE: Duration = Duration::from_millis(50);
+
+/// [`median_spacing`] of a file with no spacing of its own: a single
+/// reading, or all at one instant. About what the polled families answer at.
+const LONE_SAMPLE_CADENCE: Duration = Duration::from_millis(500);
+
+/// The spacing a recording's readings came at, from their `offsets` in
+/// order: the median gap between neighbours, floored. Every player and
+/// importer of a recording, whatever its format, judges its gaps by this.
+///
+/// The median rather than the mean, so one pause in an otherwise steady
+/// recording does not stretch it. Gaps of zero are left out: readings at one
+/// instant (a link that hands two over together) are one moment of the
+/// recording, and a playback shows only the newest of them.
+pub fn median_spacing(offsets: impl IntoIterator<Item = Duration>) -> Duration {
+    let mut before: Option<Duration> = None;
+    let mut gaps: Vec<Duration> = offsets
+        .into_iter()
+        .filter_map(|at| before.replace(at).map(|b| at.saturating_sub(b)))
+        .filter(|gap| !gap.is_zero())
+        .collect();
+    if gaps.is_empty() {
+        return LONE_SAMPLE_CADENCE;
+    }
+    // The element a sort would put in the middle, without the sort.
+    let middle = gaps.len() / 2;
+    (*gaps.select_nth_unstable(middle).1).max(MIN_CADENCE)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1592,5 +1623,48 @@ mod tests {
             .to_string(),
             "Unit changed (mV \u{2192} V)"
         );
+    }
+
+    /// The spacing is the median gap, odd or even in number, and the
+    /// same element a sort would pick.
+    #[test]
+    fn the_spacing_is_the_median_gap() {
+        let at = |ms: &[u64]| -> Vec<Duration> {
+            ms.iter().map(|&ms| Duration::from_millis(ms)).collect()
+        };
+        let spacing = |ms: &[u64]| median_spacing(at(ms));
+        let sorted_median = |ms: &[u64]| {
+            let mut gaps: Vec<Duration> = at(ms)
+                .windows(2)
+                .map(|w| w[1].saturating_sub(w[0]))
+                .collect();
+            gaps.sort_unstable();
+            gaps[gaps.len() / 2].max(MIN_CADENCE)
+        };
+        // Gaps 300, 100, 200: odd count.
+        let odd = [0, 300, 400, 600];
+        assert_eq!(spacing(&odd), Duration::from_millis(200));
+        assert_eq!(spacing(&odd), sorted_median(&odd));
+        // Gaps 400, 100, 300, 200: even count, the upper middle.
+        let even = [0, 400, 500, 800, 1000];
+        assert_eq!(spacing(&even), Duration::from_millis(300));
+        assert_eq!(spacing(&even), sorted_median(&even));
+        // A dense recording is floored.
+        assert_eq!(spacing(&[0, 1, 2, 3]), MIN_CADENCE);
+        assert_eq!(spacing(&[0]), LONE_SAMPLE_CADENCE);
+        assert_eq!(spacing(&[]), LONE_SAMPLE_CADENCE);
+    }
+
+    /// Readings handed over in pairs at one instant are spaced by the pairs,
+    /// not by the zero between the two of a pair; all at one instant have
+    /// no spacing of their own.
+    #[test]
+    fn readings_at_one_instant_are_one_moment() {
+        let at = |ms: &[u64]| median_spacing(ms.iter().map(|&ms| Duration::from_millis(ms)));
+        assert_eq!(
+            at(&[0, 0, 600, 600, 1200, 1200]),
+            Duration::from_millis(600)
+        );
+        assert_eq!(at(&[500, 500, 500]), LONE_SAMPLE_CADENCE);
     }
 }

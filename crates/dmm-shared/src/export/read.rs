@@ -109,22 +109,6 @@ impl Imported {
     }
 }
 
-/// The median gap between consecutive `offsets`, a second when there is
-/// none to measure: the spacing a file's readings came at, which a single
-/// slow stretch doesn't move.
-pub fn median_spacing(offsets: &[Duration]) -> Duration {
-    let mut gaps: Vec<Duration> = offsets
-        .windows(2)
-        .map(|w| w[1].saturating_sub(w[0]))
-        .filter(|g| !g.is_zero())
-        .collect();
-    if gaps.is_empty() {
-        return Duration::from_secs(1);
-    }
-    let mid = gaps.len() / 2;
-    *gaps.select_nth_unstable(mid).1
-}
-
 /// `text` with every control character written as its escape: file text
 /// headed for a terminal or a single line, where a raw one would act.
 pub fn escape_controls(text: &str) -> Cow<'_, str> {

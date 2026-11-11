@@ -1329,7 +1329,7 @@ fn read_import(
     // The readings' gaps are the file's: judged by its median spacing, as
     // the GUI's import does, so a slow file does not break at every point.
     let offsets = imported.offsets();
-    let tick = dmm_shared::export::median_spacing(&offsets);
+    let tick = dmm_lib::stats::median_spacing(offsets.iter().copied());
     let first_marker = next_marker_number(imported.markers.iter().map(|m| m.number));
     let count = options.count;
     let mut run = Run::open(options, &device, out, tick, first_marker)?;

@@ -11,8 +11,8 @@ mod read_error;
 
 pub use csv_layout::{CsvLayout, device_comment};
 pub use read::{
-    ExportKind, Imported, ImportedAux, ImportedMarker, ImportedReading, escape_controls,
-    median_spacing, read_csv, read_csv_from, read_json, read_json_from, timestamp,
+    ExportKind, Imported, ImportedAux, ImportedMarker, ImportedReading, escape_controls, read_csv,
+    read_csv_from, read_json, read_json_from, timestamp,
 };
 pub use read_error::{ReadError, ReadReason};
 
