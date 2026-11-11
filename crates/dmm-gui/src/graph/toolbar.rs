@@ -432,6 +432,15 @@ impl Graph {
                 &tr!(l10n, "graph-y-max.hover"),
             )
             .changed();
+            // The unit the bounds are in, the plotted one: it moves a prefix
+            // with an auto-range step, and the numbers with it.
+            if let Some(unit) = self.plotted_unit_if_any().filter(|u| !u.is_empty()) {
+                ui.label(
+                    egui::RichText::new(unit)
+                        .small()
+                        .color(ui.visuals().weak_text_color()),
+                );
+            }
             if changed_min && self.y_axis.min.parse() {
                 self.y_axis.user_set = true;
             }
