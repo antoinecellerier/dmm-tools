@@ -10,7 +10,7 @@ use crate::transport::{BluetoothPeers, Transport, ble, bu86x, ch9325, ch9329, cp
 use crate::{BLUETOOTH, BLUETOOTH_SUPPORTED, DeviceInfo, OpenOptions};
 use log::info;
 use std::ffi::CString;
-use std::sync::{Mutex, MutexGuard, PoisonError};
+use std::sync::{Mutex, MutexGuard, OnceLock, PoisonError};
 
 /// Descriptor for a known USB-HID transport bridge.
 pub(crate) struct KnownTransport {
@@ -299,8 +299,37 @@ fn open_hid_transport(
 /// no lock.
 static HID_BUS: Mutex<()> = Mutex::new(());
 
+/// Set once hidapi has been initialised on [`start_hid_home`]'s thread.
+static HID_HOME: OnceLock<()> = OnceLock::new();
+
+/// Take the bus, initialising hidapi first if this is the first call.
 fn hid_bus() -> MutexGuard<'static, ()> {
-    HID_BUS.lock().unwrap_or_else(PoisonError::into_inner)
+    let bus = HID_BUS.lock().unwrap_or_else(PoisonError::into_inner);
+    HID_HOME.get_or_init(start_hid_home);
+    bus
+}
+
+/// Initialise hidapi on a thread that lives as long as the process. On macOS
+/// `hid_init` ties the shared `IOHIDManager` to the run loop of the thread
+/// that calls it, and once that thread has ended, the next listing from any
+/// thread dies in Core Foundation (SIGTRAP on Apple silicon, SIGILL on
+/// Intel; hidapi-rs issue #127). Each session runs on a thread of its own, so
+/// a second connect would otherwise list on a dead first session's run loop.
+/// Should the thread or the init fail, the first listing initialises hidapi
+/// where it runs, as before.
+fn start_hid_home() {
+    let (ready_tx, ready_rx) = std::sync::mpsc::channel();
+    let spawned = std::thread::Builder::new()
+        .name("hidapi".to_string())
+        .spawn(move || {
+            let _ = ready_tx.send(hidapi::HidApi::new().is_ok());
+            loop {
+                std::thread::park();
+            }
+        });
+    if spawned.is_ok() {
+        let _ = ready_rx.recv();
+    }
 }
 
 /// The serial number of a cable just opened, for
@@ -433,12 +462,15 @@ mod tests {
         assert_eq!(can_pin("12:34:56:78:9A:BC"), !cfg!(feature = "bluetooth"));
     }
 
-    /// Listings on several threads at once take turns: unserialised, they
-    /// race inside hidapi and take the process down (macOS CI died on
-    /// SIGTRAP with the GUI's tests listing in parallel). Whatever the
-    /// machine has plugged in, each listing returns.
+    /// Listings from threads that have since ended, and from several threads
+    /// at once, all return, whatever the machine has plugged in. On macOS
+    /// hidapi used to stay tied to the first lister's thread, and the next
+    /// listing after it ended took the process down.
     #[test]
-    fn listings_on_several_threads_at_once_take_turns() {
+    fn listings_from_ended_and_concurrent_threads_return() {
+        for _ in 0..5 {
+            std::thread::spawn(list_usb).join().unwrap().ok();
+        }
         let threads: Vec<_> = (0..8)
             .map(|_| {
                 std::thread::spawn(|| {
