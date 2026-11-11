@@ -564,8 +564,10 @@ scene_reading_controls() {
 # out of the session's history. They are separate because triggers and cursors
 # land on the same two crossings, and because only one of them can be live.
 # Each loads its state (OVERLAYS_VIEW, TRIGGERS_VIEW) into a launch of its own.
+# Statistics, outside the crop, is off, so the toolbar writes every figure of
+# the cursors (the cycle's spread and charge too) rather than only ΔT and Δ.
 scene_overlays() {
-	write_settings
+	write_settings '{"show_stats": false}'
 	launch_file "$(staged dcma-boot-refresh "$OVERLAYS_VIEW")" 178
 	park
 	capture gui-graph-overlays "$GRAPH_CROP"
