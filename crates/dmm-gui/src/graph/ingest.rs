@@ -72,6 +72,8 @@ impl Graph {
             let Some(oldest) = self.history.pop_front() else {
                 break;
             };
+            // The opening over-range band hung from the first point.
+            self.lead_in = None;
             for o in &mut self.overlays {
                 while o.points.front().is_some_and(|p| p.time <= oldest.time) {
                     o.points.pop_front();
@@ -476,7 +478,7 @@ impl Graph {
         // a consecutive pair — so appending and rebuilding cannot disagree.
         let seq = self.pushed_total;
         let t = self.elapsed_secs(point.time);
-        let prev_time = self.history.back().map(|p| p.time);
+        let prev_time = self.time_before(self.history.len());
         let break_kind = prev_time.and_then(|prev| self.breaks_before(prev, &point));
         let gaps = match (prev_time, break_kind) {
             (Some(prev), Some(kind)) => self.gap_entries(prev, &point, kind),
@@ -511,8 +513,17 @@ impl Graph {
     /// here and leaves the word's stretch a gap (`gap_entries`). A word
     /// after that band is drawn into it: one interruption splits in two, not
     /// three.
+    ///
+    /// In a trace with no point yet, it opens the trace here (`lead_in`):
+    /// the band runs from it to the first point. A word or a lost link
+    /// before it is forgotten, as it has nothing to break from.
     pub fn push_break(&mut self, timestamp: Instant) {
         self.heard(timestamp);
+        if self.history.is_empty() && self.lead_in.is_none() {
+            self.origin.get_or_insert(timestamp);
+            self.breaks.forget_interruption();
+            self.lead_in = Some(timestamp);
+        }
         self.breaks.overload(timestamp);
     }
 
@@ -568,6 +579,7 @@ impl Graph {
         self.overlays.clear();
         self.current_series = None;
         self.breaks = Breaks::default();
+        self.lead_in = None;
         self.silences.clear();
         self.last_heard = None;
         self.main_missing_frames = 0;

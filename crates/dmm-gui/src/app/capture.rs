@@ -185,9 +185,9 @@ impl Capture {
     /// Runs after the graph has taken the reading, so a mode change the graph
     /// restarted on already shows as its first point. An auto-range step
     /// (mV→V) cuts nothing: the graph keeps the trace before it, in the new
-    /// prefix, while the history keeps each reading as shown. An empty graph
-    /// cuts nothing: over-range readings add no point, and are still readings
-    /// to export.
+    /// prefix, while the history keeps each reading as shown. A trace that
+    /// opens over range starts at its first OL, drawn as a band: those are
+    /// readings to export too, and a dial turn into OL cuts at it.
     fn keep_sample(
         &mut self,
         m: &Measurement,

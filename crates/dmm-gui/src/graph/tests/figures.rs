@@ -133,7 +133,9 @@ fn the_cursor_readout_writes_the_integral_in_a_readable_prefix() {
 
 /// Over-range readings count with the readings they fell between: after a
 /// range's first reading up to the one after its last, or up to now after
-/// the newest, never the stretch before the first.
+/// the newest, never the stretch before the first. A trace that opened over
+/// range counts its opening stretch with the view that shows it, but not
+/// between cursors from its first reading.
 #[test]
 fn overloads_are_counted_where_they_fell() {
     let mut g = Graph::new();
@@ -156,6 +158,14 @@ fn overloads_are_counted_where_they_fell() {
     assert_eq!(g.overloads_in(0..1), 3, "after the first, before the next");
     assert_eq!(g.overloads_in(1..2), 0, "the stretch before it is not its");
     assert_eq!(g.overloads_in(2..len), 2);
+
+    let mut g = Graph::new();
+    push_overload(&mut g, at(0), "DC V", "V");
+    push_overload(&mut g, at(100), "DC V", "V");
+    g.push(1.0, at(200), "DC V", "V", None);
+    assert_eq!(g.overloads_in(0..1), 0, "cursors from the first reading");
+    assert_eq!(g.overloads_in_view(0..1), 2, "the band the trace opened on");
+    assert_eq!(g.overloads_in_view(1..1), 0, "the band out of view");
 }
 
 /// The cursor figures are kept while the readings between the cursors stay

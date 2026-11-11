@@ -55,6 +55,7 @@
 - **A recording played with `--replay` integrates across readings logged over a second apart** — the integral skipped every interval, and dmm-gui's graph broke between readings over 5 s apart.
 - **dmm-gui's graph breaks its trace where the integral stops counting** — under a 0.4 s **Sample interval**, a silence shorter than 2 s broke the graph but was integrated across.
 - **A recording made in pairs plays back in dmm-gui as one line** — played with `--replay`, readings handed over two at a time more than a second apart broke the graph at every pair.
+- **The graph shades OL at the start of a session or dial turn** — it stayed blank, and Export… dropped those readings.
 - **Markers start at 1 when dmm-gui connects after an import** — the first one took the number after the imported file's last marker.
 - **A capture plan's `at_least` is in the mode's base unit, whatever prefix the meter shows** — lead noise shown in mV passed a floor of 1.
 - **A cable pulled at `capture`'s meter check asks for no report** — it saved a no-response report and asked you to attach it.

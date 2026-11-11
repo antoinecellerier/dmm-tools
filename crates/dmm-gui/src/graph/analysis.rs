@@ -250,21 +250,23 @@ impl Graph {
     /// overload is still in progress no such sample exists, and the trace
     /// would simply stop with nothing to say why until the meter came back.
     ///
-    /// Anchored to the last plotted point — where the trace ends — and closed
-    /// at the newest overload sample rather than at "now", so a meter that
-    /// disconnects mid-overload leaves a band covering the samples we actually
-    /// received instead of one that grows forever.
+    /// Anchored to the last plotted point — where the trace ends — or, in a
+    /// trace that opened over range and has no point yet, to the first OL
+    /// sample. Closed at the newest overload sample rather than at "now", so
+    /// a meter that disconnects mid-overload leaves a band covering the
+    /// samples we actually received instead of one that grows forever.
     pub(super) fn pending_overload_span(&self) -> Option<(f64, f64)> {
         if !self.breaks.overloaded() {
             return None;
         }
-        let trace_end = self.history.back().map(|p| self.elapsed_secs(p.time))?;
         // After a word shown instead of a reading, the band starts at the
         // first OL sample instead (`push_break`).
         let start = self
             .breaks
             .band_from
-            .map_or(trace_end, |t| self.elapsed_secs(t));
+            .or_else(|| self.history.back().map(|p| p.time))
+            .or(self.lead_in)
+            .map(|t| self.elapsed_secs(t))?;
         let end = self
             .breaks
             .last_overload

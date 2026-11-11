@@ -8,7 +8,8 @@ use super::{DataPoint, GapKind};
 /// Whether the plotted series is interrupted since its last point, and why,
 /// plus the over-range readings counted since the trace began. Restarting
 /// the trace starts this over: an open break belongs to the trace that
-/// ended, which the new one has no point before its first to break from.
+/// ended. The new one's first point breaks only from an over-range reading
+/// the trace opened on (`Graph::push_break`).
 #[derive(Debug, Default)]
 pub(super) struct Breaks {
     /// A non-plottable sample arrived since the last plotted point, so the
@@ -71,6 +72,15 @@ impl Breaks {
             }
             Some(_) => {}
         }
+    }
+
+    /// Drop the interruption in progress, keeping the over-range count: a
+    /// trace with no point yet opens on an overload, and a word or a lost
+    /// link before it has nothing to break from.
+    pub(super) fn forget_interruption(&mut self) {
+        self.kind = None;
+        self.data_loss = false;
+        self.band_from = None;
     }
 
     /// A word shown instead of a reading arrived at `t`: see

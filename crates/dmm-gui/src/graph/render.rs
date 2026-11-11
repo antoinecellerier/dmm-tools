@@ -549,7 +549,13 @@ impl Graph {
         let mut segments: Vec<Vec<[f64; 2]>> = Vec::new();
         let mut gaps: Vec<(f64, f64, GapKind)> = Vec::new();
         let mut current_segment: Vec<[f64; 2]> = Vec::new();
-        let mut prev_time: Option<Instant> = None;
+        // Only the trace's first point looks back past the slice: to the
+        // over-range reading it opened on, if it did.
+        let mut prev_time: Option<Instant> = if start == 0 {
+            self.time_before(0)
+        } else {
+            None
+        };
 
         for i in start..end {
             let point = &self.history[i];
@@ -557,13 +563,14 @@ impl Graph {
 
             if let Some(prev) = prev_time
                 && let Some(kind) = self.breaks_before(prev, point)
-                && !current_segment.is_empty()
             {
                 // Through the same helper the minimap's level appends with,
                 // so the plot's bands and the strip's cannot come to describe
                 // one interruption differently.
                 gaps.extend(self.gap_entries(prev, point, kind).into_iter().flatten());
-                segments.push(std::mem::take(&mut current_segment));
+                if !current_segment.is_empty() {
+                    segments.push(std::mem::take(&mut current_segment));
+                }
             }
 
             current_segment.push([t, point.value]);
@@ -1163,7 +1170,7 @@ impl Graph {
             view: self.readings_key(visible.clone()),
             interval: cursors.clone().map(|r| self.readings_key(r)),
             overloads: (
-                self.overloads_in(visible.clone()),
+                self.overloads_in_view(visible.clone()),
                 cursors.map(|r| self.overloads_in(r)),
             ),
             range: y,

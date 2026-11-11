@@ -23,6 +23,29 @@ mod view;
 /// menu names a reading by its value on the trace.
 const NO_DIGITS: ReadingDigits = &|_, _| None;
 
+/// A frame with no plotted value and no sub-values, as `Capture::ingest`
+/// hands an over-range one over before its break.
+fn push_without_value(g: &mut Graph, t: Instant, mode: &str, unit: &str) {
+    g.push_sample(PlotSample {
+        value: None,
+        timestamp: t,
+        mode,
+        unit,
+        display_raw: None,
+        series: None,
+        main_label: None,
+        levels: false,
+        overlays: &[],
+    });
+}
+
+/// An over-range frame as `Capture::ingest` hands it over: no value and no
+/// sub-values, then the break.
+fn push_overload(g: &mut Graph, t: Instant, mode: &str, unit: &str) {
+    push_without_value(g, t, mode, unit);
+    g.push_break(t);
+}
+
 /// Push a sample carrying sub-values. Everything but the parts under
 /// test matches the single-series `push` helper.
 fn push_aux(

@@ -226,6 +226,22 @@ impl Graph {
         u32::try_from(end.saturating_sub(start)).unwrap_or(u32::MAX)
     }
 
+    /// [`Graph::overloads_in`] the readings in view, plus the over-range
+    /// stretch the trace opened on when its first reading is in view: the
+    /// band drawn before it. Not for the cursors: one snapped to that
+    /// reading leaves the band outside its interval.
+    pub(super) fn overloads_in_view(&self, range: std::ops::Range<usize>) -> u32 {
+        let opening = match self.lead_in {
+            Some(_) if range.start == 0 => self
+                .history
+                .front()
+                .map_or(self.breaks.overloads, |p| p.overloads_before),
+            _ => 0,
+        };
+        self.overloads_in(range)
+            .saturating_add(u32::try_from(opening).unwrap_or(u32::MAX))
+    }
+
     /// Bin the history readings `view` for the histogram, unless `key` is
     /// what they were last binned from, with those between the cursors.
     pub(super) fn bin_histogram(

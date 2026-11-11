@@ -2570,6 +2570,28 @@ mod tests {
         );
     }
 
+    /// A dial turn into OL starts the graph at the first OL, drawn as a band
+    /// before the new mode's first reading: the history keeps those
+    /// over-range readings and drops the old mode's.
+    #[test]
+    fn a_dial_turn_into_ol_keeps_the_ol_in_the_history() {
+        let mut app = connected_app();
+        let t0 = Instant::now();
+        let at = |ms: u64| t0 + Duration::from_millis(ms);
+        for (ms, mode, value) in [
+            (0, "DC V", MeasuredValue::Normal(1.0)),
+            (100, "DC V", MeasuredValue::Normal(1.0)),
+            (200, "Ω", MeasuredValue::Overload),
+            (300, "Ω", MeasuredValue::Overload),
+            (400, "Ω", MeasuredValue::Normal(1.0)),
+        ] {
+            app.deliver(DmmMessage::Measurement(reading(mode, value, at(ms))));
+        }
+        assert_eq!(modes(&app), ["Ω"; 3]);
+        assert_eq!(app.graph.first_point_time(), Some(at(200)));
+        assert_eq!(app.graph.len(), 1);
+    }
+
     /// "Auto" with the probes lifted comes under a mode of its own, but it is
     /// no dial turn: the graph, the history and the statistics carry on.
     #[test]

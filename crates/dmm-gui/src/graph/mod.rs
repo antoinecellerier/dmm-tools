@@ -407,6 +407,11 @@ pub struct Graph {
     /// The interruption since the last plotted point, if any, which the
     /// next one records as its break.
     breaks: Breaks,
+    /// When the trace's first over-range reading came, in a trace that
+    /// opened on one: what its first point breaks from, as a later point
+    /// breaks from the one before it, so the stretch draws as a band.
+    /// Dropped with that first point.
+    lead_in: Option<Instant>,
     /// Stretches in which no frame of any kind arrived for longer than the gap
     /// threshold in force at the time, oldest first, as (last frame before,
     /// first frame after).
@@ -596,6 +601,7 @@ impl Graph {
             origin: None,
             overlays: Vec::new(),
             breaks: Breaks::default(),
+            lead_in: None,
             silences: VecDeque::new(),
             last_heard: None,
             // As fast as the meter answers, until told the sample interval.
@@ -764,6 +770,8 @@ impl Graph {
             kind: pending,
             ..Breaks::default()
         };
+        // The plotted series' opening over-range stretch went with it.
+        self.lead_in = None;
 
         self.overlays[i] = OverlaySeries {
             label: self
@@ -974,13 +982,14 @@ impl Graph {
     }
 
     /// When the oldest point still in the history or a sub-value trace was
-    /// sampled, or `None` while there is none: where what the graph holds
-    /// begins.
+    /// sampled, or the over-range reading a trace opened on came, or `None`
+    /// while there is none: where what the graph holds begins.
     pub fn first_point_time(&self) -> Option<Instant> {
         self.history
             .front()
             .map(|p| p.time)
             .into_iter()
+            .chain(self.lead_in)
             .chain(
                 self.overlays
                     .iter()
@@ -1022,8 +1031,8 @@ impl Graph {
     fn build_level(&self, width: f64) -> MinimapLevel {
         let mut level = MinimapLevel::new(width);
         let first_seq = self.pushed_total.saturating_sub(self.history.len() as u64);
-        let mut prev_time: Option<Instant> = None;
         for (i, point) in self.history.iter().enumerate() {
+            let prev_time = self.time_before(i);
             let break_kind = prev_time.and_then(|prev| self.breaks_before(prev, point));
             level.append(self.elapsed_secs(point.time), point.value, break_kind);
             if let (Some(prev), Some(kind)) = (prev_time, break_kind) {
@@ -1031,7 +1040,6 @@ impl Graph {
                     level.push_gap(start, end, k, first_seq + i as u64);
                 }
             }
-            prev_time = Some(point.time);
         }
         level
     }
@@ -1070,6 +1078,16 @@ impl Graph {
             points.partition_point(|p| self.elapsed_secs(time(p)) < x_min),
             points.partition_point(|p| self.elapsed_secs(time(p)) <= x_max),
         )
+    }
+
+    /// What the history's point `i` follows on from: the point before it,
+    /// or, before the trace's first, the over-range reading it opened on.
+    /// The one rule the plot, the minimap's level and its appends share.
+    fn time_before(&self, i: usize) -> Option<Instant> {
+        match i.checked_sub(1) {
+            Some(prev) => self.history.get(prev).map(|p| p.time),
+            None => self.lead_in,
+        }
     }
 
     /// Why the line breaks between `prev` and `point`, or `None` if it

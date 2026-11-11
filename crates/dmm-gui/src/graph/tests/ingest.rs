@@ -273,25 +273,9 @@ fn an_unfinished_overload_still_marks_where_the_trace_stopped() {
     assert_eq!(g.visible_gaps().len(), 1);
 }
 
-/// An over-range frame as `Capture::ingest` hands it over: no value and no
-/// sub-values, then the break.
-fn push_overload(g: &mut Graph, t: Instant, mode: &str, unit: &str) {
-    g.push_sample(PlotSample {
-        value: None,
-        timestamp: t,
-        mode,
-        unit,
-        display_raw: None,
-        series: None,
-        main_label: None,
-        levels: false,
-        overlays: &[],
-    });
-    g.push_break(t);
-}
-
 /// Turning the dial from mV to Ω with the leads open gives only OL: the old
-/// mode's trace must not carry on with an over-range band after it.
+/// mode's trace must not carry on with an over-range band after it. The Ω
+/// trace opens on the band instead.
 #[test]
 fn an_overload_in_a_new_mode_restarts_the_trace() {
     let mut g = Graph::new();
@@ -302,12 +286,143 @@ fn an_overload_in_a_new_mode_restarts_the_trace() {
 
     assert!(g.is_empty(), "the mV trace is gone");
     assert_eq!(g.current_mode.as_deref(), Some("Ω"));
-    assert_eq!(g.pending_overload_span(), None, "no trace to band after");
+    assert_eq!(
+        g.pending_overload_span(),
+        Some((0.0, 0.0)),
+        "the band starts with the Ω trace, not on the mV one"
+    );
 
-    // The first reading starts the Ω trace with no break before it.
+    // The first reading closes the band before it.
     g.push(1.0, t0 + Duration::from_millis(300), "Ω", "kΩ", None);
     assert_eq!(g.all_segments().len(), 1);
+    assert_gaps(&g, &[(0.0, 0.1, GapKind::Overload)]);
+}
+
+/// Asserts the graph's gaps, to the nanosecond.
+fn assert_gaps(g: &Graph, expected: &[(f64, f64, GapKind)]) {
+    let gaps = g.visible_gaps();
+    assert_eq!(gaps.len(), expected.len(), "{gaps:?}");
+    for (&(a, b, k), &(ea, eb, ek)) in gaps.iter().zip(expected) {
+        assert!(
+            (a - ea).abs() < 1e-9 && (b - eb).abs() < 1e-9 && k == ek,
+            "{gaps:?}"
+        );
+    }
+}
+
+/// A session opening on OL draws its stretch as a band, like any later
+/// one: open while OL lasts, closed by the first reading, the same in the
+/// minimap's level, and part of what the graph holds.
+#[test]
+fn a_trace_opening_over_range_bands_from_its_first_ol() {
+    const WIDTH: f64 = 0.01;
+    let mut g = Graph::new();
+    let t0 = Instant::now();
+    let at = |ms: u64| t0 + Duration::from_millis(ms);
+    push_overload(&mut g, at(0), "Ω", "MΩ");
+    push_overload(&mut g, at(100), "Ω", "MΩ");
+    let (start, end) = g.pending_overload_span().expect("open while OL");
+    assert!(start.abs() < 1e-9 && (end - 0.1).abs() < 1e-9);
+    assert_eq!(g.first_point_time(), Some(at(0)));
+
+    g.ensure_level(WIDTH);
+    g.push(1.0, at(200), "Ω", "MΩ", None);
+    assert_eq!(g.pending_overload_span(), None);
+    assert_eq!(g.all_segments().len(), 1);
+    assert_gaps(&g, &[(0.0, 0.2, GapKind::Overload)]);
+    assert_eq!(g.minimap_level, Some(g.build_level(WIDTH)));
+    let level = g.minimap_level.as_ref().expect("level");
+    assert_eq!(level.gaps().count(), 1);
+    assert!(g.data_time_range().0.abs() < 1e-9, "Home reaches the band");
+    assert_eq!(g.first_point_time(), Some(at(0)));
+    assert_eq!(
+        g.overloads_in_view(0..1),
+        2,
+        "the band's OLs count with the view"
+    );
+}
+
+/// A word or a lost link after the opening OL ends the band at the last OL,
+/// as in the middle of a trace.
+#[test]
+fn a_word_or_a_loss_after_the_opening_ol_ends_its_band() {
+    for word in [true, false] {
+        let mut g = Graph::new();
+        let t0 = Instant::now();
+        let at = |ms: u64| t0 + Duration::from_millis(ms);
+        push_overload(&mut g, at(0), "Ω", "MΩ");
+        push_overload(&mut g, at(100), "Ω", "MΩ");
+        if word {
+            g.push_no_reading(at(200));
+        } else {
+            g.push_data_loss();
+        }
+        g.push(1.0, at(300), "Ω", "MΩ", None);
+        assert_gaps(
+            &g,
+            &[(0.0, 0.1, GapKind::Overload), (0.1, 0.3, GapKind::NoData)],
+        );
+    }
+}
+
+/// A word or a lost link before a trace's first OL has nothing to break
+/// from: the stretch is one band, with no empty gap at its edge.
+#[test]
+fn a_word_or_a_loss_before_the_opening_ol_is_forgotten() {
+    for word in [true, false] {
+        let mut g = Graph::new();
+        let t0 = Instant::now();
+        let at = |ms: u64| t0 + Duration::from_millis(ms);
+        // A frame without the plotted reading starts the trace, empty.
+        push_without_value(&mut g, at(0), "DC V", "V");
+        if word {
+            g.push_no_reading(at(50));
+        } else {
+            g.push_data_loss();
+        }
+        push_overload(&mut g, at(100), "DC V", "V");
+        assert!(g.pending_overload_span().is_some(), "over range");
+        g.push(1.0, at(200), "DC V", "V", None);
+        assert_gaps(&g, &[(0.1, 0.2, GapKind::Overload)]);
+    }
+}
+
+/// An overload before any data starts the graph there.
+#[test]
+fn a_break_with_no_history_opens_the_band() {
+    let mut g = Graph::new();
+    let t0 = Instant::now();
+    g.push_break(t0);
+    assert_eq!(g.origin, Some(t0));
+    assert_eq!(g.pending_overload_span(), Some((0.0, 0.0)));
+}
+
+/// The opening band hangs from the trace's first point and goes with it,
+/// in the plot and the minimap alike, and with a cleared graph.
+#[test]
+fn the_opening_band_goes_with_the_first_point() {
+    const WIDTH: f64 = 0.01;
+    let mut g = Graph::new();
+    g.set_max_points(2);
+    let t0 = Instant::now();
+    let at = |ms: u64| t0 + Duration::from_millis(ms);
+    push_overload(&mut g, at(0), "DC V", "V");
+    g.ensure_level(WIDTH);
+    g.push(1.0, at(100), "DC V", "V", None);
+    g.push(1.0, at(105), "DC V", "V", None);
+    assert_eq!(g.visible_gaps().len(), 1);
+    // In the first point's bucket still: the level must not tell it apart
+    // from a rebuild either.
+    g.push(1.0, at(107), "DC V", "V", None);
     assert!(g.visible_gaps().is_empty());
+    assert_eq!(g.first_point_time(), Some(at(105)));
+    assert_eq!(g.minimap_level, Some(g.build_level(WIDTH)));
+
+    push_overload(&mut g, at(200), "Ω", "MΩ");
+    assert!(g.pending_overload_span().is_some());
+    g.clear();
+    assert_eq!(g.pending_overload_span(), None);
+    assert_eq!(g.first_point_time(), None);
 }
 
 /// Lifting the leads off a resistor sends OL on the top range (kΩ to MΩ) in
@@ -600,14 +715,6 @@ fn the_level_follows_a_break_as_it_arrives() {
     assert_eq!(level.gaps().count(), 1);
     assert_eq!(level.runs().count(), 2);
     assert_eq!(g.minimap_level, Some(g.build_level(0.01)));
-}
-
-/// An overload before any data has nothing to anchor to.
-#[test]
-fn a_break_with_no_history_marks_nothing() {
-    let mut g = Graph::new();
-    g.push_break(Instant::now());
-    assert_eq!(g.pending_overload_span(), None);
 }
 
 /// The opening marker anchors to the last plotted point, and in live mode
@@ -984,6 +1091,7 @@ fn a_decade_step_reaches_every_value_bearing_field() {
         pushed_total: _,
         origin: _,
         breaks: _,
+        lead_in: _,
         silences: _,
         last_heard: _,
         gap_threshold_secs: _,

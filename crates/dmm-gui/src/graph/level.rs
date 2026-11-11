@@ -72,7 +72,9 @@ impl MinimapLevel {
         // a quotient that rounds up across an integer has always been drawn in
         // the column above, and the level must put it in the same one.
         let key = ((t / self.width) as f32).floor() as i64;
-        let starts_segment = break_kind.is_some();
+        // A first bucket has nothing before it to break from: a rebuild
+        // after the trace's first point is evicted must not tell it apart.
+        let starts_segment = break_kind.is_some() && !self.buckets.is_empty();
         match self.buckets.back_mut() {
             // A break opens a new bucket even in the middle of one: the trace
             // has to stop and restart there, exactly as on the main plot.
