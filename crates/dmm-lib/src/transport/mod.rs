@@ -52,11 +52,14 @@ pub trait Transport: Send {
         Ok(None)
     }
 
-    /// The bridge's name, for display and logs (e.g. "CP2110", "CH9329").
-    /// Default: "unknown", for a transport with no bridge behind it.
+    /// The bridge's name as `KNOWN_TRANSPORTS` spells it ("CP2110",
+    /// "CH9329", "CH9325", "BU-86X", [`crate::BLUETOOTH`]). Default:
+    /// "unknown", for a transport with no bridge behind it.
     ///
-    /// What the meter is on is [`Transport::link`]'s to say; nothing should
-    /// branch on this text.
+    /// Detection picks its probes by it, and capture compares it with the
+    /// registry's verified bridges and with the bridge a reopen came back on.
+    /// Whether the meter is on a cable or a radio is [`Transport::link`]'s
+    /// to say.
     fn transport_name(&self) -> &'static str {
         "unknown"
     }
@@ -534,6 +537,8 @@ pub mod mock {
         /// See [`fail_after`](Self::fail_after).
         reads_left: Cell<usize>,
         failure: Option<fn() -> Error>,
+        /// See [`on_bridge`](Self::on_bridge).
+        bridge: &'static str,
     }
 
     impl MockTransport {
@@ -554,7 +559,15 @@ pub mod mock {
                 bauds: RefCell::new(Vec::new()),
                 reads_left: Cell::new(0),
                 failure: None,
+                bridge: "unknown",
             }
+        }
+
+        /// Report `bridge` as [`Transport::transport_name`], as a real link
+        /// on that bridge would; "unknown" until then.
+        pub fn on_bridge(mut self, bridge: &'static str) -> Self {
+            self.bridge = bridge;
+            self
         }
 
         /// Fail like a link that went away: `reads` reads go as usual, then
@@ -623,6 +636,10 @@ pub mod mock {
             }
             self.bauds.borrow_mut().push(baud);
             Ok(())
+        }
+
+        fn transport_name(&self) -> &'static str {
+            self.bridge
         }
 
         fn link(&self) -> Option<Link> {

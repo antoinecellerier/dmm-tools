@@ -325,7 +325,7 @@ fn detect_on(
     }
     let (transport, recorder) = RecordingTransport::new(transport);
     let started = std::time::Instant::now();
-    let result = dmm_lib::detect::detect_device(&transport, bridge);
+    let result = dmm_lib::detect::detect_device(&transport);
     check.elapsed_ms = Some(started.elapsed().as_millis() as u64);
     check.frames = recording::lock(&recorder)
         .drain()
@@ -609,9 +609,10 @@ mod tests {
         .unwrap()
     }
 
-    /// A UT61E+ that answers the first probe it is sent, as ours does.
+    /// A UT61E+ on a CP2110 that answers the first probe it is sent, as ours
+    /// does.
     fn answering_ut61eplus() -> Box<dyn Transport> {
-        let meter = MockTransport::new(vec![]);
+        let meter = MockTransport::new(vec![]).on_bridge("CP2110");
         meter.push_reply(ACK.to_vec());
         meter.push_reply(NAME.to_vec());
         Box::new(meter)
@@ -675,7 +676,12 @@ mod tests {
             None,
             None,
             &input,
-            Box::new(|bridge| Ok((Box::new(MockTransport::new(vec![])), bridge))),
+            Box::new(|bridge| {
+                Ok((
+                    Box::new(MockTransport::new(vec![]).on_bridge(bridge)),
+                    bridge,
+                ))
+            }),
         )
         .unwrap()
         .unwrap();

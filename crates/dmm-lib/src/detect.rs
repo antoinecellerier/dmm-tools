@@ -160,13 +160,20 @@ fn probe_order(carried: &[&'static Fingerprint]) -> Vec<&'static Fingerprint> {
     ordered
 }
 
-/// Identify the meter answering on `transport`, `bridge` being the USB bridge
-/// it is reached through, spelled as `KNOWN_TRANSPORTS` spells it.
+/// Identify the meter answering on `transport`, through the bridge its
+/// [`Transport::transport_name`] names.
 ///
 /// Sends each family's trigger in turn and classifies everything that comes
 /// back; the receive buffer persists across steps, so a meter that speaks
 /// slowly still gets the whole cascade's worth of time.
-pub fn detect_device(transport: &dyn Transport, bridge: &'static str) -> Result<Detected> {
+pub fn detect_device(transport: &dyn Transport) -> Result<Detected> {
+    let bridge = transport.transport_name();
+    // A transport that keeps the trait's "unknown" carries no meter, so
+    // nothing would be probed: a wrapper that forgot to forward the name.
+    debug_assert!(
+        !crate::devices_on_bridge(bridge).is_empty(),
+        "detection on a transport naming no known bridge ({bridge:?})"
+    );
     // A link that read a device-information characteristic is the radio of
     // the family whose profile reads one, even when its name matched no
     // entry (renamed, or opened by address): it narrows to that family's
@@ -523,6 +530,8 @@ mod tests {
         /// are written.
         script: Vec<(Vec<u8>, Vec<u8>)>,
         queued: RefCell<VecDeque<Vec<u8>>>,
+        /// The bridge it is reached through, a CP2110 unless [`Self::on`].
+        bridge: &'static str,
     }
 
     impl ScriptedMeter {
@@ -531,11 +540,22 @@ mod tests {
             Self {
                 script: vec![(trigger.to_vec(), reply)],
                 queued: RefCell::new(VecDeque::new()),
+                bridge: "CP2110",
             }
+        }
+
+        /// The same meter reached through `bridge`.
+        fn on(mut self, bridge: &'static str) -> Self {
+            self.bridge = bridge;
+            self
         }
     }
 
     impl Transport for ScriptedMeter {
+        fn transport_name(&self) -> &'static str {
+            self.bridge
+        }
+
         fn link(&self) -> Option<crate::transport::Link> {
             None
         }
@@ -579,6 +599,10 @@ mod tests {
     }
 
     impl Transport for PacedStream {
+        fn transport_name(&self) -> &'static str {
+            "CH9325"
+        }
+
         fn link(&self) -> Option<crate::transport::Link> {
             None
         }
@@ -618,14 +642,15 @@ mod tests {
         ])
     }
 
-    fn detect(transport: &dyn Transport) -> Result<Detected> {
-        detect_device(transport, "CP2110")
+    /// A mock on a CP2110, replaying `responses`.
+    fn cp2110(responses: Vec<Vec<u8>>) -> MockTransport {
+        MockTransport::new(responses).on_bridge("CP2110")
     }
 
     #[test]
     fn ut61eplus_answers_get_name_with_whole_frames() {
-        let mock = MockTransport::new(vec![ack_frame(), name_frame()]);
-        let detected = detect(&mock).unwrap();
+        let mock = cp2110(vec![ack_frame(), name_frame()]);
+        let detected = detect_device(&mock).unwrap();
         assert_eq!(detected.device.id, "ut61eplus");
         assert_eq!(detected.reported_name.as_deref(), Some("UT61E+"));
         // The name arrives in the first window, so nothing after Get Name is
@@ -644,8 +669,8 @@ mod tests {
             reports.push(Vec::new()); // an HID report with no UART payload
             reports.push(vec![*byte]);
         }
-        let mock = MockTransport::new(reports);
-        let detected = detect(&mock).unwrap();
+        let mock = cp2110(reports);
+        let detected = detect_device(&mock).unwrap();
         assert_eq!(detected.device.id, "ut61eplus");
         assert_eq!(detected.reported_name.as_deref(), Some("UT61E+"));
     }
@@ -667,8 +692,8 @@ mod tests {
             empty > MAX_EMPTY_READS,
             "{empty} idle reports is under the cap"
         );
-        let mock = MockTransport::new(reports);
-        let detected = detect(&mock).unwrap();
+        let mock = cp2110(reports);
+        let detected = detect_device(&mock).unwrap();
         assert_eq!(detected.device.id, "ut61eplus");
         assert_eq!(detected.reported_name.as_deref(), Some("UT61E+"));
         // Still inside the first window, so no other family's trigger went out.
@@ -682,8 +707,8 @@ mod tests {
     /// earlier session can arrive before the name. The name outranks it.
     #[test]
     fn a_stale_measurement_frame_does_not_outrank_the_name() {
-        let mock = MockTransport::new(vec![ut61plus_reading(), ack_frame(), name_frame()]);
-        let detected = detect(&mock).unwrap();
+        let mock = cp2110(vec![ut61plus_reading(), ack_frame(), name_frame()]);
+        let detected = detect_device(&mock).unwrap();
         assert_eq!(detected.device.id, "ut61eplus");
         assert_eq!(detected.reported_name.as_deref(), Some("UT61E+"));
     }
@@ -692,8 +717,8 @@ mod tests {
     /// the UT61E+ tables are the family fallback — but no model is claimed.
     #[test]
     fn a_lone_measurement_frame_falls_back_to_the_family() {
-        let mock = MockTransport::new(vec![ut61plus_reading()]);
-        let detected = detect(&mock).unwrap();
+        let mock = cp2110(vec![ut61plus_reading()]);
+        let detected = detect_device(&mock).unwrap();
         assert_eq!(detected.device.id, "ut61eplus");
         assert_eq!(detected.reported_name, None);
         // The family is known after the name window, so no other family's
@@ -728,6 +753,10 @@ mod tests {
     }
 
     impl Transport for Advertising {
+        fn transport_name(&self) -> &'static str {
+            crate::BLUETOOTH
+        }
+
         fn link(&self) -> Option<crate::transport::Link> {
             self.inner.link()
         }
@@ -757,7 +786,7 @@ mod tests {
     /// before detection gave up on it, and whether the error called the link
     /// a meter's own radio.
     fn probes_to_silent(transport: &dyn Transport, mock: &MockTransport) -> (Vec<Vec<u8>>, bool) {
-        match detect_device(transport, crate::BLUETOOTH) {
+        match detect_device(transport) {
             Err(Error::DeviceNotIdentified { built_in_radio, .. }) => {
                 (mock.written.take(), built_in_radio)
             }
@@ -794,7 +823,7 @@ mod tests {
         assert_eq!(sent, every_bluetooth_probe());
         assert!(!built_in_radio);
 
-        let unnamed = MockTransport::new(vec![]);
+        let unnamed = MockTransport::new(vec![]).on_bridge(crate::BLUETOOTH);
         let (sent, built_in_radio) = probes_to_silent(&unnamed, &unnamed);
         assert_eq!(sent, every_bluetooth_probe());
         assert!(!built_in_radio);
@@ -868,7 +897,7 @@ mod tests {
     #[test]
     fn a_built_in_meter_that_never_names_itself_falls_back_to_its_own_entry() {
         let meter = Advertising::ut60bt(vec![ut61plus_reading()]);
-        let detected = detect_device(&meter, crate::BLUETOOTH).unwrap();
+        let detected = detect_device(&meter).unwrap();
         assert_eq!(detected.device.id, "ut60bt");
         assert_eq!(detected.reported_name, None);
     }
@@ -877,7 +906,7 @@ mod tests {
     #[test]
     fn a_name_reply_outranks_the_advertised_name() {
         let meter = Advertising::ut60bt(vec![ack_frame(), name_frame()]);
-        let detected = detect_device(&meter, crate::BLUETOOTH).unwrap();
+        let detected = detect_device(&meter).unwrap();
         assert_eq!(detected.device.id, "ut61eplus");
         assert_eq!(detected.reported_name.as_deref(), Some("UT61E+"));
     }
@@ -888,11 +917,11 @@ mod tests {
     fn an_unknown_name_falls_back_to_the_advertised_model() {
         let unknown = || vec![ack_frame(), test_frame_be16(b"UT216XD")];
         let meter = Advertising::ut60bt(unknown());
-        let detected = detect_device(&meter, crate::BLUETOOTH).unwrap();
+        let detected = detect_device(&meter).unwrap();
         assert_eq!(detected.device.id, "ut60bt");
         assert_eq!(detected.reported_name.as_deref(), Some("UT216XD"));
 
-        let detected = detect(&MockTransport::new(unknown())).unwrap();
+        let detected = detect_device(&cp2110(unknown())).unwrap();
         assert_eq!(detected.device.id, "ut61eplus");
         assert_eq!(detected.reported_name.as_deref(), Some("UT216XD"));
     }
@@ -926,7 +955,7 @@ mod tests {
     fn ut181a_real_frames_after_set_monitor() {
         for payload in [real_frame_temp_dual_probe(), real_frame_vac_hz()] {
             let meter = ScriptedMeter::answering(&set_monitor_frame(), build_abcd_le16(&payload));
-            let detected = detect(&meter).unwrap();
+            let detected = detect_device(&meter).unwrap();
             assert_eq!(detected.device.id, "ut181a", "payload {}", payload.len());
             assert_eq!(detected.reported_name, None);
         }
@@ -940,7 +969,7 @@ mod tests {
             &set_monitor_frame(),
             build_abcd_le16(&le16_measurement_payload(19)),
         );
-        let detected = detect(&meter).unwrap();
+        let detected = detect_device(&meter).unwrap();
         assert_eq!(detected.device.id, "ut181a");
     }
 
@@ -952,7 +981,7 @@ mod tests {
             &connect_frame(),
             build_abcd_le16(&le16_measurement_payload(15)),
         );
-        let detected = detect(&meter).unwrap();
+        let detected = detect_device(&meter).unwrap();
         assert_eq!(detected.device.id, "ut171");
     }
 
@@ -960,8 +989,8 @@ mod tests {
     /// first window — before any probe can reach it.
     #[test]
     fn ut8803_stream_is_identified_unprompted() {
-        let mock = MockTransport::new(vec![test_frame_ut8803(&test_ut8803_body())]);
-        let detected = detect(&mock).unwrap();
+        let mock = cp2110(vec![test_frame_ut8803(&test_ut8803_body())]);
+        let detected = detect_device(&mock).unwrap();
         assert_eq!(detected.device.id, "ut8803");
     }
 
@@ -972,7 +1001,7 @@ mod tests {
         let mut payload = vec![b'0'; Vc890Model::PAYLOAD_LEN];
         payload[0] = MSG_TYPE_LIVE_DATA;
         let meter = ScriptedMeter::answering(&POLL_FRAME, test_frame_be16(&payload));
-        let detected = detect(&meter).unwrap();
+        let detected = detect_device(&meter).unwrap();
         assert_eq!(detected.device.id, "vc890");
     }
 
@@ -986,13 +1015,13 @@ mod tests {
             0x00, 0x01, 0x11, 0xF8, 0xA0, 0xDA, 0xA9, 0xA0, 0x00, 0x00, 0x7E, 0xBF, 0xA0, 0xA0,
             0x04, 0x00, 0x86, 0x86, 0x86, 0x86, 0x00, 0x00, 0x00, 0x00,
         ];
-        let meter = ScriptedMeter::answering(&REQUEST, reply);
-        assert_eq!(detect_device(&meter, "BU-86X").unwrap().device.id, "bm86x");
+        let meter = ScriptedMeter::answering(&REQUEST, reply).on("BU-86X");
+        assert_eq!(detect_device(&meter).unwrap().device.id, "bm86x");
         // Nothing answers: each series' request went out, in registry
         // order, and nothing else did.
-        let silent = MockTransport::new(Vec::new());
+        let silent = MockTransport::new(Vec::new()).on_bridge("BU-86X");
         assert!(matches!(
-            detect_device(&silent, "BU-86X"),
+            detect_device(&silent),
             Err(Error::DeviceNotIdentified {
                 bridge: "BU-86X",
                 built_in_radio: false
@@ -1021,10 +1050,10 @@ mod tests {
     /// other two series' have gone unanswered; a BM82x answers the second.
     #[test]
     fn a_bm82x_or_bm52x_answers_its_own_request() {
-        let bm52x = ScriptedMeter::answering(&[0x00, 0x52, 0x66], bm820_reply(0x52));
-        assert_eq!(detect_device(&bm52x, "BU-86X").unwrap().device.id, "bm52x");
-        let bm82x = ScriptedMeter::answering(&[0x00, 0x82, 0x66], bm820_reply(0x82));
-        assert_eq!(detect_device(&bm82x, "BU-86X").unwrap().device.id, "bm82x");
+        let bm52x = ScriptedMeter::answering(&[0x00, 0x52, 0x66], bm820_reply(0x52)).on("BU-86X");
+        assert_eq!(detect_device(&bm52x).unwrap().device.id, "bm52x");
+        let bm82x = ScriptedMeter::answering(&[0x00, 0x82, 0x66], bm820_reply(0x82)).on("BU-86X");
+        assert_eq!(detect_device(&bm82x).unwrap().device.id, "bm82x");
     }
 
     /// Brymen's programs expect a BM52x to answer the BM82x's request with
@@ -1032,8 +1061,8 @@ mod tests {
     /// whichever request drew them.
     #[test]
     fn model_bytes_decide_whichever_request_drew_them() {
-        let meter = ScriptedMeter::answering(&[0x00, 0x82, 0x66], bm820_reply(0x52));
-        assert_eq!(detect_device(&meter, "BU-86X").unwrap().device.id, "bm52x");
+        let meter = ScriptedMeter::answering(&[0x00, 0x82, 0x66], bm820_reply(0x52)).on("BU-86X");
+        assert_eq!(detect_device(&meter).unwrap().device.id, "bm52x");
     }
 
     /// The CH9325 window sends nothing at all, and the UT80x family is the
@@ -1051,8 +1080,8 @@ mod tests {
             .chain(std::iter::repeat_n(Vec::new(), 50))
             .chain(DC_V_MINUS_0_0013.iter().map(|&b| vec![b]))
             .collect();
-        let mock = MockTransport::new(reports);
-        assert_eq!(detect_device(&mock, "CH9325").unwrap().device.id, "ut804");
+        let mock = MockTransport::new(reports).on_bridge("CH9325");
+        assert_eq!(detect_device(&mock).unwrap().device.id, "ut804");
         assert!(mock.written.borrow().is_empty(), "nothing is sent");
     }
 
@@ -1067,13 +1096,13 @@ mod tests {
             first_read: OnceCell::new(),
         };
         assert!(meter.silent_for > WINDOW, "the gap outlasts a probe window");
-        assert_eq!(detect_device(&meter, "CH9325").unwrap().device.id, "ut804");
+        assert_eq!(detect_device(&meter).unwrap().device.id, "ut804");
     }
 
     #[test]
     fn silence_is_not_identified() {
-        let mock = MockTransport::new(vec![]);
-        let err = detect(&mock).unwrap_err();
+        let mock = cp2110(vec![]);
+        let err = detect_device(&mock).unwrap_err();
         assert!(matches!(
             err,
             Error::DeviceNotIdentified {
@@ -1091,7 +1120,7 @@ mod tests {
         let frame = vec![0x24, 0xF0, 0x04, 0x00, 0x03, 0x00];
         let mut meter = Advertising::new("BDM", vec![frame]);
         meter.info = Some(vec![0x29, 0xFF, 0x00, 0x01, 0x02, 0x00]);
-        let detected = detect_device(&meter, crate::BLUETOOTH).unwrap();
+        let detected = detect_device(&meter).unwrap();
         assert_eq!(detected.device.id, "b41t+");
         assert_eq!(detected.reported_name.as_deref(), Some("B41T+"));
         assert!(meter.inner.written.borrow().is_empty());
@@ -1100,7 +1129,7 @@ mod tests {
         // comes in a notification of its own, as on the meter.
         let frames = crate::protocol::owon::frame::tests::VECTORS.map(|v| v.to_vec());
         let meter = Advertising::new("BDM", frames.to_vec());
-        let detected = detect_device(&meter, crate::BLUETOOTH).unwrap();
+        let detected = detect_device(&meter).unwrap();
         assert_eq!(detected.device.id, "b35t+");
         assert_eq!(detected.reported_name, None);
         assert!(meter.inner.written.borrow().is_empty());
@@ -1119,7 +1148,7 @@ mod tests {
         let frame = vec![0x24, 0xF0, 0x04, 0x00, 0x03, 0x00];
         let mut meter = Advertising::new("My meter", vec![frame]);
         meter.info = Some(vec![0x29, 0xFF, 0x00, 0x01, 0x02, 0x00]);
-        let detected = detect_device(&meter, crate::BLUETOOTH).unwrap();
+        let detected = detect_device(&meter).unwrap();
         assert_eq!(detected.device.id, "b41t+");
         assert!(meter.inner.written.borrow().is_empty());
     }
@@ -1145,8 +1174,8 @@ mod tests {
     /// a registry reshuffle that moves a probe fails here.
     #[test]
     fn the_probes_go_out_in_the_designed_order() {
-        let mock = MockTransport::new(vec![]);
-        assert!(detect(&mock).is_err());
+        let mock = cp2110(vec![]);
+        assert!(detect_device(&mock).is_err());
         let written = mock.written.borrow();
         assert_eq!(
             written[0],
@@ -1179,9 +1208,9 @@ mod tests {
             .take(64)
             .copied()
             .collect();
-        let mock = MockTransport::new(vec![junk; 200]);
+        let mock = cp2110(vec![junk; 200]);
         assert!(matches!(
-            detect(&mock),
+            detect_device(&mock),
             Err(Error::DeviceNotIdentified { .. })
         ));
     }

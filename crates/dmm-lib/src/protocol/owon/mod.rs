@@ -546,6 +546,9 @@ mod tests {
         fn link(&self) -> Option<Link> {
             self.inner.link()
         }
+        fn transport_name(&self) -> &'static str {
+            crate::BLUETOOTH
+        }
         fn info_characteristic(&self) -> Option<&[u8]> {
             self.info.as_deref()
         }
@@ -1080,7 +1083,7 @@ mod tests {
     fn auto_detect_on_a_vc871_reads_it() {
         let stream = VC871_STREAM.concat().repeat(2);
         let meter = Meter::new(Some(&info(87)), pieces(&stream, 64));
-        let detected = crate::detect::detect_device(&meter, crate::BLUETOOTH).unwrap();
+        let detected = crate::detect::detect_device(&meter).unwrap();
         assert_eq!(detected.device.id, "vc871");
         assert_eq!(detected.reported_name.as_deref(), Some("VC871"));
         let mut dmm = crate::Dmm::from_detected(meter, &detected).unwrap();

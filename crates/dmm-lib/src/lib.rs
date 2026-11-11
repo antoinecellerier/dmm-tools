@@ -457,8 +457,8 @@ pub fn open_auto(opts: OpenOptions<'_>) -> Result<(Dmm<Box<dyn Transport>>, dete
 fn open_detected(opts: OpenOptions<'_>) -> Result<(Box<dyn Transport>, detect::Detected)> {
     // No family, so no link to prefer: whichever bridge answers first is the
     // one the meter is probed through.
-    let (transport, bridge) = open_transport(&[], opts)?;
-    let detected = detect::detect_device(&*transport, bridge)?;
+    let (transport, _) = open_transport(&[], opts)?;
+    let detected = detect::detect_device(&*transport)?;
     Ok((transport, detected))
 }
 
@@ -468,8 +468,8 @@ fn open_detected(opts: OpenOptions<'_>) -> Result<(Box<dyn Transport>, detect::D
 /// `preferred` orders the links to try, empty when nothing is known about
 /// the meter; on the radio, any adapter or meter we support is taken, since
 /// detection picks the entry afterwards. The returned name is the bridge's
-/// (`"CP2110"`, `"CH9329"`, `"CH9325"`, `"BU-86X"`, [`BLUETOOTH`]), which
-/// [`detect::detect_device`] needs to know which probes are worth sending.
+/// (`"CP2110"`, `"CH9329"`, `"CH9325"`, `"BU-86X"`, [`BLUETOOTH`]), the
+/// transport's own [`Transport::transport_name`].
 ///
 /// The USB bus comes first and Bluetooth is the fallback, which has one known
 /// consequence: a cable with a silent meter on it wins over a live meter on a
@@ -980,7 +980,7 @@ mod tests {
             name: link,
         };
         let mut dmm = if auto {
-            let detected = detect::detect_device(&transport, link).unwrap();
+            let detected = detect::detect_device(&transport).unwrap();
             assert_eq!(detected.device.id, model);
             Dmm::from_detected(transport, &detected).unwrap()
         } else {
