@@ -99,11 +99,7 @@ impl App {
             ContentLayout::Wide => {
                 ui.add_space(8.0);
 
-                let has_spec = self
-                    .last_measurement
-                    .as_ref()
-                    .is_some_and(|m| m.spec.is_some() || m.mode_spec.is_some());
-                if has_spec || self.manual_url().is_some() {
+                if self.specs_shown() {
                     ui.separator();
                     self.show_specs_section(ui, 1.0);
                 }
@@ -326,7 +322,7 @@ impl App {
             f32,
         ),
     ) {
-        if !self.settings.show_specs {
+        if !self.specs_shown() {
             return;
         }
         let manual_url = self.manual_url();
@@ -337,6 +333,17 @@ impl App {
         } else if let Some(url) = manual_url {
             specs::show_manual_only(ui, &self.l10n, url, scale);
         }
+    }
+
+    /// Whether the Specifications section draws anything: it is switched
+    /// on, and the reading has spec data or the meter a manual to link.
+    fn specs_shown(&self) -> bool {
+        self.settings.show_specs
+            && (self
+                .last_measurement
+                .as_ref()
+                .is_some_and(|m| m.spec.is_some() || m.mode_spec.is_some())
+                || self.manual_url().is_some())
     }
 
     /// Render specs for the wide (side panel) layout, folded or not as the
@@ -383,6 +390,18 @@ mod tests {
     };
     use eframe::egui::ViewportInfo;
     use eframe::egui::scroll_area::ScrollAreaOutput;
+
+    /// Specifications hidden draws no section, so the wide column draws no
+    /// separator for it either, though the meter has a manual to link.
+    #[test]
+    fn hidden_specifications_take_no_separator() {
+        let mut app = test_app();
+        app.settings.shared.device_family = "ut61eplus".to_string();
+        assert!(app.manual_url().is_some(), "the UT61E+ links its manual");
+        assert!(app.specs_shown());
+        app.settings.show_specs = false;
+        assert!(!app.specs_shown());
+    }
 
     /// The page scrollers one multi-panel layout ends up with: the wide
     /// layout has one per column, the narrow layout only the reading column
