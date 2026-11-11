@@ -453,7 +453,7 @@ impl Connection {
     }
 
     /// Commands the connected protocol supports; none while disconnected.
-    pub(super) fn supported_commands(&self) -> &[String] {
+    pub(super) fn supported_commands(&self) -> &[&'static str] {
         self.meter
             .as_ref()
             .map_or(&[], |m| m.supported_commands.as_slice())
@@ -736,9 +736,9 @@ impl App {
         }
     }
 
-    pub(super) fn send_command(&self, cmd: &str) {
+    pub(super) fn send_command(&self, cmd: &'static str) {
         if let Some(worker) = &self.connection.worker {
-            worker.command(RemoteCommand::Named(cmd.to_string()));
+            worker.command(RemoteCommand::Named(cmd));
         }
     }
 
@@ -1846,7 +1846,7 @@ mod tests {
         app.l10n = french();
         app.connection.state = ConnectionState::Connected;
         app.connection.meter = Some(ConnectedMeter {
-            supported_commands: vec!["hold".to_string(), "zero".to_string()],
+            supported_commands: vec!["hold", "zero"],
             meter_keys: MeterKeys {
                 context: CURRENT,
                 ..MeterKeys::NONE

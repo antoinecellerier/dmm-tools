@@ -31,7 +31,7 @@ pub(crate) enum ThreadControl {
 /// A command the UI asks the acquisition thread to send to the meter.
 pub(crate) enum RemoteCommand {
     /// A named button command (`hold`, `range`, …) from the remote controls.
-    Named(String),
+    Named(&'static str),
     /// Switch a setting to one of the values `Dmm::choices` listed, by its id.
     Select(Setting, u16),
 }
@@ -177,7 +177,7 @@ pub(crate) struct ConnectedMeter {
     /// link at all.
     pub(crate) link: Option<Link>,
     /// Commands the connected protocol supports.
-    pub(crate) supported_commands: Vec<String>,
+    pub(crate) supported_commands: Vec<&'static str>,
     /// The function and context keys the protocol lists, drawn as the mode
     /// readout's list and as chips beside HOLD.
     pub(crate) meter_keys: MeterKeys,
@@ -354,11 +354,7 @@ fn establish_connection<T: Transport>(
     let profile = dmm.profile();
     let stability = profile.stability;
     let feedback_url = profile.feedback_url();
-    let cmds: Vec<String> = profile
-        .supported_commands
-        .iter()
-        .map(|s| s.to_string())
-        .collect();
+    let cmds = profile.supported_commands.to_vec();
     // Read before `get_name`, which borrows the device mutably.
     let max_aux_values = profile.max_aux_values;
     let meter_keys = profile.meter_keys;
@@ -1229,7 +1225,7 @@ mod tests {
         next_of(&worker.rx, bound, reading).expect("the first reading, at once");
 
         // Each bound is a third of the interval it must beat.
-        worker.command(RemoteCommand::Named("no-such-key".to_string()));
+        worker.command(RemoteCommand::Named("no-such-key"));
         next_of(&worker.rx, bound, |m| {
             matches!(m, DmmMessage::CommandFailed { .. }).then_some(())
         })
@@ -1341,7 +1337,7 @@ mod tests {
                 .map(|d| (d, None)),
             1 => {
                 // Pressed while the thread is retrying the link.
-                let _ = cmd_tx.send(RemoteCommand::Named("no-such-command".to_string()));
+                let _ = cmd_tx.send(RemoteCommand::Named("no-such-command"));
                 dmm_lib::Dmm::new(Dropout::open(&open_live), (entry.new_protocol)())
                     .map(|d| (d, None))
             }

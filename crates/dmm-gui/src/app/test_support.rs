@@ -17,7 +17,7 @@ pub(crate) fn test_app() -> App {
 /// The app connected to a meter offering `commands`, a 1.234 reading in
 /// `unit` on screen. The connected state is set by hand: no acquisition
 /// thread runs.
-pub(crate) fn connected_app(commands: &[&str], unit: &'static str) -> App {
+pub(crate) fn connected_app(commands: &[&'static str], unit: &'static str) -> App {
     let settings = Settings {
         auto_connect: false,
         ..Settings::default()
@@ -25,7 +25,7 @@ pub(crate) fn connected_app(commands: &[&str], unit: &'static str) -> App {
     let mut app = App::from_settings(settings, dmm_lib::Clock::real());
     app.connection.state = ConnectionState::Connected;
     app.connection.meter = Some(ConnectedMeter {
-        supported_commands: commands.iter().map(|c| c.to_string()).collect(),
+        supported_commands: commands.to_vec(),
         ..ConnectedMeter::test_fixture(None)
     });
     app.last_measurement = Some(dmm_lib::measurement::Measurement::test_fixture(

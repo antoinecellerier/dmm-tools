@@ -321,12 +321,7 @@ impl App {
         }
         let flags = self.last_measurement.as_ref().map(|m| m.flags);
         let keys = self.connection.meter_keys();
-        let has_cmd = |cmd: &str| {
-            self.connection
-                .supported_commands()
-                .iter()
-                .any(|c| c == cmd)
-        };
+        let has_cmd = |cmd: &str| self.connection.supported_commands().contains(&cmd);
         let l10n = self.l10n.clone();
         let l10n = l10n.as_ref();
         // What a shared button shows: the model's own word, or the generic one.
@@ -1186,7 +1181,7 @@ mod tests {
     }
 
     /// Every button drawn for `commands`, the app's own included.
-    fn row_buttons_for(commands: &[&str], flags: StatusFlags) -> Vec<String> {
+    fn row_buttons_for(commands: &[&'static str], flags: StatusFlags) -> Vec<String> {
         let mut app = connected_app(commands, "V");
         app.last_measurement = Some(Measurement::test_fixture(
             MeasuredValue::Normal(1.234),
@@ -1218,8 +1213,8 @@ mod tests {
     /// lone command, past the buttons it draws for none.
     fn gap(
         profile: &DeviceProfile,
-        command: &str,
-        row_only: &mut impl FnMut(&str) -> usize,
+        command: &'static str,
+        row_only: &mut impl FnMut(&'static str) -> usize,
     ) -> Option<String> {
         let keys = profile.meter_keys;
         // A function key is drawn in the mode dropdown, unless the family also
@@ -1253,7 +1248,7 @@ mod tests {
     fn every_advertised_command_reaches_the_gui() {
         let none = row_buttons_for(&["no_such_command"], StatusFlags::default()).len();
         let mut drawn: BTreeMap<String, usize> = BTreeMap::new();
-        let mut row_only = |command: &str| {
+        let mut row_only = |command: &'static str| {
             *drawn.entry(command.to_string()).or_insert_with(|| {
                 row_buttons_for(&[command], StatusFlags::default())
                     .len()

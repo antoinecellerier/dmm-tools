@@ -170,7 +170,7 @@ fn command_failed_toast(
             tr!(
                 l10n,
                 "connection-command-failed",
-                command = name,
+                command = *name,
                 error = error
             )
         }
@@ -2194,7 +2194,7 @@ mod tests {
         use crate::app::connection::RemoteCommand;
         use dmm_lib::error::{Error, Rejected};
         let l10n = crate::l10n::english();
-        let hold = RemoteCommand::Named("hold".to_string());
+        let hold = RemoteCommand::Named("hold");
         let other = Error::CommandRejected(Rejected::OtherModel {
             code: 61,
             model: "OWON CMS061",
@@ -2237,7 +2237,7 @@ mod tests {
                 .ends_with(". Check the dial position.")
         );
         // A button press is no switch: its words stand alone.
-        let hold = RemoteCommand::Named("hold".to_string());
+        let hold = RemoteCommand::Named("hold");
         assert!(!command_failed_toast(&l10n, &hold, &refused, None).contains("dial"));
         // A reason that says what to do gets no dial advice beside it.
         let locked = Error::CommandRejected(Rejected::MinMaxLocksRange);
