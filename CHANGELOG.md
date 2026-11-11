@@ -22,7 +22,7 @@
 - **`--alarm-high` and `--alarm-low` take a unit, and then watch only that quantity** — `4980mV` or `10kohm`; a bare number stays in the base unit.
 - **An unknown `--device` value points to `--help`, which lists the devices**
 - **A mistyped `command` name is answered with the meter's commands**
-- **dmm-cli's connection warnings come in the chosen language** — several USB cables or Bluetooth adapters, a meter naming or sending another model, unknown data.
+- **dmm-cli's connection warnings come in the chosen language** — several USB cables or Bluetooth adapters, a meter naming or sending another model, unknown data, late Bluetooth readings.
 - **dmm-cli says which meter is picked when its data won't read**
 - **"No USB cable found" says when Bluetooth wasn't searched** — and how to switch the search on.
 - **`--mock-mode` with a real meter or Auto-detect is refused** — it was ignored.

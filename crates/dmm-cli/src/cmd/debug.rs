@@ -53,6 +53,7 @@ pub(crate) fn cmd_debug(
         match stream.tick() {
             Ok(StreamEvent::Measurement(m)) => {
                 crate::open::warn_other_data(stream.dmm());
+                crate::open::warn_late_readings(&mut stream);
                 // A frame without a main reading has its digits on the
                 // sub-value it carries instead.
                 let absent = !m.has_main_reading();

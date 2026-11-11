@@ -34,7 +34,7 @@ use crate::error::{Error, ErrorKind, Result};
 use crate::measurement::Measurement;
 use crate::protocol::Delivery;
 use crate::transport::{LateReadings, Transport};
-use log::{debug, trace, warn};
+use log::{debug, trace};
 use std::collections::VecDeque;
 use std::time::{Duration, Instant};
 
@@ -303,7 +303,7 @@ impl<'a, T: Transport> MeasurementStream<'a, T> {
     /// The notice for readings arriving two at a time, once, when a
     /// streaming meter's link has been seen handing them over that way and
     /// knows what to say about it ([`Transport::late_readings`]). The stream
-    /// has logged it as a warning already.
+    /// logs it only at debug: the app says it.
     pub fn take_late_readings(&mut self) -> Option<LateReadings> {
         self.pairs.notice.take()
     }
@@ -412,7 +412,8 @@ impl<'a, T: Transport> MeasurementStream<'a, T> {
         self.pairs.settled = true;
         match self.dmm.transport().late_readings() {
             Some(notice) => {
-                warn!("{notice}");
+                // Each app says it in its own language.
+                debug!("{notice}");
                 let link = match self.dmm.transport().transport_status() {
                     Ok(status) => status.unwrap_or_else(|| "no status".to_string()),
                     Err(e) => format!("status unavailable ({e})"),

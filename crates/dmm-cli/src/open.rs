@@ -7,7 +7,7 @@
 //! localizer's library lookups. The ids and commands it names stay as typed.
 
 use crate::capture::recording;
-use crate::l10n::{error_label, warning_label};
+use crate::l10n::{error_label, note_label, warning_label};
 use console::style;
 use dmm_lib::mock::MockMode;
 use dmm_lib::protocol::registry::{self, SelectableDevice, Selection};
@@ -395,6 +395,38 @@ pub(crate) fn warn_other_data<T: dmm_lib::transport::Transport>(dmm: &dmm_lib::D
         help.other_data(&prose_name(shown), &prose_name(profile_name(dmm.profile()))),
         help.cli_choose_meter(MeterChoice::Entry(named), pick)
     );
+}
+
+/// Say, once a run, that the link hands readings over late, in the run's
+/// language: the stream has the notice once it has seen readings arrive in
+/// pairs, and the library only logs it.
+pub(crate) fn warn_late_readings<T: dmm_lib::transport::Transport>(
+    stream: &mut dmm_lib::stream::MeasurementStream<'_, T>,
+) {
+    static TOLD: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+    let Some(notice) = stream.take_late_readings() else {
+        return;
+    };
+    if TOLD.swap(true, std::sync::atomic::Ordering::Relaxed) {
+        return;
+    }
+    eprintln!("{}", late_readings_text(&notice));
+}
+
+/// The title on the label's line, then the advice and the command to run,
+/// each on a line of its own so the command copies clean.
+fn late_readings_text(notice: &dmm_lib::transport::LateReadings) -> String {
+    let l = crate::l10n::get();
+    let mut text = format!(
+        "{} {}\n  {}",
+        note_label(),
+        l.late_readings_title(),
+        l.late_readings_advice(notice)
+    );
+    if let Some(command) = &notice.command {
+        text.push_str(&format!("\n  {}", style(command).dim()));
+    }
+    text
 }
 
 /// Ask for a report, once per run, when a meter sent data no parser knows:
@@ -845,6 +877,27 @@ pub(crate) fn open_mock_device(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The late-readings notice reads as the library's, each part on a line
+    /// of its own, the command last and alone so it copies clean.
+    #[test]
+    fn the_late_readings_notice_puts_the_command_alone_last() {
+        use dmm_lib::transport::LateReadings;
+        let command = "hcitool lecup --handle 64 --min 6 --max 6";
+        let with = LateReadings {
+            command: Some(command.to_string()),
+        };
+        let text = console::strip_ansi_codes(&late_readings_text(&with)).into_owned();
+        let lines: Vec<&str> = text.lines().map(str::trim).collect();
+        assert_eq!(lines.len(), 3, "{text}");
+        assert!(lines[0].ends_with(LateReadings::TITLE), "{text}");
+        assert_eq!(lines[1], with.advice());
+        assert_eq!(lines[2], command);
+        let without = LateReadings { command: None };
+        let text = console::strip_ansi_codes(&late_readings_text(&without)).into_owned();
+        assert_eq!(text.lines().nth(1).map(str::trim), Some(without.advice()));
+        assert_eq!(text.lines().count(), 2);
+    }
 
     /// A raised flag settles any open: one that got through, and one that
     /// failed with help of its own, end alike and say nothing. Down or absent,

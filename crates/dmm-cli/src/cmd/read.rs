@@ -1117,6 +1117,7 @@ fn run_read_loop<T: dmm_lib::transport::Transport>(
         match event {
             Ok(StreamEvent::Measurement(m)) => {
                 crate::open::warn_other_data(stream.dmm());
+                crate::open::warn_late_readings(&mut stream);
                 let due = markers.front().zip(start).is_some_and(|(next, start)| {
                     m.timestamp
                         .checked_duration_since(start)
