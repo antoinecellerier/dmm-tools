@@ -1070,7 +1070,7 @@ fn run_read_loop<T: dmm_lib::transport::Transport>(
     meter_name: &str,
     // A real meter's; `None` for the mock and a recording.
     meter: Option<Meter<T>>,
-    // A recording's markers, in file order; none for a meter.
+    // A recording's markers, in offset order; none for a meter.
     markers: Vec<dmm_lib::replay::ReplayMarker>,
 ) -> Result<(), crate::l10n::Failure> {
     let count = options.count;
@@ -1082,15 +1082,11 @@ fn run_read_loop<T: dmm_lib::transport::Transport>(
         }) => (Some(device), reopen.map(|r| (r, interval))),
         None => (None, None),
     };
-    // Each marker goes on the first reading played at or after its offset,
-    // one per reading, so a frame `--interval-ms` or `--count` skips passes
-    // its marker on rather than losing it — the rule the GUI plays by.
+    // One marker per reading, by `ReplayMarker::is_due`, so a frame
+    // `--interval-ms` or `--count` skips passes its marker on rather than
+    // losing it — the rule the GUI plays by.
     let start = dmm.clock().wall_origin().map(|(start, _)| start);
-    let mut markers: std::collections::VecDeque<_> = {
-        let mut markers = markers;
-        markers.sort_by_key(|m| m.offset);
-        markers.into()
-    };
+    let mut markers: std::collections::VecDeque<_> = markers.into();
     let tick = Duration::from_millis(interval_ms);
     let first_marker = next_marker_number(markers.iter().map(|m| m.number));
     // Stopped before a reading was taken: an output file named on the command
@@ -1114,9 +1110,9 @@ fn run_read_loop<T: dmm_lib::transport::Transport>(
             Ok(StreamEvent::Measurement(m)) => {
                 crate::open::warn_other_data(stream.dmm());
                 let due = markers.front().zip(start).is_some_and(|(next, start)| {
-                    start
-                        .checked_add(next.offset)
-                        .is_some_and(|at| at <= m.timestamp)
+                    m.timestamp
+                        .checked_duration_since(start)
+                        .is_some_and(|elapsed| next.is_due(elapsed))
                 });
                 let marker = if due { markers.pop_front() } else { None };
                 // Once per run: the dashes on every line say the rest.

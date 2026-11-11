@@ -408,11 +408,9 @@ impl App {
             // the session; a plain Disconnect/Connect resumes the playback,
             // and the markers already played are on their readings.
             if self.pin_replay_origin(recorded) || std::mem::take(&mut self.source.requeue_replay) {
-                let mut markers = replay.markers.clone();
-                markers.sort_by_key(|m| m.offset);
                 self.markers
-                    .reserve(markers.iter().map(|m| m.number).max().unwrap_or(0));
-                self.source.replay_markers = markers.into();
+                    .reserve(replay.markers.iter().map(|m| m.number).max().unwrap_or(0));
+                self.source.replay_markers = replay.markers.iter().cloned().collect();
                 self.source.replay_view = replay
                     .view
                     .as_deref()

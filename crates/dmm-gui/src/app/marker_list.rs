@@ -260,25 +260,21 @@ impl App {
         self.markers.retain(|at| reading_held(graph, recording, at));
     }
 
-    /// Put the `--replay` file's next marker on `m` when `m` is the first
-    /// reading played at or after the marker's offset, so a frame the
-    /// playback skipped passes its marker to the next one. One per reading:
-    /// a second marker due by now waits for the next reading rather than
-    /// losing its place to the first.
+    /// Put the `--replay` file's next marker on `m` when it is due
+    /// (`ReplayMarker::is_due`). One per reading: a second marker due by now
+    /// waits for the next reading rather than losing its place to the first.
     pub(super) fn place_replay_marker(&mut self, m: &dmm_lib::measurement::Measurement) {
         let Some((start, _)) = self.clock.wall_origin() else {
             return;
         };
-        let due = |offset| {
-            start
-                .checked_add(offset)
-                .is_some_and(|at| at <= m.timestamp)
+        let Some(elapsed) = m.timestamp.checked_duration_since(start) else {
+            return;
         };
         if !self
             .source
             .replay_markers
             .front()
-            .is_some_and(|next| due(next.offset))
+            .is_some_and(|next| next.is_due(elapsed))
         {
             return;
         }

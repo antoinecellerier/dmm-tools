@@ -42,8 +42,8 @@ pub(super) struct SessionSource {
     /// the settings as an override, so nothing about a playback is saved.
     pub(super) replay: Option<crate::ReplaySource>,
     /// The `--replay` file's markers still waiting for their reading, in
-    /// offset order: each goes on the first reading played at or after its
-    /// offset (see `place_replay_marker`).
+    /// offset order: each goes on the first reading it is due on (see
+    /// `place_replay_marker`).
     pub(super) replay_markers: std::collections::VecDeque<dmm_lib::replay::ReplayMarker>,
     /// The `--replay` file's saved view, waiting until the playback reaches
     /// the furthest moment it shows (see `view_reach`).
@@ -309,7 +309,7 @@ fn from_export(imported: dmm_shared::export::Imported, base: Instant) -> Loaded 
 /// frames decode, with the recording's own timestamps — never the session's.
 fn load_replay(text: &str, base: Instant, limit: usize) -> Result<Loaded, Unreadable> {
     use dmm_lib::stream::{MeasurementStream, StreamEvent};
-    let replay = dmm_lib::replay::Replay::parse(text)?;
+    let mut replay = dmm_lib::replay::Replay::parse(text)?;
     let recorded = dmm_shared::replay::recorded_at(&replay)?;
     let clock = dmm_lib::Clock::manual();
     // A manual clock stands still until the playback sleeps on it: its now
@@ -349,14 +349,12 @@ fn load_replay(text: &str, base: Instant, limit: usize) -> Result<Loaded, Unread
             }
         }
     }
-    // Each marker on the first reading at or after its offset, one per
-    // reading, as a playback puts them.
+    // Each marker on the first reading it is due on, one per reading, as a
+    // playback puts them.
     let mut markers = Vec::with_capacity(replay.markers.len());
-    let mut pending: Vec<_> = replay.markers.clone();
-    pending.sort_by_key(|m| m.offset);
     let mut next = 0;
-    for m in pending {
-        let from = offsets.partition_point(|&o| o < m.offset).max(next);
+    for m in std::mem::take(&mut replay.markers) {
+        let from = offsets.partition_point(|&o| !m.is_due(o)).max(next);
         if from < offsets.len() {
             markers.push((from, m.number, m.note));
             next = from + 1;

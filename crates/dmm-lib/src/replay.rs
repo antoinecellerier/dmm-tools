@@ -127,7 +127,9 @@ pub struct Replay {
     /// no `# link:` line is a cable recording; one naming a link this version
     /// does not know says nothing.
     pub link: Option<Link>,
-    /// The markers the recording was saved with, in file order.
+    /// The markers the recording was saved with, in offset order, and in
+    /// file order among those at one offset: the order a playback reaches
+    /// them, wherever their lines sit.
     pub markers: Vec<ReplayMarker>,
     /// The graph view the recording was saved with, as the `# view:` line's
     /// text: its fields are the viewer's business, not this crate's.
@@ -151,6 +153,15 @@ pub struct ReplayMarker {
     pub number: u32,
     /// Its note, possibly empty.
     pub note: String,
+}
+
+impl ReplayMarker {
+    /// Whether a reading `elapsed` into the session is one this marker may go
+    /// on: the first reading at or after its offset takes it, so a playback
+    /// that skips the marked frame puts it on the next one.
+    pub fn is_due(&self, elapsed: Duration) -> bool {
+        self.offset <= elapsed
+    }
 }
 
 impl Replay {
@@ -219,6 +230,8 @@ impl Replay {
         }
         // Kept for the session: the growth slack would be kept with it.
         samples.shrink_to_fit();
+        // Stable, so markers at one offset keep the order they were written.
+        markers.sort_by_key(|m| m.offset);
         Ok(Self {
             device,
             listing,
@@ -782,7 +795,8 @@ mod tests {
     }
 
     /// A marker line reads back as written, wherever it sits and whatever
-    /// its note holds; a line break in the note is written as a space.
+    /// its note holds; a line break in the note is written as a space. The
+    /// markers come back in offset order, those at one offset as written.
     #[test]
     fn marker_lines_round_trip() {
         let notes = ["probes on", "", "  # 3.3 V rail, see #2  ", "two\r\nlines"];
@@ -791,8 +805,8 @@ mod tests {
         text.push_str(&format!("0 {DCV_BATTERY}\n"));
         text.push_str(&marker_line(Duration::ZERO, 1, notes[0]));
         text.push_str(&format!("500 {DCV_BATTERY}\n"));
-        text.push_str(&marker_line(Duration::from_millis(500), 7, notes[2]));
-        text.push_str(&marker_line(Duration::from_millis(500), 8, notes[3]));
+        text.push_str(&marker_line(Duration::from_millis(500), 8, notes[2]));
+        text.push_str(&marker_line(Duration::from_millis(500), 7, notes[3]));
         let replay = parsed(&text);
         let marker = |ms, number, note: &str| ReplayMarker {
             offset: Duration::from_millis(ms),
@@ -802,17 +816,17 @@ mod tests {
         assert_eq!(
             replay.markers,
             [
-                marker(250, 2, ""),
                 marker(0, 1, "probes on"),
-                marker(500, 7, "  # 3.3 V rail, see #2  "),
-                marker(500, 8, "two  lines"),
+                marker(250, 2, ""),
+                marker(500, 8, "  # 3.3 V rail, see #2  "),
+                marker(500, 7, "two  lines"),
             ]
         );
         // A file written with Windows line ends reads the same.
         assert_eq!(parsed(&text.replace('\n', "\r\n")).markers, replay.markers);
         // A marker line trimmed of its trailing space still has an empty note.
         let bare = text.replace("# marker: 250 2 \n", "# marker: 250 2\n");
-        assert_eq!(parsed(&bare).markers[0], marker(250, 2, ""));
+        assert_eq!(parsed(&bare).markers[1], marker(250, 2, ""));
     }
 
     /// A meter name with a line break in it stays one model line, and adds
