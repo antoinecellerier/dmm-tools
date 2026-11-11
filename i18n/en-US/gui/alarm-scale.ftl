@@ -79,12 +79,13 @@ scale-on =
         [both] Scaling readings: { $transform } — recording continues with scaled values — alarm off; set its limits again in the new unit
        *[none] Scaling readings: { $transform }
     }
-# Scaling turned off. $also as in scale-on.
-scale-off-toast =
+# Scaling turned off. $also as in scale-on, except that recording means
+# the recording goes on with the meter's own, unscaled readings.
+scale-cleared =
     { $also ->
-        [recording] Scaling off — recording continues with scaled values
+        [recording] Scaling off — recording continues with unscaled values
         [alarm] Scaling off — alarm off; set its limits again in the new unit
-        [both] Scaling off — recording continues with scaled values — alarm off; set its limits again in the new unit
+        [both] Scaling off — recording continues with unscaled values — alarm off; set its limits again in the new unit
        *[none] Scaling off
     }
 

@@ -510,7 +510,7 @@ scaled with it; sub-values in another unit are left as sent. Statistics and
 the integral use the scaled reading.
 
 Applying or clearing a scale resets the graph and statistics, like
-**Clear**, and turns an [alarm](#alarm) off; a recording in progress continues with scaled values. The setting
+**Clear**, and turns an [alarm](#alarm) off; a recording in progress continues, with scaled values while a scale is applied and the meter's own after it is cleared. The setting
 is session-only and survives disconnect, a change of device and `Ctrl+L`.
 `dmm-cli read` offers the same transform as `--scale`, `--offset` and `--unit`.
 

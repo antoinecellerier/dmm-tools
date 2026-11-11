@@ -79,12 +79,13 @@ scale-on =
         [both] 正在换算读数: { $transform }；记录将继续使用换算后的值，报警已关闭，请用新单位重新设置限值
        *[none] 正在换算读数: { $transform }
     }
-# Scaling turned off. $also as in scale-on.
-scale-off-toast =
+# Scaling turned off. $also as in scale-on, except that recording means
+# the recording goes on with the meter's own, unscaled readings.
+scale-cleared =
     { $also ->
-        [recording] 换算已关闭；记录将继续使用换算后的值
+        [recording] 换算已关闭；记录将继续使用未换算的值
         [alarm] 换算和报警均已关闭，请用新单位重新设置限值
-        [both] 换算已关闭，记录将继续使用换算后的值；报警也已关闭，请用新单位重新设置限值
+        [both] 换算已关闭，记录将继续使用未换算的值；报警也已关闭，请用新单位重新设置限值
        *[none] 换算已关闭
     }
 

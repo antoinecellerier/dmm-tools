@@ -79,12 +79,13 @@ scale-on =
         [both] Escala aplicada às leituras: { $transform } — a gravação continua com os valores ajustados — alarme desativado; volte a definir os limites na nova unidade
        *[none] Escala aplicada às leituras: { $transform }
     }
-# Scaling turned off. $also as in scale-on.
-scale-off-toast =
+# Scaling turned off. $also as in scale-on, except that recording means
+# the recording goes on with the meter's own, unscaled readings.
+scale-cleared =
     { $also ->
-        [recording] Escala desativada — a gravação continua com os valores ajustados
+        [recording] Escala desativada — a gravação continua com os valores do próprio multímetro
         [alarm] Escala desativada — alarme desativado; volte a definir os limites na nova unidade
-        [both] Escala desativada — a gravação continua com os valores ajustados — alarme desativado; volte a definir os limites na nova unidade
+        [both] Escala desativada — a gravação continua com os valores do próprio multímetro — alarme desativado; volte a definir os limites na nova unidade
        *[none] Escala desativada
     }
 

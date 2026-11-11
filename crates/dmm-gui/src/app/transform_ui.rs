@@ -325,7 +325,7 @@ impl App {
             (false, false) => "none",
         };
         let message = if identity {
-            tr!(self.l10n, "scale-off-toast", also = also)
+            tr!(self.l10n, "scale-cleared", also = also)
         } else {
             let transform = self.transform.describe();
             tr!(self.l10n, "scale-on", transform = transform, also = also)
@@ -556,7 +556,7 @@ mod tests {
         assert_eq!(
             app.toast.as_ref().map(|t| t.message.as_str()),
             Some(
-                "Scaling off \u{2014} recording continues with scaled values \u{2014} alarm off; \
+                "Scaling off \u{2014} recording continues with unscaled values \u{2014} alarm off; \
                  set its limits again in the new unit"
             )
         );

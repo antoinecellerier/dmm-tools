@@ -79,12 +79,13 @@ scale-on =
         [both] 測定値をスケーリングしています: { $transform }。記録はスケーリング後の値で続行されます。アラームはオフになりました。新しい単位で上限と下限を設定し直してください。
        *[none] 測定値をスケーリングしています: { $transform }
     }
-# Scaling turned off. $also as in scale-on.
-scale-off-toast =
+# Scaling turned off. $also as in scale-on, except that recording means
+# the recording goes on with the meter's own, unscaled readings.
+scale-cleared =
     { $also ->
-        [recording] スケーリングはオフになりました。記録はスケーリング後の値で続行されます。
+        [recording] スケーリングはオフになりました。記録は元の値で続行されます。
         [alarm] スケーリングはオフになりました。アラームもオフになりました。新しい単位で上限と下限を設定し直してください。
-        [both] スケーリングはオフになりました。記録はスケーリング後の値で続行されます。アラームもオフになりました。新しい単位で上限と下限を設定し直してください。
+        [both] スケーリングはオフになりました。記録は元の値で続行されます。アラームもオフになりました。新しい単位で上限と下限を設定し直してください。
        *[none] スケーリング オフ
     }
 
