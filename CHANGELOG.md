@@ -65,6 +65,10 @@
 - **`dmm-cli read` and `debug` piped into `head` end cleanly** — `read` ended with "Broken pipe" and no summary, and `debug` crashed.
 - **The mock ignores HOLD, REL, MIN/MAX and Peak where a UT61E+ does**
 
+### Internal
+
+- **dmm-gui and dmm-cli are smaller, by about a third on Linux** — a crash's backtrace now shows addresses in place of function names.
+
 ## v0.10.0 — Translations
 
 dmm-gui and dmm-cli come in Brazilian Portuguese, French, Japanese, Simplified Chinese and Spanish. The OWON CMS061, sold as the UNI-T UT217A, is verified, and the Brymen BM827s and BM525s are partly verified. More meters get remote buttons. Fixes make connections sturdier and reach every supported meter family.

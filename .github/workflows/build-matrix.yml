@@ -25,7 +25,7 @@ on:
         type: boolean
         default: false
       published:
-        description: "Mark the binaries as a published build, so dmm-gui checks GitHub for newer ones; only for binaries that become a release or dev release"
+        description: "Mark the binaries as a published build, so dmm-gui checks GitHub for newer ones, and build them with fat LTO and stripped; only for binaries that become a release or dev release"
         type: boolean
         default: false
 
@@ -129,7 +129,9 @@ jobs:
     name: Build (${{ matrix.name }})
     needs: [targets, docs]
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 30
+    # Room for the published builds' whole-program optimisation, which the
+    # macOS job runs for two targets.
+    timeout-minutes: 60
     env:
       ARCHIVE: ${{ inputs.archive-prefix }}-${{ matrix.slug }}
       # The second target's archive, when the entry has one.
@@ -167,10 +169,16 @@ jobs:
       - name: Build
         env:
           DMM_PUBLISHED_BUILD: ${{ inputs.published && '1' || '' }}
-          # Release's usual settings for every binary CI builds; the
-          # workspace's release profile is incremental for local rebuilds.
+          # The workspace's release profile is incremental for local rebuilds;
+          # every binary CI builds gets release's usual settings instead.
+          # Published binaries are also optimised as one unit across all
+          # crates (fat LTO) and stripped of symbols, which takes about 38%
+          # off the Linux pair at the same opt-level; the smoke build skips
+          # both, as the whole-program pass reruns on every push.
           CARGO_PROFILE_RELEASE_INCREMENTAL: "false"
-          CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "16"
+          CARGO_PROFILE_RELEASE_CODEGEN_UNITS: ${{ inputs.published && '1' || '16' }}
+          CARGO_PROFILE_RELEASE_LTO: ${{ inputs.published && 'fat' || 'false' }}
+          CARGO_PROFILE_RELEASE_STRIP: ${{ inputs.published && 'symbols' || 'debuginfo' }}
         run: >
           cargo build --workspace --release --target ${{ matrix.target }}
           ${{ matrix.also_target && format('--target {0}', matrix.also_target) || '' }}

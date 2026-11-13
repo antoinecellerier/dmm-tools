@@ -52,6 +52,6 @@ opt-level = 1
 # units: after an edit --release rebuilds dmm-cli in about 5 s instead of
 # about 60 s, for slightly slower code. Published binaries are built without
 # it: the Build step in .github/workflows/build-matrix.yml turns incremental
-# off and asks for 16 units, release's usual settings.
+# off, and for releases and dev builds adds fat LTO and strips the symbols.
 [profile.release]
 incremental = true

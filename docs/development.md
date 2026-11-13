@@ -55,8 +55,13 @@ mostly in the GUI tests, for about 4 more minutes whenever the dependencies
 rebuild. Our own crates keep debuginfo and stay unoptimised. A local
 `--release` build is incremental, so after a change to `dmm-lib` it
 rebuilds `dmm-cli` in about 5 s instead of about 60 s, for slightly slower
-code. Published binaries keep release's full settings: CI's Build step in
-`build-matrix.yml` turns incremental off and asks for 16 codegen units.
+code. CI's Build step in `build-matrix.yml` overrides that profile through
+`CARGO_PROFILE_RELEASE_*` variables: every CI binary is built without
+incremental, and releases and dev builds also get fat LTO and have their
+symbols stripped, which makes them about a third smaller at the same
+`opt-level`. A panic backtrace from a published binary therefore shows
+addresses, not function names; set the same variables locally to reproduce
+one.
 Comparing behaviour across commits needs no optimisation; a debug build
 gives the same output.
 
