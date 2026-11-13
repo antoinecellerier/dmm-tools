@@ -609,8 +609,7 @@ impl Graph {
         let mut current: Vec<[f64; 2]> = Vec::new();
         let mut prev_time: Option<Instant> = None;
 
-        for i in start..end {
-            let point = o.points[i];
+        for &point in o.points.range(start..end) {
             if let Some(prev) = prev_time
                 && self.silent_between(prev, point.time)
                 && !current.is_empty()

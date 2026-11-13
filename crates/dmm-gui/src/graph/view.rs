@@ -330,8 +330,7 @@ impl Graph {
         let (start, end) = self.visible_index_range(x_min, x_max);
         let mut y_min = f64::INFINITY;
         let mut y_max = f64::NEG_INFINITY;
-        for i in start..end {
-            let v = self.history[i].value;
+        for v in self.history.range(start..end).map(|p| p.value) {
             y_min = y_min.min(v);
             y_max = y_max.max(v);
         }
