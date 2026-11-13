@@ -13,7 +13,7 @@ The short list. Where a section below gives the background, this list is what ap
 5. U+00A0 before % in sentences; % in notation is written as the English writes it.
 6. Meter flags stay as printed (HOLD, REL, LOW BAT, LEAD ERR, HV!, VOID…); their spoken forms are French.
 7. The app's own badges are translated in capitals with accents: ÉCHELLE, LIM. HAUTE, LIM. BASSE, DIRECT, VÉRIFIÉ, PARTIELLEMENT VÉRIFIÉ, EXPÉRIMENTAL.
-8. AC/DC/AC+DC stay as printed in mode labels and notes. Table titles and prose use full words, AC+DC included: «Tension alternative + continue». Never «V CC»/«V CA».
+8. AC/DC/AC+DC stay as printed in mode labels and notes. Prose uses full words, AC+DC included: «Tension alternative + continue». Never «V CC»/«V CA».
 9. Glossary entries are full terms, with no optional words in parentheses: «maintien de l'affichage», «bip sonore», «valeur efficace sinusoïdale», «plage de mesure». A parenthesis in an entry is part of the text (an abbreviation or unit kept, as in «gain en courant (hFE)», «puissance apparente (VA)»).
 10. A unit symbol the English gives next to a term stays («puissance apparente (VA)»).
 11. Terms ruled without an approved source: «gain en courant (hFE)» ("Transistor Magnification" → «Gain en courant du transistor (hFE)»), «Daltonien» (Colorblind preset). The other unsourced terms take the glossary's value as drafted.
@@ -118,7 +118,7 @@ That leaves French prose next to English-formatted numbers: «Conserver jusqu'à
 - **Unit symbols never change,** except in the spoken reading's unit names (§0 ruling 13): V, mV, A, mA, µA, Ω, kΩ, MΩ, Hz, F, °C, °F, W, VA, Wh, Ah, dBm, dBV, s, ms, h, V·s, mAh. `lib.ftl` doesn't even list labels made only of units (`200mV`, `kΩ`).
 - **Space between a number and its unit:** follow the English as written. Spec text keeps the manual's own spacing (`10MΩ`, `≈3V`), which the spec check ignores. In prose that you write, use U+00A0 («2 s», «10 MΩ») (MS-SG p.33).
 - **The meter's AC/DC labels stay as the meter prints them:** `DC V`, `V AC`, `AC mA`, `AC+DC`, `ACV`, `DCV`, `LoZ V~`. `lib.ftl` allows this ("you may keep abbreviations such as DC V, LPF or REL"), and they match the LCD and the meter's own legends.
-- **In prose and table titles, spell the words out:** «tension continue», «tension alternative», «courant continu / alternatif» (VC831 PDF p.91, VC920 PDF p.65), and «tension alternative + continue» for AC+DC.
+- **In prose, spell the words out:** «tension continue», «tension alternative», «courant continu / alternatif» (VC831 PDF p.91, VC920 PDF p.65), and «tension alternative + continue» for AC+DC.
 - **No «V CC» / «V CA».** Voltcraft's French uses them in running text («1 000 V CC», VC920 PDF p.65; «tension CC», VC925 PDF p.111), but mixes them with «V DC», «mV DC» and «ACV» on the same pages. UNI-T's French keeps AC/DC (UT197). Keep the English DC/AC abbreviations in labels and notes, «AC+DC» included, and never write CC/CA. A note such as "AC+DC: add 1%+35 digits" would otherwise put «CA+CC» beside a mode line that says `AC+DC`.
 - **True RMS:** in notes, «valeur efficace vraie (True RMS)», or keep «True RMS» as Voltcraft does (VC920 PDF p.65). "rms" after a number (`250V rms`) is notation: keep it.
 
@@ -180,7 +180,6 @@ Fluent can't tell you the gender or number of what a placeable holds. So build s
 - Keep every number, sign, ±, ≤, ≥, <, >, ≈ and ~, and each unit symbol right after its number. Write numbers as in the English (§5). The spec check compares them and falls back to English on any mismatch.
 - Keep the exact sense: comparisons, ranges, «typique» / «typ.», «nominal», «environ», «au moins», «max.». The check can't catch a flipped comparison, and the panel shows the English on hover wherever the text differs.
 - Use the maker manuals' wording: «Non spécifié»; «de la mesure» (accuracy); «points» (digits/counts); «protection contre les surcharges»; «impédance d'entrée»; «facteur de crête»; «coefficient de température»; «cordons court-circuités»; «circuit ouvert»; «sensibilité». See the glossary for each source.
-- Table titles keep the manual's numbering and letters: «(1) Tension alternative», «A. Tension continue», «K. Température 1-1. Degrés Celsius».
 
 ## 13. Words to avoid
 

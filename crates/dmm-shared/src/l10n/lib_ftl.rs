@@ -88,10 +88,6 @@ number as it is."
 when a connection gets no data. Keep each step on its own line, and the
 meter's key names, menu items and display text as the meter prints them."
         }
-        TextKind::Table => {
-            "Specification table names, in the Specifications panel, as the
-meter's manual titles them. Keep the manual's numbering: (1), A."
-        }
         TextKind::Band => {
             "Specification accuracy bands, beside an accuracy in the
 Specifications panel: the condition it holds under, or an accuracy the manual

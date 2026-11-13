@@ -127,7 +127,7 @@ def optional(path, key):
     translations check (crates/dmm-shared/src/l10n/translations.rs) says."""
     if path == "cli/capture.ftl":
         return True
-    return path == "lib.ftl" and key.split("-", 1)[0] in ("table", "note", "input", "band")
+    return path == "lib.ftl" and key.split("-", 1)[0] in ("note", "input", "band")
 
 
 def glossary(path):

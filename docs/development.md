@@ -333,7 +333,7 @@ language lacks shows in English, so new or reworded English never waits on
 its translations. They are filled before each release, and before a
 language ships: `cargo test -p dmm-shared shipped_languages_are_complete -- --ignored`
 lists what each shipped language lacks, the specification text (`lib.ftl`'s
-table titles, notes, inputs and bands) and `capture`'s text
+notes, inputs and bands) and `capture`'s text
 (`cli/capture.ftl`) aside, which may stay English.
 `cargo test -p dmm-shared long_labels -- --ignored --nocapture` lists short
 labels that grew past one and a half times their English, for a look in
@@ -345,7 +345,8 @@ a settings folder of their own. A script that must read English whatever
 the settings say passes `--lang en-US`, as the screenshot script does.
 
 `i18n/en-US/lib.ftl` is generated from the library's text: its labels, meter
-keys, activation steps and spec tables. After changing any of them, run
+keys, activation steps and spec tables' notes, inputs and bands. After
+changing any of them, run
 `UPDATE_L10N=1 cargo test -p dmm-shared lib_ftl` and commit the file; the
 test fails until then. It only adds messages. One whose English the library
 no longer shows fails the test by name: correct its English to the new text

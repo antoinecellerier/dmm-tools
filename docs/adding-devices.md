@@ -207,7 +207,7 @@ Add spec tables once a first hardware capture has confirmed the model; until the
    - **Footnotes** — temperature coefficients, overrange conditions
    - **Model variants** — same manual covering multiple models with small spec differences (e.g., AC current frequency response differs between UT61B+ and UT61D+)
 4. Transcribe from the rendered pages (`pdftoppm`), never extracted text. The `/spec-data` skill (`.claude/skills/spec-data/SKILL.md`) runs the workflow end to end: two blind transcriptions, an adjudication of each disagreement against the zoomed page, a diff of `dump_specs --format json` against the result and the `--format html` review sheet read beside the manual. [development.md](development.md#verifying-specification-data) has the `dump_specs` flags
-5. Regenerate `i18n/en-US/lib.ftl` for the new table names, inputs and notes ([Translations](development.md#translations))
+5. Regenerate `i18n/en-US/lib.ftl` for the new tables' bands, inputs and notes ([Translations](development.md#translations))
 6. Test that every reading the parser accepts resolves a spec or sits on an explicit list, with its reason, of readings that take only their table's mode data or have no spec at all, and that every table row is reached. The UT804's coverage test in `ut80x/mod.rs` is the model
 
 ## Phase 5: Testing Without Hardware

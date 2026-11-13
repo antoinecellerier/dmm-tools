@@ -1,31 +1,24 @@
 english	spanish	part_of_speech/gender	context (where it appears)	source (document + PDF page)	notes
-DC voltage	tensión continua	s. f.	spec table titles (table-*-dc-voltage), prose, notes	Fluke 117 PDF p.6 «Tensión continua de 0,1 a 600 mV»; UNI-T UT197 PDF p.7 «DC (Corriente continua)»	Mode labels keep the meter's DC V / V DC (STYLE §6). Fluke and Amprobe write «tensión de CC» (F87V PDF p.7, AM500 PDF p.62): CC rejected, see AC/DC ruling.
-AC voltage	tensión alterna	s. f.	spec table titles, prose	Fluke 3000 FC PDF p.39 «Mide tensión alterna hasta 1000 V»; UNI-T UT197 PDF p.7 «AC (Corriente alterna)»	Fluke usually says «tensión de CA» (F117 PDF p.6): CA rejected.
-AC+DC voltage	tensión alterna + continua	s. f.	table-3-ac-voltage-plus-dc-voltage, table-ac-plus-dc-voltage	Fluke 287/289 PDF p.37 «un valor CA+CC (rms) combinado» (the combination); wording built from the two rows above	"Full words in titles and prose, like DC/AC voltage; mode labels and notes keep AC+DC as printed. ""AC Voltage + DC Voltage"" → «Tensión alterna + tensión continua»."
+DC voltage	tensión continua	s. f.	prose, notes	Fluke 117 PDF p.6 «Tensión continua de 0,1 a 600 mV»; UNI-T UT197 PDF p.7 «DC (Corriente continua)»	Mode labels keep the meter's DC V / V DC (STYLE §6). Fluke and Amprobe write «tensión de CC» (F87V PDF p.7, AM500 PDF p.62): CC rejected, see AC/DC ruling.
+AC voltage	tensión alterna	s. f.	prose	Fluke 3000 FC PDF p.39 «Mide tensión alterna hasta 1000 V»; UNI-T UT197 PDF p.7 «AC (Corriente alterna)»	Fluke usually says «tensión de CA» (F117 PDF p.6): CA rejected.
 voltage	tensión	s. f.	aux-voltage, prose	Fluke 80 Series V PDF p.3 «Medición de tensiones de CA y CC»; Fluke 117 PDF p.6; Amprobe AM-500 PDF p.50 «medición de tensión»	Provisional (SUMMARY Q5). «voltaje» is in Fluke 287/289 (PDF p.4) and UNI-T UT197 (PDF p.4) and common in Latin America; keep one word: «tensión».
 current	corriente	s. f.	aux-current, key-current	Amprobe AM-500 PDF p.51 «Corriente continua»; Fluke 117 PDF p.7	
-DC current	corriente continua	s. f.	spec table titles	Amprobe AM-500 PDF p.51 «2 Corriente continua»; Fluke 117 PDF p.7 «Corriente continua o corriente alterna»	
-AC current	corriente alterna	s. f.	spec table titles	Amprobe AM-500 PDF p.51 «3 Corriente alterna»; Truper MUT-39 PDF p.4 «c.a. (corriente alterna)»	
-4–20 mA loop current	corriente de lazo de 4-20 mA	s. f.	table-l-4-20-ma-loop-current, notes	no approved source found for «lazo» (UNI-T UT197 PDF p.12 prints only «%4-20mA»)	«lazo de corriente» is the usual instrumentation term; «bucle» is the alternative. Unverified.
-resistance	resistencia	s. f.	mode, table titles	Fluke 80 Series V PDF p.3 «Medición de resistencia»; Truper MUT-202 PDF p.3	
-Ohms (table title)	Resistencia	s. f.	table-ohms, table-autocheck-ohms	Fluke 80 Series V PDF p.3 «Medición de resistencia»	Keep «Ohms» only inside the AutoCheck™ (Ohms) trademark title.
+4–20 mA loop current	corriente de lazo de 4-20 mA	s. f.	notes	no approved source found for «lazo» (UNI-T UT197 PDF p.12 prints only «%4-20mA»)	«lazo de corriente» is the usual instrumentation term; «bucle» is the alternative. Unverified.
+resistance	resistencia	s. f.	mode	Fluke 80 Series V PDF p.3 «Medición de resistencia»; Truper MUT-202 PDF p.3	
 continuity	continuidad	s. f.	mode-continuity, aux-continuity	Fluke 117 PDF p.3 «Pruebas de continuidad»; Amprobe AM-500 PDF p.51	
-continuity test	prueba de continuidad	s. f.	table-14-continuity-test, table-f-continuity-test	Fluke 3000 FC PDF p.4 «Prueba de continuidad»; Fluke 117 PDF p.3; alt. «comprobación de continuidad» Fluke 80 Series V PDF p.3, Amprobe AM-500 PDF p.51	Pick «prueba» everywhere.
-audible continuity tester	comprobador de continuidad audible	s. m.	table-audible-continuity-tester	Truper MUT-39 PDF p.2 «continuidad audible»; «comprobador»: no approved source	
 diode	diodo	s. m.	mode-diode, range-diode	Fluke 117 PDF p.6; UNI-T UT197 PDF p.10 «medición de diodos»	
-diode test	prueba de diodos	s. f.	table-15-diode-test, table-diode-tester	Fluke 117 PDF p.6 «Prueba de diodos»; Fluke 287/289 PDF p.6	Diode Tester → «Comprobador de diodos» (AM-500 PDF p.51 «Comprobación de diodos»).
-capacitance	capacitancia	s. f.	mode-capacitance, tables	Fluke 80 Series V PDF p.3 «Medición de capacitancia»; Fluke 117 PDF p.3; Truper MUT-39 PDF p.10; UNI-T UT197 PDF p.5	Every maker manual says «capacitancia». «capacidad» (UT195 PDF p.1 «capacidad eléctrica») is also a fuse's breaking capacity (UT197 PDF p.8): avoid.
+capacitance	capacitancia	s. f.	mode-capacitance	Fluke 80 Series V PDF p.3 «Medición de capacitancia»; Fluke 117 PDF p.3; Truper MUT-39 PDF p.10; UNI-T UT197 PDF p.5	Every maker manual says «capacitancia». «capacidad» (UT195 PDF p.1 «capacidad eléctrica») is also a fuse's breaking capacity (UT197 PDF p.8): avoid.
 frequency	frecuencia	s. f.	mode-frequency, aux-frequency	Fluke 80 Series V PDF p.4 «Medición de frecuencia»; Truper MUT-202 PDF p.3	
-duty cycle	ciclo de trabajo	s. m.	mode-duty-pct, range-duty, aux-duty, table-12-duty-cycle	Fluke 80 Series V PDF p.4 «Medición del ciclo de trabajo»; Truper MUT-202 PDF p.5 «ciclo de trabajo (duty cycle)»; UNI-T UT197 PDF p.11	Every maker agrees.
+duty cycle	ciclo de trabajo	s. m.	mode-duty-pct, range-duty, aux-duty	Fluke 80 Series V PDF p.4 «Medición del ciclo de trabajo»; Truper MUT-202 PDF p.5 «ciclo de trabajo (duty cycle)»; UNI-T UT197 PDF p.11	Every maker agrees.
 Duty % (mode label)	Ciclo de trabajo %	s. m.	mode-duty-pct	as duty cycle	Long (19 vs 6 characters) for the mode line. Fallback if it wraps: keep «Duty %», as Truper prints «(duty cycle)» beside the Spanish.
-pulse width	ancho de pulso	s. m.	mode-pulse-width, table-13-pulse-width	UNI-T UT197 PDF p.13 «el ancho de pulso de 250uS»; alt. «ancho de impulso» Fluke 287/289 PDF p.58	
+pulse width	ancho de pulso	s. m.	mode-pulse-width	UNI-T UT197 PDF p.13 «el ancho de pulso de 250uS»; alt. «ancho de impulso» Fluke 287/289 PDF p.58	
 temperature	temperatura	s. f.	mode-temperature, aux-temperature	Fluke 80 Series V PDF p.3 «Medición de temperatura»	Temp °C label → «Temp °C» (same abbreviation).
 internal temperature	temperatura interna	s. f.	aux-internal-temperature	no approved source found	Plain Spanish; listed so it stays consistent.
 K-type thermocouple	termopar tipo K	s. m.	notes (note-k-type-thermocouple-*)	Fluke 80 Series V PDF p.16 «Conecte un termopar tipo K»; UNI-T UT197 PDF p.37 «termopar tipo K»	
 temperature probe	sonda de temperatura	s. f.	notes	UNI-T UT197 PDF p.5 «Sonda de temperatura»; Fluke 287/289 PDF p.39	"point-contact probe → «sonda de contacto puntual»; ""rod-type probe"" → «sonda de varilla» (no source)."
-hFE	ganancia de corriente (hFE)	s. f.	mode-hfe, aux-hfe, table-k-transistor	no approved source found (Truper MUT-39 PDF p.2 prints «hFE» only)	"Mode labels keep hFE. ""Transistor Magnification"" → «Ganancia de corriente del transistor (hFE)»."
+hFE	ganancia de corriente (hFE)	s. f.	mode-hfe, aux-hfe	no approved source found (Truper MUT-39 PDF p.2 prints «hFE» only)	"Mode labels keep hFE. ""Transistor Magnification"" → «Ganancia de corriente del transistor (hFE)»."
 NCV	NCV (detección de tensión sin contacto)	s. f.	mode-ncv, aux-ncv, reading-spoken-ncv, read-error-not-an-ncv-level	UNI-T UT197 PDF p.38 «NCV (Detección de voltaje de AC sin contacto)»; Fluke 117 PDF p.6 «Detección sin contacto de tensión de CA»	Keep «NCV» in labels; spell out only in prose. Spoken: «nivel NCV { $level }».
-EF / non-contact EF detection	EF / detección de campo eléctrico sin contacto	s. f.	mode-ef*, table-non-contact-ef-detection	UNI-T UT197 PDF p.28 «cerca de un campo eléctrico activo»; PDF p.38 «se muestra "EF"»	Keep EF, EF-H, EF-L as printed.
+EF / non-contact EF detection	EF / detección de campo eléctrico sin contacto	s. f.	mode-ef*	UNI-T UT197 PDF p.28 «cerca de un campo eléctrico activo»; PDF p.38 «se muestra "EF"»	Keep EF, EF-H, EF-L as printed.
 LoZ	LoZ (baja impedancia)	s. f.	mode-loz-*, flag-loz	Fluke 287/289 PDF p.4 «Utilización de LoZ para mediciones de voltaje»; UNI-T UT197 PDF p.10 «La baja impedancia identifica automáticamente…»	"Spoken (reading-spoken-loz): «baja impedancia». ""Lo-Z threshold"" → «umbral Lo-Z»."
 low-pass filter / LPF	filtro de paso bajo / LPF	s. m.	mode-acv-lpf, qualifier-lpf-mode, aux-lpf-v	Fluke 80 Series V PDF p.3 «Filtro de paso bajo»; Fluke 287/289 PDF p.4; UNI-T UT197 PDF p.6 «filtro de paso bajo»	Keep LPF in labels (qualifier-lpf-mode = «LPF { $mode }»).
 VFD	VFD	—	mode-vfd-*	UNI-T UT197 PDF p.13 lists «VFD» among the modes	Keep as printed.
@@ -33,7 +26,6 @@ VFC	VFC	—	mode-vfc	no approved source found	Keep as printed.
 dBm / dBV	dBm / dBV	unit	mode-v-ac-dbm, notes	Fluke 287/289 PDF p.35	Unit symbols: never change.
 dBm reference	referencia de dBm	s. f.	mode-dbm-reference	Fluke 287/289 PDF p.35 «Establecimiento de una referencia de dBm personalizada»	
 inductance	inductancia	s. f.	mode-inductance*	no approved source found	Q and R sub-labels unchanged.
-conductance	conductancia	s. f.	table-8-conductance	Fluke 80 Series V PDF p.3 «Uso de la conductancia en pruebas de valores altos de resistencia»; Fluke 287/289 PDF p.10	
 power	potencia	s. f.	mode-power*	MS-T «power» → «potencia»; no meter manual hit	AC power W → «Potencia AC W».
 apparent power (VA)	potencia aparente (VA)	s. f.	notes, VA modes	no approved source found	Keep the unit symbol whenever the English gives it. No en-US text uses the term today.
 power factor / PF	factor de potencia / PF	s. m.	mode-power-factor, aux-pf	no approved source found	Keep «PF» where the meter prints it.
@@ -47,8 +39,8 @@ period	período	s. m.	aux-period	Fluke 287/289 PDF p.21 «temperatura, período 
 impedance	impedancia	s. f.	aux-impedance	Amprobe AM-500 PDF p.62 «Impedancia de entrada»	
 burden voltage	tensión de carga	s. f.	aux-burden-voltage, note-burden-voltage-*	Fluke 3000 FC PDF p.44 «Tensión de carga de entrada (típica)»; Fluke 80 Series V PDF p.26; Fluke 287/289 PDF p.93 «Voltaje típico de la carga»	
 clamp	pinza	s. f.	mode-clamp-*, aux-clamp-*	UNI-T UT197 PDF p.5 «Pinza de AC/DC UT-CS07»; Fluke 117 PDF p.13 «pinzas amperimétricas»	Clamp AC A → «Pinza AC A». Truper (Mexico) says «multímetro de gancho» (MUT-202 PDF p.1): «pinza» is understood everywhere.
-power (mains) line	red eléctrica	s. f.	mode-line-hz, table-line-level-frequency-hz	Fluke 3000 FC PDF p.8 «la instalación de baja tensión de la red eléctrica del edificio»	Line Hz → «Hz de red».
-logic level	nivel lógico	s. m.	mode-logic-hz, table-logic-level-*	no approved source found	Logic Hz → «Hz lógico».
+power (mains) line	red eléctrica	s. f.	mode-line-hz	Fluke 3000 FC PDF p.8 «la instalación de baja tensión de la red eléctrica del edificio»	Line Hz → «Hz de red».
+logic level	nivel lógico	s. m.	mode-logic-hz	no approved source found	Logic Hz → «Hz lógico».
 Motor / Solar / Compass / Angle / Time / Scope	Motor / Solar / Brújula / Ángulo / Tiempo / Osciloscopio	s. m. (Brújula f.)	mode-motor, mode-solar, mode-compass, mode-angle, mode-time, mode-scope	no approved source found	Plain Spanish; check each against the meter when it is reviewed.
 Live (mode: live-wire detection)	Fase	s. f.	mode-live, aux-live	no approved source found	Spanish electricians call the live wire «fase» in Spain and most of Latin America («vivo» is also heard). Not the graph's LIVE chip.
 Recall	Recuperar	v.	mode-recall	no approved source found (MS-T has no «recall» entry)	Mode label, infinitive like a key's action; alternative «Memoria».

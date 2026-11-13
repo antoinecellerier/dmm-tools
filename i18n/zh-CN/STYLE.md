@@ -15,7 +15,7 @@ The short list. Where a section below gives the background, this list is what ap
 5. *Provisional.* No space before `%` («10%», MS-SG p.30 «10 ~ 20%»).
 6. Meter flags stay as printed (HOLD, REL, AUTO, LOW BAT, LEAD ERR, HV!, VOID…); their spoken forms are Chinese.
 7. *Provisional.* The app's own badges are translated: «已验证», «部分验证», «实验性», «换算», «超上限», «超下限», «实时». Chinese has no capitals; the badge's own style marks it.
-8. AC/DC/AC+DC stay as printed in mode labels and notes. Table titles and prose use full words: «直流电压», «交流电流», and *(provisional)* «交流+直流电压» for AC+DC. Never «交直流» for AC+DC: UNI-T uses it for "AC or DC".
+8. AC/DC/AC+DC stay as printed in mode labels and notes. Prose uses full words: «直流电压», «交流电流», and *(provisional)* «交流+直流电压» for AC+DC. Never «交直流» for AC+DC: UNI-T uses it for "AC or DC".
 9. Glossary entries are full terms, with no optional words in parentheses. A parenthesis in an entry is part of the text («三极管放大倍数 (hFE)», «视在功率 (VA)»).
 10. A unit symbol the English gives next to a term stays. Unit symbols never change: «°C» stays two characters, never «℃» (U+2103) as the manuals print it.
 11. *Provisional.* Key names (`shortcuts-key-*`, MS-SG p.50–51): Ctrl, Shift, Alt, Esc, Home, End stay; Space → «空格键»; Left/Right → «向左键»/«向右键»; Plus/Minus → «加号»/«减号». In prose also «向上键»/«向下键», «Page Up»/«Page Down». Never add «键» after Ctrl, Shift or Alt.
@@ -127,7 +127,7 @@ epaint 0.37 (`text_layout.rs:1394–1431`, `unicode.rs:49–71`) may break befor
 - **Space between a number and its unit:** follow the English as written; spec text keeps the manual's own spacing (`10MΩ`), which the spec check ignores.
 - **Time words in prose:** where the English writes words ("17 minutes", "2 seconds"), write «17 分钟», «2 秒»; where it writes a symbol, keep the symbol.
 - **The meter's AC/DC labels stay as the meter prints them:** `DC V`, `V AC`, `AC mA`, `AC+DC`, `ACV`, `DCV`, `LoZ V~`. The UNI-T manuals do the same in their tables («LoZ ACV 600.0V», UT61E+ PDF p.15R).
-- **In prose and table titles, spell the words out:** «直流电压», «交流电压», «直流电流», «交流电流» (UT61E+ PDF p.8L, p.8R, p.18R), and «交流+直流电压» for AC+DC (ruling 8). **«交直流» means AC *or* DC** in UNI-T's Chinese («交直流电压测量», UT61E+ PDF p.7L), so it never stands for AC+DC.
+- **In prose, spell the words out:** «直流电压», «交流电压», «直流电流», «交流电流» (UT61E+ PDF p.8L, p.8R, p.18R), and «交流+直流电压» for AC+DC (ruling 8). **«交直流» means AC *or* DC** in UNI-T's Chinese («交直流电压测量», UT61E+ PDF p.7L), so it never stands for AC+DC.
 - **True RMS:** «真有效值», or «真有效值 (True RMS)» once in a note; «True RMS» alone is fine where the meter prints it. "rms" after a number (`250V rms`) is notation: keep it.
 - **OL** is «超量程» in words (UT71 PDF p.13 «OL 超量程提示符»); «过载» is for overload *protection* only.
 
@@ -189,7 +189,6 @@ Optional for shipping (`translations::optional()`), as for every language.
 - Keep every number, sign, ±, ≤, ≥, <, >, ≈ and ~, and each unit symbol right after its number. The spec check falls back to English on any mismatch.
 - Keep the exact sense: comparisons, ranges, «典型值»/«典型», «标称», «约», «至少», «最大». The check can't catch a flipped comparison.
 - Use the manuals' wording: «未指定» (UT71 PDF p.22); «读数» in accuracy («±(a%读数+b)», UT61E+ PDF p.15L); «字» for digits («加 10 个字», «剩余读数 ≤10 个字», UT61E+ PDF p.15L, p.17R); «量程的 10%–100%» (UT61E+ PDF p.16L); «过载保护»; «输入阻抗»; «波峰因数»; «温度系数»; «表笔短路»; «开路电压»; «仅供参考».
-- Table titles keep the manual's numbering and letters: «(1) 交流电压», «A. 直流电压», «K. 温度 1-1. 摄氏度».
 
 ## 13. Glyphs and fonts
 

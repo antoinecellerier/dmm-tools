@@ -1,31 +1,24 @@
 english	french	part_of_speech/gender	context (where it appears)	source (URL or file + page)	notes
-DC voltage	tension continue	n. f.	spec table titles (table-*-dc-voltage), prose, notes	Voltcraft VC831 FR (Conrad 2576864) PDF p.91 «Mesure de la tension continue»; VC920 FR PDF p.65	Mode labels keep the meter's DC V / V DC (see STYLE §Units). UNI-T UT197 FR p.31 heads it «Tension DC»: rejected in titles, Voltcraft wording preferred.
-AC voltage	tension alternative	n. f.	spec table titles, prose	Voltcraft VC831 FR PDF p.91 «Mesure de la tension alternative»; VC920 FR PDF p.65	
-AC+DC voltage	tension alternative + continue	n. f.	table-3-ac-voltage-plus-dc-voltage, table-ac-plus-dc-voltage	Voltcraft VC891 FR (Conrad 2576866) PDF p.99 «Mesure CA + CC de la tension « V AC+DC »»; VC925 FR (Conrad 3072348) PDF p.111 «tension CA/CC»	"Ruling: full words in titles and prose, like DC/AC voltage; mode labels and notes keep AC+DC as the meter prints it. ""AC Voltage + DC Voltage"" → «Tension alternative + tension continue»."
+DC voltage	tension continue	n. f.	prose, notes	Voltcraft VC831 FR (Conrad 2576864) PDF p.91 «Mesure de la tension continue»; VC920 FR PDF p.65	Mode labels keep the meter's DC V / V DC (see STYLE §Units). UNI-T UT197 FR p.31 heads it «Tension DC»: rejected in titles, Voltcraft wording preferred.
+AC voltage	tension alternative	n. f.	prose	Voltcraft VC831 FR PDF p.91 «Mesure de la tension alternative»; VC920 FR PDF p.65	
 voltage	tension	n. f.	aux-voltage, prose	Voltcraft VC831 FR PDF p.91	Never «voltage» (anglicism).
 current	courant	n. m.	aux-current, key-current	Voltcraft VC831 FR PDF p.91 «Mesure du courant»	«intensité» appears in VC880 symbol lists only.
-DC current	courant continu	n. m.	spec table titles	Voltcraft VC831 FR PDF p.94 «Mesure de courant continu et alternatif»	
-AC current	courant alternatif	n. m.	spec table titles	Voltcraft VC831 FR PDF p.94	
-4–20 mA loop current	courant de boucle 4-20 mA	n. m.	table-l-4-20-ma-loop-current, notes	Voltcraft VC915 FR (Conrad 3072347) PDF p.107 «Mesure du courant de boucle 4 - 20 mA»; VC891 FR PDF p.114	
-resistance	résistance	n. f.	mode, table titles	Voltcraft VC891 FR PDF p.99 «Mesure de la résistance»	
-Ohms (table title)	Résistance	n. f.	table-ohms, table-autocheck-ohms	Voltcraft VC920 FR PDF p.71 «Ohm (unité de résistance électrique)»	Keep «Ohms» only inside the AutoCheck™ (Ohms) trademark title.
+4–20 mA loop current	courant de boucle 4-20 mA	n. m.	notes	Voltcraft VC915 FR (Conrad 3072347) PDF p.107 «Mesure du courant de boucle 4 - 20 mA»; VC891 FR PDF p.114	
+resistance	résistance	n. f.	mode	Voltcraft VC891 FR PDF p.99 «Mesure de la résistance»	
 continuity	continuité	n. f.	mode-continuity, aux-continuity	Voltcraft VC831 FR PDF p.91 «Test de continuité»	
-continuity test	test de continuité	n. m.	table-14-continuity-test, table-f-continuity-test	Voltcraft VC831 FR PDF p.91; alt. «contrôle de continuité» VC880 FR (Conrad 124609) PDF p.66, «essai de continuité» VC920 FR PDF p.64	Pick «test» everywhere.
-audible continuity tester	testeur de continuité acoustique	n. m.	table-audible-continuity-tester	Voltcraft VC925 FR PDF p.124 «Symbole du testeur de continuité acoustique»; VC920 FR PDF p.71 «contrôleur acoustique de continuité»	
 diode	diode	n. f.	mode-diode, range-diode	Voltcraft VC831 FR PDF p.91	
-diode test	test de diode	n. m.	table-15-diode-test, table-diode-tester	Voltcraft VC925 FR PDF p.111 «Test de diode»; VC831 FR PDF p.91 «Test de diodes»	Diode Tester → «Testeur de diode».
-capacitance	capacité	n. f.	mode-capacitance, tables	Voltcraft VC831 FR PDF p.91 «Mesure de la capacité»; VC920 FR PDF p.72	UNI-T UT197 FR PDF p.33 writes «capacitance» (anglicism): rejected.
+capacitance	capacité	n. f.	mode-capacitance	Voltcraft VC831 FR PDF p.91 «Mesure de la capacité»; VC920 FR PDF p.72	UNI-T UT197 FR PDF p.33 writes «capacitance» (anglicism): rejected.
 frequency	fréquence	n. f.	mode-frequency, aux-frequency	Voltcraft VC831 FR PDF p.91	
-duty cycle	rapport cyclique	n. m.	mode-duty-pct, range-duty, aux-duty, table-12-duty-cycle	Voltcraft VC925 FR PDF p.111 and p.134 «Mesures de la fréquence / du rapport cyclique (%)»	Decided. Manuals disagree: «cycle de service» (VC915 PDF p.156, VC920 PDF p.80), «cycle d'utilisation» (VC831 PDF p.91), «rapport d'impulsion» (VC891 PDF p.147), «facteur de marche» (VC650 PDF p.84), «Duty Cycle» kept (VC880 PDF p.77), «cycle d'occupation» (UT197 PDF p.12). IEV (search index only) has «facteur de marche» 851-12-03 (welding) and «facteur d'utilisation» 444-02-15 (relays), neither about pulses. Recommended: «rapport cyclique».
+duty cycle	rapport cyclique	n. m.	mode-duty-pct, range-duty, aux-duty	Voltcraft VC925 FR PDF p.111 and p.134 «Mesures de la fréquence / du rapport cyclique (%)»	Decided. Manuals disagree: «cycle de service» (VC915 PDF p.156, VC920 PDF p.80), «cycle d'utilisation» (VC831 PDF p.91), «rapport d'impulsion» (VC891 PDF p.147), «facteur de marche» (VC650 PDF p.84), «Duty Cycle» kept (VC880 PDF p.77), «cycle d'occupation» (UT197 PDF p.12). IEV (search index only) has «facteur de marche» 851-12-03 (welding) and «facteur d'utilisation» 444-02-15 (relays), neither about pulses. Recommended: «rapport cyclique».
 Duty % (mode label)	Rapport cyclique %	n. m.	mode-duty-pct	as duty cycle	Long (18 vs 6 chars) for a mode line. Fallback if it wraps: keep «Duty %», as VC880 FR keeps «Duty Cycle».
-pulse width	largeur d'impulsion	n. f.	mode-pulse-width, table-13-pulse-width	UNI-T UT197 FR PDF p.13 «la largeur d'impulsion de 250uS»	
+pulse width	largeur d'impulsion	n. f.	mode-pulse-width	UNI-T UT197 FR PDF p.13 «la largeur d'impulsion de 250uS»	
 temperature	température	n. f.	mode-temperature, aux-temperature	Voltcraft VC891 FR PDF p.100 «Mesure de la température»	Temp °C label → «Temp °C» (same abbreviation).
 internal temperature	température interne	n. f.	aux-internal-temperature	no approved source found	Plain French; listed so it stays consistent.
 K-type thermocouple	thermocouple de type K	n. m.	notes (note-k-type-thermocouple-*)	Voltcraft VC920 FR PDF p.66 «Sonde thermique de type K»; VC891 FR PDF p.107 «Sonde de température filaire, type K»	The FR manuals checked never print «thermocouple»; the word itself is unverified against an approved source.
 temperature probe	sonde de température	n. f.	notes	Voltcraft VC891 FR PDF p.107; VC880 FR PDF p.80 «sonde de température à contact»	"point-contact probe → «sonde à contact» (VC880 p.80); ""rod-type probe"" → «sonde à tige» (no source)."
-hFE	gain en courant (hFE)	—	mode-hfe, aux-hfe, table-k-transistor	maintainer's ruling (no approved source)	"Ruling: ""Transistor Magnification"" → «Gain en courant du transistor (hFE)»; mode labels keep hFE. ""gain en courant"" the maintainer's."
+hFE	gain en courant (hFE)	—	mode-hfe, aux-hfe	maintainer's ruling (no approved source)	"Ruling: ""Transistor Magnification"" → «Gain en courant du transistor (hFE)»; mode labels keep hFE. ""gain en courant"" the maintainer's."
 NCV	NCV (détection de tension sans contact)	n. f.	mode-ncv, aux-ncv, reading-spoken-ncv, read-error-not-an-ncv-level	UNI-T UT197 FR PDF p.28 «NCV (Détection de tension AC sans contact)»	Keep «NCV» in labels; spell out only in prose. Spoken: «niveau NCV { $level }».
-EF / non-contact EF detection	EF / détection de champ électrique sans contact	n. f.	mode-ef*, table-non-contact-ef-detection	UNI-T UT197 FR PDF p.28 «proche d'un champ électrique sous tension» (partial)	Keep EF, EF-H, EF-L as printed.
+EF / non-contact EF detection	EF / détection de champ électrique sans contact	n. f.	mode-ef*	UNI-T UT197 FR PDF p.28 «proche d'un champ électrique sous tension» (partial)	Keep EF, EF-H, EF-L as printed.
 LoZ	LoZ (basse impédance)	n. f.	mode-loz-*, flag-loz	Voltcraft VC831 FR PDF p.94 «Une fonction basse impédance (LoZ)»; VC915 FR PDF p.119 «LoZ Symbole de basse impédance»	"VC925 PDF p.125 has «Faible impédance d'entrée». Spoken (reading-spoken-loz): «basse impédance». ""Lo-Z threshold"" → «seuil Lo-Z»."
 low-pass filter / LPF	filtre passe-bas / LPF	n. m.	mode-acv-lpf, qualifier-lpf-mode, aux-lpf-v	Voltcraft VC915 FR PDF p.106 «tension alternative avec filtre passe-bas « LPF »»; VC891 FR PDF p.106 «Filtre passe-bas actif»	Keep LPF in labels (qualifier-lpf-mode = «LPF { $mode }»).
 VFD	VFD	—	mode-vfd-*	UNI-T UT197 FR PDF p.4 «La fonction de filtre passe-bas (VFD)»	Keep as printed.
@@ -33,7 +26,6 @@ VFC	VFC	—	mode-vfc	no French source	Keep as printed.
 dBm / dBV	dBm / dBV	unit	mode-v-ac-dbm, notes	Voltcraft VC925 FR PDF p.155 «0,86 dBm»	Unit symbols: never change.
 dBm reference	référence dBm	n. f.	mode-dbm-reference	no approved source for the phrase; «référence» from Voltcraft VC891 FR PDF p.113	
 inductance	inductance	n. f.	mode-inductance*	no approved source found	Q and R sub-labels unchanged.
-conductance	conductance	n. f.	table-8-conductance	no approved source found	
 power	puissance	n. f.	mode-power*	Voltcraft VC920 FR PDF p.72 «W Watt (Unité de mesure de la puissance)»	AC power W → «Puissance AC W».
 apparent power (VA)	puissance apparente (VA)	n. f.	notes, VA modes	Voltcraft VC920 FR PDF p.72 «VA Voltampère (Unité de mesure de la puissance apparente)»	Ruling: keep the unit symbol whenever the English gives it. No en-US text uses the term today.
 power factor / PF	facteur de puissance / PF	n. m.	mode-power-factor, aux-pf	Voltcraft VC920 FR PDF p.72 «cos φ Cosinus phi (Facteur de puissance)»	Keep «PF» where the meter prints it.
@@ -47,8 +39,8 @@ period	période	n. f.	aux-period	no approved source found
 impedance	impédance	n. f.	aux-impedance	UNI-T UT197 FR PDF p.30 «Impédance d'entrée»	
 burden voltage	chute de tension	n. f.	aux-burden-voltage, note-burden-voltage-*	no approved source found	No manual term found. Ruling: no optional parts in parentheses.
 clamp	pince	n. f.	mode-clamp-*, aux-clamp-*	UNI-T UT197 FR PDF p.38 «la pince multimètre»	Clamp AC A → «Pince AC A».
-power (mains) line	secteur	n. m.	mode-line-hz, table-line-level-frequency-hz	Voltcraft VC925 FR PDF p.114 «distribution secteur»	Line Hz → «Hz secteur».
-logic level	niveau logique	n. m.	mode-logic-hz, table-logic-level-*	no approved source found	Logic Hz → «Hz logique».
+power (mains) line	secteur	n. m.	mode-line-hz	Voltcraft VC925 FR PDF p.114 «distribution secteur»	Line Hz → «Hz secteur».
+logic level	niveau logique	n. m.	mode-logic-hz	no approved source found	Logic Hz → «Hz logique».
 Motor / Solar / Compass / Angle / Time / Scope	Moteur / Solaire / Boussole / Angle / Temps / Oscilloscope	n. m. (Boussole f.)	mode-motor, mode-solar, mode-compass, mode-angle, mode-time, mode-scope	no approved source found (VC925 is a PV meter: «Icône PV» PDF p.123)	Plain French; check each against the meter when it is reviewed.
 Live (mode: live-wire detection)	Phase	n. f.	mode-live, aux-live	no approved source found	Decided: French electricians say «phase» for the live wire; no manual seen. Not the graph's LIVE chip.
 Recall	Lecture mémoire	n. f.	mode-recall	"Voltcraft VC920 FR PDF p.72 «RCL ""Recall"" Lecture de la mémoire des valeurs de mesure»"	

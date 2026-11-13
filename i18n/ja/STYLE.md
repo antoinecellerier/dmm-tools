@@ -22,7 +22,7 @@ The short list. Where a section below gives the background, this list is what ap
 7. *Provisional.* Other quoted text takes «「」»: text the user types, text from a file, what the meter reports or shows on its display («「Org」と表示されます», as Sanwa PC7000 JP PDF p.7 «「dSAPO」» and KEW1062 JP PDF p.11 «「ＯＬ」表示»). No «“ ”» in Japanese text. The `'…'` around command lines and Windows device names stays as it is (MS-SG p.54).
 8. Meter flags stay as printed (HOLD, REL, AUTO, LOW BAT, LEAD ERR, HV!, VOID…); their spoken forms are Japanese.
 9. *Provisional.* The app's own badges are translated: «検証済み», «一部検証済み», «試験的», «スケール», «上限超過», «下限未満», «ライブ». Japanese has no capitals; the badge's style marks it.
-10. AC/DC/AC+DC stay as printed in mode labels and notes. Table titles and prose use full words: «直流電圧», «交流電流», and *(provisional)* «交流+直流電圧» for AC+DC, in the English's order (the makers write «直流+交流», Sanwa PC7000 JP PDF p.2).
+10. AC/DC/AC+DC stay as printed in mode labels and notes. Prose uses full words: «直流電圧», «交流電流», and *(provisional)* «交流+直流電圧» for AC+DC, in the English's order (the makers write «直流+交流», Sanwa PC7000 JP PDF p.2).
 11. Glossary entries are full terms, with no optional words in parentheses. A parenthesis in an entry is part of the text («トランジスタの電流増幅率 (hFE)», «皮相電力 (VA)»). A unit symbol the English gives next to a term stays.
 12. Unit symbols never change: `°C` stays two characters, never «℃» (U+2103) as the manuals print it; `µ` stays U+00B5.
 13. *Provisional.* Key terms: reading «測定値»; range «レンジ»; accuracy «確度»; resolution «分解能»; digits/counts «カウント»; specifications «仕様»; meter «マルチメーター»; dial «ファンクションスイッチ»; test lead «テストリード»; display «ディスプレイ»; graph «グラフ»; trace «トレース»; recording «記録»; replay «リプレイ»; simulated «シミュレーション»; scale «スケール»; alarm «アラーム»; OL «オーバーレンジ»; support (of a meter) «対応»; machine-translated «自動翻訳».
@@ -139,7 +139,7 @@ epaint 0.37 (`text/unicode.rs:49–71`) treats U+3040–U+30FF and the CJK ideog
 - **Space between a number and its unit:** follow the English as written; spec text keeps the manual's own spacing (`10MΩ`), which the spec check ignores. MS-SG p.34 puts a space before a unit («3 kg»), which matches the English's prose.
 - **Time words in prose:** where the English writes words ("17 minutes", "2 seconds"), write «17 分», «2 秒»; where it writes a symbol, keep the symbol.
 - **The meter's AC/DC labels stay as the meter prints them:** `DC V`, `V AC`, `AC mA`, `AC+DC`, `ACV`, `DCV`, `LoZ V~`. The Japanese manuals do the same in their tables («DCV直流電圧», Sanwa CD772 JP PDF p.25).
-- **In prose and table titles, spell the words out:** «直流電圧», «交流電圧», «直流電流», «交流電流» (KEW1062 JP PDF p.9), and «交流+直流電圧» for AC+DC (ruling 10).
+- **In prose, spell the words out:** «直流電圧», «交流電圧», «直流電流», «交流電流» (KEW1062 JP PDF p.9), and «交流+直流電圧» for AC+DC (ruling 10).
 - **True RMS:** «真の実効値», or «真の実効値 (True RMS)» once in a note (Sanwa PC7000 JP PDF p.4); "rms" after a number (`250V rms`) is notation: keep it.
 - **OL** is «オーバーレンジ» in words (KEW1062 JP PDF p.11 «オーバーレンジ表示 …「ＯＬ」表示»); «過負荷» is for overload *protection* only.
 
@@ -202,7 +202,6 @@ Optional for shipping (`translations::optional()`), as for every language.
 - Keep every number, sign, ±, ≤, ≥, <, >, ≈ and ~, and each unit symbol right after its number. The spec check falls back to English on any mismatch.
 - Keep the exact sense: comparisons, ranges, «標準» / «TYP.», «定格», «約», «以上», «以下», «最大». The check can't catch a flipped comparison.
 - Use the manuals' wording: «規定されず» / «規定なし» (Sanwa PC710 JP PDF p.29); «読み取り値» in accuracy, «%rdg» in a formula (Sanwa CD772 JP PDF p.25); «カウント» for digits («10 カウントを加算», «残留 ≤10 カウント»); «レンジの 10%–100%» (Fluke 80V JP PDF p.43); «過負荷保護»; «入力インピーダンス»; «クレストファクター»; «温度係数»; «開放電圧»; «参考値» (no approved source).
-- Table titles keep the manual's numbering and letters: «(1) 交流電圧», «A. 直流電圧», «K. 温度 1-1. 摂氏».
 
 ## 13. Glyphs and fonts
 

@@ -1,31 +1,24 @@
 english	chinese	part_of_speech/measure_word	context (where it appears)	source (URL or file + page)	notes
-DC voltage	直流电压	n.	spec table titles (table-*-dc-voltage), prose, notes	UT61E+ CN PDF p.8R (p.14) “2. 直流电压测量”; UT71 CN PDF p.5 “直流电压测量”	Mode labels keep the meter's DC V / V DC (STYLE §6). Never «DCV 电压» in prose.
-AC voltage	交流电压	n.	spec table titles, prose	UT61E+ CN PDF p.8L (p.13) “1. 交流电压测量”; UT8805A CN PDF p.6 “交流电压量程”	
-AC+DC voltage	交流+直流电压	n.	table-3-ac-voltage-plus-dc-voltage, table-ac-plus-dc-voltage	UT181A CN PDF p.8 (p.4) “交流合并直流(AC+DC)”; UT171 CN PDF p.6L (p.7) “(交流+直流)测量”; UT195 CN PDF p.3L (p.1) “AC+DC（交流合并直流）”	"Provisional ruling: full words in titles and prose, like DC/AC voltage. UT61E+ CN PDF p.16L (p.29) heads the table «AC+DC电压测量»: that is the label form, kept in mode labels and notes. «交直流» is NOT AC+DC: UNI-T uses it for «AC or DC» (UT61E+ PDF p.7L «交直流电压测量»). ""AC Voltage + DC Voltage"" → «交流电压+直流电压»."
+DC voltage	直流电压	n.	prose, notes	UT61E+ CN PDF p.8R (p.14) “2. 直流电压测量”; UT71 CN PDF p.5 “直流电压测量”	Mode labels keep the meter's DC V / V DC (STYLE §6). Never «DCV 电压» in prose.
+AC voltage	交流电压	n.	prose	UT61E+ CN PDF p.8L (p.13) “1. 交流电压测量”; UT8805A CN PDF p.6 “交流电压量程”	
 voltage	电压	n.	aux-voltage, prose	UT61E+ CN PDF p.8L (p.13); UT71 CN PDF p.6	
 current	电流	n.	aux-current, key-current	UT61E+ CN PDF p.18R (p.34) “交流电流测量”; MS-T current => 电流	
-DC current	直流电流	n.	spec table titles	UT71 CN PDF p.5 “3.直流电流测量”; UT8805A CN PDF p.6	
-AC current	交流电流	n.	spec table titles	UT61E+ CN PDF p.18R (p.34) “10. 交流电流测量”	
-4–20 mA loop current	4-20 mA 环路电流	n.	table-l-4-20-ma-loop-current, notes	partial: UT171 CN PDF p.6L (p.7) “专供(4-20mA)电流变送器测量”; UT71 CN PDF p.4 “(4～20mA)%测量”	«环路电流» itself has no approved source; UNI-T names the use (current transmitter), not the loop. Keep the hyphen as the English writes the range.
-resistance	电阻	n.	mode, table titles	UT61E+ CN PDF p.16R (p.30) “4.电阻测量”; MS-T resistance => 电阻	
-Ohms (table title)	电阻	n.	table-ohms, table-autocheck-ohms	UT61E+ CN PDF p.16R (p.30) “电阻测量”; UT61E+ CN PDF p.6R (p.10) “电阻单位：欧姆”	Keep «Ohms» inside the AutoCheck™ (Ohms) trademark title, as fr does.
+4–20 mA loop current	4-20 mA 环路电流	n.	notes	partial: UT171 CN PDF p.6L (p.7) “专供(4-20mA)电流变送器测量”; UT71 CN PDF p.4 “(4～20mA)%测量”	«环路电流» itself has no approved source; UNI-T names the use (current transmitter), not the loop. Keep the hyphen as the English writes the range.
+resistance	电阻	n.	mode	UT61E+ CN PDF p.16R (p.30) “4.电阻测量”; MS-T resistance => 电阻	
 continuity	通断	n.	mode-continuity, aux-continuity	UT61E+ CN PDF p.6R (p.10) “电路通断测量提示符”; UT181A CN PDF p.20 (p.16) “通断测试”	Bench manuals say «连通性» (UT8805A CN PDF p.6): use «通断», the handheld word.
-continuity test	通断测试	n.	table-14-continuity-test, table-f-continuity-test	UT181A CN PDF p.20 (p.16) “9.通断测试”; UT71 CN PDF p.5 “电路通断测量”	
-audible continuity tester	蜂鸣通断测试	n.	table-audible-continuity-tester	partial: UT71 CN PDF p.41 “电路良好导通…蜂鸣器连续发声”; UT8805A CN PDF p.29 “蜂鸣器发出连续的蜂鸣声”	No manual names the tester as such.
 diode	二极管	n.	mode-diode, range-diode	UT61E+ CN PDF p.6R (p.10) “二极管测量提示符”	UT8806 writes «二极体» (Taiwan usage): avoid.
-diode test	二极管测试	n.	table-15-diode-test, table-diode-tester	UT181A CN PDF p.20 (p.16) “二极管测试开路电压约为3V”; UT8805A CN PDF p.6 “连通性和二极管测试”	Diode Tester → «二极管测试».
-capacitance	电容	n.	mode-capacitance, tables	UT61E+ CN PDF p.7L (p.11) “电容测量”; UT181A CN PDF p.19 (p.15) “8.电容”	«电容» is both capacitance and capacitor; context decides, as in the manuals.
+capacitance	电容	n.	mode-capacitance	UT61E+ CN PDF p.7L (p.11) “电容测量”; UT181A CN PDF p.19 (p.15) “8.电容”	«电容» is both capacitance and capacitor; context decides, as in the manuals.
 frequency	频率	n.	mode-frequency, aux-frequency	UT61E+ CN PDF p.7L (p.11) “频率占空比测量”; MS-T frequency => 频率	
-duty cycle	占空比	n.	mode-duty-pct, range-duty, aux-duty, table-12-duty-cycle	UT61E+ CN PDF p.7L (p.11) “频率占空比测量”; UT71 CN PDF p.4 “频率/占空比测量”; UT181A CN PDF p.21 (p.17)	Every manual agrees; no French-style choice needed.
+duty cycle	占空比	n.	mode-duty-pct, range-duty, aux-duty	UT61E+ CN PDF p.7L (p.11) “频率占空比测量”; UT71 CN PDF p.4 “频率/占空比测量”; UT181A CN PDF p.21 (p.17)	Every manual agrees; no French-style choice needed.
 Duty % (mode label)	占空比 %	n.	mode-duty-pct	UT61E+ CN PDF p.6R (p.10) “Hz, % 频率单位：赫兹、占空比”; UT195 CN PDF p.6R (p.8) “% 占空比测量单位”	Shorter than the English on screen; no fallback needed.
-pulse width	脉冲宽度	n.	mode-pulse-width, table-13-pulse-width	UT181A CN PDF p.21 (p.17) “11.频率/占空比测量/脉冲宽度”	
+pulse width	脉冲宽度	n.	mode-pulse-width	UT181A CN PDF p.21 (p.17) “11.频率/占空比测量/脉冲宽度”	
 temperature	温度	n.	mode-temperature, aux-temperature	UT61E+ CN PDF p.17R (p.32) “8.温度测量”	Temp °C → «温度 °C». Keep °C as two characters; never ℃ (U+2103), which the manuals print (STYLE §6).
 internal temperature	内部温度	n.	aux-internal-temperature	no approved source found	Plain Chinese.
 K-type thermocouple	K 型热电偶	n.	notes (note-k-type-thermocouple-*)	UT61E+ CN PDF p.17R (p.32) “点式K型(镍铬～镍硅)热电偶”; UT71 CN PDF p.23	
 temperature probe	温度探头	n.	notes	UT71 CN PDF p.23 “将温度探头探测被测温度表面”; UT181A CN PDF p.21 (p.17)	point-contact probe → «点式探头» (UT61E+ PDF p.17R «点式K型»); rod-type probe → «杆式探头» (no source).
-hFE	三极管放大倍数 (hFE)	n.	mode-hfe, aux-hfe, table-k-transistor	UT61E+ CN PDF p.6R (p.10) “β 三极管放大倍数(UT61E+)”; PDF p.7L (p.11) “hFE 三极管放大测量”	"Sourced, unlike fr. ""Transistor Magnification"" → «三极管放大倍数 (hFE)»; mode labels keep hFE."
+hFE	三极管放大倍数 (hFE)	n.	mode-hfe, aux-hfe	UT61E+ CN PDF p.6R (p.10) “β 三极管放大倍数(UT61E+)”; PDF p.7L (p.11) “hFE 三极管放大测量”	"Sourced, unlike fr. ""Transistor Magnification"" → «三极管放大倍数 (hFE)»; mode labels keep hFE."
 NCV	NCV (非接触电压感应)	n.	mode-ncv, aux-ncv, reading-spoken-ncv, read-error-not-an-ncv-level	UT61E+ CN PDF p.13R (p.24) “13. NCV非接触电压感应测量”; UT171 CN PDF p.6L (p.7) “非接触交流电压感测”	"Keep «NCV» in labels; spell out only in prose. Spoken ""NCV level n"" → «NCV 等级 { $level }» (UT61E+ PDF p.13R «感应等级»). Half-width parentheses, a space before them after Latin text (STYLE §4)."
-EF / non-contact EF detection	EF / 非接触电场检测	n.	mode-ef*, table-non-contact-ef-detection	partial: UT61E+ CN PDF p.13R (p.24) “LCD显示“EF”” (no Chinese name given)	Keep EF, EF-H, EF-L as printed. «电场检测» has no approved source.
+EF / non-contact EF detection	EF / 非接触电场检测	n.	mode-ef*	partial: UT61E+ CN PDF p.13R (p.24) “LCD显示“EF”” (no Chinese name given)	Keep EF, EF-H, EF-L as printed. «电场检测» has no approved source.
 LoZ	LoZ (低阻抗)	n.	mode-loz-*, flag-loz	UT61E+ CN PDF p.6R (p.10) “LoZ 交流低阻抗提示符”; UT171 CN PDF p.6L (p.7) “交流低阻抗电压测量”; UT195 CN PDF p.8L (p.11) “在线交流电压低阻抗测量”	"Spoken (reading-spoken-loz): «低阻抗». ""Lo-Z threshold"" → «Lo-Z 阈值»."
 low-pass filter / LPF	低通滤波 / LPF	n.	mode-acv-lpf, qualifier-lpf-mode, aux-lpf-v	UT61E+ CN PDF p.7L (p.11) “低通滤波测量”; UT181A CN PDF p.22 (p.18) “13. 低通滤波测量”; UT195 CN PDF p.6R (p.8) “LPF 低通滤波器测量”	Keep LPF in labels (qualifier-lpf-mode = «LPF { $mode }»). The filter itself: «低通滤波器».
 VFD	VFD	n.	mode-vfd-*	UT195 CN PDF p.3L (p.1) “低通滤波器确保对变速驱动器(VSD)精确测量”	Keep as printed. In prose the drive is «变频器» (UT181A CN PDF p.22 (p.18) “由逆变器和变频电动机产生”, partial).
@@ -33,7 +26,6 @@ VFC	VFC	n.	mode-vfc	UT171 CN PDF p.5R (p.6) “VFC 变频电压测量提示符�
 dBm / dBV	dBm / dBV	unit	mode-v-ac-dbm, notes	UT181A CN PDF p.22 (p.18) “14.dBV” “15.dBm”	Unit symbols: never change.
 dBm reference	dBm 参考阻抗	n.	mode-dbm-reference	UT181A CN PDF p.22 (p.18) “dBm 测量必须使用一个参考阻抗(电阻)”; UT8806 CN PDF p.75 “参考电阻”	mode-dbm-reference. Sourced, unlike fr.
 inductance	电感	n.	mode-inductance*	no approved source found	No UNI-T manual read has an inductance function. Q and R sub-labels unchanged.
-conductance	电导	n.	table-8-conductance	UT171 CN PDF p.6L (p.7) “nS 电导测量”; PDF p.5R (p.6) “电导单位：纳西门子”; UT181A CN PDF p.8 (p.4) “电导系数测量”	
 power	功率	n.	mode-power*	UT71 CN PDF p.6 “有功功率、功率因数、视在功率”	AC power W → «交流功率 W» in prose, «AC 功率 W» as a label. Active power: «有功功率» (UT71 CN PDF p.13 “W 有功功率提示符”).
 apparent power (VA)	视在功率 (VA)	n.	notes, VA modes	UT71 CN PDF p.13 “VA 视在功率提示符”	Ruling kept from fr: the unit symbol stays when the English gives it.
 power factor / PF	功率因数 / PF	n.	mode-power-factor, aux-pf	UT71 CN PDF p.13 “COSф 功率因数提示符”	Keep «PF» where the meter prints it.
@@ -47,8 +39,8 @@ period	周期	n.	aux-period	UT8806 CN PDF p.18 “测量信号频率或信号周
 impedance	阻抗	n.	aux-impedance	UT61E+ CN PDF p.15L (p.27) “输入阻抗”; UT71 CN PDF p.14	
 burden voltage	负载电压	n.	aux-burden-voltage, note-burden-voltage-*	no approved source found	No CN manual read gives a term. Alternative: «电流档压降». Reviewer to choose; no optional parts in parentheses (fr ruling 9).
 clamp	钳形	adj./n.	mode-clamp-*, aux-clamp-*	partial: UT171 CN PDF p.6L (p.7) “600A交流/直流电流卡钳输入测量”	Clamp AC A → «钳形 AC A». The accessory itself: «电流钳» (UT171 says «卡钳»).
-power (mains) line	市电	n.	mode-line-hz, table-line-level-frequency-hz	UT8805N CN PDF p.8 “支持全球市电电压”; UT61E+ CN PDF p.13R (p.24) “被测电源线”	Line Hz → «市电 Hz».
-logic level	逻辑电平	n.	mode-logic-hz, table-logic-level-*	no approved source found	Logic Hz → «逻辑 Hz».
+power (mains) line	市电	n.	mode-line-hz	UT8805N CN PDF p.8 “支持全球市电电压”; UT61E+ CN PDF p.13R (p.24) “被测电源线”	Line Hz → «市电 Hz».
+logic level	逻辑电平	n.	mode-logic-hz	no approved source found	Logic Hz → «逻辑 Hz».
 Motor / Solar / Compass / Angle / Time / Scope	电机 / 太阳能 / 指南针 / 角度 / 时间 / 示波器	n.	mode-motor, mode-solar, mode-compass, mode-angle, mode-time, mode-scope	Motor only: UT195 CN PDF p.3L (p.1) “识别马达电机相位”, PDF p.8L (p.11) “MOTOR 三相电机旋转相序”; MS-T time => 时间; others no approved source found	Check each against the meter when it is reviewed.
 Live (mode: live-wire detection)	火线	n.	mode-live, aux-live	no approved source found	Chinese electricians call the live wire «火线». Not the graph's LIVE chip (that is «实时»).
 Recall	数据回读	n.	mode-recall	UT71 CN PDF p.11 “RECALL 回读数据键”, p.13 “RCL 数据回读提示符”; UT171 CN PDF p.5R (p.6) “RCL 数据回读提示符”	mode-recall. MS-T recall => 召回率 (statistics sense): avoid.

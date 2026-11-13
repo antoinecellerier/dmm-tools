@@ -1,31 +1,24 @@
 english	japanese	part_of_speech/counter	context (where it appears)	source (URL or file + page)	notes
-DC voltage	直流電圧	n.	spec table titles (table-*-dc-voltage), prose, notes	Sanwa CD772 JP PDF p.25 “DCV直流電圧”; KEW1062 JP PDF p.6 “4.3.2 直流電圧測定”; Sanwa PC773 JP PDF p.3	Mode labels keep the meter's DC V / V DC (STYLE §6). Never «DCV 電圧» in prose.
-AC voltage	交流電圧	n.	spec table titles, prose	Sanwa CD772 JP PDF p.25 “ACV 交流電圧”; KEW1062 JP PDF p.6 “4.3.1 交流電圧測定”	
-AC+DC voltage	交流+直流電圧	n.	table-3-ac-voltage-plus-dc-voltage, table-ac-plus-dc-voltage	partial: Sanwa PC7000 JP PDF p.2 “直流+交流電圧 (mV)”; KEW1062 JP PDF p.6 “4.3.11 DC+AC 電流測定”; Fluke 289 JP PDF p.20 “AC+DC 電圧測定”	"Provisional ruling (STYLE §0 item 10): full words in titles and prose, in the English's AC+DC order. The makers write DC first («直流+交流»): that order is the alternative. Mode labels and notes keep AC+DC. ""AC Voltage + DC Voltage"" → «交流電圧+直流電圧»."
+DC voltage	直流電圧	n.	prose, notes	Sanwa CD772 JP PDF p.25 “DCV直流電圧”; KEW1062 JP PDF p.6 “4.3.2 直流電圧測定”; Sanwa PC773 JP PDF p.3	Mode labels keep the meter's DC V / V DC (STYLE §6). Never «DCV 電圧» in prose.
+AC voltage	交流電圧	n.	prose	Sanwa CD772 JP PDF p.25 “ACV 交流電圧”; KEW1062 JP PDF p.6 “4.3.1 交流電圧測定”	
 voltage	電圧	n.	aux-voltage, prose	Sanwa PM3 JP PDF p.1 “5-2-1 電圧（Ｖ）測定”; KEW1062 JP PDF p.9	
 current	電流	n.	aux-current, key-current	KEW1062 JP PDF p.6 “4.3.10 電流測定”; MS-T current => 電流	
-DC current	直流電流	n.	spec table titles	KEW1062 JP PDF p.9 “直流電圧，交流電圧，直流電流，交流電流”; Sanwa PC7000 JP PDF p.2	
-AC current	交流電流	n.	spec table titles	KEW1062 JP PDF p.9; KEW MATE 2000A JP PDF p.1 “交流電流 Ａ”	
-4–20 mA loop current	4-20 mA ループ電流	n.	table-l-4-20-ma-loop-current, notes	partial: Sanwa PC7000 JP PDF p.7 “[ mA/% 4～20 mA ]” (the function, no name for the loop)	«ループ電流» itself has no approved source. Keep the hyphen as the English writes the range; never «～» (MS-SG p.26).
-resistance	抵抗	n.	mode, table titles	Sanwa CD800a JP PDF p.1 “5-3 抵抗（Ω）測定”; KEW1062 JP PDF p.6 “4.3.5 抵抗測定（Ω）”; MS-T resistance => 抵抗	
-Ohms (table title)	抵抗	n.	table-ohms, table-autocheck-ohms	KEW1062 JP PDF p.6 “抵抗測定（Ω）”; Fluke 289 JP PDF p.39 “オーム (Ω) で抵抗を測定します”	Keep «Ohms» inside the AutoCheck™ (Ohms) trademark title, as fr does.
+4–20 mA loop current	4-20 mA ループ電流	n.	notes	partial: Sanwa PC7000 JP PDF p.7 “[ mA/% 4～20 mA ]” (the function, no name for the loop)	«ループ電流» itself has no approved source. Keep the hyphen as the English writes the range; never «～» (MS-SG p.26).
+resistance	抵抗	n.	mode	Sanwa CD800a JP PDF p.1 “5-3 抵抗（Ω）測定”; KEW1062 JP PDF p.6 “4.3.5 抵抗測定（Ω）”; MS-T resistance => 抵抗	
 continuity	導通	n.	mode-continuity, aux-continuity	Sanwa PC7000 JP PDF p.2 “導通チェック”; KEW1062 JP PDF p.6 “4.3.7 導通チェック”; Fluke 80V JP PDF p.3 “導通試験”	
-continuity test	導通チェック	n.	table-14-continuity-test, table-f-continuity-test	Sanwa CD772 JP PDF p.3 “導通チェック”; KEW1062 JP PDF p.6; alt. «導通試験» Fluke 80V JP PDF p.3, Fluke 289 JP PDF p.4	Japanese makers say «チェック»; pick it everywhere.
-audible continuity tester	導通ブザー	n.	table-audible-continuity-tester	KEW MATE 2000A JP PDF p.1 “30±10Ω以下で導通ブザー鳴動”; Sanwa CD772 JP PDF p.6 “導通チェックは、ブザー音と赤色LEDランプ点灯で確認”	
 diode	ダイオード	n.	mode-diode, range-diode	Sanwa PM3 JP PDF p.1 “：ダイオード”; KEW1062 JP PDF p.6	
-diode test	ダイオードテスト	n.	table-15-diode-test, table-diode-tester	Sanwa CD772 JP PDF p.3 “ダイオードテスト”; KEW1062 JP PDF p.6 “4.3.8 ダイオードテスト”	Diode Tester → «ダイオードテスト». Fluke writes «ダイオード試験» (289 JP PDF p.4).
-capacitance	静電容量	n.	mode-capacitance, tables	Sanwa CD772 JP PDF p.3 “5－05 静電容量測定”; Fluke 80V JP PDF p.3 “静電容量の測定”	KEW writes «キャパシタンス» (KEW1062 JP PDF p.9): rejected for the kanji term most makers use.
+capacitance	静電容量	n.	mode-capacitance	Sanwa CD772 JP PDF p.3 “5－05 静電容量測定”; Fluke 80V JP PDF p.3 “静電容量の測定”	KEW writes «キャパシタンス» (KEW1062 JP PDF p.9): rejected for the kanji term most makers use.
 frequency	周波数	n.	mode-frequency, aux-frequency	Sanwa CD772 JP PDF p.3 “5－04 周波数測定（Hz）”; KEW1062 JP PDF p.6; MS-T frequency => 周波数	
-duty cycle	デューティー比	n.	mode-duty-pct, range-duty, aux-duty, table-12-duty-cycle	Sanwa CD800a JP PDF p.1 “％：デューティー比”; Sanwa PM3 JP PDF p.1 “DUTY：デューティー比”; alt. «デューティ比» Sanwa PC7000 JP PDF p.3, KEW1062 JP PDF p.6; «デューティー･サイクル» Fluke 80V JP PDF p.4	The long vowel follows MS-SG p.35 (fewer than 4 counted characters), as Sanwa's CD800a and PM3 write it.
+duty cycle	デューティー比	n.	mode-duty-pct, range-duty, aux-duty	Sanwa CD800a JP PDF p.1 “％：デューティー比”; Sanwa PM3 JP PDF p.1 “DUTY：デューティー比”; alt. «デューティ比» Sanwa PC7000 JP PDF p.3, KEW1062 JP PDF p.6; «デューティー･サイクル» Fluke 80V JP PDF p.4	The long vowel follows MS-SG p.35 (fewer than 4 counted characters), as Sanwa's CD800a and PM3 write it.
 Duty % (mode label)	デューティー比 %	n.	mode-duty-pct	as duty cycle; Sanwa CD800a JP PDF p.1 “％：デューティー比”	7 wide characters against 6 Latin ones: about 2.5× on screen. Fallback if the mode line wraps: keep «Duty %», as the meters print D%.
-pulse width	パルス幅	n.	mode-pulse-width, table-13-pulse-width	Fluke 80V JP PDF p.4 “パルス幅の測定”; Fluke 289 JP PDF p.5	
+pulse width	パルス幅	n.	mode-pulse-width	Fluke 80V JP PDF p.4 “パルス幅の測定”; Fluke 289 JP PDF p.5	
 temperature	温度	n.	mode-temperature, aux-temperature	Sanwa CD772 JP PDF p.3 “5－06 温度測定”; KEW1062 JP PDF p.6 “4.3.9 温度測定（TEMP）”	Temp °C → «温度 °C». Keep °C as two characters, never ℃ (U+2103), which the manuals print (STYLE §6).
 internal temperature	内部温度	n.	aux-internal-temperature	no approved source found	Plain Japanese.
 K-type thermocouple	K 型熱電対	n.	notes (note-k-type-thermocouple-*)	Sanwa PC7000 JP PDF p.4 “K 型熱電対温度センサ対応”; Fluke 80V JP PDF p.16 “K 型熱電対”	Sanwa CD772 writes «Kタイプ熱電対» (PDF p.6). Half-width space after K (MS-SG p.32).
 temperature probe	温度プローブ	n.	notes	KEW1052 JP PDF p.12 “温度プローブ：K タイプ温度プローブ”; Sanwa PC773 JP PDF p.25 “温度プローブ（T-300PC）による測定”	point-contact probe → «接触型プローブ», rod-type probe → «棒状プローブ» (no source for either).
-hFE	トランジスタの電流増幅率 (hFE)	n.	mode-hfe, aux-hfe, table-k-transistor	partial: MS-SG p.38 “transistor トランジスタ” (no long vowel, a listed exception); «電流増幅率» no approved source found	"Mode labels keep hFE. ""Transistor Magnification"" → «トランジスタの電流増幅率 (hFE)»."
+hFE	トランジスタの電流増幅率 (hFE)	n.	mode-hfe, aux-hfe	partial: MS-SG p.38 “transistor トランジスタ” (no long vowel, a listed exception); «電流増幅率» no approved source found	"Mode labels keep hFE. ""Transistor Magnification"" → «トランジスタの電流増幅率 (hFE)»."
 NCV	NCV (非接触検電)	n.	mode-ncv, aux-ncv, reading-spoken-ncv, read-error-not-an-ncv-level	partial: Sanwa CD800a JP PDF p.1 “5-9 検電（EF:Electric Field 検知）”; Sanwa PC710 JP PDF p.4 “接触／非接触により導体の通電／非通電を調べられる”	"Keep «NCV» in labels; spell out only in prose. Spoken ""NCV level n"" → «NCV レベル { $level }»."
-EF / non-contact EF detection	EF / 非接触電界検出	n.	mode-ef*, table-non-contact-ef-detection	Sanwa PC710 JP PDF p.2 “電界検出 (EF-Detection) 機能”; PDF p.7 “非接触 EF”; PDF p.3 “EF：電界”	Keep EF, EF-H, EF-L as printed.
+EF / non-contact EF detection	EF / 非接触電界検出	n.	mode-ef*	Sanwa PC710 JP PDF p.2 “電界検出 (EF-Detection) 機能”; PDF p.7 “非接触 EF”; PDF p.3 “EF：電界”	Keep EF, EF-H, EF-L as printed.
 LoZ	LoZ (低インピーダンス)	n.	mode-loz-*, flag-loz	Sanwa PC720M JP PDF p.3 “：低入力インピーダンス”; PDF p.2 “ローインピーダンス電圧・抵抗 (AutoΩ・V)”; Fluke 289 JP PDF p.4 “電圧測定用 LoZ の使用”	"Spoken (reading-spoken-loz): «低インピーダンス». ""Lo-Z threshold"" → «Lo-Z しきい値»."
 low-pass filter / LPF	ローパスフィルター / LPF	n.	mode-acv-lpf, qualifier-lpf-mode, aux-lpf-v	KEW1062 JP PDF p.9 “● ローパスフィルタ”; Sanwa PC7000 JP PDF p.4 “LPF 内蔵”; MS-T filter => フィルター	Long vowel per MS-SG p.35 (-er) and MS-T; KEW writes «フィルタ». Keep LPF in labels (qualifier-lpf-mode = «LPF { $mode }»).
 VFD	VFD	—	mode-vfd-*	Sanwa PC7000 JP PDF p.2 “5-2 可変周波数駆動 (VFD)”	Keep as printed; in prose «可変周波数駆動 (VFD)».
@@ -33,7 +26,6 @@ VFC	VFC	—	mode-vfc	no approved source found	Keep as printed.
 dBm / dBV	dBm / dBV	unit	mode-v-ac-dbm, notes	KEW1062 JP PDF p.6 “4.3.20 デシベル演算機能（dBm，dBV）”	Unit symbols: never change.
 dBm reference	dBm 基準値	n.	mode-dbm-reference	Fluke 289 JP PDF p.5 “カスタム dBm 基準値の設定”; Sanwa PC7000 JP PDF p.13 “基準インピーダンス”	
 inductance	インダクタンス	n.	mode-inductance*	no approved source found	Q and R sub-labels unchanged.
-conductance	コンダクタンス	n.	table-8-conductance	Sanwa PC710 JP PDF p.2 “コンダクタンス (nS) 測定”; Fluke 80V JP PDF p.3	
 power	電力	n.	mode-power*	Sanwa CD772 JP PDF p.4 “電力ライン”; Sanwa CD800a JP PDF p.1 “消費電力”	AC power W → «AC 電力 W» (mode labels keep AC/DC as printed).
 apparent power (VA)	皮相電力 (VA)	n.	notes, VA modes	no approved source found	Keep the unit symbol whenever the English gives it (fr ruling). No en-US text uses the term today.
 power factor / PF	力率 / PF	n.	mode-power-factor, aux-pf	no approved source found	Keep «PF» where the meter prints it.
@@ -47,8 +39,8 @@ period	周期	n.	aux-period	Fluke 289 JP PDF p.36 “周期測定”
 impedance	インピーダンス	n.	aux-impedance	KEW MATE 2000A JP PDF p.1 “入力インピーダンス :10M Ω”; Sanwa PC773 JP PDF p.14	
 burden voltage	バーデン電圧	n.	aux-burden-voltage, note-burden-voltage-*	no approved source found	No manual term found. Alternative: «電流測定時の電圧降下» (Sanwa writes «電圧降下» for diodes, PC7000 JP PDF p.23).
 clamp	クランプ	n.	mode-clamp-*, aux-clamp-*	Sanwa CD772 JP PDF p.24 “クランププローブ”; KEW MATE 2000A JP PDF p.1 “クランプセンサー”	Clamp AC A → «クランプ AC A».
-power (mains) line	ライン	n.	mode-line-hz, table-line-level-frequency-hz	Sanwa PC7000 JP PDF p.3 “Hz：ライン周波数”	Line Hz → «ライン Hz».
-logic level	ロジックレベル	n.	mode-logic-hz, table-logic-level-*	Sanwa PC7000 JP PDF p.33 “ロジック・レベル周波数(Hz)”; PDF p.2 “ロジック周波数”	Logic Hz → «ロジック Hz».
+power (mains) line	ライン	n.	mode-line-hz	Sanwa PC7000 JP PDF p.3 “Hz：ライン周波数”	Line Hz → «ライン Hz».
+logic level	ロジックレベル	n.	mode-logic-hz	Sanwa PC7000 JP PDF p.33 “ロジック・レベル周波数(Hz)”; PDF p.2 “ロジック周波数”	Logic Hz → «ロジック Hz».
 Motor / Solar / Compass / Angle / Time / Scope	モーター / ソーラー / コンパス / 角度 / 時間 / オシロスコープ	n.	mode-motor, mode-solar, mode-compass, mode-angle, mode-time, mode-scope	partial: Fluke 80V JP PDF p.15 “モーター･ドライブ” (motor); others no approved source found	Long vowel on «モーター» per MS-SG p.35 (-or); Sanwa writes «モータ» (CD772 JP PDF p.4). Check each against the meter when it is reviewed.
 Live (mode: live-wire detection)	活線	n.	mode-live, aux-live	no approved source found	Not «ライブ»: that is the graph's LIVE chip. Alternative: «充電部».
 Recall	データ呼び出し	n.	mode-recall	Sanwa PC720M JP PDF p.11 “（Recall）するとデータ呼び出し”	
@@ -329,6 +321,6 @@ swipe	スワイプ	n.	shortcuts-mouse-swipe	MS-T swipe => スワイプ	Two-finge
 renderer	レンダラー	n.	dmm-gui--renderer	MS-T renderer => レンダラー	
 main display / second display (areas of one LCD)	メイン表示部 / サブ表示部	n.	key-hover-show-vac-or-vdc-on-the, key-hover-swap-the-main-and-second-displays	Sanwa PC7000 JP PDF p.6 “メイン表示部”, “サブ表示部”	The whole display stays «ディスプレイ».
 phase rotation (3-phase)	相回転	n.	key-hover-show-3-phase-rotation-direction	no approved source found (MS-T rotation => 回転 only)	Awaits a reviewer's confirmation.
-peak hold	ピークホールド	n.	table-crest-mode-instantaneous-peak-hold, key-hover-peak-hold-in-ac-v-and	KEW1062 JP PDF p.6 “4.3.18 ピークホールド機能”	As an action: «ピークをホールドする».
+peak hold	ピークホールド	n.	key-hover-peak-hold-in-ac-v-and	KEW1062 JP PDF p.6 “4.3.18 ピークホールド機能”	As an action: «ピークをホールドする».
 core semantics (capture)	基本項目	n.	capture-core-confirmed, capture-core-not-confirmed	no approved source found	The en-US comment defines it as mode, range and flags. Read as «基本項目の読み取り», not «基本動作».
 automatic sweep (capture)	自動設定	n.	capture-drive-unreliable	no approved source found	The tool setting ranges and flags itself, as capture--no-drive says «自動で設定».

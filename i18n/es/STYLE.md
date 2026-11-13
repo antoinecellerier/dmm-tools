@@ -18,7 +18,7 @@ One Spanish serves every Spanish system locale: the app matches by language subt
 8. **U+00A0 between a number and its unit, and before %, in prose you write** («2 s», «15 minutos», «1 %»). Notation follows the English as written («10%–100%», `Duty %`, `{ $percent }%` in the histogram).
 9. *(decided)* **Meter flags stay as printed** (HOLD, REL, AUTO, LOW BAT, LEAD ERR, HV!, VOID…); their spoken forms are Spanish («retención», «rango automático», «batería baja»).
 10. **The app's own badges** are translated, in capitals with accents: ESCALA, LÍM. SUP., LÍM. INF., EN VIVO, VERIFICADO, PARCIALMENTE VERIFICADO (fallback VERIF. PARCIAL), EXPERIMENTAL.
-11. *(decided)* **AC/DC/AC+DC stay as printed** in mode labels and notes. Table titles and prose use full words: «Tensión continua», «Tensión alterna», «Tensión alterna + continua». **Never «CA»/«CC»** («c.a.»/«c.c.»), though Fluke, Amprobe and Truper print them.
+11. *(decided)* **AC/DC/AC+DC stay as printed** in mode labels and notes. Prose uses full words: «Tensión continua», «Tensión alterna», «Tensión alterna + continua». **Never «CA»/«CC»** («c.a.»/«c.c.»), though Fluke, Amprobe and Truper print them.
 12. *(decided)* **Glossary entries are full terms**, no optional words in parentheses. A parenthesis in an entry is part of the text («ganancia de corriente (hFE)», «potencia aparente (VA)»).
 13. **Terms:** «tensión» (not «voltaje»); «exactitud» (not «precisión»); «lectura» for a reading, «medición» for the act; «rango» for a range; «dígitos» in accuracy and residual notes, «cuentas» for display counts; «botón» for a meter key, «tecla» for a computer key; «EN VIVO» / «en vivo» for live.
 14. **Key names** (`shortcuts-key-*`): Ctrl, Mayús, Alt, Espacio, Esc, Izquierda, Derecha, Inicio, Fin, Más, Menos. In prose, Microsoft's full names where room allows: «Flecha arriba», «Flecha abajo», «Re Pág», «Av Pág», «barra espaciadora» (MS-SG-ES PDF p.55–56, MS-SG-MX PDF p.51–52).
@@ -141,7 +141,7 @@ Where the Spain and Mexico guides, or the manuals, pick different words, use a w
 - **Unit symbols never change** *(decided)*, except in the spoken reading's unit names (§0 ruling 20): V, mV, A, mA, µA, Ω, kΩ, MΩ, Hz, F, °C, °F, W, VA, Wh, Ah, dBm, dBV, s, ms, h, V·s, mAh. They are symbols, not abbreviations: no period, no plural «s» (MS-SG-ES PDF p.20–21).
 - **Space between a number and its unit:** follow the English as written in notation and spec text (`10MΩ`, `≈3V`); in prose you write, put U+00A0 («2 s», «10 MΩ»).
 - **The meter's AC/DC labels stay as the meter prints them** *(decided)*: `DC V`, `V AC`, `AC mA`, `AC+DC`, `ACV`, `DCV`, `LoZ V~`.
-- **In prose and table titles, spell the words out** *(decided)*: «tensión continua» (Fluke 117 PDF p.6), «tensión alterna» (Fluke 3000 FC PDF p.39), «corriente continua / alterna» (Amprobe AM-500 PDF p.51), «tensión alterna + continua» for AC+DC.
+- **In prose, spell the words out** *(decided)*: «tensión continua» (Fluke 117 PDF p.6), «tensión alterna» (Fluke 3000 FC PDF p.39), «corriente continua / alterna» (Amprobe AM-500 PDF p.51), «tensión alterna + continua» for AC+DC.
 - **No «CA» / «CC»** («c.a.» / «c.c.»). Fluke and Amprobe write «tensión de CC», «V CA» (Fluke 80 Series V PDF p.7, Amprobe AM-500 PDF p.62), Truper «c.a.»/«c.c.» (MUT-39 PDF p.2), while UNI-T keeps AC/DC (UT197 PDF p.7 «AC (Corriente alterna) DC (Corriente continua)»). Keep AC/DC in labels and notes, «AC+DC» included: a note "AC+DC: add 1%+35 digits" would otherwise put «CA+CC» beside a mode line that says `AC+DC`.
 - **«tensión», not «voltaje»** in prose and titles (Fluke 80 Series V, Fluke 117, Fluke 3000 FC, Amprobe AM-500); Fluke 287/289 and UNI-T write «voltaje». SUMMARY question 5.
 - **True RMS:** «verdadero valor eficaz» (Fluke 80 Series V PDF p.13, Fluke 3000 FC PDF p.5), or keep «True RMS» in notes as Truper does (MUT-202 PDF p.7). Never «RMS real» (UT197 PDF p.4, MUT-39 PDF p.7: a calque). "rms" after a number (`250V rms`) is notation: keep it.
@@ -206,7 +206,6 @@ Fluent can't tell you the gender or number of what a placeable holds, and Spanis
 - Keep every number, sign, ±, ≤, ≥, <, >, ≈ and ~, and each unit symbol right after its number. Numbers as in the English (§5). The spec check compares them and falls back to English on any mismatch.
 - Keep the exact sense: comparisons, ranges, «típico» / «típ.», «nominal», «aproximadamente» / «aprox.», «al menos», «máx.». The check can't catch a flipped comparison, and the panel shows the English on hover wherever the text differs.
 - Use the makers' wording: «No especificado»; «de la lectura» (accuracy); «dígitos» (accuracy and residual digits), «cuentas» (display counts); «protección contra sobrecargas»; «impedancia de entrada»; «factor de cresta»; «coeficiente de temperatura»; «cables de prueba en cortocircuito»; «circuito abierto»; «sensibilidad»; «tensión de carga» (burden voltage); «umbral»; «respuesta de frecuencia»; «solo como referencia». See the glossary for each source.
-- Table titles keep the manual's numbering and letters: «(1) Tensión alterna», «A. Tensión continua», «K. Temperatura 1-1. Grados Celsius».
 
 ## 13. Words to avoid
 

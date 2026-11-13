@@ -104,7 +104,7 @@ Most languages start machine-translated, and stay marked so in the **Language** 
 
 ### Translating
 
-A language ships once all its files are translated, but for the specification text in `lib.ftl` (the `table-`, `note-`, `input-` and `band-` messages) and `capture`'s text in `cli/capture.ftl`: these show in English until someone translates them. Text a code change adds or rewords needs only its English: it shows in English until the translations are filled in before the next release. A language should also have a translation of the README, `README.<lang>.md`, which the language row at the top of the README links to.
+A language ships once all its files are translated, but for the specification text in `lib.ftl` (the `note-`, `input-` and `band-` messages) and `capture`'s text in `cli/capture.ftl`: these show in English until someone translates them. Text a code change adds or rewords needs only its English: it shows in English until the translations are filled in before the next release. A language should also have a translation of the README, `README.<lang>.md`, which the language row at the top of the README links to.
 
 #### Using a coding agent
 

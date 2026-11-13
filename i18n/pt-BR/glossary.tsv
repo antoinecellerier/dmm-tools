@@ -1,31 +1,24 @@
 english	portuguese_brazil	part_of_speech/gender	context (where it appears)	source (document + PDF page)	notes
-DC voltage	tensão contínua	s. f.	spec table titles (table-*-dc-voltage), prose, notes	Minipa ET-1649BT PDF p.8 «Corrente Contínua (DC)»; Minipa ET-2517A/2615A PDF p.3 «DC--Corrente Contínua»	Full words in table titles and prose (decided for every language). Minipa's own tables say «Tensão DC» (ET-1649BT PDF p.24): mode labels and notes keep DC as printed. «tensão contínua» is built on Minipa's «corrente contínua»; no Minipa page writes «tensão contínua» itself.
-AC voltage	tensão alternada	s. f.	spec table titles, prose	Minipa ET-1649BT PDF p.8 «Corrente Alternada (AC)»; Minipa ET-2587 PDF p.6 «Corrente Alternada»	As DC voltage: built on Minipa's «corrente alternada».
-AC+DC voltage	tensão alternada + contínua	s. f.	table-3-ac-voltage-plus-dc-voltage, table-ac-plus-dc-voltage	Minipa ET-1649BT PDF p.8 «Corrente Contínua ou Alternada (DC ou AC)»; Minipa ET-2990 PDF p.4 «Tensão AC/DC/AC+DC»	"Title form. ""AC Voltage + DC Voltage"" → «Tensão alternada + tensão contínua». Notes and mode labels keep AC+DC."
+DC voltage	tensão contínua	s. f.	prose, notes	Minipa ET-1649BT PDF p.8 «Corrente Contínua (DC)»; Minipa ET-2517A/2615A PDF p.3 «DC--Corrente Contínua»	Full words in table titles and prose (decided for every language). Minipa's own tables say «Tensão DC» (ET-1649BT PDF p.24): mode labels and notes keep DC as printed. «tensão contínua» is built on Minipa's «corrente contínua»; no Minipa page writes «tensão contínua» itself.
+AC voltage	tensão alternada	s. f.	prose	Minipa ET-1649BT PDF p.8 «Corrente Alternada (AC)»; Minipa ET-2587 PDF p.6 «Corrente Alternada»	As DC voltage: built on Minipa's «corrente alternada».
 voltage	tensão	s. f.	aux-voltage, prose	Minipa ET-1649BT PDF p.14 «Medida de Tensão AC/DC»	Never «voltagem» (colloquial; no maker manual uses it).
 current	corrente	s. f.	aux-current, key-current	Minipa ET-1649BT PDF p.15 «Medida de Corrente AC/DC»	Feminine in Portuguese (French courant is masculine): «a corrente».
-DC current	corrente contínua	s. f.	spec table titles	Minipa ET-1649BT PDF p.8 «Corrente Contínua (DC)»	
-AC current	corrente alternada	s. f.	spec table titles	Minipa ET-1649BT PDF p.8 «Corrente Alternada (AC)»	
-4–20 mA loop current	corrente de loop 4-20 mA	s. f.	table-l-4-20-ma-loop-current, notes	Minipa ET-2990 PDF p.22 «Modo Loop», «circuito de loop»	Minipa keeps «loop» untranslated; «malha de corrente» has no approved source.
-resistance	resistência	s. f.	mode, table titles	Minipa ET-1649BT PDF p.16 «Medida de Resistência»	
-Ohms (table title)	Resistência	s. f.	table-ohms, table-autocheck-ohms	Minipa ET-1649BT PDF p.25 «- Resistência» (table title)	Minipa ET-2517A/2615A PDF p.21 heads its table «Ohms»; keep «Ohms» only inside the AutoCheck™ (Ohms) trademark title.
+4–20 mA loop current	corrente de loop 4-20 mA	s. f.	notes	Minipa ET-2990 PDF p.22 «Modo Loop», «circuito de loop»	Minipa keeps «loop» untranslated; «malha de corrente» has no approved source.
+resistance	resistência	s. f.	mode	Minipa ET-1649BT PDF p.16 «Medida de Resistência»	
 continuity	continuidade	s. f.	mode-continuity, aux-continuity	Minipa ET-1649BT PDF p.17 «Teste de Continuidade»	
-continuity test	teste de continuidade	s. m.	table-14-continuity-test, table-f-continuity-test	Minipa ET-1649BT PDF p.17; Minipa ET-2990 PDF p.16	
-audible continuity tester	teste de continuidade audível	s. m.	table-audible-continuity-tester	Minipa ET-2517A/2615A PDF p.21 «Teste de Continuidade Audível»	
 diode	diodo	s. m.	mode-diode, range-diode	Minipa ET-1649BT PDF p.18; MS-T «diode» → «diodo» (masc.)	
-diode test	teste de diodo	s. m.	table-15-diode-test, table-diode-tester	Minipa ET-1649BT PDF p.18 «Teste de Diodo»	
-capacitance	capacitância	s. f.	mode-capacitance, tables	Minipa ET-1649BT PDF p.17 «Medida de Capacitância»	Unlike French (capacité), Portuguese uses «capacitância»; «capacidade» is a battery's or a fuse's capacity (ET-1649BT PDF p.15 «capacidade máxima nominal»).
+capacitance	capacitância	s. f.	mode-capacitance	Minipa ET-1649BT PDF p.17 «Medida de Capacitância»	Unlike French (capacité), Portuguese uses «capacitância»; «capacidade» is a battery's or a fuse's capacity (ET-1649BT PDF p.15 «capacidade máxima nominal»).
 frequency	frequência	s. f.	mode-frequency, aux-frequency	Minipa ET-1649BT PDF p.18 «Medida de Frequência»; MS-T «frequency» → «frequência» (fem.)	2009 spelling: no trema. Older Minipa manuals write «freqüência» (ET-2517A/2615A PDF p.7): don't copy it.
-duty cycle	duty cycle	s. m.	mode-duty-pct, range-duty, aux-duty, table-12-duty-cycle	Minipa ET-1649BT PDF p.19 «Medida de Duty Cycle»; Minipa ET-2587 PDF p.2; Minipa ET-2517A/2615A PDF p.22 «Duty Cycle (D%)»	Ruling needed (SUMMARY). Every Minipa manual keeps the English term. «ciclo de trabalho» is the textbook word but has no approved source.
+duty cycle	duty cycle	s. m.	mode-duty-pct, range-duty, aux-duty	Minipa ET-1649BT PDF p.19 «Medida de Duty Cycle»; Minipa ET-2587 PDF p.2; Minipa ET-2517A/2615A PDF p.22 «Duty Cycle (D%)»	Ruling needed (SUMMARY). Every Minipa manual keeps the English term. «ciclo de trabalho» is the textbook word but has no approved source.
 Duty % (mode label)	Duty %	s. m.	mode-duty-pct	Minipa ET-2517A/2615A PDF p.8 «Nível Lógico Hz & Duty%»	Keep as the meter prints it; follows the duty cycle ruling.
-pulse width	largura de pulso	s. f.	mode-pulse-width, table-13-pulse-width	Minipa ET-2587 PDF p.26 «Largura de Pulso Minimo»	
+pulse width	largura de pulso	s. f.	mode-pulse-width	Minipa ET-2587 PDF p.26 «Largura de Pulso Minimo»	
 temperature	temperatura	s. f.	mode-temperature, aux-temperature	Minipa ET-1649BT PDF p.19 «Medida de Temperatura»	
 internal temperature	temperatura interna	s. f.	aux-internal-temperature	no approved source found	Plain composition of «temperatura» (Minipa) + «interna».
 K-type thermocouple	termopar tipo K	s. m.	notes (note-k-type-thermocouple-*)	Minipa ET-1649BT PDF p.4 «Termopar tipo K»; Minipa ET-2587 PDF p.3 «Termopar Tipo K»	
 temperature probe	sensor de temperatura	s. m.	notes	Minipa ET-2517A/2615A PDF p.10 «sensor de temperatura Bkp60»; Minipa ET-2587 PDF p.10 «Entrada do sensor de temperatura»	ET-1649BT PDF p.20 also says «sonda termopar tipo K»; «sensor» is the commoner Minipa word.
-hFE	ganho do transistor (hFE)	s. m.	mode-hfe, aux-hfe, table-k-transistor	no approved source found	"No Minipa manual found has an hFE function. ""Transistor Magnification"" → «Ganho do transistor (hFE)»."
+hFE	ganho do transistor (hFE)	s. m.	mode-hfe, aux-hfe	no approved source found	"No Minipa manual found has an hFE function. ""Transistor Magnification"" → «Ganho do transistor (hFE)»."
 NCV	NCV (detecção de tensão sem contato)	s. f.	mode-ncv, aux-ncv, reading-spoken-ncv, read-error-not-an-ncv-level	Minipa ET-1649BT PDF p.20 «Detecção de Tensão sem Contato (NCV)»	Acronym first, spelled-out form after it in parentheses (MS-SG PDF p.24).
-EF / non-contact EF detection	EF / detecção de campo elétrico sem contato	s. f.	mode-ef*, table-non-contact-ef-detection	Minipa ET-2517A/2615A PDF p.12 «Detecção de Campo Elétrico - EF», «Detecção-EF Sem Contato»	
+EF / non-contact EF detection	EF / detecção de campo elétrico sem contato	s. f.	mode-ef*	Minipa ET-2517A/2615A PDF p.12 «Detecção de Campo Elétrico - EF», «Detecção-EF Sem Contato»	
 LoZ	LoZ (baixa impedância)	s. f.	mode-loz-*, flag-loz	Minipa ET-2517A/2615A PDF p.7 «O “LoZ” mostrado no LCD lembra o usuário que está no modo de baixa impedância»	
 low-pass filter / LPF	filtro passa-baixa / LPF	s. m.	mode-acv-lpf, qualifier-lpf-mode, aux-lpf-v	Minipa ET-2990 PDF p.2 «Rejeição de Alta Frequência (Filtro Passa Baixa)», PDF p.11 «filtro passa baixa»	Minipa writes it unhyphenated; the hyphen follows the 2009 rule for compounds of verb + adjective. Reviewer to confirm.
 VFD	VFD	—	mode-vfd-*	no approved source found	Keep as printed.
@@ -33,7 +26,6 @@ VFC	VFC	—	mode-vfc	no approved source found	Keep as printed.
 dBm / dBV	dBm / dBV	unidade	mode-v-ac-dbm, notes	Minipa ET-2517A/2615A PDF p.5 «dB (decibel)»	Unit symbols never change.
 dBm reference	referência dBm	s. f.	mode-dbm-reference	Minipa ET-1649BT PDF p.12 «valor de referência»	
 inductance	indutância	s. f.	mode-inductance*	no approved source found	No Minipa manual found measures inductance. Standard spelling (VOLP).
-conductance	condutância	s. f.	table-8-conductance	Minipa ET-2517A/2615A PDF p.9 «Funções Condutância nS, Resistência e Continuidade»	
 power	potência	s. f.	mode-power*	Minipa ET-2587 PDF p.10 «medidas relativas a potência»; MS-T «power» → «potência»	
 apparent power (VA)	potência aparente (VA)	s. f.	notes, VA modes	no approved source found	
 power factor / PF	fator de potência / PF	s. m.	mode-power-factor, aux-pf	no approved source found	Keep PF as printed in labels.
@@ -47,8 +39,8 @@ period	período	s. m.	aux-period	no approved source found	Minipa uses «período
 impedance	impedância	s. f.	aux-impedance	Minipa ET-1649BT PDF p.24 «Impedância de entrada»	
 burden voltage	queda de tensão	s. f.	aux-burden-voltage, note-burden-voltage-*	Minipa ET-2517A/2615A PDF p.22 «Queda de Tensão» column of the current tables («1.5mV/mA»)	The same words mean a diode's forward voltage (ET-2517A/2615A PDF p.11 «queda de tensão direta»); context tells them apart.
 clamp	alicate	s. m.	mode-clamp-*, aux-clamp-*	minipa.com.br product category «Alicates» / «Alicates Amperímetros» (web page, see SOURCE.txt)	No Minipa manual among the four covers a clamp. «alicate amperímetro» in full.
-power (mains) line	rede elétrica	s. f.	mode-line-hz, table-line-level-frequency-hz	Minipa ET-1649BT PDF p.21 «fonte de tensão (como a rede elétrica)»; Minipa ET-2517A/2615A PDF p.22 «Freqüência de Nível de Rede (Hz)»	"Table title ""Line Level Frequency (Hz)"" → «Frequência de nível de rede (Hz)»."
-logic level	nível lógico	s. m.	mode-logic-hz, table-logic-level-*	Minipa ET-2517A/2615A PDF p.8 «Nível Lógico Hz & Duty%»	
+power (mains) line	rede elétrica	s. f.	mode-line-hz	Minipa ET-1649BT PDF p.21 «fonte de tensão (como a rede elétrica)»; Minipa ET-2517A/2615A PDF p.22 «Freqüência de Nível de Rede (Hz)»	"Table title ""Line Level Frequency (Hz)"" → «Frequência de nível de rede (Hz)»."
+logic level	nível lógico	s. m.	mode-logic-hz	Minipa ET-2517A/2615A PDF p.8 «Nível Lógico Hz & Duty%»	
 Motor / Solar / Compass / Angle / Time / Scope	Motor / Solar / Bússola / Ângulo / Tempo / Osciloscópio	s. m. (Bússola s. f.)	mode-motor, mode-solar, mode-compass, mode-angle, mode-time, mode-scope	Osciloscópio: minipa.com.br category «Osciloscópios»; MS-T «time» → «tempo»; others no approved source found	
 Live (mode: live-wire detection)	Fase	s. f.	mode-live, aux-live	Minipa ET-2517A/2615A PDF p.12 «distinguir entre conexão viva e o terra», «tensões fase a neutro»	Ruling needed (SUMMARY): «Fase» (what an electrician calls the live conductor) or Minipa's «Fio vivo».
 Recall	Recuperação	s. f.	mode-recall	Minipa ET-2990 PDF p.24 «modo de recuperação»	RECALL on a meter key stays as printed (ET-2517A/2615A PDF p.16 «modo RECALL»).
@@ -258,7 +250,7 @@ click	clicar	v.	hovers, notices	MS-SG PDF p.17 «clique em Cancelar»; MS-T «cl
 turn on / switch on (the meter, Bluetooth)	ligar	v.	activation steps, setup help	Minipa ET-1649BT PDF p.22 «1. Ligue o instrumento»; MS-T «turn on» → «ligar»	«ligar o Bluetooth», «ligar a transmissão de dados».
 low battery (spoken)	bateria fraca	s. f.	reading-spoken-low-battery	Minipa ET-1649BT PDF p.8 «Bateria Fraca»; PDF p.6 «indicador de bateria fraca»	
 residual reading	leitura residual	s. f.	notes	Minipa ET-2517A/2615A PDF p.20 «Leitura residual menor que 5 dígitos»; Minipa ET-1649BT PDF p.17 «zerar o valor residual»	
-forward voltage	tensão direta	s. f.	notes, diode tables	Minipa ET-1649BT PDF p.26 «Exibe a tensão direta aproximada do diodo»	
+forward voltage	tensão direta	s. f.	notes	Minipa ET-1649BT PDF p.26 «Exibe a tensão direta aproximada do diodo»	
 test current	corrente de teste	s. f.	notes	Minipa ET-2517A/2615A PDF p.21 «Corrente de Teste: 0.4mA típico»	
 frequency response	resposta de frequência	s. f.	notes	Minipa ET-1649BT PDF p.24 «Resposta de Frequência: 40~400Hz»	
 sampling rate / update rate	taxa de amostragem / taxa de atualização	s. f.	notes, settings	Minipa ET-1649BT PDF p.23 «Taxa de Amostragem: 3 vezes por segundo»; Minipa ET-2517A/2615A PDF p.19 «Taxa de Atualização»	

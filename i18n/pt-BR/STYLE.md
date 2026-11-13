@@ -14,7 +14,7 @@ How the Brazilian Portuguese translation is written. It goes with `glossary.tsv`
 6. **No space before %**: «50%», «{ $percent }%», as in English and in most of Minipa's figures («±(0,5% + 3D)», ET-1649BT PDF p.24; «±10%», PDF p.25). ET-2517A/2615A PDF p.20 spaces it («de 10 % a 100 % da faixa»).
 7. *(decided)* **Meter flags stay as printed** (HOLD, REL, AUTO, LOW BAT, LEAD ERR, HV!, VOID…); their spoken forms are Portuguese («congelamento da leitura», «faixa automática», «bateria fraca»).
 8. **The app's own badges** are translated, in capitals with accents: ESCALA, LIM. SUP., LIM. INF., AO VIVO, VERIFICADO, PARCIALMENTE VERIFICADO, EXPERIMENTAL.
-9. *(decided)* **AC/DC/AC+DC stay as printed** in mode labels and notes. Table titles and prose use full words: «Tensão contínua», «Tensão alternada», «Tensão alternada + contínua». Never «CC»/«CA» (Minipa writes AC/DC too: ET-1649BT PDF p.8 «Corrente Contínua (DC)»).
+9. *(decided)* **AC/DC/AC+DC stay as printed** in mode labels and notes. Prose uses full words: «Tensão contínua», «Tensão alternada», «Tensão alternada + contínua». Never «CC»/«CA» (Minipa writes AC/DC too: ET-1649BT PDF p.8 «Corrente Contínua (DC)»).
 10. *(decided)* **Glossary entries are full terms**, no optional words in parentheses. A parenthesis in an entry is part of the text («ganho do transistor (hFE)», «potência aparente (VA)»).
 11. **Plurals:** the plural rules fluent-bundle uses give Portuguese `one` for **0 and 1**. Brazilian Portuguese puts zero in the plural («0 amostras»). Where a count can be 0, add a numeric `[0]` variant with the plural text (§10); the translation check ignores numeric keys.
 12. **Gender-neutral toward the user:** no adjective or participle agrees with the user. Rephrase («Conexão estabelecida», not «Você está conectado»), as MS-SG PDF p.19–20 asks.
@@ -100,7 +100,7 @@ The four Minipa manuals are uneven too: the older ones write «freqüência» (p
 - **Unit symbols never change** *(decided)*, except in the spoken reading's unit names (§0 ruling 16): V, mV, A, mA, µA, Ω, kΩ, MΩ, Hz, F, °C, °F, W, VA, Wh, Ah, dBm, dBV, s, ms, h, V·s, mAh. No plural «s» on a symbol (MS-SG PDF p.23).
 - **Space between a number and its unit:** follow the English as written in notation and spec text (`10MΩ`, `≈3V`); in prose you write, put U+00A0 («2 s», «10 MΩ») (MS-SG PDF p.30).
 - **The meter's AC/DC labels stay as the meter prints them** *(decided)*: `DC V`, `V AC`, `AC mA`, `AC+DC`, `ACV`, `DCV`, `LoZ V~`.
-- **In prose and table titles, spell the words out** *(decided)*: «tensão contínua», «tensão alternada», «corrente contínua / alternada» (Minipa ET-1649BT PDF p.8), «tensão alternada + contínua» for AC+DC.
+- **In prose, spell the words out** *(decided)*: «tensão contínua», «tensão alternada», «corrente contínua / alternada» (Minipa ET-1649BT PDF p.8), «tensão alternada + contínua» for AC+DC.
 - **No «CC» / «CA».** Minipa writes AC/DC in every manual found (ET-1649BT PDF p.3 «Medida de Tensão AC/DC»; ET-2517A/2615A PDF p.3). A note "AC+DC: add 1%+35 digits" keeps AC+DC beside a mode line that says `AC+DC`.
 - **True RMS:** keep «True RMS» as Minipa does (ET-2517A/2615A PDF p.5, ET-1649BT PDF p.23). "rms" after a number (`250V rms`) is notation: keep it.
 
@@ -174,7 +174,6 @@ Fluent can't tell you the gender or number of what a placeable holds, and Portug
 - Keep every number, sign, ±, ≤, ≥, <, >, ≈ and ~, and each unit symbol right after its number. Numbers as in the English (§5). The spec check falls back to English on any mismatch.
 - Keep the exact sense: comparisons, ranges, «típico» / «típ.», «nominal», «aproximadamente» / «aprox.», «pelo menos», «máx.». The check can't catch a flipped comparison.
 - Use Minipa's wording: «Não especificado»; «da leitura» (accuracy); «dígitos» (digits/counts in accuracy), «contagens» (display counts); «proteção de sobrecarga»; «impedância de entrada»; «fator de crista»; «coeficiente de temperatura»; «pontas de prova em curto-circuito»; «tensão de circuito aberto»; «sensibilidade»; «queda de tensão» (burden voltage); «limiar». See the glossary for each source.
-- Table titles keep the manual's numbering and letters: «(1) Tensão alternada», «A. Tensão contínua», «K. Temperatura 1-1. Graus Celsius».
 
 ## 13. Words to avoid
 

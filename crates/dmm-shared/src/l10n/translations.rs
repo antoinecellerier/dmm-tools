@@ -16,7 +16,6 @@
 //! never waits on its translations.
 
 use super::lib_index::{GUARDED, kind_of_id, same_numbers};
-use dmm_lib::text::TextKind;
 use fluent_bundle::FluentResource;
 use fluent_bundle::concurrent::FluentBundle;
 use fluent_syntax::ast;
@@ -295,8 +294,8 @@ fn spec_number_problems(english: &str, translated: &str, locale: &str) -> Vec<St
 }
 
 /// Whether message `key` of file `path` may be left out of a shipped
-/// language: the specification text of `lib.ftl` (table titles, notes,
-/// input ratings, accuracy bands) and every message of `cli/capture.ftl`
+/// language: the specification text of `lib.ftl` (notes, input ratings,
+/// accuracy bands) and every message of `cli/capture.ftl`
 /// (the guided run behind a device report, whose report stays English),
 /// polish that shows in English one message at a time until translated.
 /// Everything that drives the meter or the apps — modes, ranges, keys,
@@ -305,7 +304,7 @@ fn optional(path: &str, key: &str) -> bool {
     path == CAPTURE
         || path == "lib.ftl"
             && kind_of_id(key.split('.').next().unwrap_or(key))
-                .is_some_and(|k| k == TextKind::Table || GUARDED.contains(&k))
+                .is_some_and(|k| GUARDED.contains(&k))
 }
 
 /// `capture`'s own text, every message of it [`optional`].
@@ -597,7 +596,7 @@ d = Extra
     assert_eq!(plural_forms("zh-CN"), BTreeSet::from(["other".into()]));
     // Specification text is the one thing a shipped language may lack.
     assert!(optional("lib.ftl", "note-hold-sel-ncv-for-ncv"));
-    assert!(optional("lib.ftl", "table-resistance"));
+    assert!(optional("lib.ftl", "input-about-10mohm"));
     assert!(!optional("lib.ftl", "activation-ut8802"));
     assert!(!optional("lib.ftl", "mode-capacitance"));
     assert!(optional("cli/capture.ftl", "capture-no-response"));

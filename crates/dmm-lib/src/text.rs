@@ -42,8 +42,6 @@ pub enum TextKind {
     Model,
     /// The steps that switch a meter's data transmission on.
     Activation,
-    /// A specification table's name ("(1) AC Voltage").
-    Table,
     /// A specification row's accuracy band: the condition it holds under
     /// ("In REL state", "40Hz~100Hz (LPF)") and its accuracy, which a manual
     /// may give in words ("Not Specified").
@@ -55,7 +53,7 @@ pub enum TextKind {
 }
 
 impl TextKind {
-    pub const ALL: [TextKind; 13] = [
+    pub const ALL: [TextKind; 12] = [
         TextKind::Mode,
         TextKind::Qualifier,
         TextKind::Range,
@@ -65,7 +63,6 @@ impl TextKind {
         TextKind::KeyHover,
         TextKind::Model,
         TextKind::Activation,
-        TextKind::Table,
         TextKind::Band,
         TextKind::Input,
         TextKind::Note,
@@ -83,7 +80,6 @@ impl TextKind {
             TextKind::KeyHover => "key-hover",
             TextKind::Model => "model",
             TextKind::Activation => "activation",
-            TextKind::Table => "table",
             TextKind::Band => "band",
             TextKind::Input => "input",
             TextKind::Note => "note",
@@ -120,8 +116,8 @@ mod tests {
     #[test]
     fn all_lists_every_kind() {
         let every = every_kind!(
-            Mode, Qualifier, Range, Aux, Toggle, Key, KeyHover, Model, Activation, Table, Band,
-            Input, Note,
+            Mode, Qualifier, Range, Aux, Toggle, Key, KeyHover, Model, Activation, Band, Input,
+            Note,
         );
         let all: BTreeSet<TextKind> = TextKind::ALL.into_iter().collect();
         assert_eq!(all.len(), TextKind::ALL.len(), "ALL repeats a kind");
@@ -209,7 +205,6 @@ mod list {
                 out.add(TextKind::KeyHover, hover, id);
             }
             for table in protocol.spec_sheet() {
-                out.add(TextKind::Table, table.name, id);
                 let mode = table.mode;
                 for input in [mode.input_impedance, mode.overload_protection] {
                     out.add(TextKind::Input, input.unwrap_or_default(), id);
@@ -333,7 +328,6 @@ mod list {
                 TextKind::Activation,
                 TextKind::Model,
                 TextKind::Key,
-                TextKind::Table,
                 TextKind::Band,
                 TextKind::Input,
                 TextKind::Note,
