@@ -736,11 +736,11 @@ table-a-dc-voltage = A. DC Voltage
 table-ac-ac-plus-dc-current = AC & AC+DC Current
 # Used by: 7 meters
 table-ac-current = AC Current
-# Used by: CMS061
+# Used by: CMS061, CMS101
 table-ac-current-a-2 = AC Current (A)
 # Used by: 9 meters
 table-ac-voltage = AC Voltage
-# Used by: CMS061, Mock ZT-5B, ZT-5B
+# Used by: CMS061, CMS101, Mock ZT-5B, ZT-5B
 table-ac-voltage-v = AC Voltage (V)
 # Used by: Mock ZT-5B, ZT-5B
 table-ac-current-a = AC current (A)
@@ -766,7 +766,7 @@ table-b-ac-voltage-ac-plus-dc = B. AC Voltage (AC+DC measurement is available)
 table-c-dc-current = C. DC Current
 # Used by: 11 meters
 table-capacitance = Capacitance
-# Used by: CMS061
+# Used by: CMS061, CMS101
 table-capacitance-f = Capacitance(F)
 # Used by: Mock ZT-5B, ZT-5B
 table-continuity = Continuity
@@ -782,23 +782,23 @@ table-d-ac-current-ac-plus-dc = D. AC Current (AC+DC measurement is available)
 table-dc-ac-ac-plus-dc-ac = DC AC & AC+DC AC Voltage
 # Used by: 9 meters
 table-dc-current = DC Current
-# Used by: CMS061
+# Used by: CMS061, CMS101
 table-dc-current-a-2 = DC Current (A)
 # Used by: Mock ZT-5B, ZT-5B
 table-dc-voltage-v = DC VOLTAGE (V)
 # Used by: 9 meters
 table-dc-voltage = DC Voltage
-# Used by: CMS061
+# Used by: CMS061, CMS101
 table-dc-voltage-v-2 = DC Voltage (V)
 # Used by: Mock ZT-5B, ZT-5B
 table-dc-current-a = DC current (A)
 # Used by: Mock ZT-5B, ZT-5B
 table-dc-current-ma = DC current (mA)
-# Used by: CMS061
+# Used by: CMS061, CMS101
 table-diode = Diode
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
 table-diode-tester = Diode Tester
-# Used by: CMS061
+# Used by: CMS061, CMS101
 table-duty-cycle-pct = Duty Cycle (%)
 # Used by: UT803, UT804
 table-e-resistance = E. Resistance
@@ -806,7 +806,7 @@ table-e-resistance = E. Resistance
 table-f-continuity-test = F. Continuity Test
 # Used by: Mock ZT-5B, ZT-5B
 table-frequency = Frequency
-# Used by: CMS061
+# Used by: CMS061, CMS101
 table-frequency-hz = Frequency (Hz)
 # Used by: 7 meters
 table-frequency-duty-ratio = Frequency/Duty Ratio
@@ -818,7 +818,7 @@ table-g-diode-testst = G. Diode Testst
 table-h-capacitance = H. Capacitance
 # Used by: UT803, UT804
 table-i-frequency = I. Frequency
-# Used by: CMS061
+# Used by: CMS061, CMS101
 table-inrush-current-a = Inrush Current(A)
 # Used by: UT804
 table-j-duty-cycle = J. Duty Cycle
@@ -840,13 +840,13 @@ table-logic-level-frequency-hz-duty-cycle = Logic Level Frequency (⎍Hz) & Duty
 table-non-contact-ef-detection = Non-Contact EF-Detection
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
 table-ohms = Ohms
-# Used by: CMS061
+# Used by: CMS061, CMS101
 table-on-off = On-Off
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
 table-record-mode = Record mode
 # Used by: 9 meters
 table-resistance = Resistance
-# Used by: CMS061
+# Used by: CMS061, CMS101
 table-resistance-ohm = Resistance(Ω)
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s, Mock ZT-5B, UT161D, UT61D+, ZT-5B
 table-temperature = Temperature
@@ -883,7 +883,7 @@ band-not-specified-2 = Not specified
 # Used by: UT181A
 # In: (1) AC Voltage; (3) AC Voltage + DC Voltage
 band-only-for-reference = Only for reference
-# Used by: CMS061
+# Used by: CMS061, CMS101
 # In: Duty Cycle (%)
 band-typical-vrms-1-v-f-100hz = Typical: Vrms=1 V, f=100Hz
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
@@ -986,7 +986,7 @@ note-10a-5a-continuous-5a-10a-10s = 10A: ≤5A continuous; >5A–10A ≤10s at a
 # Used by: UT181A
 # In: (13) Pulse Width
 note-10hz-200khz-pulse-width-2us-depends = 10Hz–200kHz: pulse width >2µs, depends on signal frequency
-# Used by: CMS061
+# Used by: CMS061, CMS101
 # In: Capacitance(F)
 note-20-00mf-measuring-duration-should-be = 20.00mF: measuring duration should be over 30 seconds
 # Used by: UT181A
@@ -1106,7 +1106,7 @@ note-accuracy-valid-1-pct-100-pct = Accuracy valid 1%–100% of range
 # Used by: Mock UT61E+, UT161E, UT61E+
 # In: AC Current; AC Voltage
 note-accuracy-valid-1-pct-100-pct-2 = Accuracy valid 1%–100% of range (1kHz–10kHz: 10%–100%)
-# Used by: CMS061
+# Used by: CMS061, CMS101
 # In: AC Current (A); AC Voltage (V)
 note-accuracy-valid-10-pct-100-pct = Accuracy valid 10%–100% of range
 # Used by: UT161D, UT61D+
@@ -1121,13 +1121,13 @@ note-accuracy-valid-40hz-500hz-1-pct = Accuracy valid 40Hz–500Hz, 1%–100% of
 # Used by: UT161B, UT61B+
 # In: AC Voltage
 note-accuracy-valid-40hz-500hz-1-pct-2 = Accuracy valid 40Hz–500Hz, 1%–100% of range (60mV: 2%–100%)
-# Used by: CMS061
+# Used by: CMS061, CMS101
 # In: Capacitance(F); DC Current (A); DC Voltage (V)
 note-accuracy-valid-5-pct-100-pct = Accuracy valid 5%–100% of range
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
 # In: Capacitance
 note-accuracy-with-film-capacitor-or-better = Accuracy with film capacitor or better
-# Used by: CMS061
+# Used by: CMS061, CMS101
 # In: Capacitance(F); Resistance(Ω)
 note-allow-for-the-test-leads-own = Allow for the test leads' own resistance and reactance
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
@@ -1139,7 +1139,7 @@ note-bm821s-specified-from-10-pct-to = BM821s: specified from 10% to 100% of ran
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
 # In: Non-Contact EF-Detection
 note-bar-segments-beep-tones-proportional-to = Bar segments & beep tones proportional to field strength
-# Used by: CMS061, Mock ZT-5B, ZT-5B
+# Used by: CMS061, CMS101, Mock ZT-5B, ZT-5B
 # In: Continuity; On-Off
 note-beeps-50ohm = Beeps <50Ω
 # Used by: UT803
@@ -1298,7 +1298,7 @@ note-normal-silicon-junction-0-5v-0 = Normal silicon junction: 0.5V–0.8V
 # Used by: UT181A
 # In: (14) Continuity Test
 note-open-alarm-beeps-50ohm-silent-10ohm = Open alarm: beeps >50Ω, silent <10Ω
-# Used by: CMS061
+# Used by: CMS061, CMS101
 # In: Diode
 note-open-circuit-3-2v = Open circuit 3.2V
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
@@ -1391,10 +1391,10 @@ note-shorted-leads-residual-3-digits = Shorted leads: residual ≤3 digits
 # Used by: 7 meters
 # In: DC Voltage
 note-shorted-leads-residual-5-digits = Shorted leads: residual ≤5 digits
-# Used by: CMS061
+# Used by: CMS061, CMS101
 # In: On-Off
 note-shows-ol-above-200-0ohm = Shows OL above 200.0Ω
-# Used by: CMS061
+# Used by: CMS061, CMS101
 # In: Frequency (Hz)
 note-signal-1hz-20mhz-1v-rms = Signal: 1Hz–20MHz, ≥ 1V rms
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
@@ -1439,10 +1439,10 @@ note-true-rms-crest-factor-3-0 = True RMS; crest factor ≤3.0 at 3000, ≤1.5 a
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
 # In: Temperature
 note-type-k-thermocouple-range-accuracy-not = Type-K thermocouple range & accuracy not included
-# Used by: CMS061
+# Used by: CMS061, CMS101
 # In: Duty Cycle (%)
 note-typical-waveform-square = Typical waveform: square
-# Used by: CMS061
+# Used by: CMS061, CMS101
 # In: Frequency (Hz)
 note-typical-waveform-square-or-sine = Typical waveform: square or sine
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s

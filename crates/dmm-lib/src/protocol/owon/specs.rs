@@ -1,15 +1,18 @@
-//! Specification data for the CMS061 clamp meter (UNI-T UT217A).
+//! Specification data for the CMS061 and CMS101 clamp meters (UNI-T UT217A
+//! and UT217B).
 //!
-//! Transcribed from the CMS061 user manual (V1.0.4, Sep. 2025), the
+//! Transcribed from each meter's user manual (V1.0.4, Sep. 2025), the
 //! multimeter specification table on PDF pages 35-36 (printed 30-31), with
-//! values as printed but for the typesetting slip noted where it is. The
-//! table gives no input impedance or overload protection. Cross-checked
-//! against UNI-T's UT217 manual: where it prints another range or
-//! resolution, a comment says so and the row keeps OWON's; one accuracy cell
-//! the OWON manual leaves blank takes the UT217 manual's figure. The notes
-//! are short app notes condensed from the table's remarks. The Diode and
-//! On-Off rows give no accuracy: the manual's cell is a remark, carried as
-//! a note.
+//! values as printed but for the typesetting slip noted where it is. The two
+//! tables differ only in the top current range, 600A against 1000A, so the
+//! meters share every other table. The CMS101's figures are from its own
+//! manual: no CMS101 has been run against them. The table gives no input
+//! impedance or overload protection. Cross-checked against UNI-T's UT217
+//! manual: where it prints another range or resolution, a comment says so
+//! and the row keeps OWON's; one accuracy cell the OWON manuals leave blank
+//! takes the UT217 manual's figure. The notes are short app notes condensed
+//! from the table's remarks, the same for both. The Diode and On-Off rows
+//! give no accuracy: the manual's cell is a remark, carried as a note.
 //!
 //! A row's `range` is the reading's range byte, `range_raw`: the function
 //! word's prefix code shifted left three and its decimal-point code (spec
@@ -53,11 +56,28 @@ static CMS061_TABLES: &[&ModeSpecs] = &[
     &ON_OFF,
 ];
 
+/// The CMS101's tables, in manual order.
+static CMS101_TABLES: &[&ModeSpecs] = &[
+    &DC_VOLTAGE,
+    &AC_VOLTAGE,
+    &DC_CURRENT_1000A,
+    &AC_CURRENT_1000A,
+    &INRUSH_CURRENT_1000A,
+    &RESISTANCE,
+    &CAPACITANCE,
+    &FREQUENCY,
+    &DUTY_CYCLE,
+    &DIODE,
+    &ON_OFF,
+];
+
 /// `model`'s tables, in manual order; none for a model whose manual's
 /// tables are not here.
 pub(crate) fn for_model(model: &Model) -> &'static [&'static ModeSpecs] {
     if model.code == model::CMS061.code {
         CMS061_TABLES
+    } else if model.code == model::CMS101.code {
+        CMS101_TABLES
     } else {
         &[]
     }
@@ -376,6 +396,144 @@ static INRUSH_CURRENT_600A: ModeSpecs = ModeSpecs {
         RangeSpec {
             range: Some(0x20),
             label: "600A",
+            spec: SpecInfo {
+                resolution: "1A",
+                accuracy: &[AccuracyBand {
+                    freq_range: Some("40Hz–1000Hz"),
+                    accuracy: "10.0%+10",
+                }],
+            },
+        },
+    ],
+    mode: ModeSpecInfo {
+        input_impedance: None,
+        overload_protection: None,
+        notes: &[],
+    },
+};
+
+static DC_CURRENT_1000A: ModeSpecs = ModeSpecs {
+    name: name::DC_CURRENT,
+    page: 35,
+    ranges: &[
+        RangeSpec {
+            range: Some(0x22),
+            label: "20.00A",
+            spec: SpecInfo {
+                resolution: "0.01A",
+                accuracy: &[AccuracyBand {
+                    freq_range: None,
+                    accuracy: "2.0%+10",
+                }],
+            },
+        },
+        RangeSpec {
+            range: Some(0x21),
+            label: "200.0A",
+            spec: SpecInfo {
+                resolution: "0.1A",
+                accuracy: &[AccuracyBand {
+                    freq_range: None,
+                    accuracy: "2.0%+5",
+                }],
+            },
+        },
+        // The UT217 manual prints 1000.0A at 0.1A.
+        RangeSpec {
+            range: Some(0x20),
+            label: "1000A",
+            spec: SpecInfo {
+                resolution: "1A",
+                accuracy: &[AccuracyBand {
+                    freq_range: None,
+                    accuracy: "2.0%+5",
+                }],
+            },
+        },
+    ],
+    mode: ModeSpecInfo {
+        input_impedance: None,
+        overload_protection: None,
+        notes: &["Accuracy valid 5%–100% of range"],
+    },
+};
+
+static AC_CURRENT_1000A: ModeSpecs = ModeSpecs {
+    name: name::AC_CURRENT,
+    page: 35,
+    ranges: &[
+        RangeSpec {
+            range: Some(0x22),
+            label: "20.00A",
+            spec: SpecInfo {
+                resolution: "0.01A",
+                accuracy: &[AccuracyBand {
+                    freq_range: Some("40Hz–1000Hz"),
+                    accuracy: "3.0%+10",
+                }],
+            },
+        },
+        RangeSpec {
+            range: Some(0x21),
+            label: "200.0A",
+            spec: SpecInfo {
+                resolution: "0.1A",
+                accuracy: &[AccuracyBand {
+                    freq_range: Some("40Hz–1000Hz"),
+                    accuracy: "2.5%+5",
+                }],
+            },
+        },
+        // The UT217 manual prints 1000.0A at 0.1A.
+        RangeSpec {
+            range: Some(0x20),
+            label: "1000A",
+            spec: SpecInfo {
+                resolution: "1A",
+                accuracy: &[AccuracyBand {
+                    freq_range: Some("40Hz–1000Hz"),
+                    accuracy: "2.5%+5",
+                }],
+            },
+        },
+    ],
+    mode: ModeSpecInfo {
+        input_impedance: None,
+        overload_protection: None,
+        notes: &["Accuracy valid 10%–100% of range"],
+    },
+};
+
+static INRUSH_CURRENT_1000A: ModeSpecs = ModeSpecs {
+    name: name::INRUSH_CURRENT,
+    page: 35,
+    ranges: &[
+        RangeSpec {
+            range: Some(0x22),
+            label: "20.00A",
+            spec: SpecInfo {
+                resolution: "0.01A",
+                accuracy: &[AccuracyBand {
+                    freq_range: Some("40Hz–1000Hz"),
+                    accuracy: "10.0%+10",
+                }],
+            },
+        },
+        RangeSpec {
+            range: Some(0x21),
+            label: "200.0A",
+            spec: SpecInfo {
+                resolution: "0.1A",
+                accuracy: &[AccuracyBand {
+                    freq_range: Some("40Hz–1000Hz"),
+                    accuracy: "10.0%+10",
+                }],
+            },
+        },
+        // The UT217 manual prints 1000.0A at 0.1A.
+        RangeSpec {
+            range: Some(0x20),
+            label: "1000A",
             spec: SpecInfo {
                 resolution: "1A",
                 accuracy: &[AccuracyBand {
@@ -737,7 +895,7 @@ mod tests {
     use super::super::decode::{AUTO, HOLD, MAX, MIN, REL};
     use super::super::decode15::tests::{frame, g24};
     use super::super::decode15::{self, AC, DC, INRUSH, LPF, OSC, PEAK, USB, code};
-    use super::super::model::{CMS061, MODELS, OW69B};
+    use super::super::model::{CMS061, CMS101, MODELS, OW69B};
     use super::*;
     use crate::protocol::test_support::hex;
     use crate::protocol::{capture_reports, golden_readings, registry};
@@ -747,7 +905,7 @@ mod tests {
 
     /// The models with tables. A 15-byte frame names no model (spec §10.2):
     /// each is decoded as its own.
-    const SHEETED: [&Model; 1] = [&CMS061];
+    const SHEETED: [&Model; 2] = [&CMS061, &CMS101];
 
     /// Why a reading has no row or no spec, and which readings that is.
     type Listed = (&'static str, fn(&Measurement) -> bool);
@@ -887,12 +1045,32 @@ mod tests {
         ("On-Off", &[("0~200.0Ω", "", 1)]),
     ];
 
+    /// The CMS101 manual's top current range (PDF p.35), in its three
+    /// current tables; the rest is the CMS061's.
+    const CMS101_TOP_CURRENT: Printed = ("1000A", "", 0);
+
     /// `model`'s manual tables, as [`CMS061_MANUAL`] writes them.
     fn manual(model: &Model) -> Vec<(&'static str, Vec<Printed>)> {
+        let cms061 = CMS061_MANUAL
+            .iter()
+            .map(|(name, rows)| (*name, rows.to_vec()));
         if model.code == CMS061.code {
-            CMS061_MANUAL
-                .iter()
-                .map(|(name, rows)| (*name, rows.to_vec()))
+            cms061.collect()
+        } else if model.code == CMS101.code {
+            cms061
+                .map(|(name, rows)| {
+                    let rows = rows
+                        .into_iter()
+                        .map(|row| {
+                            if row.0 == "600A" {
+                                CMS101_TOP_CURRENT
+                            } else {
+                                row
+                            }
+                        })
+                        .collect();
+                    (name, rows)
+                })
                 .collect()
         } else {
             Vec::new()
@@ -1311,6 +1489,60 @@ mod tests {
         assert_eq!(spec.accuracy[0].accuracy, "0.6%+10");
         let mode = m.mode_spec.expect("mode data");
         assert!(std::ptr::eq(mode, &AC_VOLTAGE.mode));
+    }
+
+    /// The CMS101 reads the same frames against its own manual: every
+    /// row a reading takes is on its sheet, and only the top current range
+    /// differs from the CMS061's.
+    #[test]
+    fn the_cms101_reads_its_own_tables() {
+        let proto = (CMS101.entry.new_protocol)();
+        let sheet = proto.spec_sheet();
+        let mut rows = 0;
+        each_reading(&CMS101, |m| {
+            if let Some(spec) = proto.spec_info(&m) {
+                assert!(
+                    sheet
+                        .iter()
+                        .flat_map(|t| &t.rows)
+                        .any(|r| std::ptr::eq(r.spec, spec)),
+                    "{}",
+                    what(&m)
+                );
+                rows += 1;
+            }
+        });
+        assert!(rows > 0);
+        let differ: Vec<(&str, &str, &str)> = for_model(&CMS061)
+            .iter()
+            .zip(for_model(&CMS101))
+            .flat_map(|(a, b)| {
+                a.ranges
+                    .iter()
+                    .zip(b.ranges)
+                    .map(move |(x, y)| (a.name, x, y))
+            })
+            .filter(|(_, x, y)| x.label != y.label)
+            .map(|(name, x, y)| (name, x.label, y.label))
+            .collect();
+        assert_eq!(
+            differ,
+            [
+                ("DC Current (A)", "600A", "1000A"),
+                ("AC Current (A)", "600A", "1000A"),
+                ("Inrush Current(A)", "600A", "1000A"),
+            ]
+        );
+        // The top range's frame: 1000A on the CMS101, 600A on the CMS061.
+        let top = frame(g24(function::DC_A, 4, 0, false), 812, 0, 0, 0);
+        let label = |model: &Model| {
+            let m = decode15::decode(&top, model).unwrap();
+            row(for_model(model), &m).map(|r| r.label)
+        };
+        assert_eq!(
+            (label(&CMS061), label(&CMS101)),
+            (Some("600A"), Some("1000A"))
+        );
     }
 
     /// The models with tables list them in manual order; every other OWON

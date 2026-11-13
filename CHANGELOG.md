@@ -8,7 +8,7 @@
 - **Alarm limits take a unit, and then watch only that quantity** — `4980 mV` or `10 kohm`; a bare number stays in the base unit.
 - **Quitting asks first when a recording or its markers aren't exported** — the close button, `Ctrl+Q` and `Ctrl+W` dropped them unasked.
 - **Statistics is one table shaped to the panel, the cursors' figures included** — a narrow window put the session's ∫ after the visible window's line; the reading column now widens to 480 px.
-- **The Specifications panel covers the OWON CMS061** — the UNI-T UT217A, which shares its entry, shows the same figures.
+- **The Specifications panel covers the OWON CMS061 and CMS101** — the UNI-T UT217A and UT217B, which share their entries, show the same figures.
 - **The Alarm, Scale and Y-range fields underline a value they won't use** — as the Ref field does, with the hover saying why.
 - **Failure notices name the meter picked in Settings and point to Auto-detect** — "No USB cable found" after a meter swap sent you to drivers.
 - **"No USB cable found" says when Bluetooth wasn't searched** — and how to switch the search on.

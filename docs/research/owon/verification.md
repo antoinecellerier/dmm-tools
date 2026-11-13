@@ -26,8 +26,8 @@ and each still wants a capture of our own.
   raw FFF4 notifications in DC V with the LCD noted — settles most items
   below at once. Needs any 6-byte model (a UT217A's covers the 15-byte
   frame, #45).
-- A first confirmed report per model but the CMS061 — gates its spec
-  tables (range, resolution, accuracy); the manuals and product pages
+- A first confirmed report per model but the CMS061 and CMS101 — gates its
+  spec tables (range, resolution, accuracy); the manuals and product pages
   disagree in places (approach doc, "Source disagreements"). Needs each
   model.
 

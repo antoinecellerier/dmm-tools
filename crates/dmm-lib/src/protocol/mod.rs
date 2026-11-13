@@ -1176,8 +1176,8 @@ mod tests {
     /// scenario's first reading, and each source whose entry has a sheet must
     /// reach a row of it. The UT61+ checks its lookups more closely in its own
     /// spec tests, the simulated ZT-5B forwards to the ZT-5B driver, which the
-    /// zt5b goldens cover, and the UT803, with no golden directory yet, has
-    /// its family's own coverage test.
+    /// zt5b goldens cover, and the UT803 and CMS101, with no golden directory
+    /// yet, have their families' own coverage tests.
     #[test]
     fn every_spec_a_reading_gets_is_on_its_sheet() {
         use crate::mock::{MockMode, MockProtocol};

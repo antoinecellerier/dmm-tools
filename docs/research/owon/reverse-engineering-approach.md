@@ -468,7 +468,8 @@ Recorded, not adjudicated; the ones a meter can settle are in
 ### Source disagreements: manual against product page or datasheet
 
 Ranges, resolutions and accuracies; recorded for the `/spec-data` pass,
-which waits for a first hardware capture on every model but the CMS061. The
+which waits for a first hardware capture on every model but the CMS061 and
+CMS101. The
 CMS rows set the CMS manuals against the UT217 manual, the UT217A and
 UT217B's; the spec tables keep OWON's figures.
 
@@ -496,6 +497,7 @@ UT217B's; the spec tables keep OWON's figures.
 | CM2100 counts | 19999 (p.33/30) | page "20000 conuts"; datasheet 19999 |
 | B35 (35 series) | — | page and datasheet p.1 match the manual |
 | CMS061 current, top range | 600A → 1 A (CMS061-UM p.35/30) | UT217 manual p.83/72, UT217A: 600.0A → 0.1 A |
+| CMS101 current, top range | 1000A → 1 A (CMS101-UM p.35/30) | UT217 manual p.83/72, UT217B: 1000.0A → 0.1 A |
 | CMS capacitance | 2000µF → 1 µF (p.36/31) | UT217 manual p.84/73: 2.000mF → 0.001 mF |
 | CMS AC V 200.00V | resolution 0.01 V (p.35/30) | UT217 manual p.83/72: 0.01 mV |
 | CMS 2.0000MΩ accuracy | cell blank; the merged ±(0.3%+10) cell ends at 200.00kΩ (p.35/30-36/31) | UT217 manual p.84/73 merges ±(0.3%+10) across 2.0000kΩ-2.0000MΩ, which the spec table takes |
