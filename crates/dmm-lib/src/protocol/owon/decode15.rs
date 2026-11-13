@@ -72,15 +72,15 @@ const GEAR_HIGH_SEEN: u32 = 0xF0_0000;
 /// documented and carry nothing a reading lacks: silent.
 const AVG: u32 = 1 << 6;
 const LOZ: u32 = 1 << 8;
-const LPF: u32 = 1 << 9;
-const PEAK: u32 = 1 << 10;
-const AC: u32 = 1 << 13;
-const DC: u32 = 1 << 14;
-const USB: u32 = 1 << 15;
+pub(super) const LPF: u32 = 1 << 9;
+pub(super) const PEAK: u32 = 1 << 10;
+pub(super) const AC: u32 = 1 << 13;
+pub(super) const DC: u32 = 1 << 14;
+pub(super) const USB: u32 = 1 << 15;
 /// "Err_port", sent after a VC871's dial moved (spec §10.6, §14.4).
 const ERR_PORT: u32 = 1 << 16;
-const INRUSH: u32 = 1 << 17;
-const OSC: u32 = 1 << 18;
+pub(super) const INRUSH: u32 = 1 << 17;
+pub(super) const OSC: u32 = 1 << 18;
 /// Bit 11, which the app names nothing, and 19-23 (spec §6.6, §10.6).
 const UNDOCUMENTED: u32 = 1 << 11 | 0xF8_0000;
 

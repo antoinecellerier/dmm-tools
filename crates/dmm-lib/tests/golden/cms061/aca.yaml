@@ -5,6 +5,7 @@ mode: "AC A"
 value: "0"
 unit: "A"
 range_label: ""
+resolution: "0.01A"
 flags:
   auto_range: true
 aux: []

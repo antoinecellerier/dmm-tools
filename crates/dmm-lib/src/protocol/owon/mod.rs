@@ -16,6 +16,7 @@
 //! - `frame.rs`, `frame15.rs`: finding 6- and 15-byte frames in the stream
 //! - `decode.rs`, `decode15.rs`: frame → `Measurement`
 //! - `keys.rs`: the remote keys each model offers, and their bytes
+//! - `specs.rs`: the manuals' spec tables, per model
 //! - `capture.rs`: the capture steps per model
 //! - `devices.rs`: the registry entries
 
@@ -27,6 +28,7 @@ pub(crate) mod frame;
 mod frame15;
 mod keys;
 mod model;
+mod specs;
 
 use crate::error::{Error, FrameRemedy, Rejected, Result, Unsupported, WrongMeter};
 use crate::measurement::Measurement;
@@ -36,6 +38,7 @@ use crate::protocol::unrecognised::report_unknown;
 use crate::protocol::{
     CaptureStep, DeviceFamily, DeviceProfile, Evidence, Fingerprint, Probing, Protocol, Stability,
 };
+use crate::specs::{ModeSpecInfo, SpecInfo, SpecSheetTable};
 use crate::transport::Transport;
 use log::{debug, warn};
 use model::{FALLBACK, Fff2, FrameKind, Model, Record};
@@ -439,6 +442,22 @@ impl Protocol for OwonProtocol {
 
     fn capture_steps(&self) -> Vec<CaptureStep> {
         capture::steps(self.model.code)
+    }
+
+    /// The tables follow the model frames decode as.
+    fn spec_info(&self, m: &Measurement) -> Option<&'static SpecInfo> {
+        specs::row(specs::for_model(self.reads_as()), m).map(|row| &row.spec)
+    }
+
+    fn mode_spec_info(&self, m: &Measurement) -> Option<&'static ModeSpecInfo> {
+        specs::table(specs::for_model(self.reads_as()), m).map(|table| &table.mode)
+    }
+
+    fn spec_sheet(&self) -> Vec<SpecSheetTable> {
+        specs::for_model(self.reads_as())
+            .iter()
+            .map(|t| t.sheet_table())
+            .collect()
     }
 }
 

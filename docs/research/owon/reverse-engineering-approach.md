@@ -110,7 +110,11 @@ The hashes of the product pages and datasheets are in `SOURCE.txt`.
    the OW6x user manuals downloaded by the user, the rest by the assistant,
    from `https://files.owon.com.cn/probook/<name>`. The file served as
    `OW65_multimeter_quick_guide.pdf` is the OWH65 power supply's guide and
-   was not used.
+   was not used. On 2026-11-13 the CMS061 and CMS101 user manuals' (V1.0.4)
+   multimeter specification tables, PDF pp.35-36, were transcribed from
+   200 dpi renders for the two meters' spec tables, and cross-checked
+   against the UT217 manual (source 9) and OWON's CMS product page (source
+   10).
 8. **Conrad's Voltcraft manuals** for the VC831, VC851, VC871, VC891, VC915
    and VC925 PV, datasheets for the first four, and the VC871/VC891 app
    manual, downloaded by
@@ -132,6 +136,10 @@ The hashes of the product pages and datasheets are in `SOURCE.txt`.
    their constants, and the scan was checked on OWON's and Voltcraft's
    `libapp.so`, whose blutter listings give the answer. Nothing was executed;
    which label belongs to which key was not read.
+10. **OWON's CMS product page**,
+    https://www.owontech.com/digital-multimeters/clamp-meters/cms101-1000a-smart-ac-dc-clamp-meter-and.html,
+    fetched by the assistant 2026-11-13 to cross-check the CMS spec tables:
+    it carries no spec table.
 
 | Source | File (under `references/owon/`) | SHA-256 |
 |---|---|---|
@@ -151,6 +159,7 @@ The hashes of the product pages and datasheets are in `SOURCE.txt`.
 | VC851-UM | `voltcraft/002576865ML00.pdf` | `e91045360f14167614e3d0dc128e73f528cde85941508825f841f714ea779de6` |
 | UT217 manual | `ut217/UT217_Series_Manual_zh_en.pdf` | `42b40623ee525db0aeca5a2de7e653d2296958908016a0ebcf92defaae54ff83` |
 | UT217 app | `ut217/UT217_app_V1.2.2.zip` | `38265f4d4e36b19b48dfe38e176402413cf7efcb9d1fbe14c85f9a0e10a958e0` |
+| CMS product page | `specs-work/web/cms101-product-page.html` | `37deb782803d34bdbc6ba2d063fda3f65582562a33863cd4428b3c746b30fc5b` |
 
 The quick guides, the datasheets and the other Conrad files are in
 `SOURCE.txt`.
@@ -458,8 +467,10 @@ Recorded, not adjudicated; the ones a meter can settle are in
 
 ### Source disagreements: manual against product page or datasheet
 
-Ranges and resolutions; recorded for the `/spec-data` pass, which waits for a
-first hardware capture.
+Ranges, resolutions and accuracies; recorded for the `/spec-data` pass,
+which waits for a first hardware capture on every model but the CMS061. The
+CMS rows set the CMS manuals against the UT217 manual, the UT217A and
+UT217B's; the spec tables keep OWON's figures.
 
 | Model | Manual | Product page / datasheet |
 |---|---|---|
@@ -484,6 +495,10 @@ first hardware capture.
 | CM2100 frequency | includes 2.0000kHz (p.33/30) | page omits it; datasheet as the manual |
 | CM2100 counts | 19999 (p.33/30) | page "20000 conuts"; datasheet 19999 |
 | B35 (35 series) | — | page and datasheet p.1 match the manual |
+| CMS061 current, top range | 600A → 1 A (CMS061-UM p.35/30) | UT217 manual p.83/72, UT217A: 600.0A → 0.1 A |
+| CMS capacitance | 2000µF → 1 µF (p.36/31) | UT217 manual p.84/73: 2.000mF → 0.001 mF |
+| CMS AC V 200.00V | resolution 0.01 V (p.35/30) | UT217 manual p.83/72: 0.01 mV |
+| CMS 2.0000MΩ accuracy | cell blank; the merged ±(0.3%+10) cell ends at 200.00kΩ (p.35/30-36/31) | UT217 manual p.84/73 merges ±(0.3%+10) across 2.0000kΩ-2.0000MΩ, which the spec table takes |
 
 The pages also say what the manuals do not: the B35 page lists a "Bluetooth
 2.0 version" beside the 4.0 one (spec §11); the B35, B41T and B33 pages give

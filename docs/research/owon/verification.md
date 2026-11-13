@@ -26,10 +26,10 @@ and each still wants a capture of our own.
   raw FFF4 notifications in DC V with the LCD noted — settles most items
   below at once. Needs any 6-byte model (a UT217A's covers the 15-byte
   frame, #45).
-- A first confirmed report per model — gates the spec tables (range,
-  resolution, accuracy), which wait for a first hardware capture; the
-  manuals and product pages disagree in places (approach doc, "Source
-  disagreements"). Needs each model.
+- A first confirmed report per model but the CMS061 — gates its spec
+  tables (range, resolution, accuracy); the manuals and product pages
+  disagree in places (approach doc, "Source disagreements"). Needs each
+  model.
 
 ## Bring-up
 
@@ -285,6 +285,9 @@ and each still wants a capture of our own.
 - The CMS's Hz/A sub-value with a current in the jaws: AC A read 0 in every
   frame so far (§9.4) — confirms its scale. Needs `aca_hz` clamped around a
   conductor carrying AC. (#45)
+- The point a CMS061 sends on its top current range and over 200 µF: 600A
+  and 2000µF by its manual, 600.0A and 2.000mF by UT217's — decides those
+  rows' keys (`owon/specs.rs`). Needs `dca` over 200 A, `cap` over 200 µF. (#45)
 - Bluetooth off and idle-off on each model (OW67B 5 min; the others not
   stated, §9.4) — decides whether a long session ends by itself. Needs a
   connected meter left idle.

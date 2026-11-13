@@ -5,5 +5,6 @@ mode: "AC V"
 value: "26.28"
 unit: "mV"
 range_label: ""
+resolution: "0.01mV"
 flags: {}
 aux: []

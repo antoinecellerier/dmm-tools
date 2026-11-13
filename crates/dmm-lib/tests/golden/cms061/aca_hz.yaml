@@ -5,6 +5,7 @@ mode: "Hz"
 value: "0"
 unit: "Hz"
 range_label: ""
+resolution: "0.01Hz"
 flags:
   auto_range: true
 aux:

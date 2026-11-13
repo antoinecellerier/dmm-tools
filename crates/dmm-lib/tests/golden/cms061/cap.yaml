@@ -5,6 +5,7 @@ mode: "Capacitance"
 value: "0.01"
 unit: "nF"
 range_label: ""
+resolution: "0.001nF"
 flags:
   auto_range: true
 aux: []

@@ -5,6 +5,7 @@ mode: "DC V"
 value: "28.6"
 unit: "V"
 range_label: ""
+resolution: "0.1V"
 flags:
   dc: true
 aux: []

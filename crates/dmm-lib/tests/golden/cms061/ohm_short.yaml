@@ -5,6 +5,7 @@ mode: "Ω"
 value: "0.09"
 unit: "Ω"
 range_label: ""
+resolution: "0.01Ω"
 flags:
   auto_range: true
 aux: []

@@ -5,6 +5,7 @@ mode: "DC V"
 value: "-39.18"
 unit: "V"
 range_label: ""
+resolution: "0.01V"
 flags:
   auto_range: true
   dc: true

@@ -5,5 +5,6 @@ mode: "Diode"
 value: "OL"
 unit: "V"
 range_label: ""
+resolution: "0.0001V"
 flags: {}
 aux: []
