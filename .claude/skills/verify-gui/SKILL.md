@@ -65,6 +65,10 @@ ${CLAUDE_SKILL_DIR}/scripts/gui-display.sh selftest
 - The zoom-in chord is `key ctrl+equal`, not `ctrl+plus`: xdotool's `plus` keysym needs Shift, and the app binds `Key::Equals` alongside `Plus`.
 - Ctrl+C, Ctrl+X and Ctrl+V (with or without Shift) become clipboard events in egui-winit before egui sees a key, so no app binding on them can fire — do not test one.
 
+## Measuring CPU cost
+
+- `run` draws with the software rasteriser (`LIBGL_ALWAYS_SOFTWARE=1`), so most of the process's CPU time is the `llvmpipe-N` threads painting each frame, about 30–50 ms a frame at the default window size whatever the app did. For the app's own cost, read the `dmm-gui` thread alone (`utime`+`stime` in `/proc/<pid>/task/*/stat`, pid in `$XDG_RUNTIME_DIR/verify-gui/gui.pid`) and count the frames drawn: one input draws several, a Ctrl+wheel step 20 to 30.
+
 ## Languages
 
 - `run` sets `LC_ALL=C`, so the app follows the system into English. To run in another language, set `"language": "<id>"` (e.g. `"fr"`, `"zh-CN"`) in the private `config/dmm-tools/settings.json` under the state directory before `run`, or pick it in the Settings **Language** row, which shows once the build has more than one language. Back that file up first and put it back after.
