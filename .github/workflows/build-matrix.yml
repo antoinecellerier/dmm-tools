@@ -84,7 +84,7 @@ jobs:
     name: Package docs
     runs-on: ubuntu-latest
     # A hung runner otherwise holds the job for GitHub's 6 h default; the
-    # slowest job so far took 13 min.
+    # slowest job so far took 15 min.
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
@@ -129,9 +129,7 @@ jobs:
     name: Build (${{ matrix.name }})
     needs: [targets, docs]
     runs-on: ${{ matrix.os }}
-    # Room for the published builds' whole-program optimisation, which the
-    # macOS job runs for two targets.
-    timeout-minutes: 60
+    timeout-minutes: 30
     env:
       ARCHIVE: ${{ inputs.archive-prefix }}-${{ matrix.slug }}
       # The second target's archive, when the entry has one.

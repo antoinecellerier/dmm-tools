@@ -67,7 +67,7 @@
 
 ### Internal
 
-- **dmm-gui and dmm-cli are smaller, by about a third on Linux** — a crash's backtrace now shows addresses in place of function names.
+- **dmm-gui and dmm-cli are smaller: a third on Linux and macOS, a tenth on Windows**
 
 ## v0.10.0 — Translations
 
