@@ -196,6 +196,17 @@ impl Default for SharedSettings {
     }
 }
 
+/// The folder [`set_config_dir`] named.
+static CONFIG_DIR: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
+
+/// Keep the settings file, and what lives beside it, in `dir`: for a
+/// platform that hands the application its folder instead of having a home
+/// directory to derive one from (Android). Call it before anything reads
+/// [`config_path`]; the first call stands.
+pub fn set_config_dir(dir: PathBuf) {
+    let _ = CONFIG_DIR.set(dir);
+}
+
 /// Return the canonical path to the shared settings file.
 ///
 /// On Windows, under `%APPDATA%` when it is set, as most Windows programs
@@ -205,7 +216,12 @@ impl Default for SharedSettings {
 ///
 /// `None` if the platform's config dir is unavailable (rare — weird embedded
 /// or sandboxed environments).
+///
+/// A folder given to [`set_config_dir`] comes before all of that.
 pub fn config_path() -> Option<PathBuf> {
+    if let Some(dir) = CONFIG_DIR.get() {
+        return Some(dir.join("settings.json"));
+    }
     if cfg!(windows)
         && let Some(appdata) = std::env::var_os("APPDATA").filter(|v| !v.is_empty())
     {

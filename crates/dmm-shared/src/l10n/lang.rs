@@ -160,8 +160,9 @@ fn traditional(tag: &str) -> bool {
 ///    `LANGUAGE` says — scripts and cron jobs set `LC_ALL=C` and expect
 ///    English (one that must get English whatever the setting says passes
 ///    `--lang en-US`), and Debian and Ubuntu desktops set `LANGUAGE`
-///    anyway. Where those variables are the system's language (Unix but macOS), all
-///    three unset is the C locale too, as gettext reads it;
+///    anyway. Where those variables are the system's language (Unix but macOS
+///    and Android, whose apps are started without them), all three unset is
+///    the C locale too, as gettext reads it;
 /// 4. `system`, the system's preferred languages in order
 ///    (`sys_locale::get_locales()`), skipping `C` and `POSIX`;
 /// 5. English.
@@ -175,7 +176,10 @@ pub fn resolve(
     var: impl Fn(&str) -> Option<String>,
     system: &[String],
 ) -> &'static Language {
-    let gettext = cfg!(all(unix, not(target_os = "macos")));
+    let gettext = cfg!(all(
+        unix,
+        not(any(target_os = "macos", target_os = "android"))
+    ));
     resolve_in(languages(), flag, setting, var, system, gettext)
 }
 
