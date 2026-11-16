@@ -10,7 +10,9 @@ use crate::transport::{BluetoothPeers, Transport, ble, bu86x, ch9325, ch9329, cp
 use crate::{BLUETOOTH, BLUETOOTH_SUPPORTED, DeviceInfo, OpenOptions};
 use log::info;
 use std::ffi::CString;
-use std::sync::{Mutex, MutexGuard, OnceLock, PoisonError};
+#[cfg(not(target_os = "android"))]
+use std::sync::OnceLock;
+use std::sync::{Mutex, MutexGuard, PoisonError};
 
 /// Descriptor for a known USB-HID transport bridge.
 pub(crate) struct KnownTransport {
@@ -219,9 +221,8 @@ pub(crate) fn open_links(
                 Ok(transport) => Ok(transport),
                 // Called off, nothing was found or missed: the caller asked.
                 Err(Error::Cancelled) => Err(Error::Cancelled),
-                // On Android there is no cable to have looked for, so what
-                // kept the radio from being searched is what the user acts
-                // on.
+                // On Android the radio is the link most meters are on, so
+                // what kept it from being searched is what the user acts on.
                 Err(stack @ Error::Bluetooth(_)) if cfg!(target_os = "android") => Err(stack),
                 Err(bluetooth_err) => {
                     // The USB error is what the user acts on: it lists the
@@ -306,11 +307,14 @@ fn open_hid_transport(
 static HID_BUS: Mutex<()> = Mutex::new(());
 
 /// Set once hidapi has been initialised on [`start_hid_home`]'s thread.
+#[cfg(not(target_os = "android"))]
 static HID_HOME: OnceLock<()> = OnceLock::new();
 
 /// Take the bus, initialising hidapi first if this is the first call.
 fn hid_bus() -> MutexGuard<'static, ()> {
     let bus = HID_BUS.lock().unwrap_or_else(PoisonError::into_inner);
+    // Android has no hidapi to initialise.
+    #[cfg(not(target_os = "android"))]
     HID_HOME.get_or_init(start_hid_home);
     bus
 }
@@ -323,6 +327,7 @@ fn hid_bus() -> MutexGuard<'static, ()> {
 /// a second connect would otherwise list on a dead first session's run loop.
 /// Should the thread or the init fail, the first listing initialises hidapi
 /// where it runs, as before.
+#[cfg(not(target_os = "android"))]
 fn start_hid_home() {
     let (ready_tx, ready_rx) = std::sync::mpsc::channel();
     let spawned = std::thread::Builder::new()

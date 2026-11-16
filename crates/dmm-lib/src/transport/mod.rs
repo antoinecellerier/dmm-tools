@@ -8,15 +8,18 @@ pub(crate) mod bu86x;
 pub(crate) mod ch9325;
 pub(crate) mod ch9329;
 pub(crate) mod cp2110;
-/// hidapi, or on Android, where it does not build, a bus with nothing on it.
-/// Same module path either way, so the bridges and `open` need no `cfg`.
+/// hidapi, or on Android, where it does not build, the same calls on the
+/// cables the application's `UsbManager` opens. Same module path either way,
+/// so the bridges and `open` need no `cfg`.
 #[cfg(not(target_os = "android"))]
 pub(crate) mod hid {
     pub(crate) use hidapi::{DeviceInfo, HidApi, HidDevice, HidError, MAX_REPORT_DESCRIPTOR_SIZE};
 }
 #[cfg(target_os = "android")]
-#[path = "hid_absent.rs"]
+#[path = "hid_android.rs"]
 pub(crate) mod hid;
+#[cfg(any(target_os = "android", test))]
+mod hid_wire;
 pub(crate) mod open;
 
 use crate::error::Result;

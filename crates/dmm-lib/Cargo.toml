@@ -23,10 +23,14 @@ windows = { version = "0.62", features = ["Devices_Bluetooth", "Foundation"], op
 [target.'cfg(target_os = "linux")'.dependencies]
 hidapi = { version = "2.6", features = ["linux-static-hidraw"] }
 
-# Not on Android, where hidapi does not build: transport/hid_absent.rs
-# stands in for it.
+# Not on Android, where hidapi does not build.
 [target.'cfg(not(any(target_os = "linux", target_os = "android")))'.dependencies]
 hidapi = { version = "2.6" }
+
+# Android only: the cable Android's UsbManager opened, driven through usbfs
+# (transport/hid_android.rs stands in for hidapi on it).
+[target.'cfg(target_os = "android")'.dependencies]
+nusb = "0.2"
 
 [features]
 default = ["bluetooth"]

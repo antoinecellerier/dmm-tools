@@ -11,10 +11,10 @@ ones to its left. `dmm-android`, an experimental Android build, wraps `dmm-gui` 
 
 **`dmm-lib`** talks to meters. It owns the transports, the protocol families, the device registry,
 detection, the acquisition loop and the session clock. It has no UI code and no opinion about
-config files or export names. It stays self-contained: only `hidapi` (left out on Android, where it
-does not build), `thiserror`, `log`, and, behind the `bluetooth` feature, `btleplug` with the `tokio`
-and `futures` its API needs, plus on Windows the `windows` crate for the one WinRT call btleplug
-cannot make. No external utility crates.
+config files or export names. It stays self-contained: only `hidapi` (on Android, where it
+does not build, `nusb` in its place), `thiserror`, `log`, and, behind the `bluetooth` feature,
+`btleplug` with the `tokio` and `futures` its API needs, plus on Windows the `windows` crate for the
+one WinRT call btleplug cannot make. No external utility crates.
 Protocol internals are `pub(crate)`: consumers use `Dmm`, the registry and the shared command names.
 
 **`dmm-shared`** holds what the two binaries must agree on and `dmm-lib` must not carry: the
@@ -374,7 +374,8 @@ Protocol families are in [protocol.md](protocol.md); each family's internals are
 | `transport/ble/{issc,fff0,eevblog121gw,brymen,owon}.rs` | One GATT profile each |
 | `transport/ble/winrt.rs` | The one WinRT connection-parameter call btleplug cannot keep |
 | `transport/ble_disabled.rs` | Stand-in when the `bluetooth` feature is off |
-| `transport/hid_absent.rs` | Stand-in for hidapi on Android: a bus with no cable on it |
+| `transport/hid_android.rs` | Stand-in for hidapi on Android: the cables the application's `UsbManager` opens, over `nusb` |
+| `transport/hid_wire.rs` | How a HID report in hidapi's form goes over plain USB transfers |
 | `protocol/mod.rs` | `Protocol`, `Delivery`, `DeviceProfile`, `Setting`/`Choice`, `MeterKeys`, `Fingerprint` |
 | `protocol/registry.rs` | `SelectableDevice`, `DEVICES`, device lookup |
 | `protocol/<family>/` | One family each: see [protocol.md](protocol.md) and its `mod.rs` |
