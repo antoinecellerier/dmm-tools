@@ -10,8 +10,8 @@
 //! (`protocol::bm86x`).
 
 use crate::error::{Error, Result, Unsupported};
+use crate::transport::hid::{self, HidDevice};
 use crate::transport::{Link, Transport, open};
-use hidapi::HidDevice;
 use log::{debug, trace};
 
 /// Brymen's cable VID, as Brymen's programs match it (spec §2; the sheets
@@ -89,7 +89,7 @@ impl Bu86x {
         }
         // The report descriptor is in no source (spec §2): trace it, so a
         // first report carries it.
-        let mut descriptor = [0u8; hidapi::MAX_REPORT_DESCRIPTOR_SIZE];
+        let mut descriptor = [0u8; hid::MAX_REPORT_DESCRIPTOR_SIZE];
         match cable.device.get_report_descriptor(&mut descriptor) {
             Ok(n) => trace!("{NAME} report descriptor: {:02X?}", &descriptor[..n]),
             Err(e) => debug!("{NAME}: no report descriptor ({e})"),

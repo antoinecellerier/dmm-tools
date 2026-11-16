@@ -1,3 +1,4 @@
+use crate::transport::hid::HidError;
 use crate::transport::open::KNOWN_TRANSPORTS;
 use thiserror::Error;
 
@@ -11,7 +12,7 @@ pub use wrong_meter::{FrameRemedy, Unread, WrongMeter};
 #[derive(Debug, Error)]
 pub enum Error {
     #[error("HID error: {0}")]
-    Hid(#[from] hidapi::HidError),
+    Hid(#[from] HidError),
 
     #[error("invalid response: {message}")]
     InvalidResponse {
@@ -252,7 +253,7 @@ impl Error {
     /// does, for code that has to go by the variant rather than the message.
     #[cfg(any(test, feature = "test-support"))]
     pub fn cable_pulled() -> Self {
-        Self::Hid(hidapi::HidError::HidApiError {
+        Self::Hid(HidError::HidApiError {
             message: "hid_read_timeout: unexpected poll error (device disconnected)".to_string(),
         })
     }
@@ -260,7 +261,7 @@ impl Error {
     /// What a HID read returns when a signal cuts it short, for tests.
     #[cfg(any(test, feature = "test-support"))]
     pub fn interrupted() -> Self {
-        Self::Hid(hidapi::HidError::IoError {
+        Self::Hid(HidError::IoError {
             error: std::io::Error::from(std::io::ErrorKind::Interrupted),
         })
     }
@@ -269,8 +270,8 @@ impl Error {
     /// which typically means a signal (e.g. Ctrl-C) arrived mid-read.
     pub fn is_interrupted(&self) -> bool {
         match self {
-            Self::Hid(hidapi::HidError::HidApiError { message }) => message.contains("Interrupted"),
-            Self::Hid(hidapi::HidError::IoError { error }) => {
+            Self::Hid(HidError::HidApiError { message }) => message.contains("Interrupted"),
+            Self::Hid(HidError::IoError { error }) => {
                 error.kind() == std::io::ErrorKind::Interrupted
             }
             _ => false,

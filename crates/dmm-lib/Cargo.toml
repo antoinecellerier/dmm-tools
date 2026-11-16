@@ -23,7 +23,9 @@ windows = { version = "0.62", features = ["Devices_Bluetooth", "Foundation"], op
 [target.'cfg(target_os = "linux")'.dependencies]
 hidapi = { version = "2.6", features = ["linux-static-hidraw"] }
 
-[target.'cfg(not(target_os = "linux"))'.dependencies]
+# Not on Android, where hidapi does not build: transport/hid_absent.rs
+# stands in for it.
+[target.'cfg(not(any(target_os = "linux", target_os = "android")))'.dependencies]
 hidapi = { version = "2.6" }
 
 [features]

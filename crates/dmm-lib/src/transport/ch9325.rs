@@ -15,8 +15,8 @@
 //! Reference: docs/research/uci-bench-family/reverse-engineered-protocol.md §4
 
 use crate::error::{Error, Result};
+use crate::transport::hid::HidDevice;
 use crate::transport::{Link, Transport, open};
-use hidapi::HidDevice;
 use log::{debug, trace, warn};
 use std::cell::Cell;
 

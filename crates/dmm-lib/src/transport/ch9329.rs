@@ -1,6 +1,6 @@
 use crate::error::{Error, Result};
+use crate::transport::hid::HidDevice;
 use crate::transport::{Link, Transport, open};
-use hidapi::HidDevice;
 use log::{debug, trace};
 
 /// WCH CH9329 VID.

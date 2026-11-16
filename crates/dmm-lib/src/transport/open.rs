@@ -6,7 +6,7 @@
 
 use crate::error::{BluetoothOnlyMiss, Error, Result};
 use crate::protocol::registry::{self, SelectableDevice};
-use crate::transport::{BluetoothPeers, Transport, ble, bu86x, ch9325, ch9329, cp2110};
+use crate::transport::{BluetoothPeers, Transport, ble, bu86x, ch9325, ch9329, cp2110, hid};
 use crate::{BLUETOOTH, BLUETOOTH_SUPPORTED, DeviceInfo, OpenOptions};
 use log::info;
 use std::ffi::CString;
@@ -24,12 +24,12 @@ pub(crate) struct KnownTransport {
     /// not, and is opened only for a meter that lists it or for `auto`.
     pub(crate) relays_uart: bool,
     /// Open the HID device, initialise the bridge, return a boxed Transport.
-    init: fn(hidapi::HidDevice) -> Result<Box<dyn Transport>>,
+    init: fn(hid::HidDevice) -> Result<Box<dyn Transport>>,
 }
 
 impl KnownTransport {
     /// Whether the HID device `dev` is this bridge, by VID and PID.
-    fn matches(&self, dev: &hidapi::DeviceInfo) -> bool {
+    fn matches(&self, dev: &hid::DeviceInfo) -> bool {
         dev.vendor_id() == self.vid && dev.product_id() == self.pid
     }
 }
@@ -275,7 +275,7 @@ fn open_hid_transport(
 ) -> Result<Box<dyn Transport>> {
     let (device, kt) = {
         let _bus = hid_bus();
-        let api = hidapi::HidApi::new().map_err(Error::Hid)?;
+        let api = hid::HidApi::new().map_err(Error::Hid)?;
         match adapter {
             Some(adapter) => open_with_adapter(&api, adapter),
             None => open_first_match(&api, preferred),
@@ -324,7 +324,7 @@ fn start_hid_home() {
     let spawned = std::thread::Builder::new()
         .name("hidapi".to_string())
         .spawn(move || {
-            let _ = ready_tx.send(hidapi::HidApi::new().is_ok());
+            let _ = ready_tx.send(hid::HidApi::new().is_ok());
             loop {
                 std::thread::park();
             }
@@ -336,7 +336,7 @@ fn start_hid_home() {
 
 /// The serial number of a cable just opened, for
 /// [`Transport::cable_serial`].
-pub(crate) fn cable_serial(device: &hidapi::HidDevice) -> Option<String> {
+pub(crate) fn cable_serial(device: &hid::HidDevice) -> Option<String> {
     device
         .get_serial_number_string()
         .ok()
@@ -357,9 +357,9 @@ fn can_pin(serial: &str) -> bool {
 /// formats vary across platforms (Linux `/dev/hidrawN`, Windows `\\?\HID#...`,
 /// macOS `IOService:...`).
 fn open_with_adapter(
-    api: &hidapi::HidApi,
+    api: &hid::HidApi,
     adapter: &str,
-) -> Result<(hidapi::HidDevice, &'static KnownTransport)> {
+) -> Result<(hid::HidDevice, &'static KnownTransport)> {
     // Try serial number first — fast, no enumeration needed.
     for kt in KNOWN_TRANSPORTS {
         if let Ok(device) = api.open_serial(kt.vid, kt.pid, adapter) {
@@ -391,9 +391,9 @@ fn open_with_adapter(
 /// first — the ones the selected family ships with, or nothing at all when no
 /// family has been selected. Warns if multiple adapters are found.
 fn open_first_match(
-    api: &hidapi::HidApi,
+    api: &hid::HidApi,
     preferred: &[&'static str],
-) -> Result<(hidapi::HidDevice, &'static KnownTransport)> {
+) -> Result<(hid::HidDevice, &'static KnownTransport)> {
     let candidates = usb_candidates(KNOWN_TRANSPORTS, preferred);
     // By path: hidapi lists a record per usage pair, so one cable can list
     // several times.
@@ -428,7 +428,7 @@ fn open_first_match(
 /// The connected USB adapters, for [`crate::list_devices`].
 pub(crate) fn list_usb() -> Result<Vec<DeviceInfo>> {
     let _bus = hid_bus();
-    let api = hidapi::HidApi::new().map_err(Error::Hid)?;
+    let api = hid::HidApi::new().map_err(Error::Hid)?;
     let mut devices = Vec::new();
 
     for dev in api.device_list() {
