@@ -6,7 +6,8 @@ edge cases and constants live in their doc comments.
 ## Overview
 
 The layering is `dmm-lib` ← `dmm-shared` ← `dmm-cli`, `dmm-gui`: each crate depends only on the
-ones to its left.
+ones to its left. `dmm-android`, an experimental Android build, wraps `dmm-gui` as a shared library
+(`docs/development.md`, "Building for Android").
 
 **`dmm-lib`** talks to meters. It owns the transports, the protocol families, the device registry,
 detection, the acquisition loop and the session clock. It has no UI code and no opinion about

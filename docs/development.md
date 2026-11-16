@@ -314,6 +314,36 @@ keyboard or click tests never touch your live desktop session or your
 The subcommands and what each one waits for are in the `verify-gui` skill
 (`.claude/skills/verify-gui/SKILL.md`). Always finish with `stop`.
 
+## Building for Android (experimental)
+
+An experimental build of `dmm-gui` runs on Android over Bluetooth only;
+[`docs/research/android-port.md`](research/android-port.md) has the
+reasoning and what a phone has shown so far. `crates/dmm-android` is the
+shared library, empty on every other target, and `android/` the Gradle
+project that packages it with btleplug's Java classes and two small
+activities. `scripts/android-build.sh` builds the debug APK for arm64, and
+with `--install` puts it on the phone `adb` sees. It names what is missing
+of:
+
+| Needed | From |
+|---|---|
+| rustup with the `aarch64-linux-android` target | [rustup.rs](https://rustup.rs), installed without changing `PATH`; a distribution's `rustc` has no Android target |
+| `cargo-ndk` | `cargo install cargo-ndk` |
+| Android SDK platform 34, build-tools 34.0.0 and an NDK | `sdkmanager`, from Google's command-line tools, into `~/Android/Sdk` |
+| JDK 17 | the distribution |
+
+The script takes rustup's `cargo` from `~/.cargo/bin` for itself alone, so
+the desktop builds keep the system's toolchain. Where that is a
+distribution's `cargo`, delete the `cargo-fmt`, `cargo-clippy` and
+`cargo-miri` links rustup puts in `~/.cargo/bin`: cargo looks there for a
+subcommand before `PATH`, and `cargo fmt` would end in a rustup error. No CI job builds the APK,
+and the pre-commit hook does not compile the Android-only code: after
+touching anything under `cfg(target_os = "android")`, run the script.
+
+On the phone, `adb shell setprop debug.dmm.mock 1` opens the simulated
+meter on the next launch, `adb shell setprop debug.dmm.log dmm_lib=debug`
+takes what `RUST_LOG` takes, and `adb logcat -s dmm` shows the log.
+
 ## Translations
 
 The apps' words live in Fluent files under `i18n/<locale>/`, with `en-US`

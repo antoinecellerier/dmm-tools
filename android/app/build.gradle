@@ -1,0 +1,64 @@
+plugins {
+    id 'com.android.application'
+}
+
+// btleplug's Java half, taken from the crate version Cargo.lock holds so the
+// classes always match the Rust that calls them. Nothing of it is copied or
+// built into the repository.
+def btleplugJava = {
+    def metadata = providers.exec {
+        workingDir rootDir.parentFile
+        commandLine 'cargo', 'metadata', '--format-version', '1', '--locked'
+    }.standardOutput.asText.get()
+    def crate = new groovy.json.JsonSlurper().parseText(metadata).packages.find { it.name == 'btleplug' }
+    if (crate == null) {
+        throw new GradleException('btleplug is not in the cargo workspace')
+    }
+    new File(new File(crate.manifest_path).parentFile, 'src/droidplug/java/src/main/java')
+}()
+
+// The launcher icon is the desktop one, copied in at build time rather than
+// kept twice in the repository: as the icon itself for Android 7, and as the
+// drawing res/mipmap-anydpi-v26/ic_launcher.xml places on its background.
+def iconRes = new File(buildDir, 'generated/icon-res')
+def copyIcon = tasks.register('copyIcon', Copy) {
+    def icon = new File(rootDir.parentFile, 'assets/icon-256.png')
+    into new File(iconRes, 'mipmap')
+    from(icon) { rename { 'ic_launcher.png' } }
+    from(icon) { rename { 'ic_launcher_art.png' } }
+}
+tasks.named('preBuild') { dependsOn copyIcon }
+
+android {
+    namespace 'io.github.antoinecellerier.dmmtools'
+    compileSdk 34
+    // The NDK the Rust half is linked with, which also strips the library:
+    // the version scripts/android-build.sh names.
+    ndkVersion '27.2.12479018'
+
+    defaultConfig {
+        applicationId 'io.github.antoinecellerier.dmmtools'
+        // btleplug's Android backend needs API 24.
+        minSdk 24
+        // Not 35: it draws under the system bars, which egui does not
+        // account for on Android (egui issue 7748).
+        targetSdk 34
+        versionCode 1
+        versionName 'experimental'
+        ndk {
+            abiFilters 'arm64-v8a'
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_11
+        targetCompatibility JavaVersion.VERSION_11
+    }
+
+    sourceSets {
+        main {
+            java.srcDirs += btleplugJava
+            res.srcDirs += iconRes
+        }
+    }
+}

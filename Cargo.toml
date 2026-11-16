@@ -4,6 +4,7 @@ members = [
     "crates/dmm-shared",
     "crates/dmm-cli",
     "crates/dmm-gui",
+    "crates/dmm-android",
 ]
 resolver = "2"
 

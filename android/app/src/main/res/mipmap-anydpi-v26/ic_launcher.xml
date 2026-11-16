@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android 8 and later: the launcher cuts its own shape out of a full
+     background, so the icon fills it. A plain picture is shrunk onto a white
+     tile instead. The inset keeps the drawing inside the part every shape
+     shows. -->
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+    <background android:drawable="@color/ic_launcher_background" />
+    <foreground>
+        <inset
+            android:drawable="@mipmap/ic_launcher_art"
+            android:inset="16%" />
+    </foreground>
+</adaptive-icon>
