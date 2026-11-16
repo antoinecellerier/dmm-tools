@@ -261,11 +261,49 @@ pub(super) fn height_tags(
     Some((left, right))
 }
 
+/// How far above a finger a readout of the point under it ends, in points:
+/// the fingertip and the hand below it cover what a mouse pointer leaves in
+/// view.
+const FINGER_CLEARANCE: f32 = 48.0;
+
+/// Where a readout for the point at `at` is anchored and which way it grows:
+/// beside a mouse pointer and downwards; for a finger, above it, clear of
+/// the hand. `top` is as high as the anchor may go.
+pub(super) fn readout_anchor(
+    ctx: &egui::Context,
+    at: egui::Pos2,
+    top: f32,
+) -> (egui::Pos2, [egui::RectAlign; 4]) {
+    if ctx.input(|i| i.any_touches()) {
+        let y = (at.y - FINGER_CLEARANCE).max(top);
+        (
+            egui::pos2(at.x, y),
+            [
+                egui::RectAlign::RIGHT_END,
+                egui::RectAlign::LEFT_END,
+                egui::RectAlign::RIGHT_START,
+                egui::RectAlign::LEFT_START,
+            ],
+        )
+    } else {
+        (
+            at,
+            [
+                egui::RectAlign::RIGHT_START,
+                egui::RectAlign::LEFT_START,
+                egui::RectAlign::RIGHT_END,
+                egui::RectAlign::LEFT_END,
+            ],
+        )
+    }
+}
+
 /// Show the hover readout beside the vertical crosshair at `at` (its x, the
 /// pointer's height): the time, then a row per series in its line's colour
 /// where that reads as text on the tooltip, as the axes do. To the line's
 /// right, or its left where there is no room, never over it: the dots on
-/// the line are what tie each row to its trace.
+/// the line are what tie each row to its trace. Under a finger it sits
+/// above the touch ([`readout_anchor`]).
 pub(super) fn show_hover_readout(
     plot: &egui::Response,
     at: egui::Pos2,
@@ -273,24 +311,19 @@ pub(super) fn show_hover_readout(
     series: &[HoverSeries],
     lines: &[HoverRow],
 ) {
-    const SIDES: [egui::RectAlign; 4] = [
-        egui::RectAlign::RIGHT_START,
-        egui::RectAlign::LEFT_START,
-        egui::RectAlign::RIGHT_END,
-        egui::RectAlign::LEFT_END,
-    ];
+    let (anchor, sides) = readout_anchor(&plot.ctx, at, plot.rect.top());
     let mut tooltip = egui::Tooltip::always_open(
         plot.ctx.clone(),
         plot.layer_id,
         plot.id,
-        egui::PopupAnchor::Position(at),
+        egui::PopupAnchor::Position(anchor),
     );
     let width = plot.ctx.global_style().spacing.tooltip_width;
     tooltip.popup = tooltip
         .popup
         .width(width)
-        .align(SIDES[0])
-        .align_alternatives(&SIDES);
+        .align(sides[0])
+        .align_alternatives(&sides);
     tooltip.gap(12.0).show(|ui| {
         ui.set_max_width(width);
         ui.label(time_label);

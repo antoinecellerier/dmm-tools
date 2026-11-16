@@ -12,6 +12,7 @@
 - **Statistics is one table shaped to the panel, the cursors' figures included** — a narrow window put the session's ∫ after the visible window's line.
 - **The Specifications panel covers the OWON CMS061 and CMS101** — the UNI-T UT217A and UT217B too.
 - **The ⊞ button steps through big meter and minimal mode** — minimal mode needed `Ctrl+B`.
+- **Graph and histogram readouts work under a finger** — the histogram showed none, and the hand covered the graph's.
 - **Ref, Alarm, Scale and Y-range fields underline values they won't use** — the hover says why.
 - **Failure notices name the meter picked in Settings and point to Auto-detect** — "No USB cable found" after a meter swap sent you to drivers.
 - **"No USB cable found" says when Bluetooth wasn't searched** — and how to switch the search on.

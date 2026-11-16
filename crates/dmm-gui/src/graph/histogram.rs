@@ -659,9 +659,34 @@ impl Pane<'_> {
             unit,
             ..
         } = self;
-        let response = ui.interact(rect, ui.scope_id().with("histogram"), Sense::hover());
-        let bin = response.hover_pos().and_then(bin_at)?;
-        response.on_hover_text_at_pointer(hist.hover_text(l10n, bin, unit));
+        // A click sense, though no click does anything: a finger has no
+        // hover, and while it is down only the widget it pressed is given
+        // the pointer. Not `Sense::click()`, which would also make a Tab
+        // stop of a widget with nothing to activate.
+        let response = ui.interact(rect, ui.scope_id().with("histogram"), Sense::CLICK);
+        let touch = ui.input(|i| i.any_touches());
+        let pos = response
+            .hover_pos()
+            .or_else(|| response.interact_pointer_pos().filter(|_| touch))?;
+        let bin = bin_at(pos)?;
+        let text = hist.hover_text(l10n, bin, unit);
+        if touch {
+            // egui shows no hover text under a finger that is down; ours
+            // goes above it, as the graph's readout does.
+            let (anchor, sides) = super::hover::readout_anchor(ui.ctx(), pos, rect.top());
+            let mut tooltip = egui::Tooltip::always_open(
+                ui.ctx().clone(),
+                response.layer_id,
+                response.id,
+                egui::PopupAnchor::Position(anchor),
+            );
+            tooltip.popup = tooltip.popup.align(sides[0]).align_alternatives(&sides);
+            tooltip.gap(12.0).show(|ui| {
+                ui.label(text);
+            });
+        } else {
+            response.on_hover_text_at_pointer(text);
+        }
         Some(bin)
     }
 
