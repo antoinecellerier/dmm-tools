@@ -88,6 +88,8 @@ Subsystem-specific rules live in path-scoped rule files that load when their fil
 
 Documentation is part of the deliverable — update affected docs in the same commit as the change, not after.
 
+Before committing a doc change, read the rule file that covers the doc (listed under Engineering standards) and re-read the whole changed section. A rule file loads when the doc is read or edited with the file tools, so a doc changed by a script reaches the commit without it.
+
 - `docs/architecture.md` — crate layering, core concepts, the connect and reading paths, subsystems, design decisions by label, module map.
 - `docs/protocol.md` — index of per-family specs. Authoritative content lives in `docs/research/<family>/reverse-engineered-protocol.md`.
 - `docs/setup.md`, `docs/development.md`, `docs/cli-reference.md`, `docs/gui-reference.md` — user and contributor references; update when their subject changes. `docs/ux-design.md` holds the design principles and the reasons behind UX decisions.

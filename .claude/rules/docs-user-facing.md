@@ -86,5 +86,9 @@ without being listed.
   the neighbours do not grow to match.
 - Read the section as the user would and stop at the first sentence that
   explains instead of describes. That sentence goes, or moves to a design doc.
+- Judge the section against the last pushed version
+  (`git diff origin/main -- <file>`), not this commit's diff: a feature built
+  over several commits adds a clause in each. Rewrite the paragraph whole
+  instead of appending to it.
 - After a subagent edits a reference, apply both checks to the diff before
   integrating it.
