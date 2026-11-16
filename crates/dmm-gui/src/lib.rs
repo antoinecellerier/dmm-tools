@@ -248,6 +248,9 @@ pub(crate) struct CliOverrides {
     /// `--update-notice`: the release the top bar links to, in place of
     /// asking GitHub.
     pub(crate) update_notice: Option<app::update_check::Tag>,
+    /// The radius of the screen's rounded corners in pixels, where the
+    /// window fills such a screen (a phone); 0 for a window on a desktop.
+    pub(crate) screen_corner_px: f32,
 }
 
 #[cfg(any(test, target_os = "android"))]
@@ -268,6 +271,7 @@ impl CliOverrides {
             replay: None,
             import: None,
             update_notice: None,
+            screen_corner_px: 0.0,
         }
     }
 }
@@ -513,6 +517,7 @@ fn parse_args(l: &Localizer, saved: &dmm_shared::SharedSettings) -> CliOverrides
         replay,
         import: args.import,
         update_notice: args.update_notice,
+        screen_corner_px: 0.0,
     }
 }
 
@@ -662,6 +667,9 @@ pub struct AndroidStart {
     /// What Import… asks for its file: the system's picker, which only the
     /// activity's Java side can show.
     pub pick_file: Option<FilePicker>,
+    /// The radius of the screen's rounded corners in pixels, 0 for square
+    /// ones: the window is kept clear of them.
+    pub screen_corner_px: f32,
 }
 
 /// Where exports go on Android, which has no save dialog here: a
@@ -704,6 +712,7 @@ pub fn run_android(app: AndroidApp, start: AndroidStart) -> eframe::Result<()> {
     let overrides = CliOverrides {
         device: start.mock.then(|| "mock".to_string()),
         no_bluetooth: !start.bluetooth,
+        screen_corner_px: start.screen_corner_px,
         ..CliOverrides::none()
     };
     let options = eframe::NativeOptions {

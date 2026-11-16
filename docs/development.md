@@ -343,6 +343,8 @@ touching anything under `cfg(target_os = "android")`, run the script.
 On the phone, `adb shell setprop debug.dmm.mock 1` opens the simulated
 meter on the next launch, `adb shell setprop debug.dmm.log dmm_lib=debug`
 takes what `RUST_LOG` takes, and `adb logcat -s dmm` shows the log.
+`debug.dmm.corner_px` gives the radius of the screen's rounded corners, in
+pixels, on a phone whose system reports none.
 
 ## Translations
 

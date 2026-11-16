@@ -8,6 +8,8 @@ import android.net.Uri;
 import android.os.Build;
 import android.provider.DocumentsContract;
 import android.provider.OpenableColumns;
+import android.view.Display;
+import android.view.RoundedCorner;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
@@ -59,6 +61,33 @@ public class MainActivity extends NativeActivity {
         } catch (IOException e) {
             return null;
         }
+    }
+
+    /**
+     * The radius of the screen's rounded corners in pixels, 0 for square
+     * ones, for the native side to keep its drawing clear of them: full
+     * screen, the window reaches into the corners.
+     */
+    public int screenCornerRadius() {
+        int radius = 0;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            Display display = getDisplay();
+            for (int position = 0; display != null && position < 4; position++) {
+                RoundedCorner corner = display.getRoundedCorner(position);
+                if (corner != null) {
+                    radius = Math.max(radius, corner.getRadius());
+                }
+            }
+        }
+        if (radius == 0) {
+            // Before Android 12, and where a device's corners are only in
+            // its system resources.
+            int id = getResources().getIdentifier("rounded_corner_radius", "dimen", "android");
+            if (id != 0) {
+                radius = getResources().getDimensionPixelSize(id);
+            }
+        }
+        return radius;
     }
 
     @Override

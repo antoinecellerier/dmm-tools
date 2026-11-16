@@ -547,6 +547,9 @@ pub struct App {
     stats_widths: stats_panel::StatsWidths,
     /// Transient big meter mode (not persisted to settings).
     big_meter_mode: BigMeterMode,
+    /// The radius of the screen's rounded corners in pixels, when the window
+    /// fills such a screen; 0 otherwise. See [`App::corner_insets`].
+    screen_corner_px: f32,
     shortcut_help: ShortcutHelp,
     whats_new: WhatsNew,
     /// Whether a newer release is out; off unless [`App::new`] turns it on.
@@ -625,7 +628,19 @@ impl App {
         let mut app = Self::from_settings(settings, cli.clock);
         app.source.replay = cli.replay;
         app.source.cli_import = cli.import;
+        app.screen_corner_px = cli.screen_corner_px;
         app
+    }
+
+    /// The margin, in points, that keeps the window's content out of the
+    /// screen's rounded corners: the same on every side, so it holds
+    /// whichever way the screen is turned. A corner of radius r hides
+    /// nothing further than r·(1 − 1/√2) in from both of its edges.
+    fn corner_insets(&self, pixels_per_point: f32) -> Option<egui::SafeAreaInsets> {
+        (self.screen_corner_px > 0.0 && pixels_per_point > 0.0).then(|| {
+            let inset = self.screen_corner_px * (1.0 - std::f32::consts::FRAC_1_SQRT_2);
+            egui::SafeAreaInsets(egui::epaint::MarginF32::same(inset / pixels_per_point))
+        })
     }
 
     /// The app state for `settings` on `clock`, before any frame. Separate
@@ -674,6 +689,7 @@ impl App {
             meter_fit: MeterFit::new(),
             stats_widths: stats_panel::StatsWidths::default(),
             big_meter_mode: BigMeterMode::Off,
+            screen_corner_px: 0.0,
             shortcut_help: ShortcutHelp::default(),
             whats_new: WhatsNew::default(),
             update_check: update_check::UpdateCheck::default(),
@@ -1169,14 +1185,36 @@ impl App {
 }
 
 impl eframe::App for App {
+    fn raw_input_hook(&mut self, ctx: &egui::Context, raw_input: &mut egui::RawInput) {
+        // Every frame: egui keeps the insets it was last given, and the
+        // zoom changes how many points the corner takes.
+        if let Some(insets) = self.corner_insets(ctx.pixels_per_point()) {
+            raw_input.safe_area_insets = Some(insets);
+        }
+    }
+
     fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.hold_close(ctx);
         self.logic_pass();
     }
 
-    fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+    fn ui(&mut self, root: &mut egui::Ui, _frame: &mut eframe::Frame) {
         self.ui_ran = true;
-        let ctx = ui.ctx().clone();
+        let ctx = root.ctx().clone();
+        // egui's root ui spans the whole window, safe-area insets or not,
+        // and the panels fill the ui they are shown in: with insets
+        // (`raw_input_hook`) they go in a child laid over what is left.
+        let content = ctx.content_rect();
+        let mut inset;
+        let ui = if content == root.max_rect() {
+            root
+        } else {
+            // The margin in the panels' own colour, not the window's.
+            let fill = root.visuals().panel_fill;
+            root.painter().rect_filled(root.max_rect(), 0.0, fill);
+            inset = root.new_child(egui::UiBuilder::new().max_rect(content));
+            &mut inset
+        };
         // Deferred focus restoration after the shortcut help modal closes.
         // We only run this once `top_modal_layer` has actually cleared —
         // otherwise egui's `create_widget` would `surrender_focus` the
@@ -1353,6 +1391,25 @@ mod tests {
     use super::*;
     use crate::app::test_support::{a11y, click_frames, headless_frame, node_rect, to_rect};
     use egui::accesskit::{Node, NodeId};
+
+    /// A corner hides nothing further in than r·(1 − 1/√2) from both edges,
+    /// and the margin is in points, so a denser screen takes fewer.
+    #[test]
+    fn a_rounded_screen_insets_every_side_alike() {
+        let mut app = App::from_cli(
+            Settings::default(),
+            crate::CliOverrides {
+                screen_corner_px: 100.0,
+                ..crate::CliOverrides::none()
+            },
+        );
+        let egui::SafeAreaInsets(margin) = app.corner_insets(2.0).expect("a rounded screen");
+        for side in [margin.left, margin.right, margin.top, margin.bottom] {
+            assert!((side - 14.645).abs() < 0.01, "{side}");
+        }
+        app.screen_corner_px = 0.0;
+        assert_eq!(app.corner_insets(2.0), None);
+    }
 
     fn app(device: &str, mock_mode: &str) -> App {
         let mut settings = Settings::default();
