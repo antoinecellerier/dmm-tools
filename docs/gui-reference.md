@@ -98,8 +98,8 @@ The top bar contains:
 - **?** button — opens the [keyboard shortcuts](#keyboard-shortcuts) help
 - **Settings gear** — opens the settings panel
 
-Toast notifications (e.g. CSV export success/failure) appear in the
-top-right corner in every layout and expire on their own.
+Toast notifications (e.g. CSV export success/failure) stack in the top-right
+corner in every layout and expire on their own.
 
 ## Reading Display
 

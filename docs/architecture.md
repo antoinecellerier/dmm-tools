@@ -441,7 +441,7 @@ Protocol families are in [protocol.md](protocol.md); each family's internals are
 | `app/plot_input.rs` | What the graph plots from one reading |
 | `app/held_reading.rs` | Keeping a split reading whole on screen |
 | `app/top_bar.rs` | The top bar |
-| `app/toast.rs` | The status toast |
+| `app/toast.rs` | The status toasts and their stack |
 | `app/controls/` | The settings panel and its rows, the Device list, the colour rows with Save as theme, and the remote-command buttons |
 | `app/layout.rs` | The reading column and the big meter toggle |
 | `app/meter_fit.rs` | Big-meter sizing arithmetic |

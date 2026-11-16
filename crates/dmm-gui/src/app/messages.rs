@@ -198,8 +198,6 @@ struct Detected {
     device: &'static registry::SelectableDevice,
     /// Whether it became the saved device.
     saved: bool,
-    /// Whether the saved device was an id no entry answers to.
-    replacing_unknown: bool,
 }
 
 impl App {
@@ -221,10 +219,6 @@ impl App {
             return None;
         }
         let device = detected_under_auto(self.connection.detecting, device_id)?;
-        // An id no entry answers to, `auto` aside, which the caution at the
-        // first Connect said is being detected over.
-        let replacing_unknown =
-            registry::resolve_selection(&self.settings.shared.device_family).is_none();
         let to_save = detected_device_to_save(
             &self.settings.shared.device_family,
             self.connection.detecting,
@@ -238,7 +232,6 @@ impl App {
         Some(Detected {
             device,
             saved: to_save.is_some(),
-            replacing_unknown,
         })
     }
 
@@ -253,25 +246,8 @@ impl App {
         let Some(detected) = self.save_detected_device(device_id, new_meter) else {
             return;
         };
-        // Good news never covers a failure still on screen: the notice that
-        // the settings file could not be read goes up as the auto-connect
-        // starts, and detection answers a moment later.
-        if self
-            .toasts
-            .latest()
-            .is_some_and(|t| t.is_error() && !t.expired())
-        {
-            return;
-        }
         let news = detected_toast(&self.l10n, detected.device, reported, detected.saved);
-        // The caution that the settings file named a device nothing answers
-        // to leads, and the news of the meter found in its place joins it.
-        self.toasts.push(match self.toasts.latest() {
-            Some(toast) if detected.replacing_unknown && toast.is_caution() && !toast.expired() => {
-                Toast::caution(format!("{} {news}", toast.message))
-            }
-            _ => Toast::info(news),
-        });
+        self.toasts.push(Toast::info(news));
     }
 
     /// Say that lowering Buffer size ended the capture that was running.
@@ -288,19 +264,6 @@ impl App {
             count = count,
             kept = format_sample_count(count)
         )));
-    }
-
-    /// A caution, giving way to a failure still on screen. News still on
-    /// screen stays beside it: "detected, and saved as your device" names the
-    /// meter the caution's arbitrary cable turned out to carry.
-    pub(super) fn caution_toast(&mut self, message: String) {
-        let message = match self.toasts.latest() {
-            Some(toast) if toast.expired() => message,
-            Some(toast) if toast.is_error() => return,
-            Some(toast) => format!("{} {message}", toast.message),
-            None => message,
-        };
-        self.toasts.push(Toast::caution(message));
     }
 
     /// Say that the recording stopped because it filled the buffer, at the
@@ -624,10 +587,7 @@ impl App {
     /// again, as Clear starts them, and a running recording with samples
     /// stops, as a file names one meter; what it recorded stays, to export
     /// under the meter it came from.
-    ///
-    /// `news` is what the same hello had to say, such as the model saved as
-    /// the device, which a stop toast would otherwise cover.
-    fn start_new_source(&mut self, news: Option<String>) {
+    fn start_new_source(&mut self) {
         info!("UI: another meter answered; the session starts again");
         self.clear_session();
         self.restart_alarm();
@@ -648,11 +608,7 @@ impl App {
                 "connection-other-meter-recording",
                 meter = self.l10n.label(dmm_lib::text::TextKind::Model, name)
             );
-            let message = match news {
-                Some(news) => format!("{stopped}\n{news}"),
-                None => stopped.into_owned(),
-            };
-            self.toasts.push(Toast::error(message));
+            self.toasts.push(Toast::error(stopped));
         }
     }
 
@@ -736,7 +692,7 @@ impl App {
                         let no_reconnect = self.l10n.help().cables_no_reconnect();
                         format!("{opened} {no_reconnect}")
                     };
-                    self.caution_toast(message);
+                    self.toasts.push(Toast::caution(message));
                 }
                 DmmMessage::Measurement(m) => breaches.extend(self.on_measurement(m)),
                 DmmMessage::Disconnected(err) => {
@@ -778,7 +734,7 @@ impl App {
                 }
                 DmmMessage::BluetoothTied(count) => {
                     let message = self.l10n.help().bluetooth_tied(count).into_owned();
-                    self.caution_toast(message);
+                    self.toasts.push(Toast::caution(message));
                 }
                 DmmMessage::OtherData { named, opened } => {
                     // Both by the names the pick's brand sells them under.
@@ -827,21 +783,13 @@ impl App {
         let Some(report) = report else {
             return;
         };
-        // A caution gives way to an error on screen: ask once it's gone.
-        if self
-            .toasts
-            .latest()
-            .is_some_and(|t| t.is_error() && !t.expired())
-        {
-            return;
-        }
         self.told_unrecognised = true;
         let message = format!(
             "{} {}",
             self.l10n.help().unrecognised_data(report),
             tr!(self.l10n, "connection-unrecognised-report")
         );
-        self.caution_toast(message);
+        self.toasts.push(Toast::caution(message));
     }
 
     /// What to tell the user about a library failure, for this session's
@@ -857,8 +805,6 @@ impl App {
     /// A link is up: record the meter, save or toast about the model it
     /// names, and clear the error and reconnect state.
     fn on_connected(&mut self, meter: ConnectedMeter) {
-        // What this hello has to say is whatever toast it raises.
-        let toast_before = self.toasts.latest().map(|t| t.message.clone());
         self.connection.link_up();
         self.held.clear();
         self.capture.device_aux_slots = meter.max_aux_values;
@@ -916,19 +862,13 @@ impl App {
             // probing the cable again.
             _ => self.remember_detected_device(device_id, &reported, new_meter),
         }
-        // Last, so a recording stopped says so, with the news above after it.
+        // Last, so a recording stopped is the newest card, over the news above.
         if self
             .capture
             .source
             .is_some_and(|before| !before.continues(&source, self.connection.detecting))
         {
-            let news = self
-                .toasts
-                .latest()
-                .map(|t| &t.message)
-                .filter(|&m| Some(m) != toast_before.as_ref())
-                .cloned();
-            self.start_new_source(news);
+            self.start_new_source();
         }
         if let Some(meter) = &self.connection.meter {
             info!(
@@ -1268,29 +1208,27 @@ mod tests {
         }
     }
 
-    /// News already up stays with it, and a failure outranks it.
+    /// A caution is a card of its own, beside the news and the failure
+    /// already up.
     #[test]
-    fn a_caution_keeps_the_news_and_gives_way_to_a_failure() {
+    fn a_caution_stacks_on_news_and_on_a_failure() {
         let several = dmm_shared::reopen::SeveralCables { count: 2 };
-        let message = DmmMessage::CablesAtOpen {
-            several,
-            reconnects: true,
-        };
         let mut app = app("ut61eplus", false);
         app.toasts.push(Toast::info("Detected the UT61E+"));
-        app.deliver(message);
-        let toast = app.toasts.take_latest().expect("a toast");
-        assert_eq!(toast.kind, ToastKind::Caution);
-        assert!(toast.message.starts_with("Detected the UT61E+ 2 USB"));
-
         app.toasts
             .push(Toast::error("the meter reports another model"));
         app.deliver(DmmMessage::CablesAtOpen {
             several,
             reconnects: true,
         });
-        let kept = app.toasts.latest().expect("the error stays");
-        assert!(kept.is_error());
+        let said = app.toasts.messages();
+        assert_eq!(
+            said[..2],
+            ["Detected the UT61E+", "the meter reports another model"]
+        );
+        assert!(said[2].starts_with("2 USB cables"), "{said:?}");
+        let toast = app.toasts.latest().expect("a toast");
+        assert_eq!(toast.kind, ToastKind::Caution);
     }
 
     /// With no recording running, nothing has to stop and no toast says so.
@@ -2054,9 +1992,9 @@ mod tests {
     }
 
     /// The caution that the saved device is unknown stays up, and the news
-    /// of the meter found in its place joins it.
+    /// of the meter found in its place goes up over it.
     #[test]
-    fn detection_news_joins_a_caution_on_screen() {
+    fn detection_news_stacks_on_a_caution_on_screen() {
         let mut settings = crate::settings::Settings::default();
         settings.shared.device_family = "nope".to_string();
         let mut app = App::from_settings(settings, dmm_lib::Clock::real());
@@ -2064,23 +2002,13 @@ mod tests {
         app.toasts
             .push(Toast::caution("The settings file names nope."));
         app.remember_detected_device(Some("ut61eplus"), "UT61E+", true);
-        let toast = app.toasts.take_latest().expect("no toast");
-        assert!(toast.is_caution());
+        let said = app.toasts.messages();
+        assert_eq!(said[0], "The settings file names nope.");
         assert!(
-            toast
-                .message
-                .starts_with("The settings file names nope. Detected UNI-T UT61E+, saved"),
-            "{}",
-            toast.message
+            said[1].starts_with("Detected UNI-T UT61E+, saved"),
+            "{said:?}"
         );
-        // Another caution up, with the saved device known: news is news.
-        let mut app =
-            App::from_settings(crate::settings::Settings::default(), dmm_lib::Clock::real());
-        app.connection.detecting = true;
-        app.toasts
-            .push(Toast::caution("Two USB cables are plugged in."));
-        app.remember_detected_device(Some("ut61eplus"), "UT61E+", true);
-        assert!(!app.toasts.take_latest().expect("no toast").is_caution());
+        assert!(!app.toasts.latest().expect("the news").is_caution());
     }
 
     /// `--device auto` detects for one run. Saving under it would either be
@@ -2196,17 +2124,13 @@ mod tests {
         app.tell_unrecognised(Some(&report));
         assert!(app.toasts.is_empty(), "asked once");
 
-        // Behind an error toast, it waits rather than being lost.
+        // An error on screen stays, and the ask goes up with it.
         let mut app = super::super::test_support::test_app();
         app.toasts.push(Toast::error("refused".to_string()));
         app.tell_unrecognised(Some(&report));
-        assert_eq!(
-            app.toasts.latest().map(|t| t.message.as_str()),
-            Some("refused")
-        );
-        app.toasts.clear();
-        app.tell_unrecognised(Some(&report));
-        assert!(!app.toasts.is_empty(), "asked once the error is gone");
+        let said = app.toasts.messages();
+        assert_eq!(said.len(), 2, "{said:?}");
+        assert_eq!(said[0], "refused");
     }
 
     /// A key the meter refused because it is another model says which to
@@ -2318,15 +2242,18 @@ mod tests {
         assert!(!app.connection.needs_reconnect);
     }
 
-    /// The detection notice leaves an error on screen in place, and still
-    /// saves the meter.
+    /// The detection notice leaves an error on screen in place: the notice
+    /// that the settings file could not be read goes up as the auto-connect
+    /// starts, and detection answers a moment later.
     #[test]
     fn detection_does_not_cover_an_error() {
         let mut app = app(registry::AUTO_DEVICE_ID, false);
         app.toasts.push(Toast::error("settings could not be read"));
         app.connection.detecting = true;
         app.remember_detected_device(Some("ut61eplus"), "UT61E+", true);
-        assert_eq!(toast_text(&app), Some("settings could not be read"));
+        let said = app.toasts.messages();
+        assert_eq!(said[0], "settings could not be read");
+        assert!(said[1].starts_with("Detected UNI-T UT61E+"), "{said:?}");
         assert_eq!(app.settings.shared.device_family, "ut61eplus");
     }
 
@@ -2969,8 +2896,8 @@ mod tests {
     }
 
     /// The toast that stops a recording names the model the meter named, and
-    /// keeps what the same hello had to say: under Auto-detect, that the new
-    /// meter is now the saved device.
+    /// goes up over what the same hello had to say: under Auto-detect, that
+    /// the new meter is now the saved device.
     #[test]
     fn the_stop_toast_names_the_model_and_keeps_the_news() {
         let mut app = app(registry::AUTO_DEVICE_ID, false);
@@ -2985,12 +2912,13 @@ mod tests {
             ..ConnectedMeter::test_fixture(Some("ut61eplus"))
         }));
         assert!(!app.capture.recording.is_active());
-        let text = toast_text(&app).expect("a toast");
+        let said = app.toasts.messages();
+        assert_eq!(said.len(), 2, "{said:?}");
+        assert!(said[0].contains("saved as your device"), "{said:?}");
         assert!(
-            text.starts_with("Recording stopped: UNI-T UT161E answered"),
-            "{text}"
+            said[1].starts_with("Recording stopped: UNI-T UT161E answered"),
+            "{said:?}"
         );
-        assert!(text.contains("saved as your device"), "{text}");
     }
 
     /// The alarm judges a new meter afresh, as it does a file: bound to the
@@ -3009,7 +2937,7 @@ mod tests {
     }
 
     /// Limits typed for the last meter's volts mean nothing for the next
-    /// one's ohms: the alarm goes off at its first reading, saying so after
+    /// one's ohms: the alarm goes off at its first reading, saying so over
     /// the news already up, with the fields kept for Apply.
     #[test]
     fn a_restarted_alarm_in_another_unit_turns_off() {
@@ -3025,12 +2953,14 @@ mod tests {
         app.deliver(DmmMessage::Measurement(ohms));
         assert!(app.alarm.is_none());
         assert!(!app.alarm_editor.is_blank(), "the fields stay for Apply");
-        let toast = app.toasts.latest().expect("a toast");
         assert_eq!(
-            toast.message,
-            "news\nReadings in \u{3a9} \u{2014} alarm off; set its limits again in the new unit"
+            app.toasts.messages(),
+            [
+                "news",
+                "Readings in \u{3a9} \u{2014} alarm off; set its limits again in the new unit"
+            ]
         );
-        assert!(toast.is_caution());
+        assert!(app.toasts.latest().is_some_and(|t| t.is_caution()));
         // A new alarm starts with nothing carried.
         app.set_limits(limits, Default::default());
         deliver_readings(&mut app, &[DC]);

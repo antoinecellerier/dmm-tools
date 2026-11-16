@@ -20,7 +20,7 @@ use eframe::egui::{self, RichText, Ui};
 use super::App;
 use super::appearance::SMALL_TEXT_SIZE;
 use super::controls::remote::{RowField, SplitChip, row_field};
-use super::toast::Toast;
+use super::toast::{Toast, ToastSlot};
 use crate::text_marks::MarkStyle;
 
 /// Draft text for the three fields, kept apart from the applied
@@ -171,7 +171,9 @@ impl App {
             Ok(new) => self.set_transform(new),
             // Nothing is applied — the previous transform (identity or
             // not) keeps running, and the toast names the field to fix.
-            Err(message) => self.toasts.push(Toast::error(message)),
+            Err(message) => self
+                .toasts
+                .push(Toast::error(message).replacing(ToastSlot::Scale)),
         }
     }
 
@@ -318,6 +320,10 @@ impl App {
         // alarm stops instead, its fields kept for Apply.
         let alarm = self.alarm.take().is_some();
         self.alarm_bound_before = None;
+        if alarm {
+            // The toast below says the alarm is off; "Alarm on" goes.
+            self.toasts.retire(ToastSlot::Alarm);
+        }
         let also = match (recording, alarm) {
             (true, true) => "both",
             (true, false) => "recording",
@@ -330,7 +336,8 @@ impl App {
             let transform = self.transform.describe();
             tr!(self.l10n, "scale-on", transform = transform, also = also)
         };
-        self.toasts.push(Toast::info(message));
+        self.toasts
+            .push(Toast::info(message).replacing(ToastSlot::Scale));
     }
 }
 
@@ -532,10 +539,13 @@ mod tests {
         app.set_transform(Transform::linear(100.0, 0.0, Some("A".to_string())));
         assert!(app.alarm.is_none());
         assert!(app.watched_limits().is_none());
-        let toast = app.toasts.latest().expect("a toast");
         assert_eq!(
-            toast.message,
-            "Scaling readings: \u{D7}100 \u{2192} A \u{2014} alarm off; set its limits again in the new unit"
+            app.toasts.messages(),
+            [
+                "Scaling readings: \u{D7}100 \u{2192} A \u{2014} alarm off; set its limits again in \
+                 the new unit"
+            ],
+            "the word that the alarm is on goes"
         );
     }
 

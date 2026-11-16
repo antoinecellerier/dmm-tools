@@ -46,6 +46,15 @@ opposite ways in time. The system's scroll direction setting flips both.
 corner, so every layout shows it, minimal mode included, and a narrow top bar
 neither clips it nor grows to hold it.
 
+**Toasts stack, within bounds.** Each message is a card with its own clock
+and close button, the newest on top where the eye already goes, so news
+arriving a second after a failure covers neither. What a card would only
+repeat or contradict replaces it: the same message again, or the next word
+from the alarm, the scale or an import. The stack floats over the reading,
+so older news makes room once it would take more than half the height under
+the top bar, rather than waiting its turn and showing up late. A caution or a
+failure stays, up to the four cards the stack holds: many are said once.
+
 **The window's position is left to the OS.** Wayland ignores it, and a monitor
 unplugged since would leave the window off-screen. Fullscreen isn't restored
 either: it is a mode the user steps into.

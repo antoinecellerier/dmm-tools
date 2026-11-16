@@ -1,11 +1,16 @@
-//! The status toast: the transient message an action leaves behind (export
+//! The status toasts: the transient messages actions leave behind (export
 //! result, a refused mode switch, "Recording stopped — buffer full", …),
-//! floated over the window's top-right corner.
+//! stacked over the window's top-right corner with the newest on top.
 //!
-//! It used to be a label appended to the top bar's status row, which meant
-//! minimal mode — where there is no bar — never showed one, a narrow bar cut
-//! it off, and its width pushed the bar into two rows for the seconds it
-//! was up. An overlay [`egui::Area`] shows the same message in every layout.
+//! They float in an overlay [`egui::Area`] rather than sit in the top bar's
+//! status row, so minimal mode — where there is no bar — shows them, a narrow
+//! bar neither cuts them off nor wraps to hold them.
+//!
+//! Each message is a card of its own, with its own clock and close button,
+//! so one arriving a second after another covers nothing. [`Toasts::push`]
+//! keeps the stack honest: a repeat or a newer word from the same control
+//! takes its card's place, and the stack is bounded by a count and by the
+//! height it may cover.
 
 use dmm_shared::l10n::Localizer;
 use dmm_shared::tr;
@@ -70,16 +75,46 @@ pub(super) enum ToastKind {
     Error,
 }
 
+/// The most cards on screen at once, however tall the window.
+const MAX_TOASTS: usize = 4;
+
+/// The share of the height under the top bar the stack may cover: what is
+/// under it — the reading, in minimal mode — stays mostly in view.
+const STACK_HEIGHT_SHARE: f32 = 0.5;
+
+/// The order cards go in when the stack is full: plain news first, a failure
+/// last.
+const EVERY_KIND: [ToastKind; 3] = [ToastKind::Ok, ToastKind::Caution, ToastKind::Error];
+
+/// Gap between two cards.
+const TOAST_GAP: f32 = 4.0;
+
+/// A control whose every toast replaces its last one: each says where the
+/// control stands now, and the one before it no longer holds.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum ToastSlot {
+    /// An import's progress and its result.
+    Import,
+    Alarm,
+    Scale,
+}
+
 /// A transient status message: what it says, what kind of news it is, and
 /// when it went up. Timed on real time, not the session clock — it is UI
 /// cadence, and a scaled mock clock must not hold one on screen for hours.
 pub(super) struct Toast {
     pub(super) message: String,
     pub(super) kind: ToastKind,
+    slot: Option<ToastSlot>,
+    /// Names its card's widgets, given by [`Toasts::push`]: a card keeps its
+    /// close button's id as others come and go around it.
+    id: u64,
     /// When it was first drawn. A toast raised while the window is hidden
     /// (readings drain from `App::logic` then) has its clock start when the
     /// window comes back, so it is not gone before anyone could read it.
     shown_at: Option<Instant>,
+    /// How tall its card was drawn, once it has been.
+    height: Option<f32>,
 }
 
 impl Toast {
@@ -103,27 +138,27 @@ impl Toast {
         Self {
             message,
             kind,
+            slot: None,
+            id: 0,
             shown_at: None,
+            height: None,
         }
     }
 
-    /// This toast with a caution after it, on a line of its own: news that
-    /// came while it was up. A failure stays one; anything else turns a
-    /// caution, and the joined toast is up for its full time again.
-    pub(super) fn with_caution(self, more: &str) -> Self {
-        let kind = match self.kind {
-            ToastKind::Error => ToastKind::Error,
-            ToastKind::Ok | ToastKind::Caution => ToastKind::Caution,
-        };
-        Self::new(format!("{}\n{more}", self.message), kind)
+    /// This toast in `slot`, where it takes the place of the slot's last one.
+    pub(super) fn replacing(mut self, slot: ToastSlot) -> Self {
+        self.slot = Some(slot);
+        self
     }
 
     /// Whether it is a failure.
+    #[cfg(test)]
     pub(super) fn is_error(&self) -> bool {
         self.kind == ToastKind::Error
     }
 
     /// Whether it is a caution.
+    #[cfg(test)]
     pub(super) fn is_caution(&self) -> bool {
         self.kind == ToastKind::Caution
     }
@@ -144,38 +179,116 @@ impl Toast {
     }
 
     /// Whether it has been up its full time.
-    pub(super) fn expired(&self) -> bool {
+    fn expired(&self) -> bool {
         self.remaining().is_zero()
+    }
+
+    /// Whether `newer` makes this card redundant: it speaks for the same
+    /// control, or says the same thing again.
+    fn superseded_by(&self, newer: &Toast) -> bool {
+        (newer.slot.is_some() && self.slot == newer.slot)
+            || (self.kind == newer.kind && self.message == newer.message)
     }
 }
 
-/// The toast on screen. Everything that raises one goes through
-/// [`Toasts::push`].
+/// The toasts on screen, oldest first. Everything that raises one goes
+/// through [`Toasts::push`].
 #[derive(Default)]
 pub(super) struct Toasts {
     cards: Vec<Toast>,
+    next_id: u64,
 }
 
 impl Toasts {
-    /// Put `toast` up, in place of the one on screen.
-    pub(super) fn push(&mut self, toast: Toast) {
-        self.cards.clear();
+    /// Put `toast` up as the newest card.
+    ///
+    /// It takes the place of the cards it supersedes — the last word from
+    /// the same [`ToastSlot`], or the same message still on screen — so a
+    /// repeated failure or a control toggled back and forth holds one card,
+    /// with a fresh clock, however often it is raised. Past [`MAX_TOASTS`]
+    /// an older card makes room, whatever its kind (see `evict`).
+    pub(super) fn push(&mut self, mut toast: Toast) {
+        // Here too, not only on a drawn frame: toasts are also raised while
+        // the window is hidden, and a card past its time must neither absorb
+        // a repeat nor count against the bound.
+        self.expire();
+        // Its card's id and height with it: an import's progress is raised
+        // afresh every frame, and its close button has to stay one widget
+        // and its card one the height bound counts.
+        let mut taken = None;
+        self.cards.retain(|card| {
+            let superseded = card.superseded_by(&toast);
+            if superseded && taken.is_none() {
+                taken = Some((card.id, card.height));
+            }
+            !superseded
+        });
+        (toast.id, toast.height) = taken.unwrap_or_else(|| {
+            self.next_id += 1;
+            (self.next_id, None)
+        });
         self.cards.push(toast);
+        while self.cards.len() > MAX_TOASTS && self.evict(&EVERY_KIND) {}
     }
 
-    /// Drop a toast that has been up its full time.
+    /// Take down what `slot`'s control last said: something else is about
+    /// to say where it stands now.
+    pub(super) fn retire(&mut self, slot: ToastSlot) {
+        self.cards.retain(|card| card.slot != Some(slot));
+    }
+
+    /// Drop the cards that have been up their full time.
     pub(super) fn expire(&mut self) {
         self.cards.retain(|toast| !toast.expired());
     }
 
+    /// Drop one card to make room, and say whether one went: the oldest of
+    /// the first of `kinds` there is a card of — never the newest, which is
+    /// why room is being made. Dropped rather than held back until there is
+    /// room: news shown tens of seconds late reads as if it had just
+    /// happened.
+    fn evict(&mut self, kinds: &[ToastKind]) -> bool {
+        let Some((_newest, older)) = self.cards.split_last() else {
+            return false;
+        };
+        let at = kinds
+            .iter()
+            .find_map(|kind| older.iter().position(|card| card.kind == *kind));
+        if let Some(at) = at {
+            self.cards.remove(at);
+        }
+        at.is_some()
+    }
+
+    /// Keep the stack within `budget` points of height where dropping older
+    /// news does it, by the heights the cards were last drawn at. A caution
+    /// or a failure stays: many are said once, and covering more of the
+    /// window for a few seconds costs less than losing one. A card not
+    /// drawn yet counts from the next frame.
+    fn fit(&mut self, budget: f32) {
+        let height = |cards: &[Toast]| {
+            let drawn = cards.iter().filter_map(|c| c.height);
+            drawn.clone().sum::<f32>() + TOAST_GAP * drawn.count().saturating_sub(1) as f32
+        };
+        while height(&self.cards) > budget && self.evict(&[ToastKind::Ok]) {}
+    }
+
     /// The toast raised last, if it is still up.
+    #[cfg(test)]
     pub(super) fn latest(&self) -> Option<&Toast> {
         self.cards.last()
     }
 
     /// Take down the toast raised last, and hand it over.
+    #[cfg(test)]
     pub(super) fn take_latest(&mut self) -> Option<Toast> {
         self.cards.pop()
+    }
+
+    /// What the cards say, oldest first.
+    #[cfg(test)]
+    pub(super) fn messages(&self) -> Vec<&str> {
+        self.cards.iter().map(|c| c.message.as_str()).collect()
     }
 
     #[cfg(test)]
@@ -190,79 +303,96 @@ impl Toasts {
 }
 
 impl App {
-    /// Draw the toast, if there is one, right-aligned `anchor_top` points
+    /// Draw the toasts, if there are any, right-aligned `anchor_top` points
     /// down the window: under the top bar where one is drawn, at the window's
     /// top edge in minimal mode.
     ///
     /// Call after the panels — [`egui::Order::Foreground`] keeps it above
     /// them. A modal drawn later still covers it, which is what we want.
     pub(super) fn show_toast(&mut self, ctx: &egui::Context, anchor_top: f32) {
-        let Some(toast) = self.toasts.cards.last_mut() else {
+        let content = ctx.content_rect();
+        self.toasts
+            .fit((content.bottom() - anchor_top) * STACK_HEIGHT_SHARE);
+        let cards = &mut self.toasts.cards;
+        let Some(soonest) = cards.iter().map(Toast::remaining).min() else {
             return;
         };
-        toast.shown_at.get_or_insert_with(Instant::now);
-        let toast = &*toast;
 
-        // Keep repainting while it is up. Nothing else repaints when
-        // disconnected or paused, so without this the toast would sit there
-        // until the next input instead of expiring; the same repaint also lets a
-        // replaced message correct its box position (an `Area` anchors from
-        // the previous frame's size) before anyone sees it.
-        let remaining = toast.remaining().min(TOAST_REPAINT_INTERVAL);
-        ctx.request_repaint_after(remaining);
+        // Keep repainting while one is up. Nothing else repaints when
+        // disconnected or paused, so without this a toast would sit there
+        // until the next input instead of expiring; the same repaint also lets
+        // a changed stack correct its position (an `Area` anchors from the
+        // previous frame's size) before anyone sees it.
+        ctx.request_repaint_after(soonest.min(TOAST_REPAINT_INTERVAL));
 
-        let content = ctx.content_rect();
         let max_width = (content.width() - 2.0 * TOAST_MARGIN).min(TOAST_MAX_WIDTH);
         // `Area::anchor` offsets from the content rect, not from the space the
         // panels left over, so the bar's height has to be taken off here.
         let offset = egui::vec2(-TOAST_MARGIN, anchor_top - content.top() + TOAST_MARGIN);
+        let tc = self
+            .settings
+            .theme_colors(ctx.global_style().visuals.dark_mode);
+        let l10n = &self.l10n;
 
-        let mut dismissed = false;
+        let mut dismissed = None;
+        // One area for the whole stack: egui keeps an area's state for good,
+        // so one per card would leave a little behind for every toast raised.
         egui::Area::new(egui::Id::unique("toast"))
             .order(egui::Order::Foreground)
             .anchor(egui::Align2::RIGHT_TOP, offset)
+            // A stack taller than the window runs off its bottom edge with
+            // the oldest cards; constrained, it would slide up over the bar.
+            .constrain(false)
             .show(ctx, |ui| {
                 // Before anything is placed: inside an `Area` the ui's
-                // `max_rect` is the previous frame's box, so the label would
-                // otherwise wrap to whatever the last message needed.
+                // `max_rect` is the previous frame's box, so the labels would
+                // otherwise wrap to whatever the last stack needed.
                 ui.set_max_width(max_width);
-                let tc = self.settings.theme_colors(ui.visuals().dark_mode);
-                let (color, glyph) = match toast.kind {
-                    ToastKind::Ok => (tc.status_ok(), OK_GLYPH),
-                    ToastKind::Caution => (tc.status_warning(), CAUTION_GLYPH),
-                    ToastKind::Error => (tc.status_error(), ERROR_GLYPH),
-                };
-                egui::Frame::popup(ui.style())
-                    .inner_margin(TOAST_PADDING)
-                    .stroke(egui::Stroke::new(TOAST_STROKE_WIDTH, color))
-                    .show(ui, |ui| {
-                        // Explicit id_salt, as the top bar's status landmark:
-                        // the auto-derived scope id shifts with the siblings
-                        // above and AT loses the landmark.
-                        ui.landmark("toast_landmark", egui::accesskit::Role::Status, |ui| {
-                            // The close button goes in first, from the right,
-                            // so the text wraps in what is left rather than
-                            // pushing the button out of the box.
-                            ui.with_layout(egui::Layout::right_to_left(egui::Align::TOP), |ui| {
-                                dismissed = dismiss_button(ui, &self.l10n);
-                                ui.with_layout(
-                                    egui::Layout::left_to_right(egui::Align::TOP),
-                                    |ui| {
-                                        ui.label(RichText::new(glyph).color(color));
-                                        ui.add(
-                                            egui::Label::new(
-                                                RichText::new(&toast.message).color(color),
-                                            )
-                                            .wrap(),
-                                        );
-                                    },
-                                );
+                ui.spacing_mut().item_spacing.y = TOAST_GAP;
+                for toast in cards.iter_mut().rev() {
+                    toast.shown_at.get_or_insert_with(Instant::now);
+                    let (color, glyph) = match toast.kind {
+                        ToastKind::Ok => (tc.status_ok(), OK_GLYPH),
+                        ToastKind::Caution => (tc.status_warning(), CAUTION_GLYPH),
+                        ToastKind::Error => (tc.status_error(), ERROR_GLYPH),
+                    };
+                    // Under the card's own id, so its widgets keep theirs
+                    // when a card above it goes.
+                    let card = ui.push_id(toast.id, |ui| {
+                        egui::Frame::popup(ui.style())
+                            .inner_margin(TOAST_PADDING)
+                            .stroke(egui::Stroke::new(TOAST_STROKE_WIDTH, color))
+                            .show(ui, |ui| {
+                                // Explicit id_salt, as the top bar's status
+                                // landmark: the auto-derived scope id shifts
+                                // with the siblings above and AT loses the
+                                // landmark.
+                                let role = egui::accesskit::Role::Status;
+                                ui.landmark("toast_landmark", role, |ui| {
+                                    // The close button goes in first, from the
+                                    // right, so the text wraps in what is left
+                                    // rather than pushing the button out of
+                                    // the box.
+                                    let rtl = egui::Layout::right_to_left(egui::Align::TOP);
+                                    ui.with_layout(rtl, |ui| {
+                                        if dismiss_button(ui, l10n) {
+                                            dismissed = Some(toast.id);
+                                        }
+                                        let ltr = egui::Layout::left_to_right(egui::Align::TOP);
+                                        ui.with_layout(ltr, |ui| {
+                                            ui.label(RichText::new(glyph).color(color));
+                                            let text = RichText::new(&toast.message).color(color);
+                                            ui.add(egui::Label::new(text).wrap());
+                                        });
+                                    });
+                                });
                             });
-                        });
                     });
+                    toast.height = Some(card.response.rect.height());
+                }
             });
-        if dismissed {
-            self.toasts.cards.clear();
+        if let Some(id) = dismissed {
+            cards.retain(|toast| toast.id != id);
         }
     }
 }
@@ -271,7 +401,7 @@ impl App {
 mod tests {
     use super::*;
     use crate::app::BigMeterMode;
-    use crate::app::test_support::{a11y, headless_frame, node_rect, test_app};
+    use crate::app::test_support::{a11y, headless_frame, node_rect, test_app, to_rect};
     use eframe::egui::accesskit::{Node, NodeId, Role};
     use eframe::egui::{Id, Pos2, Rect, vec2};
 
@@ -354,6 +484,11 @@ mod tests {
             self.app.toasts.push(Toast::error(message));
         }
 
+        /// The space the stack may take: half of what is under the bar.
+        fn stack_budget(&self) -> f32 {
+            (self.screen.bottom() - self.toast_rect().top() + TOAST_MARGIN) * STACK_HEIGHT_SHARE
+        }
+
         /// The width the bar's left group reported last frame — the number
         /// that decides whether the bar wraps to two rows, and feeds the
         /// window's minimum width.
@@ -415,6 +550,259 @@ mod tests {
     fn labelled_bounds(frame: &ToastFrame, label: &str) -> Rect {
         node_rect(&frame.nodes, |n| n.label() == Some(label))
             .unwrap_or_else(|| panic!("no node labelled {label:?} in the tree"))
+    }
+
+    /// Where each card's close button was drawn, top to bottom.
+    fn close_buttons(frame: &ToastFrame) -> Vec<Rect> {
+        let mut rects: Vec<Rect> = frame
+            .nodes
+            .iter()
+            .filter(|(_, n)| n.label() == Some("Dismiss notification"))
+            .filter_map(|(_, n)| n.bounds())
+            .map(to_rect)
+            .collect();
+        rects.sort_by(|a, b| a.top().total_cmp(&b.top()));
+        rects
+    }
+
+    /// A card that has been up its full time, or `None` where the monotonic
+    /// clock started less than that ago.
+    fn stale(toast: Toast) -> Option<Toast> {
+        let long_ago = Instant::now().checked_sub(CAUTION_DURATION)?;
+        Some(Toast {
+            shown_at: Some(long_ago),
+            ..toast
+        })
+    }
+
+    /// Mashing a button that fails raises the same failure each time: one
+    /// card says it, as the newest, with its full time again.
+    #[test]
+    fn a_repeat_takes_its_cards_place() {
+        let mut toasts = Toasts::default();
+        toasts.push(Toast::error("HOLD failed"));
+        toasts.push(Toast::info("Copied"));
+        toasts.cards[0].shown_at = Some(Instant::now());
+        let id = toasts.cards[0].id;
+        toasts.push(Toast::error("HOLD failed"));
+        assert_eq!(toasts.messages(), ["Copied", "HOLD failed"]);
+        let repeat = toasts.latest().expect("the repeat");
+        assert_eq!(repeat.id, id, "the card's widgets changed id");
+        assert_eq!(repeat.remaining(), TOAST_DURATION);
+        // The same words as another kind of news are other news.
+        toasts.push(Toast::info("HOLD failed"));
+        assert_eq!(toasts.messages().len(), 3);
+    }
+
+    /// A control says where it stands now: its last word goes, whatever it
+    /// said, and other news stays.
+    #[test]
+    fn a_slot_holds_one_card() {
+        let mut toasts = Toasts::default();
+        toasts.push(Toast::info("Alarm on").replacing(ToastSlot::Alarm));
+        let id = toasts.cards[0].id;
+        toasts.push(Toast::info("Scale on").replacing(ToastSlot::Scale));
+        toasts.push(Toast::info("Exported"));
+        toasts.push(Toast::error("Low limit above high").replacing(ToastSlot::Alarm));
+        assert_eq!(
+            toasts.messages(),
+            ["Scale on", "Exported", "Low limit above high"]
+        );
+        assert_eq!(toasts.latest().map(|t| t.id), Some(id));
+        // A card it also repeats goes with the slot's.
+        toasts.push(Toast::info("Alarm off"));
+        toasts.push(Toast::info("Alarm on").replacing(ToastSlot::Alarm));
+        toasts.push(Toast::info("Alarm off").replacing(ToastSlot::Alarm));
+        assert_eq!(toasts.messages(), ["Scale on", "Exported", "Alarm off"]);
+        // Another control taking the alarm down takes its word down too.
+        toasts.retire(ToastSlot::Alarm);
+        assert_eq!(toasts.messages(), ["Scale on", "Exported"]);
+    }
+
+    /// Past the bound the oldest plain news goes, then the oldest caution;
+    /// with only failures behind the newest, the oldest of them.
+    #[test]
+    fn a_full_stack_drops_old_news_before_a_failure() {
+        let mut toasts = Toasts::default();
+        toasts.push(Toast::error("first failure"));
+        toasts.push(Toast::info("news"));
+        for n in 2..=MAX_TOASTS {
+            toasts.push(Toast::error(format!("failure {n}")));
+        }
+        assert_eq!(toasts.messages().len(), MAX_TOASTS);
+        assert_eq!(toasts.messages()[0], "first failure", "news goes first");
+        assert!(!toasts.messages().contains(&"news"));
+        toasts.cards[1] = Toast::caution("a caution");
+        toasts.push(Toast::error("one more failure"));
+        assert!(!toasts.messages().contains(&"a caution"));
+        assert_eq!(toasts.messages()[1], "failure 3");
+        toasts.push(Toast::info("the newest stays"));
+        assert_eq!(toasts.messages().len(), MAX_TOASTS);
+        assert_eq!(toasts.messages()[0], "failure 3");
+        assert_eq!(
+            toasts.latest().map(|t| &*t.message),
+            Some("the newest stays")
+        );
+    }
+
+    /// Each card runs its own clock: one past its time goes and the others
+    /// stay, and a push sweeps too — toasts are raised while the window is
+    /// hidden — so a card past its time does not absorb a repeat.
+    #[test]
+    fn a_card_expires_on_its_own() {
+        let Some(old) = stale(Toast::info("Exported")) else {
+            return;
+        };
+        let mut toasts = Toasts::default();
+        toasts.push(Toast::error("Export failed"));
+        toasts.cards.push(old);
+        toasts.expire();
+        assert_eq!(toasts.messages(), ["Export failed"]);
+
+        let Some(old) = stale(Toast::info("Exported")) else {
+            return;
+        };
+        toasts.cards.insert(0, Toast { id: 99, ..old });
+        toasts.push(Toast::info("Exported"));
+        assert_eq!(toasts.messages(), ["Export failed", "Exported"]);
+        assert_ne!(toasts.latest().map(|t| t.id), Some(99));
+    }
+
+    /// Two messages a second apart are both on screen, each a landmark of
+    /// its own, the newest where the single toast has always been and the
+    /// older one under it at the same width.
+    #[test]
+    fn toasts_stack_newest_on_top_in_every_layout() {
+        for mode in [BigMeterMode::Off, BigMeterMode::Minimal] {
+            let mut run = ToastRun::new(900.0, 600.0);
+            run.app.big_meter_mode = mode;
+            run.app.toasts.push(Toast::info("Exported 1234 samples"));
+            let frame = run.settle();
+            let alone = text_bounds(&frame, "Exported 1234 samples");
+            run.show_toast(LONG_MESSAGE);
+            let frame = run.settle();
+            for text in ["Exported 1234 samples", LONG_MESSAGE] {
+                assert!(
+                    status_landmark_holding(&frame, text).is_some(),
+                    "{mode:?}: no Status landmark holds {text:?}"
+                );
+            }
+            let (older, newer) = (
+                text_bounds(&frame, "Exported 1234 samples"),
+                text_bounds(&frame, LONG_MESSAGE),
+            );
+            assert_eq!(newer.top(), alone.top(), "{mode:?}: the newest moved");
+            assert!(
+                newer.bottom() < older.top(),
+                "{mode:?}: {newer:?} {older:?}"
+            );
+            assert_eq!(
+                newer.left(),
+                older.left(),
+                "{mode:?}: cards differ in width"
+            );
+            let closes = close_buttons(&frame);
+            assert_eq!(closes.len(), 2, "{mode:?}");
+            assert_eq!(closes[0].right(), closes[1].right(), "{mode:?}");
+        }
+    }
+
+    /// A card's × closes that card and no other.
+    #[test]
+    fn a_close_button_dismisses_its_own_card() {
+        let mut run = ToastRun::new(900.0, 600.0);
+        for message in ["oldest", "middle", "newest"] {
+            run.show_toast(message);
+        }
+        let frame = run.settle();
+        let closes = close_buttons(&frame);
+        assert_eq!(closes.len(), 3);
+        run.frame_with(click_at(closes[1].center()));
+        assert_eq!(run.app.toasts.messages(), ["oldest", "newest"]);
+        // The card under it kept its button: one more click closes it.
+        let frame = run.settle();
+        let closes = close_buttons(&frame);
+        run.frame_with(click_at(closes[1].center()));
+        assert_eq!(run.app.toasts.messages(), ["newest"]);
+    }
+
+    /// A card raised later starts its own clock at its own first frame.
+    #[test]
+    fn each_card_runs_its_clock_from_its_first_frame() {
+        let mut run = ToastRun::new(900.0, 600.0);
+        run.show_toast("first");
+        run.frame();
+        let first = run.app.toasts.cards[0].shown_at;
+        run.show_toast("second");
+        assert_eq!(run.app.toasts.cards[1].remaining(), TOAST_DURATION);
+        let before = Instant::now();
+        run.frame();
+        assert_eq!(run.app.toasts.cards[0].shown_at, first);
+        assert!(
+            run.app.toasts.cards[1]
+                .shown_at
+                .is_some_and(|at| at >= before)
+        );
+    }
+
+    /// In a short window the stack keeps to half the height under the bar,
+    /// so what is under it stays mostly in view: older news goes and the
+    /// newest stays, as it does when it alone is taller than that.
+    #[test]
+    fn the_stack_keeps_to_half_the_height_under_the_bar() {
+        let mut run = ToastRun::new(420.0, 300.0);
+        for n in 1..=MAX_TOASTS {
+            let message = format!("Exported run {n} to the measurements folder");
+            run.app.toasts.push(Toast::info(message));
+            // As an import's progress is, raised afresh before each frame.
+            run.app
+                .toasts
+                .push(Toast::info("Importing").replacing(ToastSlot::Import));
+            run.frame();
+        }
+        run.settle();
+        let left = run.app.toasts.messages().len();
+        assert!((1..MAX_TOASTS).contains(&left), "{left} cards left");
+        assert!(
+            run.toast_rect().height() <= run.stack_budget(),
+            "the stack {:?} is over its {} pt",
+            run.toast_rect(),
+            run.stack_budget()
+        );
+        assert_eq!(run.app.toasts.messages().last(), Some(&"Importing"));
+    }
+
+    /// A failure or a caution is not what makes room: the settings file that
+    /// could not be read stays when detection answers a moment later, in a
+    /// window where half the height holds one card.
+    #[test]
+    fn a_short_window_keeps_a_failure_under_newer_news() {
+        let mut run = ToastRun::new(300.0, 160.0);
+        run.app.toasts.push(Toast::info("an earlier export"));
+        run.show_toast(LONG_MESSAGE);
+        run.app.toasts.push(Toast::caution("Two USB cables"));
+        run.app.toasts.push(Toast::info("Detected the meter"));
+        run.settle();
+        assert_eq!(
+            run.app.toasts.messages(),
+            [LONG_MESSAGE, "Two USB cables", "Detected the meter"]
+        );
+    }
+
+    /// A tall window holds the whole stack, and it starts under the bar
+    /// rather than sliding up over it.
+    #[test]
+    fn a_full_stack_fits_a_tall_window_under_the_bar() {
+        let mut run = ToastRun::new(900.0, 600.0);
+        run.show_toast("one");
+        run.settle();
+        let top = run.toast_rect().top();
+        for n in 2..=MAX_TOASTS {
+            run.show_toast(&format!("failure {n}: {LONG_MESSAGE}"));
+        }
+        run.settle();
+        assert_eq!(run.app.toasts.messages().len(), MAX_TOASTS);
+        assert_eq!(run.toast_rect().top(), top);
     }
 
     /// A press and release at `pos`, as the pointer would deliver them.

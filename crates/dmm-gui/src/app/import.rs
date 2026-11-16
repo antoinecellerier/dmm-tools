@@ -25,7 +25,7 @@ use log::{error, info, warn};
 use super::App;
 use super::capture::CaptureLayout;
 use super::task::Task;
-use super::toast::Toast;
+use super::toast::{Toast, ToastSlot};
 use crate::recording::Recording;
 
 /// Readings taken through the pipeline per frame: a fraction of a frame's
@@ -223,9 +223,6 @@ pub(super) struct Ingest {
     first: Option<Instant>,
     /// Readings the loader left out, past the limit it read the file with.
     left_out: usize,
-    /// The alarm went off on the file's first reading, which put its limits
-    /// in another unit: said with the result.
-    alarm_off: Option<String>,
 }
 
 /// Parse `path` and stamp its readings from `base`.
@@ -557,7 +554,6 @@ impl App {
             view,
             first,
             left_out,
-            alarm_off: None,
         }))
     }
 
@@ -585,7 +581,7 @@ impl App {
             // shows if it was scaled when written (`LimitUnit::of`).
             match self.check_imported(&m) {
                 Ok(breach) => breaches.extend(breach),
-                Err(off) => ingest.alarm_off = Some(off),
+                Err(off) => self.alarm_off_toast(off),
             }
             ingest.taken += 1;
             self.last_measurement = Some(m);
@@ -602,7 +598,9 @@ impl App {
                 file = file_name(&ingest.path),
                 percent = percent
             );
-            self.toasts.push(Toast::info(message.into_owned()));
+            // One card for the whole import, which the result then takes.
+            self.toasts
+                .push(Toast::info(message.into_owned()).replacing(ToastSlot::Import));
             return Some(ImportJob::Ingesting(ingest));
         }
         self.finish_import(ingest);
@@ -644,10 +642,8 @@ impl App {
                 file = &name
             )
         };
-        self.toasts.push(match ingest.alarm_off.as_deref() {
-            Some(off) => Toast::info(message.into_owned()).with_caution(off),
-            None => Toast::info(message.into_owned()),
-        });
+        self.toasts
+            .push(Toast::info(message.into_owned()).replacing(ToastSlot::Import));
         self.source.imported = Some(ImportedFrom {
             path: ingest.path,
             readings: ingest.taken,
@@ -795,8 +791,9 @@ timestamp,mode,value,unit,range,flags,aux1_label,aux1_value,aux1_unit
     }
 
     /// An alarm bound to the last session's volts, carried into a file in
-    /// kV, goes off: the same limits would mean a thousand times more. The
-    /// result says so; a file in the same unit keeps the alarm on.
+    /// kV, goes off: the same limits would mean a thousand times more. A
+    /// caution says so, in place of the word that the alarm was on and under
+    /// the result; a file in the same unit keeps the alarm on.
     #[test]
     fn an_import_in_another_unit_turns_the_alarm_off() {
         let mut app = test_app();
@@ -811,14 +808,13 @@ timestamp,mode,value,unit,range,flags,aux1_label,aux1_value,aux1_unit
         let path = file("kv-off.csv", KV_CSV);
         import(&mut app, path.clone());
         assert!(app.alarm.is_none());
-        let toast = app.toasts.latest().expect("the result");
-        assert!(
-            toast.message.ends_with(
-                "\nReadings in kV \u{2014} alarm off; set its limits again in the new unit"
-            ),
-            "{}",
-            toast.message
+        let said = app.toasts.messages();
+        assert_eq!(said.len(), 2, "{said:?}");
+        assert_eq!(
+            said[0],
+            "Readings in kV \u{2014} alarm off; set its limits again in the new unit"
         );
+        assert!(said[1].starts_with("Imported "), "{said:?}");
         let _ = std::fs::remove_file(path);
 
         app.set_limits(limits, dmm_lib::alarm::Hysteresis::Auto);

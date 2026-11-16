@@ -531,7 +531,8 @@ pub struct App {
     /// `WindowLevel` commands and "Always on top" cannot work.
     on_wayland: bool,
     applied: AppliedChrome,
-    /// The transient status toast.
+    /// The status toasts on screen. Raising one is `Toasts::push`, which
+    /// keeps the stack in bounds: no site checks what is already up.
     toasts: Toasts,
     /// The report the library keeps of data a meter sent that no parser
     /// knows was asked for: once per process, as the library keeps one.
@@ -1069,24 +1070,15 @@ impl App {
         {
             self.open_whats_new();
         }
-        // Last, so a toast raised above can't replace it.
+        // Last, so it is the newest card, over what the lines above raised.
         self.settings_load_toast();
     }
 
     /// Tell the user, at the first Connect, that the settings file names a
     /// device no entry answers to, so the meter is detected instead:
-    /// detection then saves the meter it finds over that id, and its news
-    /// joins this caution. Not once another device has been picked.
+    /// detection then saves the meter it finds over that id, and says so.
+    /// Not once another device has been picked.
     pub(super) fn saved_device_toast(&mut self) {
-        // A caution gives way to a failure on screen: say it at the next
-        // Connect instead of losing it.
-        if self
-            .toasts
-            .latest()
-            .is_some_and(|t| t.is_error() && !t.expired())
-        {
-            return;
-        }
         let Some(device) = self.settings.unknown_saved_device.take() else {
             return;
         };
@@ -1095,7 +1087,7 @@ impl App {
         }
         log::warn!("the settings file names device {device:?}, which no entry answers to");
         let message = self.l10n.help().saved_device_unknown(&device).into_owned();
-        self.caution_toast(message);
+        self.toasts.push(Toast::caution(message));
     }
 
     /// Tell the user, once, that their settings file could not be loaded and
@@ -1433,16 +1425,15 @@ mod tests {
         app.saved_device_toast();
         assert!(app.toasts.is_empty());
 
-        // Behind a failure on screen it waits for the next Connect.
+        // A failure on screen stays, with the caution over it.
         let mut settings = Settings::default();
         settings.shared.device_family = "nope".to_string();
         let mut app = App::from_cli(settings, unknown());
         app.toasts
             .push(Toast::error("The meter stopped answering."));
         app.saved_device_toast();
+        assert!(app.toasts.take_latest().is_some_and(|t| t.is_caution()));
         assert!(app.toasts.take_latest().is_some_and(|t| t.is_error()));
-        app.saved_device_toast();
-        assert!(app.toasts.latest().is_some_and(|t| t.is_caution()));
 
         // Another device picked before the first Connect: nothing to say.
         let mut app = App::from_cli(Settings::default(), unknown());

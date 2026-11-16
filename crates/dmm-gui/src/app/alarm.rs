@@ -17,7 +17,7 @@ use super::App;
 use super::appearance::SMALL_TEXT_SIZE;
 use super::controls::remote::{RowField, SplitChip, row_field};
 use super::marker_list::log_line;
-use super::toast::Toast;
+use super::toast::{Toast, ToastSlot};
 use crate::a11y::AnnouncePolicy;
 use crate::display::ReadingState;
 use crate::graph::{LimitSide, WatchedLimits};
@@ -257,7 +257,9 @@ impl App {
         match parse_limits(&self.l10n, &editor.low, &editor.high, &editor.band) {
             Ok((limits, band)) => self.set_limits(limits, band),
             // The alarm in force, if any, keeps running.
-            Err(message) => self.toasts.push(Toast::error(message)),
+            Err(message) => self
+                .toasts
+                .push(Toast::error(message).replacing(ToastSlot::Alarm)),
         }
     }
 
@@ -430,19 +432,18 @@ impl App {
     pub(super) fn set_limits(&mut self, limits: Limits, band: Hysteresis) {
         if limits.is_empty() {
             if self.alarm.take().is_some() {
+                let off = tr!(self.l10n, "alarm-off-toast");
                 self.toasts
-                    .push(Toast::info(tr!(self.l10n, "alarm-off-toast")));
+                    .push(Toast::info(off).replacing(ToastSlot::Alarm));
             }
             self.alarm_bound_before = None;
         } else {
             self.alarm = Some(Alarm::new(limits, band));
             self.alarm_bound_before = None;
             let limits = self.l10n.alarm_limits(&limits, band);
-            self.toasts.push(Toast::info(tr!(
-                self.l10n,
-                "alarm-on-toast",
-                limits = limits
-            )));
+            let on = tr!(self.l10n, "alarm-on-toast", limits = limits);
+            self.toasts
+                .push(Toast::info(on).replacing(ToastSlot::Alarm));
         }
     }
 
@@ -485,12 +486,16 @@ impl App {
         let limits = match Limits::check(low, high) {
             Ok(limits) => limits.in_base(current.unit),
             Err(e) => {
-                self.toasts.push(Toast::error(limit_message(&self.l10n, e)));
+                let message = limit_message(&self.l10n, e);
+                self.toasts
+                    .push(Toast::error(message).replacing(ToastSlot::Alarm));
                 return;
             }
         };
         let Ok(band) = band.check(&limits) else {
-            self.toasts.push(Toast::error(percent_of_zero(&self.l10n)));
+            let message = percent_of_zero(&self.l10n);
+            self.toasts
+                .push(Toast::error(message).replacing(ToastSlot::Alarm));
             return;
         };
         self.set_limits(limits, band);
@@ -532,14 +537,7 @@ impl App {
         let breach = match self.judge(m) {
             Ok(breach) => breach?,
             Err(off) => {
-                // After the toast a new meter's stop raised, if it is up.
-                // (Not `caution_toast`, which gives way to a failure: the
-                // alarm going off must be said all the same.)
-                let up = self.toasts.take_latest().filter(|t| !t.expired());
-                self.toasts.push(match up {
-                    Some(toast) => toast.with_caution(&off),
-                    None => Toast::caution(off),
-                });
+                self.alarm_off_toast(off);
                 return None;
             }
         };
@@ -554,10 +552,16 @@ impl App {
         Some(PendingBreach::new(&self.l10n, m, &breach))
     }
 
+    /// Say that a reading turned the alarm off, in `off`'s words.
+    pub(super) fn alarm_off_toast(&mut self, off: String) {
+        self.toasts
+            .push(Toast::caution(off).replacing(ToastSlot::Alarm));
+    }
+
     /// Judge one imported reading, as the file holds it: as
     /// [`check_alarm`](Self::check_alarm), but a first reading found out
-    /// goes unsaid — the import's progress and result toasts hold the slot,
-    /// and the alarm going off is handed back in `Err` for the result's.
+    /// goes unsaid, leaving the toasts to the import's progress and result,
+    /// and the alarm going off is handed back in `Err` for the caller to say.
     pub(super) fn check_imported(
         &mut self,
         m: &Measurement,
