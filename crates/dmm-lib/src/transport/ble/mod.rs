@@ -88,6 +88,9 @@ const DISCOVERY_TIMEOUT: Duration = Duration::from_secs(15);
 const LOGIN_TIMEOUT: Duration = Duration::from_secs(8);
 /// How long a profile's information read may take, bounded as the login is.
 const INFO_READ_TIMEOUT: Duration = Duration::from_secs(3);
+/// How long one request of the setup may go unanswered: a service
+/// discovery, bounded as the login is, and the subscribe.
+const SETUP_STEP_TIMEOUT: Duration = Duration::from_secs(3);
 /// The pause before retrying a link setup that failed.
 const SETUP_RETRY_PAUSE: Duration = Duration::from_millis(500);
 /// How often to look again while the service tree is still filling in.
@@ -631,7 +634,9 @@ async fn subscribe_profile(
 ) -> std::result::Result<Subscribed, SetupFailure> {
     let mut last_look = None;
     let chosen = loop {
-        peripheral.discover_services().await.map_err(link_error)?;
+        let now = tokio::time::Instant::now();
+        let until = bring_up_deadline(deadline, now, SETUP_STEP_TIMEOUT);
+        answered(peripheral.discover_services(), until).await?;
         let characteristics = peripheral.characteristics();
         let past_deadline = tokio::time::Instant::now() >= deadline;
         match choose_profile(&characteristics) {
@@ -687,10 +692,7 @@ async fn subscribe_profile(
             }
         }
     }
-    peripheral
-        .subscribe(&chosen.notify)
-        .await
-        .map_err(link_error)?;
+    answered(peripheral.subscribe(&chosen.notify), subscribe_until()).await?;
     let notifications = peripheral.notifications().await.map_err(link_error)?;
     Ok(Subscribed {
         profile: chosen.profile,
@@ -804,6 +806,34 @@ fn not_found(selector: Option<&str>) -> Error {
 /// than looking like a silent meter.
 fn stack_error(e: btleplug::Error) -> Error {
     BluetoothIssue::Stack(e.to_string()).into()
+}
+
+/// When a subscribe starting now is given up. On Android alone, where one
+/// was seen never to be answered: anywhere else the stack fails it on a
+/// dead link, and a meter that wants pairing first holds it for as long as
+/// the user takes over the system's prompt.
+fn subscribe_until() -> tokio::time::Instant {
+    let bound = if cfg!(target_os = "android") {
+        SETUP_STEP_TIMEOUT
+    } else {
+        // Tokio's own "never": about thirty years.
+        Duration::from_secs(86400 * 365 * 30)
+    };
+    tokio::time::Instant::now() + bound
+}
+
+/// One request of the link's setup, given until `until` to answer. A
+/// stack normally fails a step on a link that went down, but Android's
+/// leaves it waiting for good when the radio was switched off under a link
+/// it still counts as up; no answer in that time is a lost link.
+async fn answered(
+    step: impl Future<Output = btleplug::Result<()>>,
+    until: tokio::time::Instant,
+) -> Result<()> {
+    match tokio::time::timeout_at(until, step).await {
+        Ok(done) => done.map_err(link_error),
+        Err(_) => Err(Error::LinkLost),
+    }
 }
 
 /// A failure of this link. `NotConnected` and a vanished device are the
@@ -1198,8 +1228,10 @@ mod tests {
 
     /// The opener's bounds have to keep the GUI's synchronous reconnect loop
     /// responsive: worst case is one scan, one connect, one discovery, one
-    /// login and the disconnect after it fails. The setup retry sits inside
-    /// the discovery bound, and both tries' logins inside one login bound.
+    /// login, a subscribe that is not answered and the disconnect after it.
+    /// The setup retry sits inside the discovery bound, a discovery left
+    /// unanswered past it inside the login's, and both tries' logins inside
+    /// one login bound.
     /// A profile has one bring-up, a login or a read, so the read fits in
     /// the login's place.
     #[test]
@@ -1207,8 +1239,13 @@ mod tests {
         assert!(SCAN_POLL < SCAN_WINDOW);
         assert!(SETUP_RETRY_PAUSE < DISCOVERY_TIMEOUT);
         assert!(INFO_READ_TIMEOUT <= LOGIN_TIMEOUT);
-        let worst_case =
-            SCAN_WINDOW + CONNECT_TIMEOUT + DISCOVERY_TIMEOUT + LOGIN_TIMEOUT + DISCONNECT_TIMEOUT;
+        assert!(SETUP_STEP_TIMEOUT <= LOGIN_TIMEOUT);
+        let worst_case = SCAN_WINDOW
+            + CONNECT_TIMEOUT
+            + DISCOVERY_TIMEOUT
+            + LOGIN_TIMEOUT
+            + SETUP_STEP_TIMEOUT
+            + DISCONNECT_TIMEOUT;
         assert!(worst_case <= Duration::from_secs(40), "{worst_case:?}");
     }
 }
