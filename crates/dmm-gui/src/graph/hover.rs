@@ -266,6 +266,10 @@ pub(super) fn height_tags(
 /// view.
 const FINGER_CLEARANCE: f32 = 48.0;
 
+/// The gap between a finger and a menu opened above it, in points: the
+/// fingertip's half.
+pub(super) const FINGER_GAP: f32 = 24.0;
+
 /// Where a readout for the point at `at` is anchored and which way it grows:
 /// beside a mouse pointer and downwards; for a finger, above it, clear of
 /// the hand. `top` is as high as the anchor may go.

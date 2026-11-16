@@ -1128,6 +1128,7 @@ fn a_decade_step_reaches_every_value_bearing_field() {
         swipe: _,
         box_zoom: _,
         menu_focus_pending: _,
+        menu_by_touch: _,
         menu_action: _,
         trace_choice: _,
         clicked_marker: _,

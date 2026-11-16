@@ -589,6 +589,10 @@ impl Graph {
             let point = self.menu_point(pos, transform, in_view, limit_lines, digits);
             self.menu = Some(MenuPoint { scope, ..point });
         }
+        if opened {
+            // Kept for as long as the menu is open: the finger lifts.
+            self.menu_by_touch = ctx.input(|i| i.any_touches());
+        }
         let popup_id = plot_menu_id();
         let was_open = egui::Popup::is_id_open(&ctx, popup_id);
         if was_open {
@@ -627,35 +631,50 @@ impl Graph {
         } else {
             None
         };
-        egui::Popup::menu(plot)
+        // Under a mouse pointer the menu drops from it; opened by a long
+        // press it goes above the finger, or beside it where there is no
+        // room above.
+        const ABOVE: [egui::RectAlign; 4] = [
+            egui::RectAlign::TOP_START,
+            egui::RectAlign::TOP_END,
+            egui::RectAlign::RIGHT_END,
+            egui::RectAlign::LEFT_END,
+        ];
+        let mut popup = egui::Popup::menu(plot)
             .id(popup_id)
             .open_memory(open)
-            .at_pointer_fixed()
-            .show(|ui| {
-                let entries = add_entries(ui, l10n, &menu, &unit, cursors, reading_secs);
-                let enabled: Vec<egui::Response> = entries
-                    .iter()
-                    .filter(|(entry, _)| entry.enabled())
-                    .map(|(entry, _)| entry.clone())
-                    .collect();
-                if (!was_open || focus_again)
-                    && let Some(first) = enabled.first()
-                {
-                    first.request_focus();
+            .at_pointer_fixed();
+        if self.menu_by_touch {
+            popup = popup
+                .align(ABOVE[0])
+                .align_alternatives(&ABOVE)
+                .gap(super::hover::FINGER_GAP);
+        }
+        popup.show(|ui| {
+            let entries = add_entries(ui, l10n, &menu, &unit, cursors, reading_secs);
+            let enabled: Vec<egui::Response> = entries
+                .iter()
+                .filter(|(entry, _)| entry.enabled())
+                .map(|(entry, _)| entry.clone())
+                .collect();
+            if (!was_open || focus_again)
+                && let Some(first) = enabled.first()
+            {
+                first.request_focus();
+            }
+            for (entry, pick) in &entries {
+                // Menu entries have no frame, so egui's focus styling is a
+                // fill too faint to find; ring the focused one.
+                crate::a11y::paint_focus_ring(ui, entry);
+                if was_open && entry.clicked() {
+                    picked = Some(*pick);
                 }
-                for (entry, pick) in &entries {
-                    // Menu entries have no frame, so egui's focus styling is a
-                    // fill too faint to find; ring the focused one.
-                    crate::a11y::paint_focus_ring(ui, entry);
-                    if was_open && entry.clicked() {
-                        picked = Some(*pick);
-                    }
-                    entry_ids.push(entry.id);
-                }
-                // A disabled entry cannot take the focus, so it is not a stop
-                // for the arrows either: Down would strand the focus on it.
-                crate::listbox::navigate_choice_entries(ui.ctx(), &enabled);
-            });
+                entry_ids.push(entry.id);
+            }
+            // A disabled entry cannot take the focus, so it is not a stop
+            // for the arrows either: Down would strand the focus on it.
+            crate::listbox::navigate_choice_entries(ui.ctx(), &enabled);
+        });
         if let Some(pick) = picked {
             // Enter and Space click without a pointer click, which is the
             // only thing a menu closes on by itself.
