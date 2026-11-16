@@ -19,7 +19,7 @@ dmm-gui [OPTIONS]
 A desktop GUI for live measurement display, time-series graphing, recording,
 and remote control of digital multimeters over USB or Bluetooth.
 
-[Connecting](#connecting) · [Top Bar](#top-bar) · [Reading Display](#reading-display) · [Remote Control](#remote-control) · [Graph](#graph) · [Statistics](#statistics) · [Recording](#recording) · [Specifications](#specifications) · [Scale](#scale) · [Layout Modes](#layout-modes) · [Settings](#settings) · [Keyboard Shortcuts](#keyboard-shortcuts) · [Command-Line Options](#command-line-options) · [Accessibility](#accessibility) · [Appendix](#appendix)
+[Connecting](#connecting) · [Top Bar](#top-bar) · [Reading Display](#reading-display) · [Remote Control](#remote-control) · [Graph](#graph) · [Statistics](#statistics) · [Recording](#recording) · [Specifications](#specifications) · [Alarm](#alarm) · [Scale](#scale) · [Layout Modes](#layout-modes) · [Settings](#settings) · [Keyboard Shortcuts](#keyboard-shortcuts) · [Command-Line Options](#command-line-options) · [Accessibility](#accessibility) · [Appendix](#appendix)
 
 ![Wide layout on a DC mA session: the live reading, specifications and statistics beside the graph, where the minimap picks out a sensor's boot sequence and two cursors read its duration and charge](../assets/gui-wide-layout.webp)
 
@@ -36,8 +36,7 @@ meter sold under several brands' names listed under each (see
 [supported devices](supported-devices.md)), and under **Simulated**: **Mock
 UT61E+**, which generates synthetic measurements without hardware, and
 **Mock ZT-5B**, which simulates a ZOTEK meter ([what its keys
-do](cli-reference.md#zotek-mock)); picking one skips detection. The
-selection persists across sessions and requires a reconnect to take effect.
+do](cli-reference.md#zotek-mock)); picking one skips detection.
 When the selected or connected meter is not fully verified, an orange badge
 in the top bar says how far it is: **PARTLY VERIFIED** or **EXPERIMENTAL**.
 Clicking it opens the device's verification issue on GitHub, where you can
@@ -48,11 +47,9 @@ Help is shown automatically when connection fails:
 ![Connection help in the left column: "No meter found over USB or Bluetooth" above a section of steps for each link](../assets/gui-connection-help.webp)
 
 - **No meter found:** one section per link that was searched, each with its
-  steps (Linux: udev rule install; Windows: Device Manager guidance to check
-  if a driver is needed). All cable variants are detected automatically.
+  steps.
 - **No response from meter:** animated "Waiting for meter..." indicator
-  during initial timeouts, then what each meter needs switched on (insert
-  module, turn on, long-press USB/Hz until S icon appears).
+  during initial timeouts, then what the meter needs switched on.
 
 In big meter and minimal mode only the title is shown; hover it for the
 steps.
@@ -61,7 +58,7 @@ While a meter is being opened, the status reads **Connecting…** (**Detecting�
 under Auto-detect) and **Cancel** (or `Ctrl+O`) stops the attempt; the
 **Device** row waits until it is done.
 
-Auto-reconnection retries every 2 seconds after a disconnect, on the same link:
+Auto-reconnection retries after a disconnect, on the same link:
 over Bluetooth the same adapter, and a USB cable with a serial number of its own
 by that number. Several USB cables the meter can use that their serial numbers
 can't tell apart end the session with a notice instead, and stop a running
@@ -79,9 +76,8 @@ The top bar contains:
 - **Device label** (left) — the model picked in Settings, or the one
   Auto-detect found; reads "Auto-detect" until a meter answers.
 - **Connect / Disconnect** button, **Cancel** while connecting
-- **Pause / Resume** button — halts acquisition without disconnecting; the
-  meter stops being polled entirely. Use the live-view toggle instead to
-  freeze the view while data keeps arriving.
+- **Pause / Resume** button — stops polling the meter without disconnecting;
+  to freeze only the view while data keeps arriving, turn off **LIVE**.
 - **Clear** button — resets graph history and statistics (does not affect
   a recording)
 - **Connection status** — colored dot (green = connected, orange =
@@ -99,8 +95,7 @@ The top bar contains:
 - **Settings gear** — opens the settings panel
 
 Toast notifications (e.g. CSV export success/failure) stack in the top-right
-corner in every layout and expire on their own, pausing while the pointer is
-over them.
+corner and expire on their own, pausing while the pointer is over them.
 
 ## Reading Display
 
@@ -108,18 +103,18 @@ over them.
 
 - Primary value in large monospace font, as the meter displays it
 - Unit shown adjacent (e.g. "V", "mV", "kΩ")
-- Sub-value rows under the reading for meters that send them (UT181A, UT171,
-  and the UT61E+'s AC component in AC+DC V): label, value and unit, plus
-  `@Ns` for the MIN/MAX timestamps. The narrow layout condenses them to one
-  line; in a wide big-meter window they sit beside the reading. In AC+DC V the
-  reading itself is captioned **DC**.
+- Sub-value rows under the reading for meters that send them (such as the
+  UT181A, the UT171 and the UT61E+'s AC component in AC+DC V): label, value
+  and unit, plus `@Ns` for the MIN/MAX timestamps. The narrow layout condenses
+  them to one line; in a wide big-meter window they sit beside the reading. In
+  AC+DC V the reading itself is captioned **DC**.
 - Mode and range label below in smaller text
-- On meters that can switch function over USB (UT61+/UT161, UT171, UT181A,
-  VC-880, VC650BT, VC-890, and the mock), the mode and range labels are dropdowns of
-  what the meter offers from the current dial position, with the live entry
-  marked `●`. Picking an entry switches the meter. Dial positions with a
-  single mode, modes with a fixed range, a replay, a meter being reconnected and
-  other meters keep the plain label.
+- On meters the tool can switch (UT61+/UT161, UT60BT/UT202BT, UT171, UT181A,
+  VC-880, VC650BT, VC-890, and the mock), the mode and range labels are
+  dropdowns of what the meter offers from the current dial position, with the
+  live entry marked `●`. Picking an entry switches the meter. Dial positions
+  with a single mode, modes with a fixed range, a replay, a meter being
+  reconnected and other meters keep the plain label.
 - On ZOTEK meters the mode label is a dropdown of the meter's function keys,
   the key for the function shown marked `●`. Picking one presses that key,
   the marked one too, which switches between diode and continuity or °C and °F.
@@ -188,7 +183,7 @@ in a narrow graph.
 | **5s, 10s, 30s, 1m, 5m, 10m** | Time window presets |
 | **LIVE** | Follow the newest readings (filled when active) |
 | **Y:Auto / Y:Fixed** | Fit the Y axis to the data, or hold it at the min/max typed; Fixed holds every axis, the values set the left one |
-| **Reset Zoom** | Return to live follow with auto Y (enabled once the view is zoomed or paused) |
+| **Reset Zoom** | Return to live follow with auto Y |
 | **Plot:** | Which series the graph draws; see [Several Series](#several-series) |
 | **Show:** | Which sub-values are drawn beside it; see [Several Series](#several-series) |
 | **Mean** | Dashed line at the visible window's average, labelled with its value |
@@ -203,7 +198,6 @@ in a narrow graph.
 ### Main Plot
 
 - Time-series line plot with auto-scaling Y axis
-- Axis labels include units (e.g. "1.0 mV", "10 s")
 - The crosshair follows the pointer and snaps onto a reading near it, its
   height tagged on each axis; its tooltip shows the time and every drawn
   series' value there, each marked by a dot on its line
@@ -211,17 +205,13 @@ in a narrow graph.
   vertical line pairs
 - Overloads shown as a filled band in the error colour, drawn at their true
   duration; the crosshair reports `overload` inside one
-- [Markers](#recording) shown as dotted vertical lines, each with a flag in
-  the time axis's row carrying its number and as much of its note as fits,
-  in place of any time label it covers; click a
-  flag to write its note
+- [Markers](#recording) shown as dotted vertical lines, each with a
+  numbered flag on the time axis; click a flag to write its note
 - Right-click the plot to mark or copy the reading nearest the click, put or
   move a cursor on it, or draw a reference line or set an [alarm](#alarm)
   limit at the Y value clicked; over a marker, a cursor, a reference line or a
-  limit the menu also removes it. On the value axis it offers only what is
-  done at a value, on the time axis only what is done to a reading, and on a
-  marker's flag that marker's deletion
-- Timeline is continuous across reconnects to the same meter (data is not cleared)
+  limit the menu also removes it
+- Timeline is continuous across reconnects to the same meter
 - History buffer holds up to the configured [buffer size](#settings) (oldest
   dropped). A change of mode or quantity clears the graph; auto-range crossing
   a decade (Ω→kΩ) keeps it, with the fixed Y range, in the unit the meter
@@ -236,8 +226,8 @@ it, and several dropouts between the same two readings collapse into one gap.
 
 ![A UT61E+ in AC+DC V across a 1.6 V cell with one lead lifted: the DC reading plotted, its AC component dashed beside it, named in the key, and the Plot: and Show: chips above](../assets/gui-graph-series.webp)
 
-Meters that send sub-values (UT181A, UT171, the UT61E+ in AC+DC V) get two
-more toolbar groups:
+Meters that send sub-values (such as the UT181A, the UT171 and the UT61E+ in
+AC+DC V) get two more toolbar groups:
 
 - **Plot:** picks the series the graph draws: **Main** (the meter's reading,
   under its own name where it has one: **DC** in the UT61E+'s AC+DC V; **T1**
@@ -253,12 +243,9 @@ more toolbar groups:
 - Sub-values are drawn as dashed or dotted lines, named in a key in the plot's
   top-left corner. Each keeps going where the plotted series is over range.
 - A sub-value in another unit, such as a UT181A's frequency and period beside
-  its AC voltage, gets a Y axis of its own on the right, with ticks in round
-  steps of its unit on the same gridlines (a step of 2.5 labels every other
-  gridline, so labels stay round), and the key names every unit. Each axis's
-  ticks take its line's colour where that colour reads as text. Two or more
-  right axes share one column, each gridline's values stacked in key order.
-  A narrow window drops the right axes until it is widened.
+  its AC voltage, gets a Y axis of its own on the right, and the key names
+  every unit. Two or more right axes share one column. A narrow window drops
+  the right axes until it is widened.
 - The minimap, the cursors, the Mean/Min/Max/Ref overlays, the histogram and
   the visible-window statistics follow the plotted series, on the left axis.
 
@@ -286,9 +273,7 @@ How the plotted series' visible readings spread, turned on by the
 
 - A strip right of the plot shares its Y axis; in a graph too narrow for it, a
   band under the minimap has a value axis of its own.
-- Each bar's length is its percentage of the readings, on the scale beside
-  it. Bars are a whole number of the meter's steps, one step each once there
-  are enough readings.
+- Each bar's length is its percentage of the readings, on the scale beside it.
 - Hover a bar for its readings and count.
 - The share of readings beyond the Y axis shows at the end they lie past:
   `↑` and `↓` at the strip's top and bottom, `←` and `→` at the band's ends.
@@ -307,7 +292,7 @@ A thin strip below the main plot showing the full capture history.
 
 - Bracket markers ([ ]) indicate the current viewport
 - Markers show as small points along the bottom edge
-- Overload bands mirror the main plot, widened to a pixel when narrower
+- Overload bands mirror the main plot
 - Spikes stay visible however long the session runs
 - Click or drag the interior to jump to a specific time
 - Swipe sideways with two fingers on a touchpad to move the viewport
@@ -337,12 +322,6 @@ there are (`1m 49s #1103`).
   starts them again
 - With a software [scale](#scale) active, all of these follow the scaled
   reading, and ∫ its unit: a clamp relabelled to `A` gives charge in Ah
-
-The table takes the shape the panel's width allows: a row per group where it
-fits, else a column per group, else the groups one under another. Over the
-graph in a narrow window it is a row per group or, narrower still, a line of
-figures per group. Its columns are as wide as the widest figure since the
-last Reset, so figures that change never move them.
 
 ## Recording
 
@@ -383,8 +362,7 @@ last Reset, so figures that change never move them.
   what it said before. Pressing the number, or clicking or typing in the
   note, scrolls the graph to the marker
 - The graph's readings and a recording each hold up to the configured
-  [buffer size](#settings). Recording auto-stops when it is full and shows a
-  toast notification.
+  [buffer size](#settings). Recording auto-stops when it is full.
 
 Import… and Export… open in the folder either last picked a file in, kept
 across restarts; the first time, in Documents.
@@ -409,9 +387,9 @@ Meters that report sub-values add `auxN_label,auxN_value,auxN_unit` columns,
 and a software [scale](#scale) adds one more such group holding the meter's
 own **Raw** reading. When an exported reading carries a marker, `marker,note`
 close the header, and the JSON export adds `"marker"` and `"note"` to the
-marked readings; `dmm-cli read` places no markers. Otherwise the column
-layout is the same as `dmm-cli read`'s and is described in the [CLI reference](cli-reference.md#dmm-cli-read), as is the
-JSON export's one-object-per-line shape.
+marked readings. Otherwise the column layout is the same as `dmm-cli read`'s
+and is described in the [CLI reference](cli-reference.md#dmm-cli-read), as is
+the JSON export's one-object-per-line shape.
 
 ## Specifications
 
@@ -424,8 +402,7 @@ as the meter changes mode/range.
   Temperature shows accuracy per sub-range (e.g., -40–0°C, 0–300°C).
 - **Input Z** — input impedance (e.g., About 10MΩ), when applicable
 - **Notes** — additional info like "True RMS", accuracy conditions or thermocouple type
-- **Manual** — hyperlink to the manufacturer's product page (shown whenever a
-  URL is configured for the device, even without per-range spec data)
+- **Manual** — hyperlink to the manufacturer's product page
 
 The **Specifications** checkbox in [Settings](#settings) shows the panel,
 and the checkboxes after it pick its fields. Clicking the **Specifications**
@@ -436,21 +413,19 @@ persists across restarts. Default: unfolded.
 
 | Layout | Display style |
 |---|---|
-| Wide (≥ 900px) | Full panel in the left sidebar, between controls and statistics |
+| Wide | Full panel in the left sidebar, between controls and statistics |
 | Big meter | Pipe-separated inline summary, scaled with the reading |
-| Narrow (< 900px) | Compact single line below the reading |
+| Narrow | Compact single line below the reading |
 
-The one-line layouts (big meter, narrow, folded) show Resolution and
-Accuracy only. A reading the manual gives no range row for shows its mode's
-Input Z and notes in the full panel. When no spec data is available
-(unsupported device or unrecognized mode), only the Manual link is shown (if
-configured). If neither specs nor manual URL exist, nothing renders.
+The one-line layouts (big meter, narrow, folded) show Resolution and Accuracy
+only. A reading the manual gives no range row for shows its mode's Input Z and
+notes in the full panel. When no spec data is available (unsupported device or
+unrecognized mode), only the Manual link is shown (if configured).
 
 **Coverage:** UT61E+, UT61B+, UT61D+, UT161B/D/E, UT181A, UT803, UT804,
 ZT-5B (ANENG V05B), the Brymen BM820s and BM520s series (Minipa ET-2517A,
 ET-2615A), the OWON CMS061 and CMS101 (UNI-T UT217A, UT217B), and Mock (the
-UT61E+'s figures; none in its temperature modes). Other devices show only the
-Manual link.
+UT61E+'s figures; none in its temperature modes).
 
 ## Alarm
 
@@ -471,21 +446,20 @@ under the pointer, keeping the other. Setting limits restarts the alarm count.
 A reading that crosses a limit is marked, with the limit in the marker's
 note, and [Statistics](#statistics) counts the alarms. While
 the reading is out it turns the error colour with a **HI LIMIT** or
-**LO LIMIT** badge. The graph draws the limits as dotted lines. The band
+**LO LIMIT** badge. The graph draws the limits as dotted lines. The hysteresis
 keeps a reading hovering at a limit to one alarm; overloads don't count.
 
-Limits are in the base unit (V, A, Ω, …), as the [scale](#scale)'s factor
-is, or in the scale's unit while one is applied or a scaled file is imported.
-A limit may carry a unit (`4980 mV`, `10 kohm`), which the band may then
+Limits are in the base unit (V, A, Ω, …), as the [scale](#scale)'s factor is,
+or in the scale's unit while one is applied or a scaled file is imported. A
+limit may carry a unit (`4980 mV`, `10 kohm`), which the hysteresis may then
 share; a prefix alone (`4.7k`) only multiplies. They watch the quantity and
-unit of the first reading after they are set, or of the unit typed: on
-another quantity, or on a file's rows in another unit, the row reads
-**idle** until they come back. They last for the session; an
-import or another meter whose readings are in another unit turns the alarm
-off.
-Without a recording, a marker leaves with its reading when the graph clears;
-the count stays. `dmm-cli read` offers the same alarm as `--alarm-high`,
-`--alarm-low` and `--alarm-hysteresis`.
+unit of the first reading after they are set, or of the unit typed: on another
+quantity, or on a file's rows in another unit, the row reads **idle** until
+they come back. They last for the session; an import or another meter whose
+readings are in another unit turns the alarm off. Without a recording, a
+marker leaves with its reading when the graph clears; the count stays.
+[`dmm-cli read`](cli-reference.md#alarms) offers the same alarm as
+`--alarm-high`, `--alarm-low` and `--alarm-hysteresis`.
 
 ## Scale
 
@@ -515,20 +489,20 @@ The meter's own reading is kept as a **Raw** sub-value in the reading
 display, the graph's **Plot:** and **Show:** groups, the recording log and
 the CSV export; its **Show:** trace starts hidden. Sub-values in the same
 unit as the reading (a second thermocouple, a REL reference, MIN/MAX) are
-scaled with it; sub-values in another unit are left as sent. Statistics and
-the integral use the scaled reading.
+scaled with it; sub-values in another unit are left as sent.
 
-Applying or clearing a scale resets the graph and statistics, like
-**Clear**, and turns an [alarm](#alarm) off; a recording in progress continues, with scaled values while a scale is applied and the meter's own after it is cleared. The setting
-is session-only and survives disconnect, a change of device and `Ctrl+L`.
-`dmm-cli read` offers the same transform as `--scale`, `--offset` and `--unit`.
+Applying or clearing a scale resets the graph and statistics, like **Clear**,
+and turns an [alarm](#alarm) off; a recording in progress continues, with
+scaled values while a scale is applied and the meter's own after it is
+cleared. The setting is session-only and survives disconnect, a change of
+device and `Ctrl+L`.
+[`dmm-cli read`](cli-reference.md#scaling-readings-in-software) offers the
+same transform as `--scale`, `--offset` and `--unit`.
 
 ## Layout Modes
 
 The layout adapts to the window size and panel visibility. In a window too
-small for its content, the panels scroll rather than being cut off, and the
-top bar stays in place. The mouse wheel scrolls; `Ctrl` + wheel zooms the
-graph.
+small for its content, the panels scroll and the top bar stays in place.
 
 The window reopens at the size it was left, maximized if it was, and the
 sidebar, the graph/recording divider and the histogram where they were
@@ -537,16 +511,16 @@ from the default layout again, remove `window_size`, `window_maximized`,
 `reading_panel_width`, `recording_height`, `histogram_width` and
 `histogram_height` from [`settings.json`](#settings).
 
-### Wide Layout (≥ 900px)
+### Wide Layout
 
-Two-column layout with a resizable left sidebar (180–480px):
+Two-column layout with a resizable left sidebar:
 
 - **Left column:** reading display, remote controls, connection help,
   specifications, statistics
 - **Right column:** graph (top) and recording (bottom), separated by a
   draggable divider
 
-### Narrow Layout (< 900px)
+### Narrow Layout
 
 ![Narrow layout — reading, controls, compact specifications, statistics, graph and recording stacked in one column](../assets/gui-narrow-layout.webp)
 
@@ -599,10 +573,10 @@ Opened via the gear icon. Persisted to `~/.config/dmm-tools/settings.json` on Li
 | **Recording** | on | Toggle recording panel visibility |
 | **Specifications** | on | Toggle [specifications](#specifications) panel visibility |
 | **Resolution**, **Accuracy**, **Input Z**, **Notes** | on | Shown while **Specifications** is on. Each shows or hides its field in the specifications. |
-| **Language** | System | **System** follows the computer's language ([how it is chosen](setup.md#language)); the other entries name each language in itself. Applies immediately; toasts and notices already on screen, and the readings markers recorded, keep their language. |
-| **Zoom** | 100% | UI scale (30%–300%). Also controllable via keyboard. |
-| **Hide window decorations** | off | Remove the title bar and window borders (`Ctrl+D`). Use Alt+drag (Linux) or the keyboard shortcut to restore. |
-| **Always on top** | off | Keep the window above all other windows (`Ctrl+T`). Not available on Wayland (greyed out): right-click the title bar and use the window menu instead. |
+| **Language** | System | **System** follows the computer's language ([how it is chosen](setup.md#language)); the other entries name each language in itself. Applies immediately. |
+| **Zoom** | 100% | UI scale (30%–300%). |
+| **Hide window decorations** | off | Remove the title bar and window borders. On Linux, Alt+drag moves the window. |
+| **Always on top** | off | Keep the window above all other windows. Not available on Wayland (greyed out): right-click the title bar and use the window menu instead. |
 | **Check for new versions** | on | Only in downloaded builds. See [Update checks](#update-checks). |
 | **Screen reader updates** | 5s | How often a [screen reader](#screen-reader) speaks the reading as it changes: **Every reading**, at most once per 2, 5, 10 or 30 s, or **Never**. |
 | **Only while the reading has focus** | off | Speak the reading only while the screen reader is on it, at the **Screen reader updates** pace. Makes the reading a Tab stop. |
@@ -722,16 +696,15 @@ shows the macOS spelling.
 | `C` | Toggle cursors |
 
 Graph and `Space` shortcuts are disabled while any widget holds keyboard
-focus — not just text fields but any button reached with `Tab`, since `Space`
-and the arrow keys drive the focused widget. Press `Escape` to release it.
+focus, a button reached with `Tab` included. Press `Escape` to release it.
 `N` waits only for a text field, where it types the letter.
 
 ## Command-Line Options
 
-All options override saved settings for the current session only — they
-do not modify the persisted `settings.json`. [Settings](#settings) marks an
-overridden value with its option, as in "Auto-detect (--device)"; picking
-another value there clears the override and saves the new one.
+All options override saved settings for the current session only.
+[Settings](#settings) marks an overridden value with its option, as in
+"Auto-detect (--device)"; picking another value there clears the override and
+saves the new one.
 
 | Option | Description |
 |--------|-------------|
@@ -753,10 +726,10 @@ When started from a terminal, dmm-gui logs there as [dmm-cli](cli-reference.md#e
 
 ### Visual
 
-- Theme-aware colors with WCAG 2.1 AA contrast ratios (≥4.5:1 text, ≥3:1 graphical elements). Minimum 11 pt font; status flags use bold text in addition to color so they don't rely on color alone.
+- Theme-aware colors with WCAG 2.1 AA contrast ratios (≥4.5:1 text, ≥3:1 graphical elements). Minimum 11 pt font; status flags are bold as well as coloured.
 - Secondary text (the mode line under the reading, sub-value labels, toolbar and hint captions) has its own per-preset color that meets the same 4.5:1 bar as the primary text.
 - The built-in named themes meet the same bars.
-- Every button, link, toggle, and setting has a hover tooltip explaining what it does — hover any control to learn it without leaving the GUI.
+- Every button, link, toggle, and setting has a hover tooltip saying what it does.
 
 ### Keyboard
 
@@ -772,7 +745,7 @@ When started from a terminal, dmm-gui logs there as [dmm-cli](cli-reference.md#e
 Screen reader support is built on [AccessKit](https://accesskit.dev/) and exposed through each platform's native accessibility API: AT-SPI on Linux (used by [Orca](https://orca.gnome.org/)), UI Automation on Windows, and NSAccessibility on macOS. Reports of what does and doesn't come through as expected are welcome.
 
 - Every button, toggle, text field, and custom widget has a spoken name; icon-only buttons, color swatches, the graph minimap and the resize bars announce what they do instead of their glyph or color.
-- Toggle buttons like HOLD, REL, RANGE, AUTO, MAX/MIN, PEAK, the graph's LIVE button, **Scale** and **Alarm** announce whether they are currently on or off — you don't have to rely on the color change. The **▸** beside **Scale** and **Alarm** announces as "Scale settings" or "Alarm settings", expanded or collapsed.
+- Toggle buttons like HOLD, REL, RANGE, AUTO, MAX/MIN, PEAK, the graph's LIVE button, **Scale** and **Alarm** announce whether they are on or off. The **▸** beside **Scale** and **Alarm** announces as "Scale settings" or "Alarm settings", expanded or collapsed.
 - The **Device** list announces each meter by its full name, brand included (a brand heading shows it once on screen), and a real meter's support level.
 - The graph toolbar's **Plot:** chips announce as "Plot \<name\>" radio buttons and its **Show:** chips as "Show \<name\> trace" toggles.
 - The main reading, its sub-values included, is one item for a screen reader, its units said by name (millivolts, kilohms), spoken as it changes, at most once per **Screen reader updates** interval ([Settings](#settings)); a change of mode is spoken at once, except under **Never**, and a lost connection always is. Under **Never**, the reading a screen reader reads on demand is at most 5 s old. With Narrator's cursor left on the reading, each change is read twice, unless **Only while the reading has focus** is on. Sub-values are spoken after the mode, MIN/MAX timestamps included. Active status flags (HOLD, REL, MIN, MAX, AUTO, ...) are spoken alongside the value so toggling them via the on-device buttons gives audible confirmation. A reading passed through a software [scale](#scale) ends with ", software scaled"; one past an [alarm limit](#alarm) with ", above the high limit" or ", below the low limit".
