@@ -13,7 +13,7 @@
 
 use android_system_properties::AndroidSystemProperties;
 use dmm_gui::{AndroidApp, AndroidStart};
-use dmm_lib::{UsbCable, UsbHost};
+use dmm_lib::{UsbCable, UsbHost, UsbRefusal};
 use jni::objects::{JObject, JString};
 use jni::{JValue, jni_sig, jni_str};
 use std::os::fd::{FromRawFd, OwnedFd};
@@ -77,7 +77,7 @@ fn android_main(app: AndroidApp) {
             }),
         cable_offered: Some(Box::new(move || {
             cable_offered(&offers).unwrap_or_else(|e| {
-                log::debug!("no word of a USB cable offered: {e}");
+                log::debug!("no word of a USB cable's offer: {e}");
                 false
             })
         })),
@@ -174,14 +174,15 @@ impl UsbHost for Usb {
         unsafe_code,
         reason = "taking over the descriptor MainActivity.openUsb duplicated for this side"
     )]
-    fn open(&self, name: &str) -> Result<OwnedFd, String> {
-        match open_usb(&self.0, name).map_err(|e| e.to_string())? {
+    fn open(&self, name: &str) -> Result<OwnedFd, UsbRefusal> {
+        let failed = |why: &str| Err(UsbRefusal::Failed(why.to_string()));
+        match open_usb(&self.0, name).map_err(|e| UsbRefusal::Failed(e.to_string()))? {
             // SAFETY: a descriptor `openUsb` detached for its caller to
             // own; nothing else holds or closes it.
             fd if fd >= 0 => Ok(unsafe { OwnedFd::from_raw_fd(fd) }),
-            -1 => Err("the device is gone".to_string()),
-            -2 => Err("the user did not allow it".to_string()),
-            _ => Err("Android did not open it".to_string()),
+            -1 => failed("the device is gone"),
+            -2 => Err(UsbRefusal::NotAllowed),
+            _ => failed("Android did not open it"),
         }
     }
 }
@@ -233,7 +234,7 @@ fn open_usb(app: &AndroidApp, name: &str) -> Result<i32, jni::errors::Error> {
     })
 }
 
-/// Whether the system started the activity for a USB cable since the last
+/// Whether the system's offer of a USB cable was answered since the last
 /// call, from `MainActivity.takeCableOffered`.
 fn cable_offered(app: &AndroidApp) -> Result<bool, jni::errors::Error> {
     with_activity(app, |env, activity| {

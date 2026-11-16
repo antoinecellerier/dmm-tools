@@ -67,9 +67,18 @@ pub trait UsbHost: Send + Sync {
     /// The devices attached now.
     fn list(&self) -> Vec<UsbCable>;
     /// Open the device of this name, asking the user's permission where it
-    /// is needed, and hand over a descriptor this library owns. The error
-    /// says why not, for the log.
-    fn open(&self, name: &str) -> Result<OwnedFd, String>;
+    /// is needed, and hand over a descriptor this library owns.
+    fn open(&self, name: &str) -> Result<OwnedFd, UsbRefusal>;
+}
+
+/// Why [`UsbHost::open`] opened nothing.
+#[derive(Debug)]
+pub enum UsbRefusal {
+    /// The user has not allowed the device: the prompt was refused, is
+    /// still unanswered, or is the system's own to show.
+    NotAllowed,
+    /// Anything else, in words for the log.
+    Failed(String),
 }
 
 static USB_HOST: OnceLock<Box<dyn UsbHost>> = OnceLock::new();
@@ -93,6 +102,9 @@ pub enum HidError {
     IoError {
         error: std::io::Error,
     },
+    /// The user has not allowed the cable, which `open.rs` reports as its
+    /// own error.
+    NotAllowed,
 }
 
 impl std::fmt::Display for HidError {
@@ -100,6 +112,7 @@ impl std::fmt::Display for HidError {
         match self {
             Self::HidApiError { message } => write!(f, "USB error: {message}"),
             Self::IoError { error } => write!(f, "{error}"),
+            Self::NotAllowed => write!(f, "USB error: the user has not allowed the cable"),
         }
     }
 }
@@ -141,9 +154,10 @@ impl HidApi {
         self.devices.iter()
     }
 
-    /// The first device with these ids that opens.
+    /// The first device with these ids that opens. Of the reasons none
+    /// did, the one the user can act on is kept: a cable not allowed.
     pub(crate) fn open(&self, vid: u16, pid: u16) -> HidResult<HidDevice> {
-        let mut last = failed("USB cable", "not attached");
+        let mut why = failed("USB cable", "not attached");
         for info in self
             .devices
             .iter()
@@ -151,10 +165,11 @@ impl HidApi {
         {
             match HidDevice::open(info) {
                 Ok(device) => return Ok(device),
-                Err(e) => last = e,
+                Err(e) if !matches!(why, HidError::NotAllowed) => why = e,
+                Err(_) => {}
             }
         }
-        Err(last)
+        Err(why)
     }
 
     /// No cable is known by its serial number here: Android keeps it from
@@ -235,9 +250,10 @@ impl HidDevice {
         let host = USB_HOST
             .get()
             .ok_or_else(|| failed("USB", "not available"))?;
-        let fd = host
-            .open(&info.cable.name)
-            .map_err(|why| failed("open", why))?;
+        let fd = host.open(&info.cable.name).map_err(|why| match why {
+            UsbRefusal::NotAllowed => HidError::NotAllowed,
+            UsbRefusal::Failed(why) => failed("open", why),
+        })?;
         let device = nusb::Device::from_fd(fd)
             .wait()
             .map_err(|e| failed("open", e))?;

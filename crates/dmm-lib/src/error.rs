@@ -5,7 +5,7 @@ use thiserror::Error;
 mod bluetooth;
 mod reason;
 mod wrong_meter;
-pub use bluetooth::{BluetoothIssue, CharacteristicRole};
+pub use bluetooth::{BluetoothIssue, CharacteristicRole, host};
 pub use reason::{Rejected, Sent, Unsupported};
 pub use wrong_meter::{FrameRemedy, Unread, WrongMeter};
 
@@ -146,6 +146,21 @@ pub enum Error {
         activation: &'static str,
         miss: BluetoothOnlyMiss,
     },
+
+    /// On Android, a cable is plugged in and the user has not allowed the
+    /// application to open it: the system's prompt is unanswered or was
+    /// refused, and it is not shown again until the cable is plugged in
+    /// again.
+    #[error(
+        "the USB cable is waiting for your permission: accept Android's prompt, or plug the \
+         cable in again to see it"
+    )]
+    CableNotAllowed,
+
+    /// On Android, where either link may carry the meter: no cable is
+    /// plugged in, and the radio is off so it was not searched.
+    #[error("no USB cable is plugged in, and Bluetooth is turned off on this phone")]
+    NoCableBluetoothOff,
 
     /// The caller called the open off through
     /// [`OpenOptions::stop`](crate::OpenOptions::stop) before it finished.
@@ -319,6 +334,8 @@ impl Error {
         }
         match self {
             Self::NoTransportFound { .. }
+            | Self::CableNotAllowed
+            | Self::NoCableBluetoothOff
             | Self::BluetoothOnly {
                 miss: BluetoothOnlyMiss::NotInRange,
                 ..

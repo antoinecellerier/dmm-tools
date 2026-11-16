@@ -121,6 +121,8 @@ impl Localizer {
             Error::BluetoothOnly { model, miss, .. } => {
                 return self.bluetooth_only(model, *miss);
             }
+            Error::CableNotAllowed => tr!(self, "error-cable-not-allowed"),
+            Error::NoCableBluetoothOff => tr!(self, "error-no-cable-bluetooth-off"),
             Error::Cancelled => tr!(self, "error-cancelled"),
         }
         .into_owned()
@@ -478,8 +480,16 @@ impl Localizer {
             BluetoothIssue::Runtime { detail } => {
                 tr!(self, "error-bluetooth-runtime", detail = detail)
             }
-            BluetoothIssue::NoAdapter => tr!(self, "error-bluetooth-no-adapter"),
-            BluetoothIssue::PoweredOff => tr!(self, "error-bluetooth-powered-off"),
+            BluetoothIssue::NoAdapter => tr!(
+                self,
+                "error-bluetooth-no-adapter",
+                host = dmm_lib::error::host()
+            ),
+            BluetoothIssue::PoweredOff => tr!(
+                self,
+                "error-bluetooth-powered-off",
+                host = dmm_lib::error::host()
+            ),
             BluetoothIssue::NoCharacteristic { role } => tr!(
                 self,
                 "error-bluetooth-no-characteristic",
@@ -870,7 +880,9 @@ mod tests {
                     miss,
                 })
                 .collect(),
-            Some(Error::BluetoothOnly { .. }) => vec![Error::Cancelled],
+            Some(Error::BluetoothOnly { .. }) => vec![Error::CableNotAllowed],
+            Some(Error::CableNotAllowed) => vec![Error::NoCableBluetoothOff],
+            Some(Error::NoCableBluetoothOff) => vec![Error::Cancelled],
             Some(Error::Cancelled) => vec![],
         })
     }

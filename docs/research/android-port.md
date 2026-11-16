@@ -136,8 +136,9 @@ Not done or not tested: the CH9329, CH9325 and BU-86X cables, a meter that
 sends unasked on a cable, two cables at once, choosing where an export
 goes, saving a theme, the soft keyboard, the system clipboard, a layout for
 a phone screen, Android versions other than 12 and 14, other meters, a
-release build or signing, CI. The error texts are the desktop's, so they
-say "this computer".
+release build or signing, CI. The texts are the desktop's but for three
+errors that name the phone, its cable prompt or its radio, so help and
+hovers still speak of a computer.
 
 ## Scope
 

@@ -4,7 +4,7 @@
 //! (`open_transport`, `open_device_transport`, `list_devices`, ...) call in
 //! here.
 
-use crate::error::{BluetoothOnlyMiss, Error, Result};
+use crate::error::{BluetoothIssue, BluetoothOnlyMiss, Error, Result};
 use crate::protocol::registry::{self, SelectableDevice};
 use crate::transport::{BluetoothPeers, Transport, ble, bu86x, ch9325, ch9329, cp2110, hid};
 use crate::{BLUETOOTH, BLUETOOTH_SUPPORTED, DeviceInfo, OpenOptions};
@@ -217,25 +217,48 @@ pub(crate) fn open_links(
     match hid {
         Ok(transport) => Ok(transport),
         Err(err) if radio_gets_a_turn && usb_failure_falls_through(&err) => {
-            match ble::open_first(peers, opts.stop) {
-                Ok(transport) => Ok(transport),
-                // Called off, nothing was found or missed: the caller asked.
-                Err(Error::Cancelled) => Err(Error::Cancelled),
-                // On Android the radio is the link most meters are on, so
-                // what kept it from being searched is what the user acts on.
-                Err(stack @ Error::Bluetooth(_)) if cfg!(target_os = "android") => Err(stack),
-                Err(bluetooth_err) => {
-                    // The USB error is what the user acts on: it lists the
-                    // cables that were looked for. Why Bluetooth found
-                    // nothing — stack off, nothing in range — stays in the
-                    // log. The error says the radio was searched, so the help
-                    // titles itself on both links rather than on the cable.
-                    info!("no meter over Bluetooth either: {bluetooth_err}");
-                    Err(searched_bluetooth(err))
-                }
-            }
+            ble::open_first(peers, opts.stop)
+                .map_err(|radio| neither_link(err, radio, cfg!(target_os = "android")))
         }
         Err(err) => Err(err),
+    }
+}
+
+/// What an open reports when no cable opened (`usb`) and the radio, tried
+/// next, opened nothing either (`radio`). `android` for the platform, where
+/// the radio is the link most meters are on and a cable is one the user has
+/// to allow.
+fn neither_link(usb: Error, radio: Error, android: bool) -> Error {
+    match radio {
+        // Called off, nothing was found or missed: the caller asked.
+        Error::Cancelled => Error::Cancelled,
+        // A cable that only waits to be allowed is what the user acts on,
+        // whatever the radio found; so is, on Android, one that is plugged
+        // in and would not open.
+        radio
+            if matches!(usb, Error::CableNotAllowed)
+                || (android && matches!(usb, Error::Hid(_))) =>
+        {
+            info!("no meter over Bluetooth either: {radio}");
+            usb
+        }
+        // On Android what kept the radio from being searched is what the
+        // user acts on: with no cable in, that and the cable.
+        Error::Bluetooth(BluetoothIssue::PoweredOff)
+            if android && matches!(usb, Error::NoTransportFound { .. }) =>
+        {
+            Error::NoCableBluetoothOff
+        }
+        stack @ Error::Bluetooth(_) if android => stack,
+        radio => {
+            // The USB error is what the user acts on: it lists the cables
+            // that were looked for. Why Bluetooth found nothing — stack
+            // off, nothing in range — stays in the log. The error says the
+            // radio was searched, so the help titles itself on both links
+            // rather than on the cable.
+            info!("no meter over Bluetooth either: {radio}");
+            searched_bluetooth(usb)
+        }
     }
 }
 
@@ -256,7 +279,30 @@ pub(crate) fn bluetooth_is_next(preferred: &[&'static str], opts: OpenOptions<'_
 /// the list because it is what a missing or broken HID API returns, which on
 /// a machine with no USB support at all must not stop Bluetooth working.
 fn usb_failure_falls_through(err: &Error) -> bool {
-    matches!(err, Error::NoTransportFound { .. } | Error::Hid(_))
+    matches!(
+        err,
+        Error::NoTransportFound { .. } | Error::CableNotAllowed | Error::Hid(_)
+    )
+}
+
+/// Whether an open failed because the user has not allowed the cable, which
+/// only Android asks them.
+#[cfg(target_os = "android")]
+fn not_allowed(err: &hid::HidError) -> bool {
+    matches!(err, hid::HidError::NotAllowed)
+}
+#[cfg(not(target_os = "android"))]
+fn not_allowed(_err: &hid::HidError) -> bool {
+    false
+}
+
+/// A failed open of a cable the user named, as this crate's error.
+fn open_failure(err: hid::HidError) -> Error {
+    if not_allowed(&err) {
+        Error::CableNotAllowed
+    } else {
+        Error::Hid(err)
+    }
 }
 
 /// Mark a "nothing found" error as having looked at the radio as well.
@@ -389,7 +435,7 @@ fn open_with_adapter(
 
         let path =
             CString::new(adapter).map_err(|_| Error::AdapterNotFound(adapter.to_string()))?;
-        let device = api.open_path(&path).map_err(Error::Hid)?;
+        let device = api.open_path(&path).map_err(open_failure)?;
         Ok((device, kt))
     } else {
         Err(Error::AdapterNotFound(adapter.to_string()))
@@ -413,17 +459,36 @@ fn open_first_match(
         .collect::<std::collections::HashSet<_>>()
         .len();
 
+    let mut waiting_to_be_allowed = false;
+    let mut would_not_open = None;
     for &kt in &candidates {
-        if let Ok(device) = api.open(kt.vid, kt.pid) {
-            if cables > 1 {
-                // What was found, for the log: both apps say it themselves,
-                // with how to pick another (`cables-at-open`).
-                info!(
-                    "{cables} USB cables this session could open are plugged in; it took the first it found."
-                );
+        match api.open(kt.vid, kt.pid) {
+            Ok(device) => {
+                if cables > 1 {
+                    // What was found, for the log: both apps say it
+                    // themselves, with how to pick another
+                    // (`cables-at-open`).
+                    info!(
+                        "{cables} USB cables this session could open are plugged in; it took the first it found."
+                    );
+                }
+                return Ok((device, kt));
             }
-            return Ok((device, kt));
+            Err(e) => {
+                waiting_to_be_allowed |= not_allowed(&e);
+                // On Android alone: there the next thing said would be
+                // that no cable is plugged in.
+                if cfg!(target_os = "android") && api.device_list().any(|dev| kt.matches(dev)) {
+                    would_not_open = Some(e);
+                }
+            }
         }
+    }
+    if waiting_to_be_allowed {
+        return Err(Error::CableNotAllowed);
+    }
+    if let Some(e) = would_not_open {
+        return Err(Error::Hid(e));
     }
 
     // The bus alone was looked at here; [`open_links`] marks the error
@@ -462,6 +527,87 @@ pub(crate) fn list_usb() -> Result<Vec<DeviceInfo>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn no_cable() -> Error {
+        Error::NoTransportFound {
+            cables: vec!["CP2110"],
+            bluetooth_searched: false,
+        }
+    }
+
+    fn radio_off() -> Error {
+        BluetoothIssue::PoweredOff.into()
+    }
+
+    fn would_not_open() -> Error {
+        Error::Hid(hid::HidError::HidApiError {
+            message: "claiming the interface failed".to_string(),
+        })
+    }
+
+    /// With no link open, a desktop reports the cables it looked for and
+    /// that the radio was searched, whatever the radio said.
+    #[test]
+    fn a_desktop_reports_the_cable_search_when_neither_link_opens() {
+        for radio in [radio_off(), Error::LinkLost] {
+            assert!(matches!(
+                neither_link(no_cable(), radio, false),
+                Error::NoTransportFound {
+                    bluetooth_searched: true,
+                    ..
+                }
+            ));
+        }
+        assert!(matches!(
+            neither_link(would_not_open(), radio_off(), false),
+            Error::Hid(_)
+        ));
+    }
+
+    /// Android reports what the user can act on: the cable waiting for
+    /// them or failing, before the radio's state; the radio's state before
+    /// a list of cables; both when there is no cable and the radio is off.
+    #[test]
+    fn android_reports_the_cable_then_the_radio_when_neither_link_opens() {
+        assert!(matches!(
+            neither_link(Error::CableNotAllowed, radio_off(), true),
+            Error::CableNotAllowed
+        ));
+        assert!(matches!(
+            neither_link(would_not_open(), radio_off(), true),
+            Error::Hid(_)
+        ));
+        assert!(matches!(
+            neither_link(no_cable(), radio_off(), true),
+            Error::NoCableBluetoothOff
+        ));
+        assert!(matches!(
+            neither_link(no_cable(), BluetoothIssue::NoAdapter.into(), true),
+            Error::Bluetooth(BluetoothIssue::NoAdapter)
+        ));
+        // Nothing in range is no fault of the radio's: the cable search.
+        assert!(matches!(
+            neither_link(no_cable(), Error::LinkLost, true),
+            Error::NoTransportFound {
+                bluetooth_searched: true,
+                ..
+            }
+        ));
+    }
+
+    /// An open called off during the radio's turn is called off, on either
+    /// platform and whatever the cable search found.
+    #[test]
+    fn an_open_called_off_on_the_radio_is_called_off() {
+        for android in [false, true] {
+            for usb in [no_cable(), Error::CableNotAllowed] {
+                assert!(matches!(
+                    neither_link(usb, Error::Cancelled, android),
+                    Error::Cancelled
+                ));
+            }
+        }
+    }
 
     /// A cable with no serial has nothing to reopen it by, and one shaped
     /// like a Bluetooth address would be sent to the radio.

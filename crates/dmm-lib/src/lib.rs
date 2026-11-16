@@ -20,7 +20,7 @@ pub mod transport;
 pub use clock::Clock;
 /// How an Android application gives the library its USB cables.
 #[cfg(target_os = "android")]
-pub use transport::hid::{UsbCable, UsbHost, set_usb_host};
+pub use transport::hid::{UsbCable, UsbHost, UsbRefusal, set_usb_host};
 
 use error::{Error, Result};
 use log::{debug, info, warn};

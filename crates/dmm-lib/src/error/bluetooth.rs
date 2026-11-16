@@ -17,6 +17,16 @@
 use std::fmt;
 use thiserror::Error;
 
+/// What the program runs on, as a reason names it: `phone` or `computer`.
+/// An app's wording selects on the same word.
+pub fn host() -> &'static str {
+    if cfg!(target_os = "android") {
+        "phone"
+    } else {
+        "computer"
+    }
+}
+
 /// Why the Bluetooth stack could not do what was asked.
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
 pub enum BluetoothIssue {
@@ -30,11 +40,11 @@ pub enum BluetoothIssue {
     Runtime { detail: String },
 
     /// The computer has no Bluetooth adapter.
-    #[error("not available on this computer")]
+    #[error("not available on this {}", host())]
     NoAdapter,
 
     /// The computer's Bluetooth adapter is powered off.
-    #[error("turned off on this computer")]
+    #[error("turned off on this {}", host())]
     PoweredOff,
 
     /// The peer answered but carries no profile we know: the closest one

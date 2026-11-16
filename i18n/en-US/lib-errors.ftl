@@ -90,6 +90,12 @@ error-bluetooth-only-switched-off = { $model } connects over Bluetooth only, and
 error-bluetooth-only-not-built = { $model } connects over Bluetooth only, and this build has no Bluetooth support
 # $model is the meter, e.g. UNI-T UT60BT.
 error-bluetooth-only-usb-adapter = { $model } connects over Bluetooth only, and --adapter names a USB device: pass the meter's Bluetooth address, or leave --adapter out
+# On Android: a cable is plugged in, and the user has not answered or has
+# refused the system's question about letting this app use it.
+error-cable-not-allowed = the USB cable is waiting for your permission: accept Android's prompt, or plug the cable in again to see it
+# On Android, where the meter may be on either: nothing was found on USB
+# and Bluetooth could not be searched.
+error-no-cable-bluetooth-off = no USB cable is plugged in, and Bluetooth is turned off on this phone
 # Opening the meter was stopped part-way, by Disconnect or by quitting.
 error-cancelled = open called off
 
@@ -225,8 +231,18 @@ error-wrong-meter-untold-frame-kind = neither the meter's model code nor its fra
 
 # $detail is what the operating system said.
 error-bluetooth-runtime = could not start the Bluetooth runtime: { $detail }
-error-bluetooth-no-adapter = not available on this computer
-error-bluetooth-powered-off = turned off on this computer
+# $host is phone on Android, else computer.
+error-bluetooth-no-adapter =
+    { $host ->
+        [phone] not available on this phone
+       *[computer] not available on this computer
+    }
+# $host is phone on Android, else computer.
+error-bluetooth-powered-off =
+    { $host ->
+        [phone] turned off on this phone
+       *[computer] turned off on this computer
+    }
 # $role is write (the characteristic commands are written to) or notify
 # (the one the meter's data arrives on).
 error-bluetooth-no-characteristic =
