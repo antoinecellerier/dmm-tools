@@ -359,6 +359,16 @@ async fn connect(target: Target<'_>, begun: &RefCell<Begun>) -> Result<Opened> {
     let selector = target.selector();
     let (manager, adapter) = central().await?;
     begun.borrow_mut().session = Some((manager.clone(), adapter.clone()));
+    // Android's backend keeps the peers of this process's earlier sessions,
+    // and still counts one as connected after the radio was switched off
+    // under it; a setup on that link is never answered. Every open there
+    // starts from what a scan hears, which also fails at once, by name, when
+    // the radio is off.
+    if cfg!(target_os = "android")
+        && let Err(e) = adapter.clear_peripherals().await
+    {
+        debug!("Bluetooth: could not forget earlier peers: {e}");
+    }
     let mut found = search(&adapter, target, Match::First).await?;
     // A named address the search did not turn up may still answer a connect.
     let mut from_address = false;

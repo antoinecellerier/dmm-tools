@@ -219,6 +219,10 @@ pub(crate) fn open_links(
                 Ok(transport) => Ok(transport),
                 // Called off, nothing was found or missed: the caller asked.
                 Err(Error::Cancelled) => Err(Error::Cancelled),
+                // On Android there is no cable to have looked for, so what
+                // kept the radio from being searched is what the user acts
+                // on.
+                Err(stack @ Error::Bluetooth(_)) if cfg!(target_os = "android") => Err(stack),
                 Err(bluetooth_err) => {
                     // The USB error is what the user acts on: it lists the
                     // cables that were looked for. Why Bluetooth found

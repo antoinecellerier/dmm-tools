@@ -125,7 +125,7 @@ pub(super) async fn search(
     adapter
         .start_scan(ScanFilter::default())
         .await
-        .map_err(stack_error)?;
+        .map_err(scan_error)?;
     let deadline = tokio::time::Instant::now() + SCAN_WINDOW;
     let scanned = loop {
         tokio::time::sleep(SCAN_POLL).await;
@@ -155,6 +155,16 @@ pub(super) async fn search(
         }
     }
     Ok(keep_matches(all, want))
+}
+
+/// Why a scan could not start. Android's backend reports no adapter state
+/// (`central` in `mod.rs`), and its scan fails with "no adapter" when the
+/// radio is switched off: an Android device that runs this has a radio.
+fn scan_error(e: btleplug::Error) -> crate::error::Error {
+    if cfg!(target_os = "android") && matches!(e, btleplug::Error::NoAdapterAvailable) {
+        return crate::error::BluetoothIssue::PoweredOff.into();
+    }
+    stack_error(e)
 }
 
 /// The peripherals the platform already knows about, with no scan.
