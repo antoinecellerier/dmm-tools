@@ -1,4 +1,4 @@
-<!-- translated from README.md b3f3a0a3722dd935b8bf521ad26efad3a0c63a18 -->
+<!-- translated from README.md d82a1f991ed2042480fcf5ec1170049adb779dff -->
 # dmm-tools
 
 [![CI](https://github.com/antoinecellerier/dmm-tools/actions/workflows/ci.yml/badge.svg)](https://github.com/antoinecellerier/dmm-tools/actions/workflows/ci.yml)
@@ -109,7 +109,7 @@ $ dmm-cli read --interval-ms 2500 --count 5
 | Voltcraft VC915/VC925 PV | — | 🧪 試験的 (内蔵) | [#49](https://github.com/antoinecellerier/dmm-tools/issues/49) |
 | Voltcraft VC920/VC940/VC960 | 🧪 試験的 | — | [#23](https://github.com/antoinecellerier/dmm-tools/issues/23) |
 
-✅ = 実機でモードとコマンドを確認済み (一部の確認項目を除く)。🟡 = 接続と主なモードを確認済み。検証されていないモードやコマンドが残っています。🧪 = メーカーのソフトウェアからリバース エンジニアリングしたもので、その接続方法での実機テストはまだ行われていません。— = その接続方法には対応していません。
+✅ = 実機でモードとコマンドを確認済み (一部の確認項目を除く)。🟡 = 接続と主なモードを確認済み。検証されていないモードやコマンドが残っています。🧪 = メーカーのソフトウェアと取扱説明書からリバース エンジニアリングしたもので、その接続方法での実機テストはまだ行われていません。— = その接続方法には対応していません。
 
 Bluetooth の「アダプター」は UNI-T のオプション品 UT-D07A/B です。「内蔵」の機種にはアダプターは不要です。動いた機能、動かなかった機能を、その機種の Issue でお知らせください。
 
@@ -161,4 +161,9 @@ GPL-3.0-or-later。詳しくは [LICENSE](LICENSE) をご覧ください。
 - [gulux/Uni-T-CP2110](https://github.com/gulux/Uni-T-CP2110): UT171 のキャプチャとパーサー
 - [antage/ut181a](https://github.com/antage/ut181a) と [libsigrok `uni-t-ut181a`](https://github.com/sigrokproject/libsigrok/tree/master/src/hardware/uni-t-ut181a): UT181A プロトコル
 - [pylablib](https://github.com/AlexShkarin/pyLabLib): VC-880 のテーブルとフラグ
-- [Silicon Labs AN434](https://www.silabs.com/documents/public/application-notes/an434-cp2110-4-interface-specification.pdf): CP2110 の HID-UART 仕様。[UNI-T](https://meters.uni-trend.com/download/ut61b-d-e-user-manual/): UT61+ のユーザー マニュアル
+
+このプロジェクトに欠かせない資料を公開している次のメーカーに感謝します:
+
+- [Silicon Labs AN434](https://www.silabs.com/documents/public/application-notes/an434-cp2110-4-interface-specification.pdf): CP2110 の HID-UART 仕様
+- UNI-T、Voltcraft、Brymen、EEVblog: 各社製マルチメーターのプロトコル資料
+- 対応機種の各メーカー: 取扱説明書。[プロトコルの詳細](docs/protocol.md) (英語) から各プロトコルの解説をたどると、使用したプロトコル資料、データシート、取扱説明書の一覧があります。

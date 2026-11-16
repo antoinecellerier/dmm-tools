@@ -1,4 +1,4 @@
-<!-- translated from README.md b3f3a0a3722dd935b8bf521ad26efad3a0c63a18 -->
+<!-- translated from README.md d82a1f991ed2042480fcf5ec1170049adb779dff -->
 # dmm-tools
 
 [![CI](https://github.com/antoinecellerier/dmm-tools/actions/workflows/ci.yml/badge.svg)](https://github.com/antoinecellerier/dmm-tools/actions/workflows/ci.yml)
@@ -109,7 +109,7 @@ $ dmm-cli read --interval-ms 2500 --count 5
 | Voltcraft VC915/VC925 PV | — | 🧪 实验性（内置） | [#49](https://github.com/antoinecellerier/dmm-tools/issues/49) |
 | Voltcraft VC920/VC940/VC960 | 🧪 实验性 | — | [#23](https://github.com/antoinecellerier/dmm-tools/issues/23) |
 
-✅ = 各模式和命令已在真实硬件上确认，仅剩个别细节有待检查。🟡 = 连接和主要模式已确认，仍有部分模式或命令尚未验证。🧪 = 基于对厂商软件的逆向分析实现，尚未通过该连接方式在真实硬件上测试。— = 不支持该连接方式。
+✅ = 各模式和命令已在真实硬件上确认，仅剩个别细节有待检查。🟡 = 连接和主要模式已确认，仍有部分模式或命令尚未验证。🧪 = 基于对厂商软件的逆向分析和说明书实现，尚未通过该连接方式在真实硬件上测试。— = 不支持该连接方式。
 
 蓝牙“适配器”指 UNI-T 的 UT-D07A/B 附加模块；“内置”则无需适配器。哪些功能可用、哪些不可用，请在对应型号的议题中反馈。
 
@@ -161,4 +161,9 @@ GPL-3.0-or-later。详见 [LICENSE](LICENSE)。
 - [gulux/Uni-T-CP2110](https://github.com/gulux/Uni-T-CP2110)：UT171 捕获数据和解析器
 - [antage/ut181a](https://github.com/antage/ut181a) 和 [libsigrok `uni-t-ut181a`](https://github.com/sigrokproject/libsigrok/tree/master/src/hardware/uni-t-ut181a)：UT181A 协议
 - [pylablib](https://github.com/AlexShkarin/pyLabLib)：VC-880 的表格和标志
-- [Silicon Labs AN434](https://www.silabs.com/documents/public/application-notes/an434-cp2110-4-interface-specification.pdf)：CP2110 HID 转 UART 规范；[UNI-T](https://meters.uni-trend.com/download/ut61b-d-e-user-manual/)：UT61+ 使用说明书
+
+本项目离不开以下厂商公开的文档，在此致谢：
+
+- [Silicon Labs AN434](https://www.silabs.com/documents/public/application-notes/an434-cp2110-4-interface-specification.pdf)：CP2110 HID 转 UART 规范
+- UNI-T、Voltcraft、Brymen 和 EEVblog：各自万用表的协议文档
+- 各款万用表的厂商：使用说明书；[协议详情](docs/protocol.md)（英文）中有各系列笔记的链接，笔记列出了所用的协议文档、数据手册和说明书

@@ -1,4 +1,4 @@
-<!-- translated from README.md b3f3a0a3722dd935b8bf521ad26efad3a0c63a18 -->
+<!-- translated from README.md d82a1f991ed2042480fcf5ec1170049adb779dff -->
 # dmm-tools
 
 [![CI](https://github.com/antoinecellerier/dmm-tools/actions/workflows/ci.yml/badge.svg)](https://github.com/antoinecellerier/dmm-tools/actions/workflows/ci.yml)
@@ -109,7 +109,7 @@ $ dmm-cli read --interval-ms 2500 --count 5
 | Voltcraft VC915/VC925 PV | — | 🧪 Experimental (integrado) | [#49](https://github.com/antoinecellerier/dmm-tools/issues/49) |
 | Voltcraft VC920/VC940/VC960 | 🧪 Experimental | — | [#23](https://github.com/antoinecellerier/dmm-tools/issues/23) |
 
-✅ = modos e comandos confirmados em hardware real, faltando apenas algumas verificações pontuais. 🟡 = conexão e modos principais confirmados; modos inteiros ou comandos ainda a verificar. 🧪 = suporte criado por engenharia reversa do software do fabricante, ainda não testado em hardware real nessa conexão. — = sem suporte nessa conexão.
+✅ = modos e comandos confirmados em hardware real, faltando apenas algumas verificações pontuais. 🟡 = conexão e modos principais confirmados; modos inteiros ou comandos ainda a verificar. 🧪 = suporte criado por engenharia reversa do software e dos manuais do fabricante, ainda não testado em hardware real nessa conexão. — = sem suporte nessa conexão.
 
 No Bluetooth, “adaptador” é o acessório UT-D07A/B da UNI-T; “integrado” dispensa adaptador. Na issue do seu multímetro, conte o que funciona e o que não funciona.
 
@@ -161,4 +161,9 @@ Agradecemos aos projetos da comunidade cujo trabalho serviu de base para o nosso
 - [gulux/Uni-T-CP2110](https://github.com/gulux/Uni-T-CP2110) — capturas e analisador do UT171
 - [antage/ut181a](https://github.com/antage/ut181a) e [libsigrok `uni-t-ut181a`](https://github.com/sigrokproject/libsigrok/tree/master/src/hardware/uni-t-ut181a) — protocolo do UT181A
 - [pylablib](https://github.com/AlexShkarin/pyLabLib) — tabelas e indicadores do VC-880
-- [Silicon Labs AN434](https://www.silabs.com/documents/public/application-notes/an434-cp2110-4-interface-specification.pdf) — especificação HID-to-UART do CP2110; [UNI-T](https://meters.uni-trend.com/download/ut61b-d-e-user-manual/) — o manual de instruções do UT61+
+
+Agradecemos também aos fabricantes cuja documentação publicada tornou este projeto possível:
+
+- [Silicon Labs AN434](https://www.silabs.com/documents/public/application-notes/an434-cp2110-4-interface-specification.pdf) — especificação HID-to-UART do CP2110
+- UNI-T, Voltcraft, Brymen e EEVblog — documentos de protocolo dos respectivos multímetros
+- O fabricante de cada multímetro — os manuais de instruções; os [detalhes do protocolo](docs/protocol.md) (em inglês) levam às notas de cada família, que listam os documentos de protocolo, os datasheets e os manuais consultados
