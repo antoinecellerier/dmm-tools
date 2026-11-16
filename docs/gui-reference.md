@@ -539,10 +539,11 @@ sub-values move beside the reading or under it, whichever lets it grow larger.
 Use the **⊞** button (near the remote control buttons) or **Ctrl+B** to
 quickly enter big meter mode — this temporarily hides graph, recording,
 statistics, and specifications without changing your saved settings.
-Press **Ctrl+B** again to enter **minimal mode**, which also hides the
-top bar and command buttons, leaving only the reading and mode line.
-Press **Ctrl+B** a third time to return to your normal layout. In a window
-too small to show the **⊞** button, **Ctrl+B** is the way out. **Scale** and
+Press either again to enter **minimal mode**, which also hides the
+top bar and command buttons, leaving only the reading and mode line, with
+the button, as **⊟**, in the bottom-right corner. Press either a third
+time to return to your normal layout. In a window too small to show the
+button, **Ctrl+B** is the way out. **Scale** and
 **Alarm** turn on and off there with the values set in the normal layout,
 which has their fields.
 

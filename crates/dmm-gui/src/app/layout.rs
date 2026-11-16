@@ -151,11 +151,12 @@ impl App {
         )
     }
 
-    /// Icon of the big-meter toggle in `mode`.
+    /// Icon of the big-meter toggle in `mode`: ⊞ while a press gives the
+    /// reading more of the window, ⊟ when it brings the panels back.
     fn big_meter_toggle_icon(mode: BigMeterMode) -> RichText {
         let icon = match mode {
-            BigMeterMode::Off => "\u{229E}",
-            BigMeterMode::Full | BigMeterMode::Minimal => "\u{229F}",
+            BigMeterMode::Off | BigMeterMode::Full => "\u{229E}",
+            BigMeterMode::Minimal => "\u{229F}",
         };
         RichText::new(icon).size(14.0)
     }
@@ -166,7 +167,10 @@ impl App {
         let keys = Shortcut::CycleBigMeter.keys(ui.ctx(), &self.l10n);
         let tooltip = match self.big_meter_mode {
             BigMeterMode::Off => tr!(self.l10n, "recording-big-meter-on.hover", keys = &keys),
-            BigMeterMode::Full | BigMeterMode::Minimal => {
+            BigMeterMode::Full => {
+                tr!(self.l10n, "recording-big-meter-minimal.hover", keys = &keys)
+            }
+            BigMeterMode::Minimal => {
                 tr!(self.l10n, "recording-big-meter-off.hover", keys = &keys)
             }
         }
@@ -176,14 +180,10 @@ impl App {
             let color = ui.visuals().weak_text_color();
             let btn = egui::Button::new(icon.color(color));
             let response = ui.add(btn).on_hover_text(&tooltip).a11y_label(&tooltip);
+            // The same round as the shortcut, so the reading alone can be
+            // reached, and left, without a keyboard.
             if response.clicked() {
-                if self.big_meter_mode == BigMeterMode::Off {
-                    // Enter big meter — use cycle_big_meter() to handle
-                    // the "already_big" restore-all-panels case.
-                    self.cycle_big_meter();
-                } else {
-                    self.big_meter_mode = BigMeterMode::Off;
-                }
+                self.cycle_big_meter();
             }
         });
     }

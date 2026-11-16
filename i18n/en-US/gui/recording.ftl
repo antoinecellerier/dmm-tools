@@ -75,6 +75,9 @@ recording-reading-resize =
 
 recording-big-meter-on =
     .hover = Hide side panels and show the meter reading full-screen ({ $keys })
-# While the reading is full-screen.
+# While the reading is full-screen with its buttons under it.
+recording-big-meter-minimal =
+    .hover = Show the reading alone, without its buttons ({ $keys })
+# While the reading alone is full-screen.
 recording-big-meter-off =
     .hover = Return to the normal multi-panel layout ({ $keys })
