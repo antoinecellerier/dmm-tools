@@ -55,7 +55,9 @@ so older news makes room once it would take more than half the height under
 the top bar, rather than waiting its turn and showing up late. A caution or a
 failure stays, up to the four cards the stack holds: many are said once. A
 ring around each × runs out with the card's time, so a card is seen to be
-leaving rather than vanishing mid-read.
+leaving rather than vanishing mid-read. Under the pointer the stack holds
+still, clocks included, so a click lands on the card it was aimed at; a
+message arriving then goes under the others rather than waiting unseen.
 
 **The window's position is left to the OS.** Wayland ignores it, and a monitor
 unplugged since would leave the window off-screen. Fullscreen isn't restored

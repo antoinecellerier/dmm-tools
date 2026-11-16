@@ -99,7 +99,8 @@ The top bar contains:
 - **Settings gear** — opens the settings panel
 
 Toast notifications (e.g. CSV export success/failure) stack in the top-right
-corner in every layout and expire on their own.
+corner in every layout and expire on their own, pausing while the pointer is
+over them.
 
 ## Reading Display
 

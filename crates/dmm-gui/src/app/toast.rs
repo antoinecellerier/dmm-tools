@@ -10,7 +10,8 @@
 //! so one arriving a second after another covers nothing. [`Toasts::push`]
 //! keeps the stack honest: a repeat or a newer word from the same control
 //! takes its card's place, and the stack is bounded by a count and by the
-//! height it may cover.
+//! height it may cover. While the pointer is over the stack it holds still
+//! (see [`Toasts::push`]), so the × under the pointer stays the one aimed at.
 
 use dmm_shared::l10n::Localizer;
 use dmm_shared::tr;
@@ -224,6 +225,10 @@ impl Toast {
 pub(super) struct Toasts {
     cards: Vec<Toast>,
     next_id: u64,
+    /// When the stack was last drawn with the pointer over it, while it
+    /// still is: the stack is held, so nothing in it moves or runs out
+    /// under a click on its way to a ×.
+    held_at: Option<Instant>,
 }
 
 impl Toasts {
@@ -234,6 +239,10 @@ impl Toasts {
     /// repeated failure or a control toggled back and forth holds one card,
     /// with a fresh clock, however often it is raised. Past [`MAX_TOASTS`]
     /// an older card makes room, whatever its kind (see `evict`).
+    ///
+    /// A held stack keeps its cards where they are: the toast goes where
+    /// the card it supersedes was, or under the others, out of order. Only
+    /// a full stack still moves, to stay in its bound.
     pub(super) fn push(&mut self, mut toast: Toast) {
         // Here too, not only on a drawn frame: toasts are also raised while
         // the window is hidden, and a card past its time must neither absorb
@@ -242,6 +251,7 @@ impl Toasts {
         // Its card's id and height with it: an import's progress is raised
         // afresh every frame, and its close button has to stay one widget
         // and its card one the height bound counts.
+        let first = self.cards.iter().position(|c| c.superseded_by(&toast));
         let mut taken = None;
         self.cards.retain(|card| {
             let superseded = card.superseded_by(&toast);
@@ -254,8 +264,17 @@ impl Toasts {
             self.next_id += 1;
             (self.next_id, None)
         });
-        self.cards.push(toast);
-        while self.cards.len() > MAX_TOASTS && self.evict(&EVERY_KIND) {}
+        match (self.held_at, first) {
+            (None, _) => {
+                self.cards.push(toast);
+                while self.cards.len() > MAX_TOASTS && self.evict(&EVERY_KIND) {}
+            }
+            (Some(_), Some(at)) => self.cards.insert(at, toast),
+            (Some(_), None) => {
+                while self.cards.len() >= MAX_TOASTS && self.evict(&EVERY_KIND) {}
+                self.cards.insert(0, toast);
+            }
+        }
     }
 
     /// Take down what `slot`'s control last said: something else is about
@@ -264,9 +283,12 @@ impl Toasts {
         self.cards.retain(|card| card.slot != Some(slot));
     }
 
-    /// Drop the cards that have been up their full time.
+    /// Drop the cards that have been up their full time, unless the stack
+    /// is held: its clocks are stopped, and are put back by the next frame.
     pub(super) fn expire(&mut self) {
-        self.cards.retain(|toast| !toast.expired());
+        if self.held_at.is_none() {
+            self.cards.retain(|toast| !toast.expired());
+        }
     }
 
     /// Drop one card to make room, and say whether one went: the oldest of
@@ -338,10 +360,22 @@ impl App {
     /// them. A modal drawn later still covers it, which is what we want.
     pub(super) fn show_toast(&mut self, ctx: &egui::Context, anchor_top: f32) {
         let content = ctx.content_rect();
-        self.toasts
-            .fit((content.bottom() - anchor_top) * STACK_HEIGHT_SHARE);
+        let now = Instant::now();
+        match self.toasts.held_at {
+            // Held: the time since the last frame did not count.
+            Some(last) => {
+                let paused = now.saturating_duration_since(last);
+                for card in &mut self.toasts.cards {
+                    card.shown_at = card.shown_at.map(|at| at.checked_add(paused).unwrap_or(at));
+                }
+            }
+            None => self
+                .toasts
+                .fit((content.bottom() - anchor_top) * STACK_HEIGHT_SHARE),
+        }
         let cards = &mut self.toasts.cards;
         let Some(soonest) = cards.iter().map(Toast::remaining).min() else {
+            self.toasts.held_at = None;
             return;
         };
 
@@ -362,6 +396,7 @@ impl App {
         let l10n = &self.l10n;
 
         let mut dismissed = None;
+        let stack =
         // One area for the whole stack: egui keeps an area's state for good,
         // so one per card would leave a little behind for every toast raised.
         egui::Area::new(egui::Id::unique("toast"))
@@ -423,6 +458,12 @@ impl App {
         if let Some(id) = dismissed {
             cards.retain(|toast| toast.id != id);
         }
+        // Held while the pointer is anywhere over the stack, the gaps
+        // between cards included: on its way from one × to the next.
+        let over = ctx
+            .pointer_hover_pos()
+            .is_some_and(|pos| stack.response.rect.contains(pos));
+        self.toasts.held_at = over.then_some(now);
     }
 }
 
@@ -753,6 +794,62 @@ mod tests {
         let closes = close_buttons(&frame);
         run.frame_with(click_at(closes[1].center()));
         assert_eq!(run.app.toasts.messages(), ["newest"]);
+    }
+
+    /// With the pointer over the stack nothing in it moves or runs out: a
+    /// click on its way to a × lands on the card it was aimed at. A new
+    /// message goes under the others, a repeat stays where its card was, and
+    /// the clocks wait until the pointer leaves.
+    #[test]
+    fn a_stack_under_the_pointer_holds_still() {
+        let mut run = ToastRun::new(900.0, 600.0);
+        for message in ["oldest", "middle", "newest"] {
+            run.show_toast(message);
+        }
+        let frame = run.settle();
+        let closes = close_buttons(&frame);
+        let aim = closes[1].center();
+        run.frame_with(vec![egui::Event::PointerMoved(aim)]);
+        assert!(run.app.toasts.held_at.is_some(), "the pointer is over it");
+
+        let clock = run.app.toasts.cards[1].shown_at;
+        run.app.toasts.push(Toast::info("news"));
+        run.show_toast("oldest");
+        let frame = run.settle();
+        assert_eq!(
+            run.app.toasts.messages(),
+            ["news", "oldest", "middle", "newest"]
+        );
+        assert_eq!(close_buttons(&frame)[..3], closes[..]);
+        assert!(run.app.toasts.cards[2].shown_at > clock, "its clock ran");
+
+        // A card past its time stays while the stack is held, and its ×
+        // still closes the card it is on.
+        let Some(long_ago) = Instant::now().checked_sub(CAUTION_DURATION) else {
+            return;
+        };
+        run.app.toasts.cards[3].shown_at = Some(long_ago);
+        run.app.toasts.expire();
+        run.frame_with(click_at(aim));
+        assert_eq!(run.app.toasts.messages(), ["news", "oldest", "newest"]);
+        run.frame_with(vec![egui::Event::PointerGone]);
+        assert!(run.app.toasts.held_at.is_none());
+        run.app.toasts.expire();
+        assert_eq!(run.app.toasts.messages(), ["news", "oldest"]);
+    }
+
+    /// A held stack that is full still keeps to its bound.
+    #[test]
+    fn a_held_stack_stays_within_its_bound() {
+        let mut toasts = Toasts {
+            held_at: Some(Instant::now()),
+            ..Toasts::default()
+        };
+        for n in 1..=MAX_TOASTS + 2 {
+            toasts.push(Toast::info(format!("news {n}")));
+        }
+        assert_eq!(toasts.messages().len(), MAX_TOASTS);
+        assert_eq!(toasts.messages()[0], format!("news {}", MAX_TOASTS + 2));
     }
 
     /// A card raised later starts its own clock at its own first frame.
