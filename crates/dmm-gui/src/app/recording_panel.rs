@@ -305,7 +305,7 @@ impl App {
         } else {
             tr!(self.l10n, "recording-discarded-graph-keeps", count = left)
         };
-        self.toast = Some(Toast::info(message.into_owned()));
+        self.toasts.push(Toast::info(message.into_owned()));
     }
 
     /// Flip the recording state. A new recording names no meter until its
@@ -691,7 +691,7 @@ impl App {
     fn copy_reading(&mut self, ctx: &egui::Context, text: String) {
         ctx.copy_text(text.clone());
         let message = tr!(self.l10n, "recording-copied", digits = &text);
-        self.toast = Some(Toast::info(message.into_owned()));
+        self.toasts.push(Toast::info(message.into_owned()));
     }
 
     /// Render the graph+recording area with a resizable drag separator between them.
@@ -863,7 +863,7 @@ mod tests {
         });
         assert_eq!(copied, Some("5.678"));
         assert_eq!(
-            app.toast.as_ref().map(|t| t.message.as_str()),
+            app.toasts.latest().map(|t| t.message.as_str()),
             Some("Copied 5.678")
         );
     }
@@ -1050,7 +1050,7 @@ mod tests {
         assert!(csv.top() >= arrow.bottom(), "focus is in the menu: {csv:?}");
         // Picking CSV… on an empty buffer reports it; nothing was picked.
         assert!(
-            run.app.toast.is_none(),
+            run.app.toasts.is_empty(),
             "Enter did not pick the first entry"
         );
     }
@@ -1390,7 +1390,7 @@ mod tests {
         assert_eq!(run.app.capture.recording.role(), BufferRole::History);
         assert_eq!(run.app.capture.recording.export_samples().len(), 0);
         assert_eq!(
-            run.app.toast.as_ref().map(|t| t.message.as_str()),
+            run.app.toasts.latest().map(|t| t.message.as_str()),
             Some("Recording discarded")
         );
         assert!(!run.shows_widget("Discard"), "nothing left to discard");
@@ -1406,7 +1406,7 @@ mod tests {
         assert_eq!(run.app.capture.recording.role(), BufferRole::History);
         assert_eq!(run.app.capture.recording.export_samples().len(), 2);
         assert_eq!(
-            run.app.toast.as_ref().map(|t| t.message.as_str()),
+            run.app.toasts.latest().map(|t| t.message.as_str()),
             Some("Recording discarded. \"Export\u{2026}\" saves the graph's 2 samples.")
         );
     }

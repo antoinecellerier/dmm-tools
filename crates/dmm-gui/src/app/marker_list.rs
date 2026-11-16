@@ -341,7 +341,8 @@ impl App {
     /// or disconnected, that reading is the moment the user is looking at.
     pub(super) fn add_marker(&mut self, write_note: bool) {
         let Some(m) = self.last_measurement.as_ref() else {
-            self.toast = Some(Toast::info(tr!(self.l10n, "markers-no-reading")));
+            self.toasts
+                .push(Toast::info(tr!(self.l10n, "markers-no-reading")));
             return;
         };
         let (at, reading) = (m.timestamp, log_line(&self.l10n, m));
@@ -357,7 +358,8 @@ impl App {
     /// marker: the next frame's trim would take it away unseen.
     fn mark_reading(&mut self, at: Instant, reading: String, write_note: bool) {
         if !reading_held(&self.graph, &self.capture.recording, at) {
-            self.toast = Some(Toast::info(tr!(self.l10n, "markers-no-reading")));
+            self.toasts
+                .push(Toast::info(tr!(self.l10n, "markers-no-reading")));
             return;
         }
         // The reading's own wall time where the buffer holds it; a point
@@ -373,7 +375,7 @@ impl App {
             // Ctrl+N opens the note already there.
             Err(number) if write_note => (number, false),
             Err(number) => {
-                self.toast = Some(Toast::info(tr!(
+                self.toasts.push(Toast::info(tr!(
                     self.l10n,
                     "markers-already-marked",
                     number = number
@@ -400,7 +402,7 @@ impl App {
                         hidden = hidden.key()
                     )
                 };
-                self.toast = Some(Toast::info(text));
+                self.toasts.push(Toast::info(text));
             }
         }
     }
@@ -437,7 +439,7 @@ impl App {
             None => self.marker_list.focus = Some(number),
             Some(hidden) => {
                 let text = tr!(self.l10n, "markers-note-hidden", hidden = hidden.key());
-                self.toast = Some(Toast::info(text));
+                self.toasts.push(Toast::info(text));
             }
         }
     }
@@ -517,7 +519,8 @@ impl App {
         if max_height < line
             && let Some(n) = self.marker_list.focus.take()
         {
-            self.toast = Some(Toast::info(tr!(l10n, "markers-log-too-short", number = n)));
+            self.toasts
+                .push(Toast::info(tr!(l10n, "markers-log-too-short", number = n)));
         }
 
         let tc = self.settings.theme_colors(ui.visuals().dark_mode);
@@ -1255,7 +1258,7 @@ mod tests {
     }
 
     fn toast(app: &App) -> Option<&str> {
-        app.toast.as_ref().map(|t| t.message.as_str())
+        app.toasts.latest().map(|t| t.message.as_str())
     }
 
     fn secs(t0: Instant, s: u64) -> Instant {
@@ -1290,7 +1293,7 @@ mod tests {
         assert_eq!(toast(&app), Some("Marker 1 is already on this reading"));
 
         // Ctrl+N on the same reading opens the note already there.
-        app.toast = None;
+        app.toasts.clear();
         app.add_marker(true);
         assert_eq!(numbers(&app), [1]);
         assert_eq!(app.marker_list.focus, Some(1));

@@ -230,7 +230,7 @@ impl App {
                     _ => tr!(english, "settings-language-no-chinese-font"),
                 }
                 .into_owned();
-                self.toast = Some(Toast::error(message));
+                self.toasts.push(Toast::error(message));
             }
             Err(why) => log::warn!("UI: the font check failed: {why}"),
         }

@@ -149,6 +149,46 @@ impl Toast {
     }
 }
 
+/// The toast on screen. Everything that raises one goes through
+/// [`Toasts::push`].
+#[derive(Default)]
+pub(super) struct Toasts {
+    cards: Vec<Toast>,
+}
+
+impl Toasts {
+    /// Put `toast` up, in place of the one on screen.
+    pub(super) fn push(&mut self, toast: Toast) {
+        self.cards.clear();
+        self.cards.push(toast);
+    }
+
+    /// Drop a toast that has been up its full time.
+    pub(super) fn expire(&mut self) {
+        self.cards.retain(|toast| !toast.expired());
+    }
+
+    /// The toast raised last, if it is still up.
+    pub(super) fn latest(&self) -> Option<&Toast> {
+        self.cards.last()
+    }
+
+    /// Take down the toast raised last, and hand it over.
+    pub(super) fn take_latest(&mut self) -> Option<Toast> {
+        self.cards.pop()
+    }
+
+    #[cfg(test)]
+    pub(super) fn is_empty(&self) -> bool {
+        self.cards.is_empty()
+    }
+
+    #[cfg(test)]
+    pub(super) fn clear(&mut self) {
+        self.cards.clear();
+    }
+}
+
 impl App {
     /// Draw the toast, if there is one, right-aligned `anchor_top` points
     /// down the window: under the top bar where one is drawn, at the window's
@@ -157,7 +197,7 @@ impl App {
     /// Call after the panels — [`egui::Order::Foreground`] keeps it above
     /// them. A modal drawn later still covers it, which is what we want.
     pub(super) fn show_toast(&mut self, ctx: &egui::Context, anchor_top: f32) {
-        let Some(toast) = &mut self.toast else {
+        let Some(toast) = self.toasts.cards.last_mut() else {
             return;
         };
         toast.shown_at.get_or_insert_with(Instant::now);
@@ -222,7 +262,7 @@ impl App {
                     });
             });
         if dismissed {
-            self.toast = None;
+            self.toasts.cards.clear();
         }
     }
 }
@@ -311,7 +351,7 @@ mod tests {
         }
 
         fn show_toast(&mut self, message: &str) {
-            self.app.toast = Some(Toast::error(message));
+            self.app.toasts.push(Toast::error(message));
         }
 
         /// The width the bar's left group reported last frame — the number
@@ -501,13 +541,13 @@ mod tests {
     fn a_toast_runs_its_clock_from_its_first_frame() {
         let mut run = ToastRun::new(900.0, 600.0);
         run.show_toast("Command failed");
-        let toast = run.app.toast.as_ref().expect("the toast was set");
+        let toast = run.app.toasts.latest().expect("the toast was set");
         assert!(!toast.expired(), "an undrawn toast expired");
         assert_eq!(toast.remaining(), TOAST_DURATION);
 
         let before = Instant::now();
         run.frame();
-        let shown_at = run.app.toast.as_ref().and_then(|t| t.shown_at);
+        let shown_at = run.app.toasts.latest().and_then(|t| t.shown_at);
         assert!(
             shown_at.is_some_and(|at| at >= before),
             "drawing the toast did not start its clock"
@@ -515,7 +555,7 @@ mod tests {
         let started = shown_at;
         run.frame();
         assert_eq!(
-            run.app.toast.as_ref().and_then(|t| t.shown_at),
+            run.app.toasts.latest().and_then(|t| t.shown_at),
             started,
             "a later frame restarted the clock"
         );
@@ -536,7 +576,7 @@ mod tests {
         );
         run.frame_with(click_at(close.center()));
         assert!(
-            run.app.toast.is_none(),
+            run.app.toasts.is_empty(),
             "the toast survived its close button"
         );
     }

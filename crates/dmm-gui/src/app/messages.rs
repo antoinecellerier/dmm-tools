@@ -257,8 +257,8 @@ impl App {
         // the settings file could not be read goes up as the auto-connect
         // starts, and detection answers a moment later.
         if self
-            .toast
-            .as_ref()
+            .toasts
+            .latest()
             .is_some_and(|t| t.is_error() && !t.expired())
         {
             return;
@@ -266,7 +266,7 @@ impl App {
         let news = detected_toast(&self.l10n, detected.device, reported, detected.saved);
         // The caution that the settings file named a device nothing answers
         // to leads, and the news of the meter found in its place joins it.
-        self.toast = Some(match &self.toast {
+        self.toasts.push(match self.toasts.latest() {
             Some(toast) if detected.replacing_unknown && toast.is_caution() && !toast.expired() => {
                 Toast::caution(format!("{} {news}", toast.message))
             }
@@ -282,7 +282,7 @@ impl App {
     /// difference had been thrown away.
     pub(super) fn buffer_shrunk_toast(&mut self) {
         let count = self.capture.recording.recording_samples().len();
-        self.toast = Some(Toast::error(tr!(
+        self.toasts.push(Toast::error(tr!(
             self.l10n,
             "connection-buffer-shrunk",
             count = count,
@@ -294,20 +294,20 @@ impl App {
     /// screen stays beside it: "detected, and saved as your device" names the
     /// meter the caution's arbitrary cable turned out to carry.
     pub(super) fn caution_toast(&mut self, message: String) {
-        let message = match &self.toast {
+        let message = match self.toasts.latest() {
             Some(toast) if toast.expired() => message,
             Some(toast) if toast.is_error() => return,
             Some(toast) => format!("{} {message}", toast.message),
             None => message,
         };
-        self.toast = Some(Toast::caution(message));
+        self.toasts.push(Toast::caution(message));
     }
 
     /// Say that the recording stopped because it filled the buffer, at the
     /// size the user configured.
     pub(super) fn buffer_full_toast(&mut self) {
         let count = self.settings.max_samples;
-        self.toast = Some(Toast::error(tr!(
+        self.toasts.push(Toast::error(tr!(
             self.l10n,
             "connection-buffer-full",
             count = count,
@@ -488,7 +488,7 @@ impl App {
                         self.l10n.help().saved_mock_mode_unknown(&unknown),
                         tr!(self.l10n, "connection-saved-mock-mode-unknown-action")
                     );
-                    self.toast = Some(Toast::error(message));
+                    self.toasts.push(Toast::error(message));
                     None
                 }
             };
@@ -652,7 +652,7 @@ impl App {
                 Some(news) => format!("{stopped}\n{news}"),
                 None => stopped.into_owned(),
             };
-            self.toast = Some(Toast::error(message));
+            self.toasts.push(Toast::error(message));
         }
     }
 
@@ -718,7 +718,7 @@ impl App {
                     // what it reads must not join this recording.
                     if self.capture.recording.is_active() {
                         self.apply_recording_toggle();
-                        self.toast = Some(Toast::error(tr!(
+                        self.toasts.push(Toast::error(tr!(
                             self.l10n,
                             "connection-several-cables-recording"
                         )));
@@ -768,7 +768,7 @@ impl App {
                 DmmMessage::CommandFailed { command, error } => {
                     let message =
                         command_failed_toast(&self.l10n, &command, &error, self.picked_listing());
-                    self.toast = Some(Toast::error(message));
+                    self.toasts.push(Toast::error(message));
                 }
                 DmmMessage::Choices(setting, choices) => {
                     self.connection.choices.set(setting, choices);
@@ -792,7 +792,7 @@ impl App {
                         help.other_data(&label(shown), &label(opened)),
                         help.gui_choose_meter(MeterChoice::Entry(named), pick)
                     );
-                    self.toast = Some(Toast::error(message));
+                    self.toasts.push(Toast::error(message));
                 }
             }
         }
@@ -829,8 +829,8 @@ impl App {
         };
         // A caution gives way to an error on screen: ask once it's gone.
         if self
-            .toast
-            .as_ref()
+            .toasts
+            .latest()
             .is_some_and(|t| t.is_error() && !t.expired())
         {
             return;
@@ -858,7 +858,7 @@ impl App {
     /// names, and clear the error and reconnect state.
     fn on_connected(&mut self, meter: ConnectedMeter) {
         // What this hello has to say is whatever toast it raises.
-        let toast_before = self.toast.as_ref().map(|t| t.message.clone());
+        let toast_before = self.toasts.latest().map(|t| t.message.clone());
         self.connection.link_up();
         self.held.clear();
         self.capture.device_aux_slots = meter.max_aux_values;
@@ -892,7 +892,7 @@ impl App {
                     .save_detected_device(Some(named.id), new_meter)
                     .is_some_and(|d| d.saved);
                 if new_meter {
-                    self.toast = Some(Toast::error(named_after_detection_toast(
+                    self.toasts.push(Toast::error(named_after_detection_toast(
                         &self.l10n,
                         &reported,
                         named.display_name(),
@@ -906,7 +906,7 @@ impl App {
                     // under the same brand.
                     let pick = self.picked_listing();
                     let picked = registry::connected_listing(pick, picked).display_name();
-                    self.toast = Some(Toast::error(other_model_toast(
+                    self.toasts.push(Toast::error(other_model_toast(
                         &self.l10n, &reported, picked, named, pick,
                     )));
                 }
@@ -923,8 +923,8 @@ impl App {
             .is_some_and(|before| !before.continues(&source, self.connection.detecting))
         {
             let news = self
-                .toast
-                .as_ref()
+                .toasts
+                .latest()
                 .map(|t| &t.message)
                 .filter(|&m| Some(m) != toast_before.as_ref())
                 .cloned();
@@ -1077,7 +1077,8 @@ impl App {
             self.connection.late_readings = None;
         }
         if copied {
-            self.toast = Some(Toast::info(tr!(self.l10n, "connection-late-copied")));
+            self.toasts
+                .push(Toast::info(tr!(self.l10n, "connection-late-copied")));
         }
     }
 
@@ -1190,7 +1191,7 @@ mod tests {
     }
 
     fn toast_text(app: &App) -> Option<&str> {
-        app.toast.as_ref().map(|t| t.message.as_str())
+        app.toasts.latest().map(|t| t.message.as_str())
     }
 
     /// A reading says the link reads, so a frame that won't read after it is
@@ -1238,7 +1239,7 @@ mod tests {
         ));
         assert!(!app.capture.recording.is_active());
         assert_eq!(app.capture.recording.export_samples().len(), 1);
-        assert!(app.toast.is_some(), "the recording stopping is said");
+        assert!(!app.toasts.is_empty(), "the recording stopping is said");
         let notice = app.connection_notice().expect("the reason is on screen");
         assert_eq!(notice.kind, NoticeKind::SeveralCables);
         assert!(notice.body.starts_with("2 USB cables"), "{}", notice.body);
@@ -1256,7 +1257,7 @@ mod tests {
                 several,
                 reconnects,
             });
-            let toast = app.toast.take().expect("a toast");
+            let toast = app.toasts.take_latest().expect("a toast");
             assert_eq!(toast.kind, ToastKind::Caution);
             let text = toast.message;
             assert!(text.starts_with("2 USB cables"), "{text}");
@@ -1276,18 +1277,19 @@ mod tests {
             reconnects: true,
         };
         let mut app = app("ut61eplus", false);
-        app.toast = Some(Toast::info("Detected the UT61E+"));
+        app.toasts.push(Toast::info("Detected the UT61E+"));
         app.deliver(message);
-        let toast = app.toast.take().expect("a toast");
+        let toast = app.toasts.take_latest().expect("a toast");
         assert_eq!(toast.kind, ToastKind::Caution);
         assert!(toast.message.starts_with("Detected the UT61E+ 2 USB"));
 
-        app.toast = Some(Toast::error("the meter reports another model"));
+        app.toasts
+            .push(Toast::error("the meter reports another model"));
         app.deliver(DmmMessage::CablesAtOpen {
             several,
             reconnects: true,
         });
-        let kept = app.toast.as_ref().expect("the error stays");
+        let kept = app.toasts.latest().expect("the error stays");
         assert!(kept.is_error());
     }
 
@@ -1297,7 +1299,7 @@ mod tests {
         let mut app = app("ut61eplus", false);
         let several = dmm_shared::reopen::SeveralCables { count: 3 };
         app.deliver(DmmMessage::SeveralCables(several));
-        assert!(app.toast.is_none());
+        assert!(app.toasts.is_empty());
         assert!(!app.capture.recording.is_active());
         let notice = app.connection_notice().expect("the reason is on screen");
         assert!(notice.body.starts_with("3 USB cables"), "{}", notice.body);
@@ -2059,9 +2061,10 @@ mod tests {
         settings.shared.device_family = "nope".to_string();
         let mut app = App::from_settings(settings, dmm_lib::Clock::real());
         app.connection.detecting = true;
-        app.toast = Some(Toast::caution("The settings file names nope."));
+        app.toasts
+            .push(Toast::caution("The settings file names nope."));
         app.remember_detected_device(Some("ut61eplus"), "UT61E+", true);
-        let toast = app.toast.take().expect("no toast");
+        let toast = app.toasts.take_latest().expect("no toast");
         assert!(toast.is_caution());
         assert!(
             toast
@@ -2074,9 +2077,10 @@ mod tests {
         let mut app =
             App::from_settings(crate::settings::Settings::default(), dmm_lib::Clock::real());
         app.connection.detecting = true;
-        app.toast = Some(Toast::caution("Two USB cables are plugged in."));
+        app.toasts
+            .push(Toast::caution("Two USB cables are plugged in."));
         app.remember_detected_device(Some("ut61eplus"), "UT61E+", true);
-        assert!(!app.toast.expect("no toast").is_caution());
+        assert!(!app.toasts.take_latest().expect("no toast").is_caution());
     }
 
     /// `--device auto` detects for one run. Saving under it would either be
@@ -2132,7 +2136,7 @@ mod tests {
         let mut app = app("ut61eplus", false);
         app.connection.state = ConnectionState::Connected;
         app.deliver(DmmMessage::BluetoothTied(2));
-        let toast = app.toast.take().expect("a toast");
+        let toast = app.toasts.take_latest().expect("a toast");
         assert!(!toast.is_error());
         assert_eq!(
             toast.message,
@@ -2150,7 +2154,7 @@ mod tests {
         let named = dmm_lib::protocol::registry::find_device("zt5566se").expect("an entry");
         let opened = dmm_lib::protocol::registry::find_device("zt300ab").expect("an entry");
         app.deliver(DmmMessage::OtherData { named, opened });
-        let toast = app.toast.take().expect("a toast");
+        let toast = app.toasts.take_latest().expect("a toast");
         assert!(
             toast.message.starts_with(&format!(
                 "The meter sends {} data, not the ",
@@ -2181,28 +2185,28 @@ mod tests {
             value: "0x7f".to_string(),
         };
         app.tell_unrecognised(None);
-        assert!(app.toast.is_none());
+        assert!(app.toasts.is_empty());
         app.tell_unrecognised(Some(&report));
-        let toast = app.toast.take().expect("a toast");
+        let toast = app.toasts.take_latest().expect("a toast");
         assert_eq!(
             toast.message,
             "The UNI-T UT61E+ sent data this tool doesn't know (mode byte: 0x7f). Please report \
              it through Help & Feedback in the top bar."
         );
         app.tell_unrecognised(Some(&report));
-        assert!(app.toast.is_none(), "asked once");
+        assert!(app.toasts.is_empty(), "asked once");
 
         // Behind an error toast, it waits rather than being lost.
         let mut app = super::super::test_support::test_app();
-        app.toast = Some(Toast::error("refused".to_string()));
+        app.toasts.push(Toast::error("refused".to_string()));
         app.tell_unrecognised(Some(&report));
         assert_eq!(
-            app.toast.as_ref().map(|t| t.message.as_str()),
+            app.toasts.latest().map(|t| t.message.as_str()),
             Some("refused")
         );
-        app.toast = None;
+        app.toasts.clear();
         app.tell_unrecognised(Some(&report));
-        assert!(app.toast.is_some(), "asked once the error is gone");
+        assert!(!app.toasts.is_empty(), "asked once the error is gone");
     }
 
     /// A key the meter refused because it is another model says which to
@@ -2319,7 +2323,7 @@ mod tests {
     #[test]
     fn detection_does_not_cover_an_error() {
         let mut app = app(registry::AUTO_DEVICE_ID, false);
-        app.toast = Some(Toast::error("settings could not be read"));
+        app.toasts.push(Toast::error("settings could not be read"));
         app.connection.detecting = true;
         app.remember_detected_device(Some("ut61eplus"), "UT61E+", true);
         assert_eq!(toast_text(&app), Some("settings could not be read"));
@@ -2373,7 +2377,7 @@ mod tests {
         };
         app.deliver(hello());
         assert!(toast_text(&app).is_some());
-        app.toast = None;
+        app.toasts.clear();
         app.deliver(hello());
         assert_eq!(toast_text(&app), None);
     }
@@ -2408,7 +2412,7 @@ mod tests {
         let hello = |id| DmmMessage::Connected(ConnectedMeter::test_fixture(Some(id)));
         app.deliver(hello("ut61eplus"));
         assert_eq!(app.settings.shared.device_family, "ut61eplus");
-        app.toast = None;
+        app.toasts.clear();
         app.deliver(hello("ut161e"));
         assert_eq!(app.settings.shared.device_family, "ut161e");
         assert_eq!(app.active_device().map(|d| d.id), Some("ut161e"));
@@ -2417,7 +2421,7 @@ mod tests {
             "{:?}",
             toast_text(&app)
         );
-        app.toast = None;
+        app.toasts.clear();
         app.deliver(hello("ut161e"));
         assert_eq!(toast_text(&app), None, "the same meter again");
     }
@@ -2435,7 +2439,7 @@ mod tests {
             ..ConnectedMeter::test_fixture(Some("ut61eplus"))
         }));
         assert_eq!(app.settings.shared.device_family, "ut161e");
-        app.toast = None;
+        app.toasts.clear();
         app.deliver(DmmMessage::Connected(ConnectedMeter::test_fixture(Some(
             "ut61eplus",
         ))));
@@ -2453,7 +2457,7 @@ mod tests {
             "ut161e",
         ))));
         assert_eq!(app.settings.shared.device_family, "ut161e");
-        app.toast = None;
+        app.toasts.clear();
         app.deliver(DmmMessage::Connected(ConnectedMeter {
             name: Some("UT161E".to_string()),
             named_other: dmm_lib::protocol::registry::find_device("ut161e"),
@@ -2901,7 +2905,7 @@ mod tests {
         app.deliver(connected("ut61eplus", Stability::Verified, 0));
         assert!(app.capture.recording.is_active());
         assert_eq!(app.capture.session.stats().count, 2);
-        assert!(app.toast.is_none());
+        assert!(app.toasts.is_empty());
     }
 
     /// Another meter answering after Disconnect, a pick in Settings and
@@ -2974,7 +2978,7 @@ mod tests {
         app.deliver(connected("ut181a", Stability::Experimental, 4));
         app.toggle_recording();
         deliver_readings(&mut app, &[DC]);
-        app.toast = None;
+        app.toasts.clear();
         app.deliver(DmmMessage::Connected(ConnectedMeter {
             name: Some("UT161E".to_string()),
             named_other: dmm_lib::protocol::registry::find_device("ut161e"),
@@ -3015,13 +3019,13 @@ mod tests {
         app.alarm_editor.set_drafts("", "5");
         deliver_readings(&mut app, &[DC]);
         app.deliver(connected("ut181a", Stability::Experimental, 4));
-        app.toast = Some(super::Toast::info("news"));
+        app.toasts.push(super::Toast::info("news"));
         let mut ohms = reading("\u{3a9}", MeasuredValue::Normal(12.0), Instant::now());
         ohms.unit = "k\u{3a9}".into();
         app.deliver(DmmMessage::Measurement(ohms));
         assert!(app.alarm.is_none());
         assert!(!app.alarm_editor.is_blank(), "the fields stay for Apply");
-        let toast = app.toast.as_ref().expect("a toast");
+        let toast = app.toasts.latest().expect("a toast");
         assert_eq!(
             toast.message,
             "news\nReadings in \u{3a9} \u{2014} alarm off; set its limits again in the new unit"
@@ -3050,7 +3054,7 @@ mod tests {
         ohms.unit = "k\u{3a9}".into();
         app.deliver(DmmMessage::Measurement(ohms));
         assert!(app.alarm.is_none());
-        let toast = app.toast.as_ref().expect("a toast");
+        let toast = app.toasts.latest().expect("a toast");
         assert!(
             toast.message.contains("Readings in \u{3a9}"),
             "{}",

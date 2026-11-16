@@ -67,7 +67,7 @@ use export::PendingExport;
 use layout::ContentLayout;
 use meter_fit::{FitInputs, MeterFit, WindowContent};
 use recording_panel::RecordingPanel;
-use toast::Toast;
+use toast::{Toast, Toasts};
 use transform_ui::TransformEditor;
 
 /// How often a recording redraws for its elapsed-time label when nothing else
@@ -531,8 +531,8 @@ pub struct App {
     /// `WindowLevel` commands and "Always on top" cannot work.
     on_wayland: bool,
     applied: AppliedChrome,
-    /// Transient status toast.
-    toast: Option<Toast>,
+    /// The transient status toast.
+    toasts: Toasts,
     /// The report the library keeps of data a meter sent that no parser
     /// knows was asked for: once per process, as the library keeps one.
     told_unrecognised: bool,
@@ -666,7 +666,7 @@ impl App {
             // Only `App::new` has a window to ask; tests build without one.
             on_wayland: false,
             applied: AppliedChrome::default(),
-            toast: None,
+            toasts: Toasts::default(),
             told_unrecognised: false,
             theme_save: Default::default(),
             export: None,
@@ -1081,8 +1081,8 @@ impl App {
         // A caution gives way to a failure on screen: say it at the next
         // Connect instead of losing it.
         if self
-            .toast
-            .as_ref()
+            .toasts
+            .latest()
             .is_some_and(|t| t.is_error() && !t.expired())
         {
             return;
@@ -1115,7 +1115,7 @@ impl App {
                 dmm_shared::tr!(self.l10n, "settings-load-failed", path = path)
             }
         };
-        self.toast = Some(Toast::error(message));
+        self.toasts.push(Toast::error(message));
     }
 
     /// Keep the window's minimum size, and its size, fitting what this frame
@@ -1227,10 +1227,7 @@ impl eframe::App for App {
             }
         }
 
-        // Expire the toast, unless the user closed it first
-        if self.toast.as_ref().is_some_and(Toast::expired) {
-            self.toast = None;
-        }
+        self.toasts.expire();
 
         if self.first_frame {
             self.first_frame = false;
@@ -1401,11 +1398,11 @@ mod tests {
             };
             let mut app = App::from_settings(settings, dmm_lib::Clock::real());
             app.settings_load_toast();
-            let toast = app.toast.take().expect("no toast");
+            let toast = app.toasts.take_latest().expect("no toast");
             assert!(toast.is_error());
             assert_eq!(toast.message, expected);
             app.settings_load_toast();
-            assert!(app.toast.is_none(), "raised twice");
+            assert!(app.toasts.is_empty(), "raised twice");
         }
     }
 
@@ -1421,7 +1418,7 @@ mod tests {
         settings.shared.device_family = "nope".to_string();
         let mut app = App::from_cli(settings.clone(), unknown());
         app.saved_device_toast();
-        let toast = app.toast.take().expect("no toast");
+        let toast = app.toasts.take_latest().expect("no toast");
         assert!(toast.is_caution());
         assert!(
             toast.message.contains("names the device \"nope\"")
@@ -1430,26 +1427,27 @@ mod tests {
             toast.message
         );
         app.saved_device_toast();
-        assert!(app.toast.is_none(), "raised twice");
+        assert!(app.toasts.is_empty(), "raised twice");
 
         let mut app = App::from_cli(settings, crate::CliOverrides::none());
         app.saved_device_toast();
-        assert!(app.toast.is_none());
+        assert!(app.toasts.is_empty());
 
         // Behind a failure on screen it waits for the next Connect.
         let mut settings = Settings::default();
         settings.shared.device_family = "nope".to_string();
         let mut app = App::from_cli(settings, unknown());
-        app.toast = Some(Toast::error("The meter stopped answering."));
+        app.toasts
+            .push(Toast::error("The meter stopped answering."));
         app.saved_device_toast();
-        assert!(app.toast.take().is_some_and(|t| t.is_error()));
+        assert!(app.toasts.take_latest().is_some_and(|t| t.is_error()));
         app.saved_device_toast();
-        assert!(app.toast.is_some_and(|t| t.is_caution()));
+        assert!(app.toasts.latest().is_some_and(|t| t.is_caution()));
 
         // Another device picked before the first Connect: nothing to say.
         let mut app = App::from_cli(Settings::default(), unknown());
         app.saved_device_toast();
-        assert!(app.toast.is_none());
+        assert!(app.toasts.is_empty());
     }
 
     /// The most strings the main scenes may draw without going through the

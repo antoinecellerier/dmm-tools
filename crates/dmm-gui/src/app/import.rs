@@ -425,7 +425,7 @@ impl App {
             Err(why) => {
                 error!("the open dialog failed: {why}");
                 let message = tr!(self.l10n, "import-dialog-failed");
-                self.toast = Some(Toast::error(message.into_owned()));
+                self.toasts.push(Toast::error(message.into_owned()));
             }
         }
     }
@@ -493,7 +493,7 @@ impl App {
                         Ok(loaded) => self.begin_ingest(loaded),
                         Err(why) => {
                             warn!("import failed: {why}");
-                            self.toast = Some(Toast::error(why.text(&self.l10n)));
+                            self.toasts.push(Toast::error(why.text(&self.l10n)));
                             None
                         }
                     }
@@ -527,7 +527,7 @@ impl App {
         } = loaded;
         if readings.is_empty() {
             let message = tr!(self.l10n, "import-empty", file = file_name(&path));
-            self.toast = Some(Toast::info(message.into_owned()));
+            self.toasts.push(Toast::info(message.into_owned()));
             return None;
         }
         self.capture.device_aux_slots = family_slots;
@@ -602,7 +602,7 @@ impl App {
                 file = file_name(&ingest.path),
                 percent = percent
             );
-            self.toast = Some(Toast::info(message.into_owned()));
+            self.toasts.push(Toast::info(message.into_owned()));
             return Some(ImportJob::Ingesting(ingest));
         }
         self.finish_import(ingest);
@@ -644,7 +644,7 @@ impl App {
                 file = &name
             )
         };
-        self.toast = Some(match ingest.alarm_off.as_deref() {
+        self.toasts.push(match ingest.alarm_off.as_deref() {
             Some(off) => Toast::info(message.into_owned()).with_caution(off),
             None => Toast::info(message.into_owned()),
         });
@@ -811,7 +811,7 @@ timestamp,mode,value,unit,range,flags,aux1_label,aux1_value,aux1_unit
         let path = file("kv-off.csv", KV_CSV);
         import(&mut app, path.clone());
         assert!(app.alarm.is_none());
-        let toast = app.toast.as_ref().expect("the result");
+        let toast = app.toasts.latest().expect("the result");
         assert!(
             toast.message.ends_with(
                 "\nReadings in kV \u{2014} alarm off; set its limits again in the new unit"
@@ -901,8 +901,8 @@ timestamp,mode,value,unit,range,flags,aux1_label,aux1_value,aux1_unit
         import(&mut app, path.clone());
         assert_eq!(app.capture.recording.export_samples().len(), 2);
         let toast = app
-            .toast
-            .as_ref()
+            .toasts
+            .latest()
             .map(|t| t.message.clone())
             .unwrap_or_default();
         assert!(
@@ -923,8 +923,8 @@ timestamp,mode,value,unit,range,flags,aux1_label,aux1_value,aux1_unit
         import(&mut app, path.clone());
         assert_eq!(app.capture.recording.export_samples().len(), 2);
         let toast = app
-            .toast
-            .as_ref()
+            .toasts
+            .latest()
             .map(|t| t.message.clone())
             .unwrap_or_default();
         assert!(toast.contains("1 reading past"), "{toast}");
@@ -1036,8 +1036,8 @@ timestamp,mode,value,unit,range,flags,aux1_label,aux1_value,aux1_unit
         let path = file("broken.csv", "timestamp,mode\nnot a time,DC V\n");
         import(&mut app, path.clone());
         let toast = app
-            .toast
-            .as_ref()
+            .toasts
+            .latest()
             .map(|t| t.message.clone())
             .unwrap_or_default();
         assert!(toast.starts_with("Import failed:"), "{toast}");

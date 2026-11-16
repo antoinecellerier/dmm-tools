@@ -96,7 +96,7 @@ impl App {
             Err(why) => {
                 log::error!("the theme's save dialog failed: {why}");
                 let message = tr!(self.l10n, "colors-save-dialog-failed");
-                self.toast = Some(Toast::error(message));
+                self.toasts.push(Toast::error(message));
             }
         }
     }
@@ -116,7 +116,7 @@ impl App {
             if path.exists() {
                 let path = path.display().to_string();
                 let message = tr!(self.l10n, "colors-save-exists", path = path);
-                self.toast = Some(Toast::error(message));
+                self.toasts.push(Toast::error(message));
                 return;
             }
         }
@@ -147,7 +147,7 @@ impl App {
                 name = &name,
                 file = other.file.as_deref().unwrap_or_default(),
             );
-            self.toast = Some(Toast::error(message));
+            self.toasts.push(Toast::error(message));
             return;
         }
         let tc = self.settings.theme_colors(dark);
@@ -156,7 +156,7 @@ impl App {
             Err(why) => {
                 let reason = why.text(&self.l10n);
                 let message = tr!(self.l10n, "colors-save-invalid", reason = reason);
-                self.toast = Some(Toast::error(message));
+                self.toasts.push(Toast::error(message));
                 return;
             }
         };
@@ -167,12 +167,12 @@ impl App {
                 path = path.display().to_string(),
                 error = e.to_string(),
             );
-            self.toast = Some(Toast::error(message));
+            self.toasts.push(Toast::error(message));
             return;
         }
         if !in_folder {
             let message = tr!(self.l10n, "colors-saved-elsewhere", file = &file);
-            self.toast = Some(Toast::info(message));
+            self.toasts.push(Toast::info(message));
             return;
         }
 
@@ -200,7 +200,8 @@ impl App {
         // After the push, so the theme is found and brings its mode.
         self.settings.pick_theme(ThemeChoice::Named(name.clone()));
         self.applied.ui_colors = None;
-        self.toast = Some(Toast::info(tr!(self.l10n, "colors-saved", name = &name)));
+        self.toasts
+            .push(Toast::info(tr!(self.l10n, "colors-saved", name = &name)));
     }
 }
 
@@ -270,7 +271,7 @@ mod tests {
             app.settings.theme_colors(false).accent(),
             Color32::from_rgb(0x7A, 0x00, 0x62)
         );
-        assert!(app.toast.as_ref().is_some_and(|t| !t.is_error()));
+        assert!(app.toasts.latest().is_some_and(|t| !t.is_error()));
     }
 
     #[test]
@@ -282,7 +283,7 @@ mod tests {
 
         assert!(elsewhere.0.join("share.json").is_file());
         assert_eq!(app.settings.active_theme(), None);
-        let toast = app.toast.as_ref().unwrap();
+        let toast = app.toasts.latest().unwrap();
         assert!(
             toast.message.contains("Copy it into your themes folder"),
             "{}",
@@ -300,7 +301,7 @@ mod tests {
         app.settings.named_theme = None;
         app.settings.color_overrides.light.accent = Some(HexColor(Color32::from_rgb(1, 2, 3)));
         app.save_theme(folder.0.join("PLUM.json"), false, Some(&folder.0));
-        assert!(app.toast.as_ref().is_some_and(|t| t.is_error()));
+        assert!(app.toasts.latest().is_some_and(|t| t.is_error()));
         // Listed rather than probed: on a case-insensitive file system
         // (Windows, macOS) `PLUM.json` names `plum.json`.
         let files: Vec<_> = std::fs::read_dir(&folder.0)
@@ -346,6 +347,6 @@ mod tests {
         app.settings.color_overrides.light.accent = Some(HexColor(Color32::from_rgb(1, 2, 3)));
         app.save_theme(folder.0.join("plum"), false, Some(&folder.0));
         assert_eq!(std::fs::read(folder.0.join("plum.json")).unwrap(), saved);
-        assert!(app.toast.as_ref().is_some_and(|t| t.is_error()));
+        assert!(app.toasts.latest().is_some_and(|t| t.is_error()));
     }
 }

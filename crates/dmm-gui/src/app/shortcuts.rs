@@ -588,8 +588,8 @@ impl App {
                     if self.on_wayland {
                         // Flipping the setting there moved a checkbox and
                         // nothing else; say so instead.
-                        self.toast =
-                            Some(Toast::info(tr!(self.l10n, "shortcuts-always-on-top-toast")));
+                        self.toasts
+                            .push(Toast::info(tr!(self.l10n, "shortcuts-always-on-top-toast")));
                     } else {
                         self.settings.always_on_top = !self.settings.always_on_top;
                         self.apply_always_on_top(ctx);

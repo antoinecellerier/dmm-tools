@@ -257,7 +257,7 @@ impl App {
         match parse_limits(&self.l10n, &editor.low, &editor.high, &editor.band) {
             Ok((limits, band)) => self.set_limits(limits, band),
             // The alarm in force, if any, keeps running.
-            Err(message) => self.toast = Some(Toast::error(message)),
+            Err(message) => self.toasts.push(Toast::error(message)),
         }
     }
 
@@ -430,14 +430,15 @@ impl App {
     pub(super) fn set_limits(&mut self, limits: Limits, band: Hysteresis) {
         if limits.is_empty() {
             if self.alarm.take().is_some() {
-                self.toast = Some(Toast::info(tr!(self.l10n, "alarm-off-toast")));
+                self.toasts
+                    .push(Toast::info(tr!(self.l10n, "alarm-off-toast")));
             }
             self.alarm_bound_before = None;
         } else {
             self.alarm = Some(Alarm::new(limits, band));
             self.alarm_bound_before = None;
             let limits = self.l10n.alarm_limits(&limits, band);
-            self.toast = Some(Toast::info(tr!(
+            self.toasts.push(Toast::info(tr!(
                 self.l10n,
                 "alarm-on-toast",
                 limits = limits
@@ -484,12 +485,12 @@ impl App {
         let limits = match Limits::check(low, high) {
             Ok(limits) => limits.in_base(current.unit),
             Err(e) => {
-                self.toast = Some(Toast::error(limit_message(&self.l10n, e)));
+                self.toasts.push(Toast::error(limit_message(&self.l10n, e)));
                 return;
             }
         };
         let Ok(band) = band.check(&limits) else {
-            self.toast = Some(Toast::error(percent_of_zero(&self.l10n)));
+            self.toasts.push(Toast::error(percent_of_zero(&self.l10n)));
             return;
         };
         self.set_limits(limits, band);
@@ -534,7 +535,8 @@ impl App {
                 // After the toast a new meter's stop raised, if it is up.
                 // (Not `caution_toast`, which gives way to a failure: the
                 // alarm going off must be said all the same.)
-                self.toast = Some(match self.toast.take().filter(|t| !t.expired()) {
+                let up = self.toasts.take_latest().filter(|t| !t.expired());
+                self.toasts.push(match up {
                     Some(toast) => toast.with_caution(&off),
                     None => Toast::caution(off),
                 });
@@ -545,7 +547,8 @@ impl App {
             // Out before the alarm saw it cross: said, not marked. In the
             // error style all the same, as the badge and the reading are:
             // the reading is past a limit, which is no good news.
-            self.toast = Some(Toast::error(self.l10n.breach_note(&breach)));
+            self.toasts
+                .push(Toast::error(self.l10n.breach_note(&breach)));
             return None;
         }
         Some(PendingBreach::new(&self.l10n, m, &breach))
@@ -621,7 +624,7 @@ mod tests {
         let inside = reading(&app, 4900.0, "mV");
         assert!(app.check_alarm(&inside).is_none());
 
-        app.toast = None;
+        app.toasts.clear();
         let m = reading(&app, 5100.0, "mV");
         app.capture
             .ingest(m.clone(), &app.transform, &mut app.graph, &app.connection);
@@ -630,7 +633,7 @@ mod tests {
         app.mark_breaches(breach.into_iter().collect());
         let marker = app.markers.iter().next().expect("a marker");
         assert_eq!(marker.note, "Above high limit 5 V");
-        assert!(app.toast.is_none(), "the badge says it, not a toast");
+        assert!(app.toasts.is_empty(), "the badge says it, not a toast");
         assert_eq!(app.alarm.as_ref().unwrap().high_count, 1);
         assert_eq!(app.reading_state().alarm, Some(dmm_lib::alarm::Zone::Above));
 
@@ -708,7 +711,7 @@ mod tests {
         let mut app = app_with_high_limit(5.0);
         let m = reading(&app, 6.0, "V");
         assert!(app.check_alarm(&m).is_none());
-        let toast = app.toast.as_ref().expect("a toast");
+        let toast = app.toasts.latest().expect("a toast");
         assert!(toast.is_error(), "past a limit, like the badge");
         assert!(
             toast.message.starts_with("Already above high limit 5 V"),
@@ -728,9 +731,9 @@ mod tests {
         assert!(app.check_alarm(&reading(&app, 4.0, "V")).is_none());
         assert!(app.check_alarm(&reading(&app, 6.0, "V")).is_some());
         app.clear_session();
-        app.toast = None;
+        app.toasts.clear();
         assert!(app.check_alarm(&reading(&app, 6.0, "V")).is_none());
-        assert!(app.toast.is_none());
+        assert!(app.toasts.is_empty());
         assert_eq!(app.alarm.as_ref().unwrap().high_count, 0);
     }
 
@@ -745,13 +748,13 @@ mod tests {
         let alarm = app.alarm.as_ref().expect("still set");
         assert_eq!(alarm.bound_unit(), None);
         assert_eq!(alarm.limits().high, Some(5.0));
-        app.toast = None;
+        app.toasts.clear();
         assert!(
             app.check_imported(&reading(&app, 6.0, "V"))
                 .unwrap()
                 .is_none()
         );
-        assert!(app.toast.is_none());
+        assert!(app.toasts.is_empty());
         assert_eq!(app.reading_state().alarm, Some(dmm_lib::alarm::Zone::Above));
         assert!(
             app.check_imported(&reading(&app, 4.0, "V"))
@@ -793,7 +796,7 @@ mod tests {
         );
         assert_eq!(app.alarm_editor.band, "1%");
         assert_eq!(
-            app.toast.as_ref().map(|t| t.message.as_str()),
+            app.toasts.latest().map(|t| t.message.as_str()),
             Some("Alarm on: above 3.29 or below 1, hysteresis 1%")
         );
 
@@ -826,7 +829,7 @@ mod tests {
         app.alarm_editor.band = "10 mV".to_string();
         app.apply_alarm_fields();
         assert_eq!(
-            app.toast.as_ref().map(|t| t.message.as_str()),
+            app.toasts.latest().map(|t| t.message.as_str()),
             Some("Alarm on: above 4.98 V or below -0.005 V, hysteresis 0.01 V")
         );
         let ohms = reading(&app, 12.0, "k\u{3a9}");
@@ -890,7 +893,7 @@ mod tests {
         let mut app = app_with_high_limit(5.0);
         app.set_limit_from_graph(LimitSide::Low, Some(6.0));
         assert_eq!(app.alarm.as_ref().unwrap().limits().low, None);
-        let toast = app.toast.as_ref().expect("a toast");
+        let toast = app.toasts.latest().expect("a toast");
         assert!(toast.is_error());
         assert!(
             toast.message.contains("low limit must be below"),
@@ -930,7 +933,7 @@ mod tests {
         assert!(app.alarm.is_none());
         assert!(app.watched_limits().is_none());
         assert_eq!(
-            app.toast.as_ref().map(|t| t.message.as_str()),
+            app.toasts.latest().map(|t| t.message.as_str()),
             Some("Alarm off")
         );
     }

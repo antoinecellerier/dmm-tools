@@ -171,7 +171,7 @@ impl App {
             Ok(new) => self.set_transform(new),
             // Nothing is applied — the previous transform (identity or
             // not) keeps running, and the toast names the field to fix.
-            Err(message) => self.toast = Some(Toast::error(message)),
+            Err(message) => self.toasts.push(Toast::error(message)),
         }
     }
 
@@ -330,7 +330,7 @@ impl App {
             let transform = self.transform.describe();
             tr!(self.l10n, "scale-on", transform = transform, also = also)
         };
-        self.toast = Some(Toast::info(message));
+        self.toasts.push(Toast::info(message));
     }
 }
 
@@ -532,7 +532,7 @@ mod tests {
         app.set_transform(Transform::linear(100.0, 0.0, Some("A".to_string())));
         assert!(app.alarm.is_none());
         assert!(app.watched_limits().is_none());
-        let toast = app.toast.as_ref().expect("a toast");
+        let toast = app.toasts.latest().expect("a toast");
         assert_eq!(
             toast.message,
             "Scaling readings: \u{D7}100 \u{2192} A \u{2014} alarm off; set its limits again in the new unit"
@@ -547,14 +547,14 @@ mod tests {
         app.capture.recording.toggle(app.clock.now());
         app.set_transform(Transform::linear(2.0, 0.5, None));
         assert_eq!(
-            app.toast.as_ref().map(|t| t.message.as_str()),
+            app.toasts.latest().map(|t| t.message.as_str()),
             Some("Scaling readings: \u{D7}2 + 0.5 \u{2014} recording continues with scaled values")
         );
         let limits = dmm_lib::alarm::Limits::check(None, Some(5.0)).unwrap();
         app.set_limits(limits, dmm_lib::alarm::Hysteresis::Auto);
         app.set_transform(Transform::default());
         assert_eq!(
-            app.toast.as_ref().map(|t| t.message.as_str()),
+            app.toasts.latest().map(|t| t.message.as_str()),
             Some(
                 "Scaling off \u{2014} recording continues with unscaled values \u{2014} alarm off; \
                  set its limits again in the new unit"
@@ -564,7 +564,7 @@ mod tests {
         app.set_transform(Transform::linear(3.0, 0.0, None));
         app.set_transform(Transform::default());
         assert_eq!(
-            app.toast.as_ref().map(|t| t.message.as_str()),
+            app.toasts.latest().map(|t| t.message.as_str()),
             Some("Scaling off")
         );
     }

@@ -444,7 +444,7 @@ impl App {
             })
         };
         if let Err(why) = self.begin_export(format, open_dialog) {
-            self.toast = Some(Toast::error(why.text(&self.l10n)));
+            self.toasts.push(Toast::error(why.text(&self.l10n)));
         }
     }
 
@@ -477,7 +477,7 @@ impl App {
                         self.remember_folder(&path);
                         match self.render_pinned(&request) {
                             Ok(bytes) => self.spawn_write(ctx, path, bytes, *request),
-                            Err(why) => self.toast = Some(Toast::error(why.text(&self.l10n))),
+                            Err(why) => self.toasts.push(Toast::error(why.text(&self.l10n))),
                         }
                     }
                     Ok(None) => {
@@ -488,7 +488,7 @@ impl App {
                         self.capture.recording.unpin_export();
                         error!("export failed: {why}");
                         let message = ExportError::Failed(Failure::Said(why)).text(&self.l10n);
-                        self.toast = Some(Toast::error(message));
+                        self.toasts.push(Toast::error(message));
                     }
                 }
             }
@@ -512,7 +512,7 @@ impl App {
                         .recording
                         .mark_exported(mark.epoch, count, mark.markers);
                 }
-                self.toast = Some(match outcome.written {
+                self.toasts.push(match outcome.written {
                     Ok((count, file)) => {
                         let message = tr!(self.l10n, "export-done", count = count, file = file);
                         Toast::info(message.into_owned())
@@ -904,7 +904,7 @@ mod tests {
         deliver_outcome(&mut app, outcome);
         assert_eq!(app.capture.recording.unexported_count(), 3);
         assert_eq!(
-            app.toast.as_ref().map(|t| t.message.as_str()),
+            app.toasts.latest().map(|t| t.message.as_str()),
             Some("Exported 3 samples to out.csv"),
             "the user still hears the file was written"
         );
@@ -1106,7 +1106,7 @@ mod tests {
         app.poll_export(&ctx);
         assert!(!app.capture.recording.is_pinned());
         assert!(app.export.is_none());
-        assert!(app.toast.is_none(), "a cancel needs no toast");
+        assert!(app.toasts.is_empty(), "a cancel needs no toast");
         assert!(
             app.settings.last_folder.is_none(),
             "a cancel picks no folder"
@@ -1117,7 +1117,7 @@ mod tests {
         app.poll_export(&ctx);
         assert!(!app.capture.recording.is_pinned());
         assert_eq!(
-            app.toast.take().map(|t| {
+            app.toasts.take_latest().map(|t| {
                 let is_error = t.is_error();
                 (t.message, is_error)
             }),
@@ -1129,7 +1129,7 @@ mod tests {
         app.poll_export(&ctx);
         assert!(!app.capture.recording.is_pinned());
         assert!(app.export.is_none());
-        assert!(app.toast.is_some_and(|t| t.is_error()));
+        assert!(app.toasts.latest().is_some_and(|t| t.is_error()));
     }
 
     /// A writer gone without an answer ends the export with an error, so
@@ -1142,7 +1142,7 @@ mod tests {
         app.export = Some(PendingExport::Writing(writer));
         app.poll_export(&crate::app::styled_context());
         assert!(app.export.is_none());
-        assert!(app.toast.take().is_some_and(|t| t.is_error()));
+        assert!(app.toasts.take_latest().is_some_and(|t| t.is_error()));
         assert!(begin(&mut app, ExportFormat::Csv).is_ok());
     }
 
@@ -1223,8 +1223,8 @@ mod tests {
         deliver_outcome(&mut app, outcome);
         assert_eq!(app.capture.recording.unexported_count(), 0);
         assert_eq!(
-            app.toast
-                .as_ref()
+            app.toasts
+                .latest()
                 .map(|t| (t.message.as_str(), t.is_error())),
             Some(("Exported 3 samples to out.csv", false))
         );
@@ -1264,8 +1264,8 @@ mod tests {
         deliver_outcome(&mut app, outcome);
         assert_eq!(app.capture.recording.unexported_count(), 2);
         assert_eq!(
-            app.toast
-                .as_ref()
+            app.toasts
+                .latest()
                 .map(|t| (t.message.as_str(), t.is_error())),
             Some(("Export failed: disk full", true))
         );
@@ -1336,7 +1336,7 @@ timestamp,mode,value,unit,range,flags,aux1_label,aux1_value,aux1_unit,aux2_label
         );
         deliver_outcome(&mut app, outcome);
         assert_eq!(
-            app.toast.as_ref().map(|t| t.message.as_str()),
+            app.toasts.latest().map(|t| t.message.as_str()),
             Some("Exported 1 sample to out.csv")
         );
     }
