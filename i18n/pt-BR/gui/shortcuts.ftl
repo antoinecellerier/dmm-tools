@@ -106,10 +106,10 @@ shortcuts-mouse-swipe = Deslocar o histórico para a esquerda / direita
 # The box dragged out sets both the span of time and the range of values
 # shown.
 shortcuts-mouse-box-zoom = Aplicar zoom ao retângulo delimitador (tempo e valor)
-    .gesture = Shift + arrastar
+    .gesture = { $shift } + arrastar
 # X axis: the time axis. Zooms around the mouse pointer.
 shortcuts-mouse-zoom = Aplicar zoom ao eixo X em torno do ponteiro
-    .gesture = Ctrl + roda de rolagem
+    .gesture = { $ctrl } + roda de rolagem
 # The wheel alone scrolls the window's panels, not the graph.
 shortcuts-mouse-scroll = Rolar o painel
     .gesture = Roda de rolagem

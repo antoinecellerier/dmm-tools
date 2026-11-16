@@ -434,6 +434,21 @@ pub(crate) fn shortcut_text(
     text
 }
 
+/// `modifiers` alone, as this machine writes them in a shortcut: `Ctrl`,
+/// `Cmd` or `⌘` for the command modifier, `Shift` or `⇧`. For a mouse
+/// gesture's label, which names its modifier beside a word, not a key.
+pub(crate) fn modifier_text(ctx: &egui::Context, l10n: &Localizer, modifiers: Modifiers) -> String {
+    // `Key::Num0` renders as "0" both ways: trimming it, and the `+` that
+    // joins spelled-out names, leaves the modifier.
+    let mut formatted = shortcut_text(ctx, l10n, modifiers, Key::Num0);
+    let len = formatted
+        .trim_end_matches(Key::Num0.name())
+        .trim_end_matches('+')
+        .len();
+    formatted.truncate(len);
+    formatted
+}
+
 /// The command modifier as this machine renders it, followed by whatever
 /// goes between it and the key: `+` where the modifier is spelled out
 /// (`Ctrl+`, or `Cmd+` on a macOS whose body font has no `⌘`), nothing where
@@ -860,6 +875,35 @@ mod tests {
             keys = Shortcut::help_keys(ui.ctx(), &l10n);
         });
         assert_eq!(keys, ("?".to_string(), "F1".to_string()));
+    }
+
+    /// A mouse gesture's label names the modifier the graph reads: the
+    /// command modifier is Ctrl here and Cmd on a Mac, where "Ctrl + scroll
+    /// wheel" would name a key that doesn't zoom.
+    #[test]
+    fn a_modifier_alone_is_named_as_the_machine_writes_it() {
+        let l10n = crate::l10n::english();
+        let mut names = Vec::new();
+        for os in [
+            egui::os::OperatingSystem::Nix,
+            egui::os::OperatingSystem::Mac,
+        ] {
+            let ctx = crate::app::styled_context();
+            ctx.set_os(os);
+            headless_frame(&ctx, None, None, vec![], |ui| {
+                names.push((
+                    modifier_text(ui.ctx(), &l10n, Modifiers::COMMAND),
+                    modifier_text(ui.ctx(), &l10n, Modifiers::SHIFT),
+                ));
+            });
+        }
+        assert_eq!(names[0], ("Ctrl".to_owned(), "Shift".to_owned()));
+        let (cmd, shift) = &names[1];
+        assert!(cmd == "⌘" || cmd == "Cmd", "command reads {cmd:?} on macOS");
+        assert!(
+            shift == "⇧" || shift == "Shift",
+            "shift reads {shift:?} on macOS"
+        );
     }
 
     /// The bindings are `Modifiers::COMMAND`, so on macOS they are Cmd —

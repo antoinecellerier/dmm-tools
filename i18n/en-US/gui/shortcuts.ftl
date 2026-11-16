@@ -104,12 +104,13 @@ shortcuts-mouse-drag = Pan left / right through history
 shortcuts-mouse-swipe = Pan left / right through history
     .gesture = Two-finger swipe
 # The box dragged out sets both the span of time and the range of values
-# shown.
+# shown. $shift is the Shift key's name, or ⇧ on a Mac.
 shortcuts-mouse-box-zoom = Zoom to bounding box (time & value)
-    .gesture = Shift + drag
-# X axis: the time axis. Zooms around the mouse pointer.
+    .gesture = { $shift } + drag
+# X axis: the time axis. Zooms around the mouse pointer. $ctrl is the key's
+# name: Ctrl, or Cmd or ⌘ on a Mac.
 shortcuts-mouse-zoom = Zoom X axis centered on cursor
-    .gesture = Ctrl + scroll wheel
+    .gesture = { $ctrl } + scroll wheel
 # The wheel alone scrolls the window's panels, not the graph.
 shortcuts-mouse-scroll = Scroll the panel
     .gesture = Scroll wheel

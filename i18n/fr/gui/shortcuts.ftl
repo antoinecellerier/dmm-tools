@@ -106,10 +106,10 @@ shortcuts-mouse-swipe = Faire défiler l’historique vers la gauche / la droite
 # The box dragged out sets both the span of time and the range of values
 # shown.
 shortcuts-mouse-box-zoom = Zoomer sur le rectangle tracé (temps et valeur)
-    .gesture = Maj + glisser
+    .gesture = { $shift } + glisser
 # X axis: the time axis. Zooms around the mouse pointer.
 shortcuts-mouse-zoom = Zoomer sur l’axe X autour du pointeur
-    .gesture = Ctrl + molette
+    .gesture = { $ctrl } + molette
 # The wheel alone scrolls the window's panels, not the graph.
 shortcuts-mouse-scroll = Faire défiler le panneau
     .gesture = Molette

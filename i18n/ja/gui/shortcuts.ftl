@@ -106,10 +106,10 @@ shortcuts-mouse-swipe = 履歴を左右にスクロール
 # The box dragged out sets both the span of time and the range of values
 # shown.
 shortcuts-mouse-box-zoom = 境界ボックスにズーム (時間と値)
-    .gesture = Shift + ドラッグ
+    .gesture = { $shift } + ドラッグ
 # X axis: the time axis. Zooms around the mouse pointer.
 shortcuts-mouse-zoom = マウス ポインターを中心に X 軸をズーム
-    .gesture = Ctrl + マウス ホイール
+    .gesture = { $ctrl } + マウス ホイール
 # The wheel alone scrolls the window's panels, not the graph.
 shortcuts-mouse-scroll = パネルのスクロール
     .gesture = マウス ホイール

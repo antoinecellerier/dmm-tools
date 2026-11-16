@@ -106,10 +106,10 @@ shortcuts-mouse-swipe = 在历史数据中向左/向右平移
 # The box dragged out sets both the span of time and the range of values
 # shown.
 shortcuts-mouse-box-zoom = 框选缩放 (时间和数值)
-    .gesture = Shift + 拖动
+    .gesture = { $shift } + 拖动
 # X axis: the time axis. Zooms around the mouse pointer.
 shortcuts-mouse-zoom = 以鼠标指针为中心缩放 X 轴
-    .gesture = Ctrl + 滚轮
+    .gesture = { $ctrl } + 滚轮
 # The wheel alone scrolls the window's panels, not the graph.
 shortcuts-mouse-scroll = 滚动面板
     .gesture = 滚轮

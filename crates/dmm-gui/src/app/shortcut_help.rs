@@ -151,7 +151,11 @@ fn graph_keys(ui: &mut egui::Ui, l10n: &Localizer) {
 
 /// The mouse table and the closing note, which stays last in every layout.
 fn graph_mouse(ui: &mut egui::Ui, l10n: &Localizer) {
-    // Each gesture travels with what it does, as one message.
+    // Each gesture travels with what it does, as one message. The modifiers
+    // are the ones the graph reads: egui zooms on the command modifier, which
+    // is Cmd on a Mac.
+    let ctrl = shortcuts::modifier_text(ui.ctx(), l10n, egui::Modifiers::COMMAND);
+    let shift = shortcuts::modifier_text(ui.ctx(), l10n, egui::Modifiers::SHIFT);
     let rows = [
         (
             tr!(l10n, "shortcuts-mouse-drag.gesture"),
@@ -162,11 +166,15 @@ fn graph_mouse(ui: &mut egui::Ui, l10n: &Localizer) {
             tr!(l10n, "shortcuts-mouse-swipe"),
         ),
         (
-            tr!(l10n, "shortcuts-mouse-box-zoom.gesture"),
+            tr!(
+                l10n,
+                "shortcuts-mouse-box-zoom.gesture",
+                shift = shift.as_str()
+            ),
             tr!(l10n, "shortcuts-mouse-box-zoom"),
         ),
         (
-            tr!(l10n, "shortcuts-mouse-zoom.gesture"),
+            tr!(l10n, "shortcuts-mouse-zoom.gesture", ctrl = ctrl.as_str()),
             tr!(l10n, "shortcuts-mouse-zoom"),
         ),
         (
