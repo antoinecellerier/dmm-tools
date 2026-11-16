@@ -345,6 +345,17 @@ The pre-commit hook does not compile the Android-only code. CI does, in
 APK on every push; after touching anything under
 `cfg(target_os = "android")`, run the script before committing.
 
+A dev build or a release publishes that APK signed with the project's key,
+by `scripts/android-sign.sh` in the `android-sign` job. Android installs an
+update only over a copy signed with the same key, so the script refuses a
+result whose certificate is not the one in `android/signing-cert.sha256`,
+and a copy built locally has to be uninstalled before a published one goes
+on. The key is a secret of the repository's `android-signing` environment,
+which only runs on `main` and on `v*` tags may use; the maintainer keeps a
+copy offline. A key that is lost or leaked cannot be revoked: a new one
+takes its place, with its fingerprint in that file, and everyone installs
+the application afresh.
+
 On the phone, `adb shell setprop debug.dmm.mock 1` opens the simulated
 meter on the next launch, `adb shell setprop debug.dmm.log dmm_lib=debug`
 takes what `RUST_LOG` takes, and `adb logcat -s dmm` shows the log.

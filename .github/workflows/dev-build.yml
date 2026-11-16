@@ -169,6 +169,7 @@ jobs:
           files: |
             artifacts/**/*.tar.gz
             artifacts/**/*.zip
+            artifacts/**/*-android-arm64.apk
 
       - name: Prune old dev releases
         env:

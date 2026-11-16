@@ -201,6 +201,48 @@ jobs:
           name: android-unpublished
           path: dmm-tools-android-debug-signed.apk
 
+  # Signs the APK with the project's key, for the builds that are published.
+  # The key is a secret of the android-signing environment, which admits runs
+  # on main and on v* tags only: that rule, not the `if:` below, is what keeps
+  # it from a pull request, whose workflow files say whatever its author
+  # likes. A job apart from the build, so that nothing the build downloads
+  # and runs is ever within reach of the key.
+  android-sign:
+    name: Sign (Android)
+    if: inputs.published
+    needs: android
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    continue-on-error: true
+    environment: android-signing
+    env:
+      APK: ${{ inputs.archive-prefix }}-android-arm64.apk
+    steps:
+      - uses: actions/checkout@v7
+      # A runner of its own, so the build job's install does not reach it.
+      - name: Install the Android build tools
+        run: |
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "build-tools;34.0.0"
+      # Into a folder of its own: unpacked over the checkout, a file of the
+      # build job's making could replace the script the next step runs.
+      - uses: actions/download-artifact@v8
+        with:
+          name: android-unpublished
+          path: unsigned
+      - name: Sign
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          DMM_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        run: |
+          export DMM_ANDROID_KEYSTORE="$RUNNER_TEMP/keystore.p12"
+          base64 -d <<<"$KEYSTORE_BASE64" > "$DMM_ANDROID_KEYSTORE"
+          scripts/android-sign.sh unsigned/dmm-tools-android-debug-signed.apk "$APK"
+          rm "$DMM_ANDROID_KEYSTORE"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: ${{ env.APK }}
+          path: ${{ env.APK }}
+
   build:
     name: Build (${{ matrix.name }})
     needs: [targets, docs]
