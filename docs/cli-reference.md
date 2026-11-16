@@ -23,8 +23,6 @@ Communicates with digital multimeters over USB or Bluetooth. Supports
 for verification, and [shell completions](#dmm-cli-completions). See
 [supported devices](supported-devices.md) for the full compatibility list.
 
-Set `NO_COLOR=1` to disable colored output.
-
 ## Global Options
 
 | Option | Default | Description |
@@ -33,7 +31,7 @@ Set `NO_COLOR=1` to disable colored output.
 | `--adapter <SERIAL_PATH_OR_ADDRESS>` | | Select a specific adapter when more than one is reachable. Use the serial number or HID path of a USB cable, or the address of a Bluetooth adapter or meter, from `list` output. |
 | `--no-bluetooth` | | Turn off Bluetooth scanning for this run. Overrides the `bluetooth` setting in the settings file; an address given to `--adapter` is still opened. |
 | `--bluetooth` | | Scan for Bluetooth adapters and meters on this run. Overrides the `bluetooth` setting in the settings file. |
-| `--lang <LANG>` | | Language of messages and help: an id from the list `--help` shows (`en` or `en_GB` picks `en-US`), or `system` for the system's. Overrides the `language` setting in the settings file; see [Language](setup.md#language). A script that matches output text passes `--lang en-US`. |
+| `--lang <LANG>` | | Language of messages and help: an id from the list `--help` shows, or `system` for the system's. Overrides the `language` setting in the settings file; see [Language](setup.md#language). A script that matches output text passes `--lang en-US`. |
 | `-h, --help` | | Print help |
 | `-V, --version` | | Print version |
 
@@ -126,8 +124,8 @@ A detected run prints one dim stderr line naming the meter and the `--device <id
 <!-- devices:end -->
 
 **Experimental** families were reverse-engineered from vendor software and
-not yet run on real hardware; a **partly verified** one has run for its main
-modes. [Supported devices](supported-devices.md) lists what each has
+manuals, not yet run on real hardware; a **partly verified** one has run for
+its main modes. [Supported devices](supported-devices.md) lists what each has
 confirmed, along with display counts, form factor and cable. Short of
 verified, the CLI prints a yellow warning with a link to the device's
 verification issue on GitHub. Please report findings there.
@@ -137,8 +135,7 @@ through the scenarios listed under [Mock modes](#mock-modes); `--mock-mode`
 pins one. It supports `read`, `command`, `get` and `set`.
 
 The `mock-zt5b` device simulates a ZOTEK ZT-5B, to try the ZOTEK remote keys
-without a meter. It supports `read` and `command`, sends about 2.6 readings a
-second, and starts on the `Auto` word each run; [ZOTEK mock](#zotek-mock)
+without a meter. It supports `read` and `command`; [ZOTEK mock](#zotek-mock)
 lists what its keys do.
 
 **Examples:**
@@ -218,10 +215,10 @@ dmm-cli read [OPTIONS]
 | `-o, --output [<FILE>]` | stdout | Write to FILE; with no FILE, to `measurements-<meter>-<mode>-<start>.<ext>`. |
 | `--count <N>` | `0` | Number of readings to take. 0 = unlimited: Ctrl+C stops it, or the end of a `--replay` file. |
 | `--no-reconnect` | off | End the run, with its summary and an error, when the link to the meter drops. |
-| `--replay <FILE>` | | Play back a `--format replay` file at its recorded pace instead of opening a meter; the run ends with the file, or sooner with `--count` or Ctrl+C. |
+| `--replay <FILE>` | | Play back a `--format replay` file at its recorded pace instead of opening a meter. |
 | `--import <FILE>` | | Read an exported CSV, JSON or replay file instead of opening a meter, without waiting: to convert it (`--format`, `-o`) or print its summary. Its markers come through; a CSV or JSON file refuses `--format replay` and `--interval-ms`. |
 | `--mock-mode <MODE>` | `mock_mode` in `settings.json` | Pin mock device to a specific mode (only with `--device mock`, or the mock saved by `dmm-gui`). See [Mock modes](#mock-modes). |
-| `--integrate` | off | Show cumulative time-integral. For current modes, this computes charge (Ah, mAh, …). For voltage modes, V·s (mV·s, …). Adds `integral` and `integral_unit` columns to CSV/JSON output. |
+| `--integrate` | off | Show the cumulative time-integral: charge (Ah, mAh, …) in current modes, V·s (mV·s, …) in voltage modes. Adds `integral` and `integral_unit` columns to CSV/JSON output. |
 | `--scale <FACTOR>` | `1` | Multiply the reading, taken in base units, by FACTOR. See [Scaling readings in software](#scaling-readings-in-software). |
 | `--offset <VALUE>` | `0` | Add VALUE after scaling. |
 | `--unit <LABEL>` | | Label the scaled reading with LABEL instead of the meter's base unit, without converting the number. |
@@ -252,7 +249,7 @@ frequency, duty, period, REL reference, AC and DC parts) report those **sub-valu
 output and in an `aux` array in JSON. CSV adds one
 `auxN_label,auxN_value,auxN_unit` group per sub-value the meter family can
 send (four for the UT181A, two for the UT171, one for the UT61E+), left empty when
-a reading uses fewer, so every row lines up. The time a sub-value carries (the
+a reading uses fewer. The time a sub-value carries (the
 UT181A's MIN/MAX times) is in text and JSON only.
 Single-display meters keep the six base columns. With `--integrate`, the
 `integral` columns come before the aux groups.
@@ -297,10 +294,9 @@ from two samples, standard deviation σ, each with its unit) is printed to
 stderr. When `--integrate` is active, the total
 integral is also shown.
 
-Statistics and the integral cover a single mode and quantity: turning the
-dial resets both and prints a note to stderr, so the summary always describes
-one comparable series. Auto-range crossing a decade (mV → V, Ω → kΩ) carries
-them on, each figure in one of the ranges the meter showed.
+Statistics and the integral cover a single mode and quantity: turning the dial
+resets both and prints a note to stderr. Auto-range crossing a decade (mV → V,
+Ω → kΩ) carries them on, each figure in one of the ranges the meter showed.
 
 When the link to a meter drops — a cable pulled, a Bluetooth adapter switched
 off — the run waits for it and reopens the meter it first opened on the same
@@ -385,8 +381,8 @@ dmm-cli read --scale 1.8 --offset 32 --unit °F    # °C → °F
 ### dmm-cli get
 
 List what the meter's settings can be switched to from the current dial
-position: mode, range, HOLD, REL, MIN/MAX and Peak (UT61+/UT161, UT181A,
-VC-880/VC650BT, VC-890 and mock).
+position: mode, range, HOLD, REL, MIN/MAX and Peak (UT61+/UT161,
+UT60BT/UT202BT, UT171, UT181A, VC-880/VC650BT, VC-890 and mock).
 
 ```
 dmm-cli get                  # one row per setting, * = the live value
@@ -577,10 +573,11 @@ dmm-cli command <ACTION>          # send a command
 
 #### ZOTEK commands
 
-The keys of ZOTEK's app; a ZT-5B has run all of its keys, the other models'
-are not yet tried on a meter, so watch the reading for what a key did. The ZT-300AB offers no `hold`, `auto_function`, `capacitance`, `hz` or
-`ncv`; the ZT-5B no `volts`, `millivolts`, `ohms` or `current`; only the
-ZT-5566SE offers `minmax`.
+The keys of ZOTEK's app; on a model
+[short of verified](supported-devices.md#zotek--zoyi--bside--aneng), watch
+the reading for what a key did. The ZT-300AB offers no `hold`, `auto_function`,
+`capacitance`, `hz` or `ncv`; the ZT-5B no `volts`, `millivolts`, `ohms` or
+`current`; only the ZT-5566SE offers `minmax`.
 
 | Command | Description |
 |---|---|
@@ -600,7 +597,8 @@ ZT-5566SE offers `minmax`.
 
 #### EEVblog 121GW commands
 
-The keys of EEVblog's and UEi's apps, not yet tried on a meter; watch the reading for
+The keys of EEVblog's and UEi's apps; on this
+[experimental](supported-devices.md#eevblog) meter, watch the reading for
 what a key did.
 
 | Command | Description |
@@ -617,9 +615,9 @@ what a key did.
 
 #### OWON and Voltcraft VC871 / VC891 / VC915 / VC925 PV commands
 
-The keys of OWON's and Voltcraft's apps and OWON's PC software, not yet tried
-on a meter; watch the reading for what a key did. Each model offers only its
-own keys.
+The keys of OWON's and Voltcraft's apps and OWON's PC software; on a model
+[short of verified](supported-devices.md#owon--voltcraft-vc871--vc891--vc915--vc925-pv),
+watch the reading for what a key did. Each model offers only its own keys.
 
 | Command | Description |
 |---|---|
@@ -726,11 +724,10 @@ check the decoder's digits, decimal point, OL and sign. Once all of them are
 confirmed, later steps capture without stopping and are listed once at the
 end for review; if any is corrected or skipped, every later step keeps asking.
 
-On meters the tool can drive (UT61+/UT161, UT181A, VC-880/VC-890, mock),
-each mode step is followed by an automatic walk through hold, REL, MIN/MAX,
-Peak and every range (on the UT171, every range), and the meter is left on auto range (or its starting
-range, where the mode has no auto, as a UT181A's Peak) with its flags off.
-`--no-drive` turns this off.
+On the meters [`get`](#dmm-cli-get) serves, each mode step is followed by an
+automatic walk through the flags and ranges the meter offers, and the meter is
+left on auto range (or its starting range, where the mode has no auto, as a
+UT181A's Peak) with its flags off. `--no-drive` turns this off.
 
 After the device's own steps, capture offers **freeform captures**: describe
 any mode the list doesn't cover and the tool records the samples with your
@@ -857,7 +854,7 @@ dmm-cli --device mock read --mock-mode dcv
 ### ZOTEK mock
 
 What each key does on `--device mock-zt5b`. The keys do what ZOTEK's app
-intends; a ZT-5B has confirmed every one.
+intends.
 
 | Key | The simulated meter shows |
 |---|---|
