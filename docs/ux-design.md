@@ -53,7 +53,9 @@ repeat or contradict replaces it: the same message again, or the next word
 from the alarm, the scale or an import. The stack floats over the reading,
 so older news makes room once it would take more than half the height under
 the top bar, rather than waiting its turn and showing up late. A caution or a
-failure stays, up to the four cards the stack holds: many are said once.
+failure stays, up to the four cards the stack holds: many are said once. A
+ring around each × runs out with the card's time, so a card is seen to be
+leaving rather than vanishing mid-read.
 
 **The window's position is left to the OS.** Wayland ignores it, and a monitor
 unplugged since would leave the window off-screen. Fullscreen isn't restored

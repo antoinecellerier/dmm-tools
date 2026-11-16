@@ -977,7 +977,7 @@ impl App {
         ui.with_layout(egui::Layout::right_to_left(egui::Align::TOP), |ui| {
             let scroll = &ui.spacing().scroll;
             ui.add_space(scroll.bar_width + scroll.bar_outer_margin);
-            dismissed = dismiss_button(ui, &self.l10n);
+            dismissed = dismiss_button(ui, &self.l10n).clicked();
             ui.with_layout(egui::Layout::left_to_right(egui::Align::TOP), |ui| {
                 ui.add(
                     egui::Label::new(

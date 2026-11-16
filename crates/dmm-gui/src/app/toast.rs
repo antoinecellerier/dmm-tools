@@ -53,13 +53,35 @@ const OK_GLYPH: &str = "\u{2714}";
 const CAUTION_GLYPH: &str = "\u{2139}";
 pub(super) const ERROR_GLYPH: &str = "\u{26A0}";
 
-/// The × that closes a notice, a toast or one drawn in a panel: whether it
-/// was clicked this frame.
-pub(super) fn dismiss_button(ui: &mut egui::Ui, l10n: &Localizer) -> bool {
+/// The × that closes a notice, a toast or one drawn in a panel.
+pub(super) fn dismiss_button(ui: &mut egui::Ui, l10n: &Localizer) -> egui::Response {
     ui.add(egui::Button::new(RichText::new("\u{00D7}").small()).frame_when_inactive(false))
         .on_hover_text(tr!(l10n, "connection-dismiss.hover"))
         .a11y_label(&tr!(l10n, "connection-dismiss.a11y"))
-        .clicked()
+}
+
+/// How far the ring showing a toast's time left stands off its ×.
+const RING_CLEARANCE: f32 = 2.0;
+
+/// Draw the time a toast has left as a ring around its × at `close`: whole
+/// when the toast goes up, running out clockwise from the top, so a card is
+/// seen to be on its way out rather than vanishing unannounced. `left` is the
+/// share of its time remaining.
+fn paint_time_left(ui: &egui::Ui, close: egui::Rect, left: f32, color: egui::Color32) {
+    use std::f32::consts::TAU;
+    let radius = close.size().max_elem() / 2.0 + RING_CLEARANCE;
+    // Segments short enough to read as a curve at this size.
+    let steps = (48.0 * left).ceil().max(1.0) as usize;
+    let gone = TAU * (1.0 - left);
+    let points = (0..=steps)
+        .map(|i| {
+            // From where the time already gone ends, round to the top.
+            let angle = gone + (TAU - gone) * i as f32 / steps as f32 - TAU / 4.0;
+            close.center() + radius * egui::Vec2::angled(angle)
+        })
+        .collect();
+    let stroke = egui::Stroke::new(TOAST_STROKE_WIDTH, color);
+    ui.painter().add(egui::Shape::line(points, stroke));
 }
 
 /// How often a visible toast asks for a repaint. Also the cadence the app
@@ -176,6 +198,11 @@ impl Toast {
         self.shown_at.map_or(self.duration(), |at| {
             self.duration().saturating_sub(at.elapsed())
         })
+    }
+
+    /// The share of its time it has left, from 1 down to 0.
+    fn left(&self) -> f32 {
+        self.remaining().as_secs_f32() / self.duration().as_secs_f32()
     }
 
     /// Whether it has been up its full time.
@@ -375,9 +402,11 @@ impl App {
                                     // the box.
                                     let rtl = egui::Layout::right_to_left(egui::Align::TOP);
                                     ui.with_layout(rtl, |ui| {
-                                        if dismiss_button(ui, l10n) {
+                                        let close = dismiss_button(ui, l10n);
+                                        if close.clicked() {
                                             dismissed = Some(toast.id);
                                         }
+                                        paint_time_left(ui, close.rect, toast.left(), color);
                                         let ltr = egui::Layout::left_to_right(egui::Align::TOP);
                                         ui.with_layout(ltr, |ui| {
                                             ui.label(RichText::new(glyph).color(color));
@@ -921,6 +950,11 @@ mod tests {
         };
         assert!(old.expired());
         assert_eq!(old.remaining(), Duration::ZERO);
+        // The ring around the × is whole before the first frame and gone
+        // at the end.
+        assert_eq!(Toast::caution("Two cables").left(), 1.0);
+        assert!(fresh.left() > 0.8 && fresh.left() <= 1.0);
+        assert_eq!(old.left(), 0.0);
     }
 
     /// A toast raised while the window is hidden waits for its first frame:
