@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The USB cables the application opens, ids in decimal as Android wants
+     them: the list of KNOWN_TRANSPORTS in crates/dmm-lib/src/transport/open.rs,
+     which a test there holds this file to. -->
+<resources>
+    <!-- CP2110, 10c4:ea80 -->
+    <usb-device vendor-id="4292" product-id="60032" />
+    <!-- CH9329, 1a86:e429 -->
+    <usb-device vendor-id="6790" product-id="58409" />
+    <!-- CH9325, 1a86:e008 -->
+    <usb-device vendor-id="6790" product-id="57352" />
+    <!-- BU-86X, 0820:0001 -->
+    <usb-device vendor-id="2080" product-id="1" />
+</resources>

@@ -1182,6 +1182,41 @@ impl App {
             self.trim_markers();
         }
     }
+
+    /// On Android, connect when the user has answered the system's offer
+    /// of a USB cable while no session runs. They plugged it in, which is
+    /// asking for its meter: allowed, the cable opens, and turned down, the
+    /// failed open says the cable waits to be allowed. Not over an imported
+    /// session, which Connect asks about.
+    #[cfg(target_os = "android")]
+    fn connect_to_offered_cable(&mut self, ctx: &egui::Context) {
+        use std::sync::atomic::{AtomicBool, Ordering};
+        /// Whether a session ran since the offer was last looked at.
+        static SESSION_SINCE: AtomicBool = AtomicBool::new(false);
+
+        // Asked of the activity's Java side, so only while there is a use
+        // for the answer. An open in progress leaves it for the frame after
+        // it has ended: failed, which it may well have for want of this
+        // cable, the cable is the next thing to try.
+        match self.connection.state {
+            ConnectionState::Disconnected => {}
+            ConnectionState::Connecting => return,
+            ConnectionState::Connected | ConnectionState::Reconnecting => {
+                SESSION_SINCE.store(true, Ordering::Relaxed);
+                return;
+            }
+        }
+        let offered = crate::take_cable_offer();
+        // An offer answered during a session is not one to act on when
+        // that session ends: the user has just disconnected.
+        let stale = SESSION_SINCE.swap(false, Ordering::Relaxed);
+        if offered && !stale && !self.source.is_import() {
+            self.connect(ctx);
+        } else {
+            // Nothing wakes the window when the offer comes.
+            ctx.request_repaint_after(std::time::Duration::from_secs(1));
+        }
+    }
 }
 
 impl eframe::App for App {
@@ -1195,6 +1230,8 @@ impl eframe::App for App {
 
     fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.hold_close(ctx);
+        #[cfg(target_os = "android")]
+        self.connect_to_offered_cable(ctx);
         self.logic_pass();
     }
 

@@ -316,12 +316,12 @@ The subcommands and what each one waits for are in the `verify-gui` skill
 
 ## Building for Android (experimental)
 
-An experimental build of `dmm-gui` runs on Android over Bluetooth only;
-[`docs/research/android-port.md`](research/android-port.md) has the
-reasoning and what a phone has shown so far. `crates/dmm-android` is the
-shared library, empty on every other target, and `android/` the Gradle
+An experimental build of `dmm-gui` runs on Android, over Bluetooth and the
+USB cables; [`docs/research/android-port.md`](research/android-port.md) has
+the reasoning and what a phone has shown so far. `crates/dmm-android` is
+the shared library, empty on every other target, and `android/` the Gradle
 project that packages it with btleplug's Java classes and two small
-activities. `scripts/android-build.sh` builds the debug APK for arm64, and
+activities, one of which lists and opens the cables for the library. `scripts/android-build.sh` builds the debug APK for arm64, and
 with `--install` puts it on the phone `adb` sees. It names what is missing
 of:
 

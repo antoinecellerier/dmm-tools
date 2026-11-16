@@ -670,6 +670,27 @@ pub struct AndroidStart {
     /// The radius of the screen's rounded corners in pixels, 0 for square
     /// ones: the window is kept clear of them.
     pub screen_corner_px: f32,
+    /// Whether the system's offer of a USB cable just plugged in was
+    /// answered since this was last asked: the user gave the cable to the
+    /// application, or turned the offer down. The window then connects if
+    /// it has no session, which opens the cable or says why it does not
+    /// open.
+    pub cable_offered: Option<CableOffer>,
+}
+
+/// See [`AndroidStart::cable_offered`]. Called on the window's thread,
+/// every frame.
+#[cfg(target_os = "android")]
+pub type CableOffer = Box<dyn Fn() -> bool + Send + Sync>;
+
+#[cfg(target_os = "android")]
+static CABLE_OFFER: std::sync::OnceLock<CableOffer> = std::sync::OnceLock::new();
+
+/// Whether a cable's offer was answered since the last call
+/// ([`AndroidStart::cable_offered`]).
+#[cfg(target_os = "android")]
+pub(crate) fn take_cable_offer() -> bool {
+    CABLE_OFFER.get().is_some_and(|offered| offered())
 }
 
 /// Where exports go on Android, which has no save dialog here: a
@@ -698,6 +719,9 @@ pub fn run_android(app: AndroidApp, start: AndroidStart) -> eframe::Result<()> {
     }
     if let Some(picker) = start.pick_file {
         file_dialog::set_file_picker(picker);
+    }
+    if let Some(offered) = start.cable_offered {
+        let _ = CABLE_OFFER.set(offered);
     }
     let (mut settings, unreadable) = settings::Settings::load();
     let l10n = Arc::new(l10n::startup(&settings.shared.language));

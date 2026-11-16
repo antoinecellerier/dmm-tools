@@ -2,6 +2,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-feature android:name="android.hardware.bluetooth_le" android:required="true" />
+    <!-- For the cabled meters, on a phone that can host a USB device. -->
+    <uses-feature android:name="android.hardware.usb.host" android:required="false" />
 
     <!-- Android 11 and older: scanning needs the location permission. -->
     <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
@@ -26,6 +28,16 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <!-- Android offers the application when one of its cables is
+                 plugged in, and a user who takes the offer for good is not
+                 asked for the cable again: a permission asked for at run
+                 time lasts only until the cable is pulled. -->
+            <intent-filter>
+                <action android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED" />
+            </intent-filter>
+            <meta-data
+                android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED"
+                android:resource="@xml/usb_cables" />
         </activity>
 
         <!-- configChanges: the native side redraws at the new size itself;

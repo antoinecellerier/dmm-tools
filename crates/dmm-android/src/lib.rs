@@ -13,8 +13,10 @@
 
 use android_system_properties::AndroidSystemProperties;
 use dmm_gui::{AndroidApp, AndroidStart};
+use dmm_lib::{UsbCable, UsbHost};
 use jni::objects::{JObject, JString};
-use jni::{jni_sig, jni_str};
+use jni::{JValue, jni_sig, jni_str};
+use std::os::fd::{FromRawFd, OwnedFd};
 use std::path::PathBuf;
 
 /// What both desktop binaries log unasked (`dmm_shared::logging`).
@@ -56,7 +58,10 @@ fn android_main(app: AndroidApp) {
         }
     };
 
+    dmm_lib::set_usb_host(Box::new(Usb(app.clone())));
+
     let activity = app.clone();
+    let offers = app.clone();
     let start = AndroidStart {
         mock: set("debug.dmm.mock").as_deref() == Some("1"),
         bluetooth,
@@ -70,6 +75,12 @@ fn android_main(app: AndroidApp) {
                     0.0
                 })
             }),
+        cable_offered: Some(Box::new(move || {
+            cable_offered(&offers).unwrap_or_else(|e| {
+                log::debug!("no word of a USB cable offered: {e}");
+                false
+            })
+        })),
         pick_file: Some(Box::new(move || match pick_file(&activity) {
             Ok(picked) => picked,
             Err(e) => {
@@ -83,21 +94,32 @@ fn android_main(app: AndroidApp) {
     }
 }
 
-/// Ask the user for a file through the system's document picker, which
-/// `MainActivity.pickFile` shows and waits on; it hands back a copy of the
-/// file in the application's cache, as the picker gives no path to read.
+/// Call the activity's Java side from this thread, attached to the Java
+/// VM for the call.
 #[expect(
     unsafe_code,
     reason = "the activity reference android-activity holds, borrowed for one call"
 )]
-fn pick_file(app: &AndroidApp) -> Result<Option<PathBuf>, jni::errors::Error> {
+fn with_activity<T>(
+    app: &AndroidApp,
+    call: impl FnOnce(&mut jni::Env<'_>, &JObject<'_>) -> Result<T, jni::errors::Error>,
+) -> Result<T, jni::errors::Error> {
     jni::JavaVM::singleton()?.attach_current_thread(|env| {
         // SAFETY: the pointer is the global reference to the activity that
         // android-activity keeps for as long as `app` lives.
         let activity = unsafe { JObject::from_raw(env, app.activity_as_ptr().cast()) };
+        call(env, &activity)
+    })
+}
+
+/// Ask the user for a file through the system's document picker, which
+/// `MainActivity.pickFile` shows and waits on; it hands back a copy of the
+/// file in the application's cache, as the picker gives no path to read.
+fn pick_file(app: &AndroidApp) -> Result<Option<PathBuf>, jni::errors::Error> {
+    with_activity(app, |env, activity| {
         let path = env
             .call_method(
-                &activity,
+                activity,
                 jni_str!("pickFile"),
                 jni_sig!("()Ljava/lang/String;"),
                 &[],
@@ -113,17 +135,11 @@ fn pick_file(app: &AndroidApp) -> Result<Option<PathBuf>, jni::errors::Error> {
 
 /// The radius of the screen's rounded corners in pixels, 0 for square ones,
 /// from `MainActivity.screenCornerRadius`.
-#[expect(
-    unsafe_code,
-    reason = "the activity reference android-activity holds, borrowed for one call"
-)]
 fn screen_corner_radius(app: &AndroidApp) -> Result<f32, jni::errors::Error> {
-    jni::JavaVM::singleton()?.attach_current_thread(|env| {
-        // SAFETY: as in `pick_file`.
-        let activity = unsafe { JObject::from_raw(env, app.activity_as_ptr().cast()) };
+    with_activity(app, |env, activity| {
         let radius = env
             .call_method(
-                &activity,
+                activity,
                 jni_str!("screenCornerRadius"),
                 jni_sig!("()I"),
                 &[],
@@ -138,4 +154,90 @@ fn screen_corner_radius(app: &AndroidApp) -> Result<f32, jni::errors::Error> {
 /// The acquisition thread, attached from native code, finds them ready.
 fn start_bluetooth() -> Result<(), btleplug::Error> {
     jni::JavaVM::singleton()?.attach_current_thread(btleplug::platform::init)
+}
+
+/// The USB cables, which only the activity's Java side can list and open.
+struct Usb(AndroidApp);
+
+impl UsbHost for Usb {
+    fn list(&self) -> Vec<UsbCable> {
+        match usb_cables(&self.0) {
+            Ok(lines) => lines.lines().filter_map(usb_cable).collect(),
+            Err(e) => {
+                log::error!("the USB devices could not be listed: {e}");
+                Vec::new()
+            }
+        }
+    }
+
+    #[expect(
+        unsafe_code,
+        reason = "taking over the descriptor MainActivity.openUsb duplicated for this side"
+    )]
+    fn open(&self, name: &str) -> Result<OwnedFd, String> {
+        match open_usb(&self.0, name).map_err(|e| e.to_string())? {
+            // SAFETY: a descriptor `openUsb` detached for its caller to
+            // own; nothing else holds or closes it.
+            fd if fd >= 0 => Ok(unsafe { OwnedFd::from_raw_fd(fd) }),
+            -1 => Err("the device is gone".to_string()),
+            -2 => Err("the user did not allow it".to_string()),
+            _ => Err("Android did not open it".to_string()),
+        }
+    }
+}
+
+/// One line of `MainActivity.usbCables`: name, vendor id, product id and
+/// product name, tab separated.
+fn usb_cable(line: &str) -> Option<UsbCable> {
+    let mut fields = line.split('\t');
+    Some(UsbCable {
+        name: fields.next().filter(|name| !name.is_empty())?.to_string(),
+        vid: fields.next()?.parse().ok()?,
+        pid: fields.next()?.parse().ok()?,
+        product: fields
+            .next()
+            .filter(|product| !product.is_empty())
+            .map(str::to_string),
+    })
+}
+
+/// The attached USB devices, from `MainActivity.usbCables`.
+fn usb_cables(app: &AndroidApp) -> Result<String, jni::errors::Error> {
+    with_activity(app, |env, activity| {
+        let lines = env
+            .call_method(
+                activity,
+                jni_str!("usbCables"),
+                jni_sig!("()Ljava/lang/String;"),
+                &[],
+            )?
+            .l()?;
+        let lines = env.cast_local::<JString>(lines)?;
+        lines.try_to_string(env)
+    })
+}
+
+/// Have `MainActivity.openUsb` open a USB device, which shows the system's
+/// permission dialog and waits on it where one is due. A descriptor to own,
+/// or the negative number that says why there is none.
+fn open_usb(app: &AndroidApp, name: &str) -> Result<i32, jni::errors::Error> {
+    with_activity(app, |env, activity| {
+        let name = env.new_string(name)?;
+        env.call_method(
+            activity,
+            jni_str!("openUsb"),
+            jni_sig!("(Ljava/lang/String;)I"),
+            &[JValue::Object(&name)],
+        )?
+        .i()
+    })
+}
+
+/// Whether the system started the activity for a USB cable since the last
+/// call, from `MainActivity.takeCableOffered`.
+fn cable_offered(app: &AndroidApp) -> Result<bool, jni::errors::Error> {
+    with_activity(app, |env, activity| {
+        env.call_method(activity, jni_str!("takeCableOffered"), jni_sig!("()Z"), &[])?
+            .z()
+    })
 }

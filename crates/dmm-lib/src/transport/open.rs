@@ -835,4 +835,43 @@ mod tests {
             "udev/70-dmm-tools.rules and KNOWN_TRANSPORTS disagree on vid:pid"
         );
     }
+
+    /// The cables the Android application tells the system are its own must
+    /// be the known transports too: one left out is asked about at every
+    /// plug-in, and a stale one has Android offer the application for
+    /// hardware nothing here opens.
+    #[test]
+    fn android_usb_filter_covers_exactly_the_known_transports() {
+        let path = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../android/app/src/main/res/xml/usb_cables.xml"
+        );
+        let filter = std::fs::read_to_string(path).expect("read usb_cables.xml");
+
+        // Ids are decimal in this file.
+        let id = |line: &str, name: &str| -> Option<u16> {
+            let rest = line.split_once(&format!("{name}=\""))?.1;
+            rest.split_once('"')?.0.parse().ok()
+        };
+        let mut in_filter: Vec<String> = filter
+            .lines()
+            .filter(|line| line.contains("<usb-device"))
+            .map(|line| {
+                let vid = id(line, "vendor-id").expect("vendor-id");
+                let pid = id(line, "product-id").expect("product-id");
+                format!("{vid:04x}:{pid:04x}")
+            })
+            .collect();
+        let mut in_code: Vec<String> = KNOWN_TRANSPORTS
+            .iter()
+            .map(|kt| format!("{:04x}:{:04x}", kt.vid, kt.pid))
+            .collect();
+
+        in_filter.sort_unstable();
+        in_code.sort_unstable();
+        assert_eq!(
+            in_filter, in_code,
+            "usb_cables.xml and KNOWN_TRANSPORTS disagree on vid:pid"
+        );
+    }
 }

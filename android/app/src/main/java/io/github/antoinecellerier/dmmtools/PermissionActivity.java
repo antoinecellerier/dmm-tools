@@ -35,7 +35,9 @@ public class PermissionActivity extends Activity {
     }
 
     private void startApplication() {
-        startActivity(new Intent(this, MainActivity.class));
+        // The action says what started this one: the launcher, or a USB
+        // cable the system offered the application for.
+        startActivity(new Intent(this, MainActivity.class).setAction(getIntent().getAction()));
         finish();
     }
 }
