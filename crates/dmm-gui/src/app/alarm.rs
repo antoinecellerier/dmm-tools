@@ -537,7 +537,8 @@ impl App {
         let breach = match self.judge(m) {
             Ok(breach) => breach?,
             Err(off) => {
-                self.alarm_off_toast(off);
+                self.toasts
+                    .push(Toast::caution(off).replacing(ToastSlot::Alarm));
                 return None;
             }
         };
@@ -550,27 +551,6 @@ impl App {
             return None;
         }
         Some(PendingBreach::new(&self.l10n, m, &breach))
-    }
-
-    /// Say that a reading turned the alarm off, in `off`'s words.
-    pub(super) fn alarm_off_toast(&mut self, off: String) {
-        self.toasts
-            .push(Toast::caution(off).replacing(ToastSlot::Alarm));
-    }
-
-    /// Judge one imported reading, as the file holds it: as
-    /// [`check_alarm`](Self::check_alarm), but a first reading found out
-    /// goes unsaid, leaving the toasts to the import's progress and result,
-    /// and the alarm going off is handed back in `Err` for the caller to say.
-    pub(super) fn check_imported(
-        &mut self,
-        m: &Measurement,
-    ) -> Result<Option<PendingBreach>, String> {
-        Ok(self.judge(m)?.and_then(|breach| {
-            breach
-                .crossing
-                .then(|| PendingBreach::new(&self.l10n, m, &breach))
-        }))
     }
 
     /// Mark each breach the drain found on its reading. No toast: the badge,
@@ -743,7 +723,7 @@ mod tests {
 
     /// An import judges the file afresh: the live session's quantity and
     /// zone don't carry over, so a file starting out is found out, not seen
-    /// crossing — and unsaid, the import's own toasts hold the slot.
+    /// crossing, and said as a meter's first reading out is.
     #[test]
     fn an_import_judges_the_file_afresh() {
         let mut app = app_with_high_limit(5.0);
@@ -753,23 +733,13 @@ mod tests {
         assert_eq!(alarm.bound_unit(), None);
         assert_eq!(alarm.limits().high, Some(5.0));
         app.toasts.clear();
-        assert!(
-            app.check_imported(&reading(&app, 6.0, "V"))
-                .unwrap()
-                .is_none()
-        );
-        assert!(app.toasts.is_empty());
+        assert!(app.check_alarm(&reading(&app, 6.0, "V")).is_none());
+        let said = app.toasts.messages();
+        assert_eq!(said.len(), 1, "{said:?}");
+        assert!(said[0].starts_with("Already above high limit"), "{said:?}");
         assert_eq!(app.reading_state().alarm, Some(dmm_lib::alarm::Zone::Above));
-        assert!(
-            app.check_imported(&reading(&app, 4.0, "V"))
-                .unwrap()
-                .is_none()
-        );
-        assert!(
-            app.check_imported(&reading(&app, 6.0, "V"))
-                .unwrap()
-                .is_some()
-        );
+        assert!(app.check_alarm(&reading(&app, 4.0, "V")).is_none());
+        assert!(app.check_alarm(&reading(&app, 6.0, "V")).is_some());
     }
 
     /// The graph's menu sets a limit at a height in the plotted unit, keeps

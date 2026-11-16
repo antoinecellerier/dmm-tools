@@ -579,10 +579,7 @@ impl App {
             }
             // After the file's marker, as for a live reading, in the unit it
             // shows if it was scaled when written (`LimitUnit::of`).
-            match self.check_imported(&m) {
-                Ok(breach) => breaches.extend(breach),
-                Err(off) => self.alarm_off_toast(off),
-            }
+            breaches.extend(self.check_alarm(&m));
             ingest.taken += 1;
             self.last_measurement = Some(m);
             if full {
