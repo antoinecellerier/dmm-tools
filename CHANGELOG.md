@@ -4,18 +4,18 @@
 
 ### GUI
 
-- **Reference values take a unit, kept through an auto-range step and an export** — `1 Ω`, `4.7k` or `10 mohm`; a bare number takes the plotted unit. A value that draws no line is underlined, and the field's hover says why.
+- **Reference values take a unit, kept through auto-range steps and exports** — `1 Ω`, `4.7k` or `10 mohm`; a bare number takes the plotted unit.
 - **Alarm limits take a unit, and then watch only that quantity** — `4980 mV` or `10 kohm`; a bare number stays in the base unit.
 - **Quitting asks first when a recording or its markers aren't exported** — the close button, `Ctrl+Q` and `Ctrl+W` dropped them unasked.
-- **Toasts stack, each with a close button and a ring showing its time left** — a newer message replaced the one on screen.
+- **Toasts stack, each with a close button and a time-left ring** — a newer message replaced the one on screen.
 - **An imported file that starts past an alarm limit says so** — as a meter's first reading does.
-- **Statistics is one table shaped to the panel, the cursors' figures included** — a narrow window put the session's ∫ after the visible window's line; the reading column now widens to 480 px.
-- **The Specifications panel covers the OWON CMS061 and CMS101** — the UNI-T UT217A and UT217B, which share their entries, show the same figures.
-- **The Alarm, Scale and Y-range fields underline a value they won't use** — as the Ref field does, with the hover saying why.
+- **Statistics is one table shaped to the panel, the cursors' figures included** — a narrow window put the session's ∫ after the visible window's line.
+- **The Specifications panel covers the OWON CMS061 and CMS101** — the UNI-T UT217A and UT217B too.
+- **Ref, Alarm, Scale and Y-range fields underline values they won't use** — the hover says why.
 - **Failure notices name the meter picked in Settings and point to Auto-detect** — "No USB cable found" after a meter swap sent you to drivers.
 - **"No USB cable found" says when Bluetooth wasn't searched** — and how to switch the search on.
 - **A refused mode or range switch says to check the dial**
-- **Data the meter sends that this tool doesn't know asks for a report** — the request only reached the log.
+- **Meter data this tool doesn't know asks for a report** — the request only reached the log.
 - **A ZOTEK meter sending another model's data names the model to pick** — the notice only reached the log.
 - **dmm-gui says when it took the first of several Bluetooth devices** — unless `--adapter` named it.
 - **dmm-gui says when the settings file names a device it doesn't know** — it detected the meter without saying why.
@@ -34,6 +34,8 @@
 
 ### Bug fixes
 
+- **The graph shows readings before an auto-range step as the meter did** — 0.07 Ω read 0.0000 MΩ, and the axis 12000000 Ω.
+- **The graph shades OL that opens a session or dial turn** — it stayed blank, and Export… dropped those readings.
 - **dmm-gui starts afresh and stops a recording when a different meter answers** — the new meter's readings joined the first one's graph, statistics and recording.
 - **dmm-gui names the meter of a played-back recording** — with **Show device name on connect (beeps)** off, it showed none.
 - **dmm-gui's replay files name the meter as dmm-cli's do** — they gave the menu's name, such as "UNI-T UT61E+".
@@ -42,26 +44,24 @@
 - **"Waiting for meter…" no longer stays frozen while dmm-gui reconnects**
 - **dmm-gui's remote buttons, dropdown picks, Pause and Sample interval act at once** — they waited for the next sample.
 - **dmm-gui's mode and range readouts switch only a connected meter** — a pick made while reconnecting went to whichever meter answered next.
-- **A ZOTEK meter's current, °C/°F and zero keys follow what it shows now** — paused or at a slow sample interval, they followed an older screen.
-- **dmm-gui stays paused when a device or mock mode picked in Settings reconnects it** — it started reading again.
+- **A ZOTEK meter's current, °C/°F and zero keys follow its screen now** — paused or at a slow sample interval, they followed an older screen.
+- **dmm-gui stays paused when a Settings change reconnects it** — it started reading again.
 - **Clicking the colour preset already in use keeps your custom colours** — it cleared them in both dark and light.
 - **`Ctrl+R`, `Ctrl+L`, `Ctrl+O` and `Ctrl+I` wait while the discard prompt is open** — they changed its question or acted behind it.
-- **dmm-gui keeps its Linux launcher and icon when installed in a folder whose name has a space**
+- **dmm-gui's Linux launcher and icon work from a path containing a space**
 - **dmm-gui keeps the settings a newer version saved** — an older version run in between deleted them at its next save.
-- **dmm-cli detects the meter when the settings file names a device it doesn't know** — every command stopped, `list` and `completions` too.
+- **dmm-cli detects the meter when the settings name an unknown device** — every command stopped, `list` and `completions` too.
 - **Alarms judge an imported scaled file in its own unit** — a limit of 5 on a kV file meant 5 V.
-- **dmm-gui turns an alarm off when an import or another meter is in another unit** — the same numbers judged the new unit.
-- **The graph shows readings from before an auto-range step as the meter did** — 0.07 Ω read 0.0000 MΩ, and the axis 12000000 Ω.
-- **A Y bound or reference value you are typing survives an auto-range step** — the graph rewrote it under the caret.
+- **Alarms turn off when an import or another meter changes the unit** — the same numbers judged the new unit.
+- **A Y bound or reference value being typed survives an auto-range step** — the graph rewrote it under the caret.
 - **A right axis keeps its fixed range when the plotted reading auto-ranges**
-- **A file's Y range and reference lines keep to the trace they framed** — an export after a mode change put them on another.
-- **An imported file whose clock was set back keeps the spacing after the step** — the readings piled onto one instant until the clock caught up.
-- **A recording played with `--replay` integrates across readings logged over a second apart** — the integral skipped every interval, and dmm-gui's graph broke between readings over 5 s apart.
+- **A file's Y range and reference lines stay on their trace** — an export after a mode change put them on another.
+- **An imported file keeps its spacing after a clock set back** — the readings piled onto one instant until the clock caught up.
+- **`--replay` integrates across readings logged over a second apart** — the integral skipped every interval, and dmm-gui's graph broke between readings over 5 s apart.
 - **dmm-gui's graph breaks its trace where the integral stops counting** — under a 0.4 s **Sample interval**, a silence shorter than 2 s broke the graph but was integrated across.
 - **A recording made in pairs plays back in dmm-gui as one line** — played with `--replay`, readings handed over two at a time more than a second apart broke the graph at every pair.
-- **The graph shades OL at the start of a session or dial turn** — it stayed blank, and Export… dropped those readings.
 - **Markers start at 1 when dmm-gui connects after an import** — the first one took the number after the imported file's last marker.
-- **A capture plan's `at_least` is in the mode's base unit, whatever prefix the meter shows** — lead noise shown in mV passed a floor of 1.
+- **A capture plan's `at_least` is always in the mode's base unit** — lead noise shown in mV passed a floor of 1.
 - **A cable pulled at `capture`'s meter check asks for no report** — it saved a no-response report and asked you to attach it.
 - **`dmm-cli debug` stops when the link to the meter is lost** — it filled the terminal with errors until Ctrl+C.
 - **`dmm-cli read` and `debug` piped into `head` end cleanly** — `read` ended with "Broken pipe" and no summary, and `debug` crashed.
@@ -69,7 +69,7 @@
 
 ### Internal
 
-- **dmm-gui and dmm-cli are smaller: a third on Linux and macOS, a tenth on Windows**
+- **dmm-gui and dmm-cli are smaller** — a third on Linux and macOS, a tenth on Windows.
 
 ## v0.10.0 — Translations
 
