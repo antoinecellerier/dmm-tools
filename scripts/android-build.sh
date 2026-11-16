@@ -1,10 +1,13 @@
 #!/usr/bin/env bash
-# Build the experimental Android APK of dmm-gui (Bluetooth only).
+# Build the experimental Android APK of dmm-gui.
 #
 # Usage:
-#   scripts/android-build.sh             # build the debug APK
-#   scripts/android-build.sh --install   # ... and install and start it on the
-#                                        # phone adb sees
+#   scripts/android-build.sh [--release] [--install]
+#
+#   --release   build optimised, as the published APK is; signed with the
+#               debug key all the same (scripts/android-sign.sh signs a
+#               published one)
+#   --install   install the APK on the phone adb sees and start it
 #
 # What it needs is listed under "Building for Android" in
 # docs/development.md; a missing piece is named and nothing is installed
@@ -21,6 +24,19 @@ NDK_VERSION=27.2.12479018
 GRADLE_VERSION=8.9
 GRADLE_SHA256=d725d707bfabd4dfdc958c624003b3c80accc03f7037b5122c4b1d0ef15cecab
 APP_ID=io.github.antoinecellerier.dmmtools
+
+profile=debug
+install=
+for arg in "$@"; do
+    case "$arg" in
+        --release) profile=release ;;
+        --install) install=1 ;;
+        *)
+            echo "usage: $0 [--release] [--install]" >&2
+            exit 2
+            ;;
+    esac
+done
 
 repo=$(cd "$(dirname "$0")/.." && pwd)
 export ANDROID_HOME=${ANDROID_HOME:-$HOME/Android/Sdk}
@@ -57,13 +73,17 @@ fi
 cd "$repo"
 # dmm-android asks for dmm-gui without its default features, so the update
 # check and its TLS stack stay out.
-cargo ndk -t arm64-v8a -o android/app/src/main/jniLibs build -p dmm-android
-
-"$gradle" --project-dir android assembleDebug
-apk=android/app/build/outputs/apk/debug/app-debug.apk
+if [ "$profile" = release ]; then
+    cargo ndk -t arm64-v8a -o android/app/src/main/jniLibs build --release -p dmm-android
+    "$gradle" --project-dir android assembleRelease
+else
+    cargo ndk -t arm64-v8a -o android/app/src/main/jniLibs build -p dmm-android
+    "$gradle" --project-dir android assembleDebug
+fi
+apk=android/app/build/outputs/apk/$profile/app-$profile.apk
 echo "Built $apk"
 
-if [ "${1:-}" = "--install" ]; then
+if [ -n "$install" ]; then
     adb install -r "$apk"
     adb shell am start -n "$APP_ID/.PermissionActivity"
 fi

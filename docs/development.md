@@ -321,9 +321,11 @@ USB cables; [`docs/research/android-port.md`](research/android-port.md) has
 the reasoning and what a phone has shown so far. `crates/dmm-android` is
 the shared library, empty on every other target, and `android/` the Gradle
 project that packages it with btleplug's Java classes and two small
-activities, one of which lists and opens the cables for the library. `scripts/android-build.sh` builds the debug APK for arm64, and
-with `--install` puts it on the phone `adb` sees. It names what is missing
-of:
+activities, one of which lists and opens the cables for the library.
+`scripts/android-build.sh` builds the debug APK for arm64, with `--release`
+the optimised one, a third of the size, and with `--install` puts it on the
+phone `adb` sees. Both are signed with this machine's debug key. It names
+what is missing of:
 
 | Needed | From |
 |---|---|

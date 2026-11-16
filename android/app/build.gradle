@@ -5,17 +5,32 @@ plugins {
 // btleplug's Java half, taken from the crate version Cargo.lock holds so the
 // classes always match the Rust that calls them. Nothing of it is copied or
 // built into the repository.
-def btleplugJava = {
-    def metadata = providers.exec {
+def run = { String... command ->
+    providers.exec {
         workingDir rootDir.parentFile
-        commandLine 'cargo', 'metadata', '--format-version', '1', '--locked'
-    }.standardOutput.asText.get()
-    def crate = new groovy.json.JsonSlurper().parseText(metadata).packages.find { it.name == 'btleplug' }
+        commandLine command
+    }.standardOutput.asText.get().trim()
+}
+def cargoPackages = new groovy.json.JsonSlurper()
+    .parseText(run('cargo', 'metadata', '--format-version', '1', '--locked')).packages
+def btleplugJava = {
+    def crate = cargoPackages.find { it.name == 'btleplug' }
     if (crate == null) {
         throw new GradleException('btleplug is not in the cargo workspace')
     }
     new File(new File(crate.manifest_path).parentFile, 'src/droidplug/java/src/main/java')
 }()
+
+// The version the desktop binaries print: the workspace's, with the commit
+// on a development version.
+def appVersion = {
+    def version = cargoPackages.find { it.name == 'dmm-android' }.version
+    version.contains('-dev') ? "$version (${run('git', 'rev-parse', '--short', 'HEAD')})" : version
+}()
+// Android installs a package over another only when this number is not
+// lower. The commit's time, in minutes, rises from one published build to
+// the next and is the same wherever the commit is built.
+def appVersionCode = run('git', 'log', '-1', '--format=%ct').toLong().intdiv(60).toInteger()
 
 // The launcher icon is the desktop one, copied in at build time rather than
 // kept twice in the repository: as the icon itself for Android 7, and as the
@@ -43,10 +58,19 @@ android {
         // Not 35: it draws under the system bars, which egui does not
         // account for on Android (egui issue 7748).
         targetSdk 34
-        versionCode 1
-        versionName 'experimental'
+        versionCode appVersionCode
+        versionName appVersion
         ndk {
             abiFilters 'arm64-v8a'
+        }
+    }
+
+    buildTypes {
+        // Signed with the debug key, so the build installs on a phone for a
+        // test. A published APK is signed again, with the project's key, by
+        // scripts/android-sign.sh.
+        release {
+            signingConfig signingConfigs.debug
         }
     }
 
