@@ -1,8 +1,8 @@
 # Android port feasibility
 
-*Last updated 2026-11-16. Option A below was built as an experiment and run
-on one phone: "Experimental build" has what it showed. The USB sections
-remain untested.*
+*Last updated 2026-11-16. Options A and B below were built as an experiment
+and run on two phones: "Experimental build" has what they showed. The rooted
+variant remains untested.*
 
 ## Summary
 
@@ -15,8 +15,8 @@ cross-compilation concerns it faces three obstacles:
    code.
 2. The `hidapi` crate that `dmm-lib` depends on does not build for
    `aarch64-linux-android` in any of its supported configurations. The
-   experimental build leaves it out there: `transport/hid_absent.rs` stands
-   in for it with a bus that holds no cable.
+   experimental build leaves it out there: `transport/hid_android.rs` stands
+   in for it, over `nusb`.
 3. Bluetooth LE on Android is reachable only through the Java Bluetooth
    API. Every Rust route found ships Java classes in the APK and needs
    runtime permissions requested from an Activity.
@@ -36,8 +36,9 @@ on the BU-86X cable.
 That leaves two ends to start from:
 
 - A Bluetooth-only build reaches the most meters and needs no root. This
-  is the one that was built; `btleplug` under a `NativeActivity` was its
-  largest unknown, and it works.
+  is the one that was built first; `btleplug` under a `NativeActivity` was
+  its largest unknown, and it works. The cables were added to it next,
+  through `UsbManager`, still without root.
 - A rooted, USB-only build on `nusb` has the fewest unknowns and needs no
   Java. It reaches the cabled meters only, and the Java glue returns as
   soon as Bluetooth is wanted.
@@ -47,11 +48,15 @@ the GUI reaches the meter only through `dmm-lib`'s transport abstraction.
 
 ## Experimental build
 
-Option A of the comparison below exists on the `android` branch: the
-`crates/dmm-android` library, the `android/` Gradle project and
-`scripts/android-build.sh` ("Building for Android" in
-`docs/development.md`). It was run on one phone, Android 12 (API 32),
-arm64, with a UT61E+ on the UT-D07B adapter, on 2026-11-16.
+Option B of the comparison below, which is option A with the cables
+added, exists on the `android` branch: the `crates/dmm-android` library,
+the `android/` Gradle project and `scripts/android-build.sh` ("Building for
+Android" in `docs/development.md`). It was run on one phone, Android 12
+(API 32), arm64, with a UT61E+ on the UT-D07B adapter and on its CP2110
+cable, on 2026-11-16. The same package was then installed on a second
+phone, Android 14 (API 34), arm64, whose screen has square corners: it
+connected over a cable, opened by the system's offer at plug-in, and over
+Bluetooth. What follows is the first phone's unless it names the second.
 
 What worked:
 
@@ -71,6 +76,12 @@ What worked:
   activity's Java side; links, opened in the browser.
 - Reconnecting after the adapter was switched off, for a few seconds and
   for a minute.
+- The CP2110 cable. The activity's Java side lists the USB devices, asks
+  the permission and opens the cable; the library drives the descriptor it
+  is handed with `nusb`, behind the calls the bridges make of hidapi
+  (`transport/hid_android.rs`), so the bridges are the desktop's. The
+  session reads the meter at the desktop's pace and comes back by itself
+  after the cable was pulled and plugged in again.
 
 What it showed about Android:
 
@@ -91,21 +102,42 @@ What it showed about Android:
   not compared with a desktop.
 - winit builds one event loop per process and does not end it when the
   activity is destroyed. The activity is single-task, so opening the app
-  again returns to it, and it ends the process when it finishes. That last
-  path did not run: Back sends this Android version's root activity to the
-  background.
+  again returns to it, and it ends the process when it finishes. Back
+  sends the root activity to the background on Android 12, so that last
+  path ran on the second phone only: swiped away from the recent
+  applications, the process ended.
 - The status bar covered the top bar (egui #7748); the activity is full
   screen.
+- The kernel binds the CP2110 to `usbhid`, and `/dev/hidraw*` is root's
+  alone. `nusb`'s disconnect-and-claim request is accepted on a
+  `UsbManager` descriptor, and a duplicate of the descriptor outlives the
+  Java connection it came from.
+- A USB permission asked for at run time lasts until the cable is
+  unplugged. The manifest names the four cables, so Android offers the
+  application when one is plugged in; taken for good, the offer opens the
+  application at each plug-in with the permission given and no dialog.
+  A running application leaves a cable just plugged in to that offer, as
+  its own request would put a second dialog over it, and connects when the
+  system hands the cable over. The system says nothing of an offer turned
+  down; the application takes it from the focus coming back with the cable
+  still not allowed.
+  On the Android version tried, the system's page for the application
+  takes that back: "Clear default preferences" under "Open by default",
+  shown only while there is one.
+  Android keeps a cable's serial number from an application that has no
+  permission yet, so a session on Android is not tied to its cable's serial
+  number.
 - Full screen, the window reaches into the screen's rounded corners. The
   build asks the system for their radius and keeps a margin clear of them,
   but this phone's system reported square corners; with the radius given
   by hand the margin held in portrait and landscape.
 
-Not done or not tested: choosing where an export goes, saving a theme, the
-soft keyboard, the system clipboard, a layout for a phone screen, other
-Android versions, other meters, a release build or signing, CI. The error
-texts are the desktop's, so they say "this computer", and "nothing found"
-still lists USB cables.
+Not done or not tested: the CH9329, CH9325 and BU-86X cables, a meter that
+sends unasked on a cable, two cables at once, choosing where an export
+goes, saving a theme, the soft keyboard, the system clipboard, a layout for
+a phone screen, Android versions other than 12 and 14, other meters, a
+release build or signing, CI. The error texts are the desktop's, so they
+say "this computer".
 
 ## Scope
 
@@ -214,8 +246,8 @@ pre-opened descriptor via `libusb_wrap_sys_device()` combined with
 `LIBUSB_OPTION_NO_DEVICE_DISCOVERY`; `nusb` offers the same hand-off as
 `Device::from_fd`.
 
-Kernel-driver binding, derived from the Linux kernel source and not tested
-on a phone: `usbhid` matches every interface of the HID class, and
+Kernel-driver binding, derived from the Linux kernel source and seen on a
+phone for the CP2110 alone: `usbhid` matches every interface of the HID class, and
 `hid-generic` takes any HID device no specialised driver claims.
 `hid-quirks.c` lists none of the four bridges (CP2110, CH9329, CH9325,
 BU-86X) among the devices it ignores. A kernel built with USB HID support
@@ -366,27 +398,21 @@ dependencies. On Android:
   usbfs node itself.
 - `detach_kernel_driver` does nothing outside `target_os = "linux"`.
   `detach_and_claim_interface` is compiled for Android and issues the
-  usbfs disconnect-and-claim request (derived from nusb's source, not
-  tested on a `UsbManager` descriptor). `claimInterface(intf, true)` on
-  the Java side is the documented alternative.
+  usbfs disconnect-and-claim request, which the experimental build uses.
+  `claimInterface(intf, true)` on the Java side is the documented
+  alternative.
 
 It has no HID-class helpers, so consumers must implement HID report framing
 themselves. For this project that cost is small: each bridge in
 `crates/dmm-lib/src/transport/` (`cp2110.rs`, `ch9329.rs`, `ch9325.rs`,
 `bu86x.rs`) is one file of interrupt-report framing plus, for some,
 `SET_REPORT`/`GET_REPORT` feature handling. The translation to `nusb`'s
-interrupt-transfer and control-transfer primitives is mechanical. Two
-structural choices are available:
+interrupt-transfer and control-transfer primitives is mechanical. The
+experimental build does it once for all four: a module with hidapi's calls
+and hidraw's bytes over `nusb`, which the bridges use unchanged.
 
-- Duplicate the framing into Android-only modules (no refactor of
-  existing code; some duplication).
-- Extract a small `HidIo` trait that the four bridges consume, with
-  implementations backed by `hidapi::HidDevice` on desktop targets and
-  `nusb` on Android (no duplication; a refactor touching the desktop
-  build).
-
-`nusb` on `aarch64-linux-android` has not been built or tested in this
-workspace.
+`nusb` 0.2.9 builds for `aarch64-linux-android` in this workspace with no
+C code, on crates the workspace already built.
 
 ### `rusb` / vendored libusb
 
@@ -469,8 +495,9 @@ and is the shortest path for cabled meters on a rooted phone. Option D is
 not recommended; Issue #122 suggests the build effort is substantial and
 LGPL licensing must be accommodated.
 
-Options A to C add `jni`, `nusb` or both as direct dependencies. Neither
-is in `dmm-lib`'s dependency list as `docs/architecture.md` states it.
+Options A to C add `jni`, `nusb` or both as direct dependencies. In the
+experimental build `jni` stays in `crates/dmm-android`, and `nusb` joins
+`dmm-lib`'s dependency list for Android alone, where `hidapi` is absent.
 
 ## Open questions
 
@@ -478,17 +505,15 @@ is in `dmm-lib`'s dependency list as `docs/architecture.md` states it.
   on Android, spares the reconnect loop the scan Android drops one time in
   six.
 - Why the first link after an adapter's power-up carried no data.
-- Whether the activity's exit on finish works, and what a phone layout
-  needs.
+- Whether the application comes back with its settings after the exit on
+  finish, and what a phone layout needs.
 - Keeping the system's status bar on screen as an option: the margin that
   clears the rounded corners could carry the bar's height too, read from
   the window's insets by the activity.
-- Whether Android kernels bind the four bridges to `usbhid` in practice.
-- Endpoint addresses and interface indices of the four bridges, required
-  for raw USB operation — these need to be read from the device
-  descriptors and are not recorded in `dmm-lib`.
-- Whether `nusb` builds cleanly for `aarch64-linux-android` in this
-  workspace.
+- Whether the CH9329, CH9325 and BU-86X work as the CP2110 does. Their
+  HID interface and endpoints are read from the descriptors when the cable
+  opens; a cable with no interrupt OUT endpoint takes its reports on the
+  control endpoint, a path the CP2110 does not use.
 - Whether `/dev/bus/usb/*` is reachable from a `su`-launched process on a
   custom ROM under its default SELinux policy, or whether a `magiskpolicy`
   rule is required.
