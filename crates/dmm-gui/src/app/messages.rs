@@ -193,8 +193,18 @@ fn command_failed_toast(
     }
 }
 
+/// A meter that identified itself under Auto-detect.
+struct Detected {
+    device: &'static registry::SelectableDevice,
+    /// Whether it became the saved device.
+    saved: bool,
+    /// Whether the saved device was an id no entry answers to.
+    replacing_unknown: bool,
+}
+
 impl App {
-    /// Save the meter that just identified itself as the device, and say so.
+    /// Save the meter that just identified itself as the device: what was
+    /// detected, or `None` where there is nothing to save or say.
     ///
     /// Only a session that was detecting gets here: under a named model the
     /// `Connected` id is the pick the user already made. What is saved is what
@@ -202,18 +212,15 @@ impl App {
     /// so nothing reconnects and no reading is lost. `new_meter` is false for
     /// a reconnect that found the meter already on screen, which changes
     /// nothing.
-    fn remember_detected_device(
+    fn save_detected_device(
         &mut self,
         device_id: Option<&'static str>,
-        reported: &str,
         new_meter: bool,
-    ) {
+    ) -> Option<Detected> {
         if !new_meter {
-            return;
+            return None;
         }
-        let Some(device) = detected_under_auto(self.connection.detecting, device_id) else {
-            return;
-        };
+        let device = detected_under_auto(self.connection.detecting, device_id)?;
         // An id no entry answers to, `auto` aside, which the caution at the
         // first Connect said is being detected over.
         let replacing_unknown =
@@ -228,6 +235,24 @@ impl App {
             info!("UI: saving detected device {id} as the selected device");
             self.settings.shared.device_family = id.to_string();
         }
+        Some(Detected {
+            device,
+            saved: to_save.is_some(),
+            replacing_unknown,
+        })
+    }
+
+    /// Save the meter that just identified itself as the device (see
+    /// `save_detected_device`), and say so.
+    fn remember_detected_device(
+        &mut self,
+        device_id: Option<&'static str>,
+        reported: &str,
+        new_meter: bool,
+    ) {
+        let Some(detected) = self.save_detected_device(device_id, new_meter) else {
+            return;
+        };
         // Good news never covers a failure still on screen: the notice that
         // the settings file could not be read goes up as the auto-connect
         // starts, and detection answers a moment later.
@@ -238,11 +263,11 @@ impl App {
         {
             return;
         }
-        let news = detected_toast(&self.l10n, device, reported, to_save.is_some());
+        let news = detected_toast(&self.l10n, detected.device, reported, detected.saved);
         // The caution that the settings file named a device nothing answers
         // to leads, and the news of the meter found in its place joins it.
         self.toast = Some(match &self.toast {
-            Some(toast) if replacing_unknown && toast.is_caution() && !toast.expired() => {
+            Some(toast) if detected.replacing_unknown && toast.is_caution() && !toast.expired() => {
                 Toast::caution(format!("{} {news}", toast.message))
             }
             _ => Toast::info(news),
@@ -857,22 +882,15 @@ impl App {
             .as_ref()
             .is_some_and(|m| m.source().same_meter(&source, self.connection.detecting));
         self.connection.meter = Some(meter);
-        let family = &self.settings.shared.device_family;
-        let detecting = self.connection.detecting;
-        let detected = detected_under_auto(detecting, device_id).is_some();
+        let detected = detected_under_auto(self.connection.detecting, device_id).is_some();
         match (named, picked) {
             // Detection fell back without hearing the name: the meter that then
             // named itself is the one to save.
             (Some(named), _) if detected => {
-                let saved = new_meter
-                    && detected_device_to_save(
-                        family,
-                        detecting,
-                        self.settings.overrides.has_device(),
-                        Some(named.id),
-                    )
-                    .is_some();
-                self.remember_detected_device(Some(named.id), &reported, new_meter);
+                // Saved, and said by the failure below rather than as news.
+                let saved = self
+                    .save_detected_device(Some(named.id), new_meter)
+                    .is_some_and(|d| d.saved);
                 if new_meter {
                     self.toast = Some(Toast::error(named_after_detection_toast(
                         &self.l10n,
