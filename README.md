@@ -108,7 +108,7 @@ $ dmm-cli read --interval-ms 2500 --count 5
 | Voltcraft VC920/VC940/VC960 | 🧪 Experimental | — | [#23](https://github.com/antoinecellerier/dmm-tools/issues/23) |
 <!-- devices:end -->
 
-✅ = modes and commands confirmed on real hardware, short of a few localized checks. 🟡 = connection and the main modes confirmed, whole modes or commands still to verify. 🧪 = reverse-engineered from vendor software, not yet tested on real hardware over that link. — = not supported over that link.
+✅ = modes and commands confirmed on real hardware, short of a few localized checks. 🟡 = connection and the main modes confirmed, whole modes or commands still to verify. 🧪 = reverse-engineered from vendor software and manuals, not yet tested on real hardware over that link. — = not supported over that link.
 
 Bluetooth "adapter" is UNI-T's UT-D07A/B add-on; "built in" needs no adapter. Post what works and what doesn't on your meter's issue.
 
@@ -160,4 +160,9 @@ Community projects whose work informed or cross-checked ours, with thanks:
 - [gulux/Uni-T-CP2110](https://github.com/gulux/Uni-T-CP2110) — UT171 captures and parser
 - [antage/ut181a](https://github.com/antage/ut181a) and [libsigrok `uni-t-ut181a`](https://github.com/sigrokproject/libsigrok/tree/master/src/hardware/uni-t-ut181a) — UT181A protocol
 - [pylablib](https://github.com/AlexShkarin/pyLabLib) — VC-880 tables and flags
-- [Silicon Labs AN434](https://www.silabs.com/documents/public/application-notes/an434-cp2110-4-interface-specification.pdf) — CP2110 HID-to-UART specification; [UNI-T](https://meters.uni-trend.com/download/ut61b-d-e-user-manual/) — the UT61+ user manual
+
+Thanks also to the manufacturers whose published documentation made this possible:
+
+- [Silicon Labs AN434](https://www.silabs.com/documents/public/application-notes/an434-cp2110-4-interface-specification.pdf) — CP2110 HID-to-UART specification
+- UNI-T, Voltcraft, Brymen and EEVblog — protocol documents for their meters
+- Every meter's maker — its user manuals; the [protocol details](docs/protocol.md) link each family's notes, which list the protocol documents, datasheets and manuals used
