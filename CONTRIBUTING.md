@@ -11,7 +11,7 @@ When filing a bug report, please include:
 1. What you expected vs. what happened
 2. Your meter model (printed on the meter, e.g. "UT61E+") and cable
 3. Your OS and the output of `dmm-cli --version`
-4. For a wrong or missing reading, a protocol capture (see below) — this is the single most useful thing you can attach
+4. For a wrong or missing reading, a [protocol capture](#protocol-captures) — the most useful thing you can attach
 5. For a graph or timing problem, a replay file: the arrow beside **Export…**, then **Replay…**, in the [GUI](docs/gui-reference.md#recording), or [`dmm-cli read --format replay`](docs/cli-reference.md#dmm-cli-read)
 
 ## Protocol captures
@@ -29,7 +29,7 @@ dmm-cli capture
 dmm-cli --device ut8803 capture
 ```
 
-It opens with what the run needs on the bench — shorted leads, a DC source, a thermocouple — and skips the steps for anything you don't have. Each step captures on its own once the meter is in the mode asked for; Enter captures now, `s` skips, `q` finishes and saves. Last, it asks you to restart the meter and checks that auto-detection finds it. The report is a YAML file such as `capture-ut61eplus.yaml`. The [CLI reference](docs/cli-reference.md#dmm-cli-capture) describes the options.
+It opens with what the run needs on the bench — shorted leads, a DC source, a thermocouple — and skips the steps for anything you don't have. Each step captures on its own once the meter is in the mode asked for; Enter captures now, `s` skips, `q` finishes and saves. Last, it asks you to restart the meter and checks that auto-detection finds it. The report is a YAML file such as `capture-ut61eplus.yaml`, saved after each step: to resume an interrupted run, run the same command again. The [CLI reference](docs/cli-reference.md#dmm-cli-capture) describes the options.
 
 If you're short on time, run only the steps no one has confirmed on hardware yet:
 
@@ -50,8 +50,6 @@ If a maintainer posts a short plan file in your issue, run it with `dmm-cli capt
 
 The steps' instructions are in English. To read them in your language, run `dmm-cli capture --export-instructions steps.ftl`, translate the text after each `=` (by hand or with a translation tool), then run `dmm-cli capture --instructions steps.ftl`.
 
-Captures save after each step, so you can interrupt and resume later.
-
 ### What to do with the capture
 
 Attach the YAML file to your GitHub issue. For a meter that is not yet verified, attach it to the meter's verification issue, linked from [supported devices](docs/supported-devices.md) — those captures are especially valuable.
@@ -69,7 +67,7 @@ If you have one of these platforms and a supported meter:
 3. If the cable is found, try `dmm-cli read` and `dmm-gui`
 4. Comment on the relevant issue with your results — include your OS version, cable, meter model, and whether readings were correct
 
-Even "it works" is valuable. If something doesn't work, the output of `RUST_LOG=dmm_lib=trace dmm-cli read` will help us debug.
+Report a working setup too. If something doesn't work, attach the output of `RUST_LOG=dmm_lib=trace dmm-cli read`.
 
 ## Translations
 

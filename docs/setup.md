@@ -4,7 +4,7 @@ You need a [supported multimeter](supported-devices.md) and its USB cable, or on
 
 ## Install from pre-built binaries
 
-Download the [latest release](https://github.com/antoinecellerier/dmm-tools/releases/latest) for your platform. Extract and run — no build tools needed. The first launch shows a security warning on [Windows](#windows-protected-your-pc) and [macOS](#macos-wont-open-dmm-cli-or-dmm-gui). The GUI links to newer versions as they come out ([update checks](gui-reference.md#update-checks)).
+Download the [latest release](https://github.com/antoinecellerier/dmm-tools/releases/latest) for your platform. Extract and run. The first launch shows a security warning on [Windows](#windows-protected-your-pc) and [macOS](#macos-wont-open-dmm-cli-or-dmm-gui). The GUI links to newer versions as they come out ([update checks](gui-reference.md#update-checks)).
 
 To build it yourself instead, see [Build from source](#build-from-source).
 
@@ -79,7 +79,7 @@ and mouse event on the machine, a far wider grant than one multimeter cable
 
 ### Windows — driver
 
-The CP2110 cable may require a driver from [Silicon Labs](https://www.silabs.com/developers/usb-to-uart-bridge-vcp-drivers). After installation, verify the device appears in Device Manager under "Human Interface Devices" or "USB Devices". The CH9329, CH9325 and Brymen BU-86X cables are standard HID devices and need no driver.
+Open Device Manager with the cable plugged in. A CP2110 cable shown with a yellow warning icon under "Other devices" needs the driver from [Silicon Labs](https://www.silabs.com/developers/usb-to-uart-bridge-vcp-drivers); under "Human Interface Devices" it is ready. The CH9329, CH9325 and Brymen BU-86X cables are standard HID devices and need no driver.
 
 ### macOS — no driver needed
 
@@ -96,7 +96,8 @@ the adapter and fit it to the meter, turn the meter on and switch its data
 transmission on — the step, and which meters take the adapter, are in
 [supported devices](supported-devices.md). `dmm-cli list` then shows the
 adapter, `auto` finds it when no USB cable is plugged in, and
-`--adapter <address>` pins it.
+`--adapter <address>` pins it. Pair the adapter in the system's Bluetooth
+settings for a quicker connection.
 
 The UT-D07A takes the same steps and has not been run on this tool — please
 [report what it does](https://github.com/antoinecellerier/dmm-tools/issues/25).
@@ -136,8 +137,6 @@ after 5 on the CM2100B and OW67B; switch it on again after every power-on
 of a VC871 or VC891. A renamed meter opens with
 `--device <id> --adapter <address>`, the id from
 [Devices](cli-reference.md#devices).
-
-Pair the adapter in the system's Bluetooth settings for a quicker connection.
 
 Readings arrive as fast as the link delivers: on a UT61E+, about 3 a second
 over the adapter, against about 10 over the cable.
@@ -180,15 +179,31 @@ To allow both binaries at once, run this in the extracted folder instead:
 xattr -dr com.apple.quarantine .
 ```
 
+### GUI shows a black screen or won't render
+
+On devices with older GPUs (e.g. Raspberry Pi 3B+, OpenGL 2.1), the default wgpu renderer may fail. The GUI automatically falls back to the glow (OpenGL) renderer, but you can also force it explicitly:
+
+```sh
+dmm-gui --renderer glow
+```
+
+### GUI won't start (Linux, Wayland/X11)
+
+If you encounter display issues on Wayland, try forcing X11:
+
+```sh
+WAYLAND_DISPLAY= dmm-gui
+```
+
 ### "No meter found over USB or Bluetooth"
 
 The GUI puts the steps for your platform on screen as its [connection
 help](../assets/gui-connection-help.webp); the full list is:
 
 - Verify the USB cable is plugged in
-- **Linux:** `lsusb | grep -iE '10c4:ea80|1a86:e429|1a86:e008|0820:0001'` — one of the cables should be listed. If missing, try another port; if listed but still not found, check the udev rule (see above)
-- **Linux, cable listed by `lsusb` but still not found:** `ls -l /dev/hidraw*` — the cable's node should show a trailing `+`, marking the ACL. For the detail, `getfacl /dev/hidrawN` (from the `acl` package) should list your user as `user:<you>:rw-`. If it doesn't, the udev rule isn't installed under a name that sorts before `73-seat-late.rules`, or you're on a headless machine (see above)
-- **Windows:** check Device Manager for the cable: the CP2110 under its own name, the other cables as "USB Input Device". If the CP2110 is missing or shows an error, reinstall the driver
+- **Linux:** `lsusb | grep -iE '10c4:ea80|1a86:e429|1a86:e008|0820:0001'` — one of the cables should be listed. If missing, try another port
+- **Linux, cable listed by `lsusb` but still not found:** `ls -l /dev/hidraw*` — the cable's node should show a trailing `+`, marking the ACL. For the detail, `getfacl /dev/hidrawN` (from the `acl` package) should list your user as `user:<you>:rw-`. If it doesn't, the udev rule isn't installed under a name that sorts before `73-seat-late.rules`, or you're on a [headless machine](#headless-machines-and-distributions-without-logind)
+- **Windows:** check Device Manager for the cable: the CP2110 under its own name, the other cables as "USB Input Device". If nothing appears, try a different USB port; on a yellow warning icon under "Other devices", install the [driver](#windows--driver)
 - **macOS:** `ioreg -p IOUSB -l -w0 | grep -E '"idVendor" = (4292|6790|2080)'` — one of the cables should be listed. If missing, try a different USB port or hub. Check System Settings > Privacy & Security > Input Monitoring if the device appears in `ioreg` but the tool can't open it
 - **Bluetooth:** see [Bluetooth adapter not found](#bluetooth-adapter-not-found)
 
@@ -225,8 +240,9 @@ on their own once it transmits again.
 - Tick **Look for Bluetooth devices** in the GUI's settings, or pass
   `dmm-cli --bluetooth` for one run; `--no-bluetooth` turns scanning off.
 
-A UT-D07A that is listed and connects but fails with "no UART … characteristic"
-carries a different service layout — please report it on
+A UT-D07A that is listed and connects but fails with "the Bluetooth device
+has no data … characteristic we recognise" carries a different service
+layout — please report it on
 [#25](https://github.com/antoinecellerier/dmm-tools/issues/25) with
 the output of `bluetoothctl info <address>`.
 
@@ -250,22 +266,6 @@ The computer has no font that draws Chinese. Install one, then restart dmm-gui:
 sudo apt install fonts-noto-cjk                # Debian, Ubuntu, Raspberry Pi OS
 sudo dnf install google-noto-sans-cjk-fonts    # Fedora
 sudo pacman -S noto-fonts-cjk                  # Arch
-```
-
-### GUI shows a black screen or won't render
-
-On devices with older GPUs (e.g. Raspberry Pi 3B+, OpenGL 2.1), the default wgpu renderer may fail. The GUI automatically falls back to the glow (OpenGL) renderer, but you can also force it explicitly:
-
-```sh
-dmm-gui --renderer glow
-```
-
-### GUI won't start (Linux, Wayland/X11)
-
-If you encounter display issues on Wayland, try forcing X11:
-
-```sh
-WAYLAND_DISPLAY= dmm-gui
 ```
 
 ## Build from source

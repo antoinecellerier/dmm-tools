@@ -7,8 +7,8 @@ Bluetooth adapters serve the meters listed for them below, and the UT60BT,
 UT202BT, ZOTEK meters, EEVblog 121GW, Brymen BM788BT/BM787BT, OWON's meters
 (UNI-T's UT217A and UT217B among them) and the Voltcraft VC871, VC891, VC915 and VC925 PV have Bluetooth built in. The tool works out which link and which
 meter are attached from the bytes the meter sends ([how](detection-design.md)),
-so the default `auto` device needs no setup beyond switching the meter's data
-transmission on, as listed per family below.
+so the default `auto` device finds most meters once their data transmission
+is on, as listed per family below.
 
 **✅ Verified** means the model's modes and commands have run on real hardware,
 short of a few localized checks listed in the family's open checks. **🟡 Partly
@@ -25,12 +25,12 @@ backlog](verification-backlog.md).
 | Cable | Chip | VID:PID | Direction | Meters | Confirmed with |
 |---|---|---|---|---|---|
 | UT-D09 | CP2110 | `10C4:EA80` | both ways | UT61+/UT161, UT171, UT8802/UT8803, Voltcraft VC-880/VC650BT/VC-890, older UT181A units | UT61E+ |
-| UT-D09 | CH9329 | `1A86:E429` | both ways | sold for UT181A, UT171, UT243 | UT181A (two units, [#5](https://github.com/antoinecellerier/dmm-tools/issues/5)), UT61B+ ([#19](https://github.com/antoinecellerier/dmm-tools/issues/19)), UT161E ([#7](https://github.com/antoinecellerier/dmm-tools/issues/7)) |
-| UT-D04 | CH9325 / HE2325U | `1A86:E008` | meter to PC (these meters take no commands) | UT803, UT804, and the UT71A–E per UNI-T's accessory page | UT804 on Linux and Windows ([#16](https://github.com/antoinecellerier/dmm-tools/issues/16)) |
+| UT-D09 | CH9329 | `1A86:E429` | both ways | UT181A, UT171, UT243 per [UNI-T's page](https://meters.uni-trend.com/product/ut-d-series-2/) | UT181A (two units, [#5](https://github.com/antoinecellerier/dmm-tools/issues/5)), UT61B+ ([#19](https://github.com/antoinecellerier/dmm-tools/issues/19)), UT161E ([#7](https://github.com/antoinecellerier/dmm-tools/issues/7)) |
+| UT-D04 | CH9325 / HE2325U | `1A86:E008` | meter to PC (these meters take no commands) | UT803, UT804, and the UT71A–E per [UNI-T's accessory page](https://meters.uni-trend.com.cn/content/4381.html) | UT804 on Linux and Windows ([#16](https://github.com/antoinecellerier/dmm-tools/issues/16)) |
 | BU-86X kit (BC-86X cable) | — | `0820:0001` | both ways | Brymen BM869s, BM867s, BM829s, BM827s, BM822s, BM821s, BM525s, BM521s per Brymen's manuals; Minipa ET-2517A and ET-2615A per Minipa's manual | BM827s (Minipa ET-2517A) and BM525s (Minipa ET-2615A) on Windows ([#35](https://github.com/antoinecellerier/dmm-tools/issues/35), [#36](https://github.com/antoinecellerier/dmm-tools/issues/36)) |
 | UT-D02 | RS232 level converter | — | both ways | serial port, not USB; not supported | — |
-| UT-D07B | Bluetooth LE | — | both ways | UT61+/UT161, UT171, UT181 series per UNI-T's page | UT61E+ ([#25](https://github.com/antoinecellerier/dmm-tools/issues/25)) |
-| UT-D07A | Bluetooth LE | — | both ways | UT171, UT181 series per UNI-T's page (also UT71, which auto-detection does not look for over Bluetooth yet) | — untested ([#25](https://github.com/antoinecellerier/dmm-tools/issues/25)) |
+| UT-D07B | Bluetooth LE | — | both ways | UT61+/UT161, UT171, UT181 series per [UNI-T's page](https://meters.uni-trend.com/product/ut-d-series/) | UT61E+ ([#25](https://github.com/antoinecellerier/dmm-tools/issues/25)) |
+| UT-D07A | Bluetooth LE | — | both ways | UT71, UT171, UT181 series per [UNI-T's page](https://meters.uni-trend.com/product/ut-d-series/) | — untested ([#25](https://github.com/antoinecellerier/dmm-tools/issues/25)) |
 
 ## UT61+ / UT161
 
@@ -43,13 +43,13 @@ meter on, long-press USB/Hz until the S icon shows.
 | UT61E+ | 22000 | ✅ Verified | our reference meter |
 | UT61B+ | 6000 | ✅ Verified ([#7](https://github.com/antoinecellerier/dmm-tools/issues/7)) | 10 A max current |
 | UT61D+ | 6000 | 🧪 Experimental ([#7](https://github.com/antoinecellerier/dmm-tools/issues/7)) | adds temperature and LoZ AC V |
-| UT161E | 22000 | ✅ Verified ([#7](https://github.com/antoinecellerier/dmm-tools/issues/7)) | same tables as UT61E+ |
-| UT161D | 6000 | 🧪 Experimental ([#7](https://github.com/antoinecellerier/dmm-tools/issues/7)) | same tables as UT61D+ |
-| UT161B | 6000 | 🧪 Experimental ([#7](https://github.com/antoinecellerier/dmm-tools/issues/7)) | same tables as UT61B+ |
+| UT161E | 22000 | ✅ Verified ([#7](https://github.com/antoinecellerier/dmm-tools/issues/7)) | same modes and ranges as UT61E+ |
+| UT161D | 6000 | 🧪 Experimental ([#7](https://github.com/antoinecellerier/dmm-tools/issues/7)) | same modes and ranges as UT61D+ |
+| UT161B | 6000 | 🧪 Experimental ([#7](https://github.com/antoinecellerier/dmm-tools/issues/7)) | same modes and ranges as UT61B+ |
 
-All six share one protocol and differ only in their mode and range tables.
-The UT61D+, UT161B and UT161D tables come from the manuals; [#7](https://github.com/antoinecellerier/dmm-tools/issues/7)
-lists the modes that need a capture.
+The UT61D+, UT161B and UT161D have not been run on a meter yet:
+[#7](https://github.com/antoinecellerier/dmm-tools/issues/7) lists the modes
+that need a capture ([open checks](research/ut61-family/verification.md)).
 
 ## UT60BT / UT202BT
 
@@ -63,8 +63,7 @@ shows.
 | UT60BT | 9999 | 🧪 Experimental ([#26](https://github.com/antoinecellerier/dmm-tools/issues/26)) | |
 | UT202BT | 9999 | 🧪 Experimental ([#27](https://github.com/antoinecellerier/dmm-tools/issues/27)) | clamp: 600 A AC, inrush, LPF; second display as a sub-value |
 
-Neither has been run on a meter yet: the range tables come from UNI-T's
-iDMM2.0 app and the manuals ([open checks](research/ut61-family/verification.md#ut60bt-and-ut202bt)).
+Neither has been run on a meter yet ([open checks](research/ut61-family/verification.md#ut60bt-and-ut202bt)).
 
 ## UT8802 / UT8803
 
@@ -76,7 +75,9 @@ meter on.
 | UT8802 / UT8802N | — | 🧪 Experimental ([#12](https://github.com/antoinecellerier/dmm-tools/issues/12)) | |
 | UT8803 / UT8803E | — | 🧪 Experimental ([#3](https://github.com/antoinecellerier/dmm-tools/issues/3)) | |
 
-Neither has been run on a meter yet.
+Neither has been run on a meter yet (open checks:
+[UT8802](research/uci-bench-family/verification.md),
+[UT8803](research/ut8803/verification.md)).
 
 ## UT803 / UT804
 
@@ -98,7 +99,7 @@ yet, and auto-detection does not find it: select UT803 as the device.
 
 Handheld. Cable: UT-D04 (CH9325) for the UT71; the VC920/VC940/VC960 ship an
 RS-232 cable (serial, not supported) and take Voltcraft's optional USB
-adapter 120317, whose chip is unconfirmed. No remote commands. Switch on:
+adapter 120317 (untested). No remote commands. Switch on:
 hold MAX MIN for 1 s (press SEND on a UT71A) so the display shows SEND; EXIT
 turns it off.
 
@@ -111,8 +112,8 @@ turns it off.
 | VC920 / VC960 | 40000 | 🧪 Experimental ([#23](https://github.com/antoinecellerier/dmm-tools/issues/23)) | resistance 4000 counts; AC V to 750 V |
 | VC940 | 40000 | 🧪 Experimental ([#23](https://github.com/antoinecellerier/dmm-tools/issues/23)) | as VC920, adds power (W) |
 
-None has been run on a meter yet: the range tables come from UNI-T's protocol
-sheet and the manuals ([open checks](research/ut71/verification.md)). Auto-detection
+None has been run on a meter yet
+([open checks](research/ut71/verification.md)). Auto-detection
 reports these meters as a UT804: pick UT71A/B, UT71C/D/E or Voltcraft VC920
 as the device once (`--device ut71ab`, `ut71cde` or `vc920`).
 
@@ -129,27 +130,30 @@ Communication → ON; the UT181A forgets this at power-off.
 
 | Model | Counts | Status | Notes |
 |---|---|---|---|
-| UT171A/B/C | — | 🧪 Experimental ([#4](https://github.com/antoinecellerier/dmm-tools/issues/4)) | not yet run on a meter |
+| UT171A/B/C | — | 🧪 Experimental ([#4](https://github.com/antoinecellerier/dmm-tools/issues/4)) | |
 | UT181A | — | 🟡 Partly verified ([#5](https://github.com/antoinecellerier/dmm-tools/issues/5)) | logging meter; also sold as [Tenma 72-3540](https://www.farnell.com/datasheets/2163316.pdf) |
 
 Two reporters have run the UT181A over the CH9329 cable, one through every
 dial position: readings in every mode, MIN/MAX, REL, Peak, COMP and remote
 mode, range, HOLD and MIN/MAX control are confirmed. REL on most dial
-positions and the CP2110 cable are still pending
-([open checks](research/ut181/verification.md)).
+positions and the CP2110 cable are pending
+([open checks](research/ut181/verification.md)). The UT171 has not been run
+on a meter yet ([open checks](research/ut171/verification.md)).
 
 ## Voltcraft VC-880 / VC650BT / VC-890
 
-Cable: UT-D09 (CP2110). Switch on: press the PC button on the meter.
+Handheld (VC-880, VC-890) and bench (VC650BT). Cable: UT-D09 (CP2110).
+Switch on: press the PC button on the meter.
 
 | Model | Counts | Status | Notes |
 |---|---|---|---|
 | VC-880 | 40000 | 🧪 Experimental ([#13](https://github.com/antoinecellerier/dmm-tools/issues/13)) | handheld |
-| VC650BT | 40000 | 🧪 Experimental ([#13](https://github.com/antoinecellerier/dmm-tools/issues/13)) | bench; same protocol as VC-880 |
-| VC-890 | 60000 | 🧪 Experimental ([#14](https://github.com/antoinecellerier/dmm-tools/issues/14)) | handheld, OLED; own protocol |
+| VC650BT | 40000 | 🧪 Experimental ([#13](https://github.com/antoinecellerier/dmm-tools/issues/13)) | bench |
+| VC-890 | 60000 | 🧪 Experimental ([#14](https://github.com/antoinecellerier/dmm-tools/issues/14)) | handheld, OLED |
 
-No Voltcraft meter has been run on hardware yet: the mode tables come from
-the manuals and the remote commands from the vendor software.
+No Voltcraft meter has been run on hardware yet (open checks:
+[VC-880](research/vc880/verification.md),
+[VC-890](research/vc890/verification.md)).
 
 ## ZOTEK / ZOYI / BSIDE / ANENG
 
@@ -168,9 +172,7 @@ short-press the red button on the ZT-5B, until the Bluetooth symbol shows.
 
 A reporter's ZOYI ZT-5B has run every reading but AC A, and all its remote
 keys; the ANENG V05B sends the same packets. The
-other models are not run on a meter yet: their decoding comes from ZOTEK's
-apps and manuals, whose ZT-5566SE pages document Bluetooth for the speaker
-only, and their remote keys from the apps. The meter names only its packet
+other models have not been run on a meter yet. The meter names only its packet
 layout, so auto-detection picks the row above that sends it
 ([open checks](research/zotek/verification.md)).
 
@@ -183,9 +185,7 @@ Handheld. Bluetooth built in, no cable; the meter shows up as "121GW"
 |---|---|---|---|
 | EEVblog 121GW | 55000 | 🧪 Experimental ([#32](https://github.com/antoinecellerier/dmm-tools/issues/32)) | update the firmware from the SD card if the tool asks (manual p.72) |
 
-Not run on a meter yet: the decoding comes from EEVblog's packet-format
-documents, EEVblog's and UEi's apps and the manual, and the remote keys from
-the apps ([open checks](research/121gw/verification.md)).
+Not run on a meter yet ([open checks](research/121gw/verification.md)).
 
 ## Brymen BM788BT / BM787BT
 
@@ -196,11 +196,10 @@ dial to any function but Auto V/LoZ, and hold Δ for one second or more until
 
 | Model | Counts | Status | Notes |
 |---|---|---|---|
-| BM788BT | 60000 | 🧪 Experimental ([#33](https://github.com/antoinecellerier/dmm-tools/issues/33)) | — |
+| BM788BT | 60000 | 🧪 Experimental ([#33](https://github.com/antoinecellerier/dmm-tools/issues/33)) | |
 | BM787BT | 60000 | 🧪 Experimental ([#33](https://github.com/antoinecellerier/dmm-tools/issues/33)) | sold by [EEVblog](https://eevblog.store/products/eevblog-bm787bt-bluetooth-multimeter); no T2, T1-T2 or %4-20mA |
 
-Not run on a meter yet: the decoding comes from Brymen's protocol document,
-Brymen's app and the two manuals. Nothing the meter sends tells the two
+Not run on a meter yet. Nothing the meter sends tells the two
 models apart, so both open as one entry, `bm78xbt`
 ([open checks](research/bm78xbt/verification.md)).
 
@@ -227,8 +226,7 @@ HOLD and auto-detection are still to confirm. A BM525s (Minipa
 ET-2615A) has run the main modes, AutoCheck, HOLD, REC and CREST
 ([#36](https://github.com/antoinecellerier/dmm-tools/issues/36)); AC+DC V,
 T2, µA and A current, logging and auto-detection are still to confirm. No
-BM860s has run yet. Their decoding comes from Brymen's protocol sheets,
-programs and manuals; the tool reads live readings, not the logged memory.
+BM860s has run yet. The tool reads live readings, not the logged memory.
 Nothing a meter sends tells the models of a series apart, so each series
 opens as one entry: `bm86x`, `bm82x` and `bm52x`. The BM820s manual names
 the cable BU-82X on one page and BU-86X in its accessory list
@@ -271,8 +269,7 @@ Voltcraft meters, until the Bluetooth symbol shows.
 A UT217A has run the CMS061's modes, NCV, negative DC V, every remote key and
 auto-detection ([#45](https://github.com/antoinecellerier/dmm-tools/issues/45));
 oscilloscope mode shows no reading, as the meter sends none. No other
-model has run yet: their decoding and remote keys come from OWON's and
-Voltcraft's apps, OWON's PC software and the manuals. The meter reports its
+model has run yet. The meter reports its
 model when it connects, which picks its entry; the OW16B opens as the
 OW18B's, `ow18b`, the UT217A as `cms061`, and the UT217B is expected to
 open as `cms101` ([open checks](research/owon/verification.md)).
