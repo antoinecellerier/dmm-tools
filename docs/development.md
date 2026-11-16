@@ -338,9 +338,12 @@ The script takes rustup's `cargo` from `~/.cargo/bin` for itself alone, so
 the desktop builds keep the system's toolchain. Where that is a
 distribution's `cargo`, delete the `cargo-fmt`, `cargo-clippy` and
 `cargo-miri` links rustup puts in `~/.cargo/bin`: cargo looks there for a
-subcommand before `PATH`, and `cargo fmt` would end in a rustup error. No CI job builds the APK,
-and the pre-commit hook does not compile the Android-only code: after
-touching anything under `cfg(target_os = "android")`, run the script.
+subcommand before `PATH`, and `cargo fmt` would end in a rustup error.
+
+The pre-commit hook does not compile the Android-only code. CI does, in
+`build-matrix.yml`'s `android` job, which lints it and builds the release
+APK on every push; after touching anything under
+`cfg(target_os = "android")`, run the script before committing.
 
 On the phone, `adb shell setprop debug.dmm.mock 1` opens the simulated
 meter on the next launch, `adb shell setprop debug.dmm.log dmm_lib=debug`
@@ -486,7 +489,8 @@ the crates:
 - `ci.yml` — fmt, clippy, tests and the dependency policy on every push and pull
   request, plus a three-target build so platform-specific breakage shows up
   early.
-- `build-matrix.yml` — the six-target release build, called by the three others.
+- `build-matrix.yml` — the six-target release build and the Android APK,
+  called by the three others.
 - `release.yml` — runs on a `v*` tag, see [Release process](#release-process).
   Dispatched by hand against a branch it builds all six targets and publishes
   nothing; against a tag it overwrites that release's assets and notes.
@@ -517,10 +521,10 @@ The allow-list holds exactly the SPDX ids the graph needs today, so a new
 dependency on an unlisted licence fails the check — read the licence, decide
 whether it belongs in a GPL-3.0-or-later binary, and only then add the id,
 both there and in `scripts/third-party-licenses.toml`'s `accepted` list. The
-check covers the six targets the release ships; a new target in
+check covers the six targets the release ships and the Android one; a new target in
 `build-matrix.yml` goes into the `targets` lists of both files too.
 
-Every release archive carries `THIRD-PARTY-LICENSES.html`, the licence texts
+Every release archive, and the Android APK among its assets, carries `THIRD-PARTY-LICENSES.html`, the licence texts
 and copyright notices of the code compiled into the binaries. `build-matrix.yml`
 generates its body with [cargo-about](https://github.com/EmbarkStudios/cargo-about)
 from `scripts/third-party-licenses.toml` and the `.hbs` template beside it, and

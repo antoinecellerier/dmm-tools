@@ -1,7 +1,8 @@
 # Dependency policy, enforced by `cargo deny check` in ci.yml.
 
 [graph]
-# The six targets build-matrix.yml ships. A crate only another platform pulls
+# The six targets build-matrix.yml ships, and the Android one of its
+# experimental APK. A crate only another platform pulls
 # in never reaches a user: rustls-platform-verifier's CA list for wasm32, which
 # has no trust store to ask, is the case in point.
 targets = [
@@ -11,6 +12,7 @@ targets = [
     "aarch64-apple-darwin",
     "x86_64-pc-windows-msvc",
     "aarch64-pc-windows-msvc",
+    "aarch64-linux-android",
 ]
 
 [advisories]

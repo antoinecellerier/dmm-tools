@@ -125,6 +125,82 @@ jobs:
           name: package-docs
           path: package-docs/
 
+  # The experimental Android APK of dmm-gui, and the one place the code behind
+  # cfg(target_os = "android") is compiled and linted: the hook and the jobs
+  # above build for desktops only. What it uploads is signed with the runner's
+  # debug key, fit for a test and for nothing else.
+  android:
+    name: Build (Android)
+    needs: docs
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # A push that breaks the Android build fails its CI run. A nightly or a
+    # release goes out without the APK instead: the port is experimental, and
+    # the desktop archives do not wait for it.
+    continue-on-error: ${{ inputs.published }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+          components: clippy
+
+      # Keeps cargo-ndk too: ~/.cargo/bin is part of what it saves.
+      - uses: Swatinem/rust-cache@v2
+        if: inputs.cache
+        with:
+          key: android
+
+      - name: Install cargo-ndk
+        run: cargo install --locked --version 4.1.2 cargo-ndk
+
+      # The runner image carries an Android SDK, but not always the versions
+      # scripts/android-build.sh asks for; sdkmanager skips what is there.
+      - name: Install the Android SDK parts
+        run: |
+          NDK_VERSION=$(sed -n 's/^NDK_VERSION=//p' scripts/android-build.sh)
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
+            "platforms;android-34" "build-tools;34.0.0" "ndk;$NDK_VERSION"
+          {
+            echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/$NDK_VERSION"
+            echo "DMM_ANDROID_JAVA_HOME=$JAVA_HOME_17_X64"
+          } >> "$GITHUB_ENV"
+
+      - name: Clippy
+        run: cargo ndk -t arm64-v8a clippy -p dmm-android -- -D warnings
+
+      # The licences of what the APK is built from travel inside it: it is
+      # published as one file, with no archive around it to carry them.
+      - uses: actions/download-artifact@v8
+        if: inputs.upload-artifacts
+        with:
+          name: package-docs
+          path: package-docs
+      - name: Put the licences in the APK
+        if: inputs.upload-artifacts
+        run: |
+          mkdir -p android/app/src/main/assets
+          cp package-docs/LICENSE package-docs/THIRD-PARTY-LICENSES.html android/app/src/main/assets/
+
+      - name: Build
+        env:
+          # As the desktop Build step below sets them.
+          CARGO_PROFILE_RELEASE_INCREMENTAL: "false"
+          CARGO_PROFILE_RELEASE_CODEGEN_UNITS: ${{ inputs.published && '1' || '16' }}
+          CARGO_PROFILE_RELEASE_LTO: ${{ inputs.published && 'fat' || 'false' }}
+          CARGO_PROFILE_RELEASE_STRIP: ${{ inputs.published && 'symbols' || 'debuginfo' }}
+        run: scripts/android-build.sh --release
+
+      # Named so that no release's file list matches it.
+      - name: Name the APK
+        if: inputs.upload-artifacts
+        run: cp android/app/build/outputs/apk/release/app-release.apk dmm-tools-android-debug-signed.apk
+      - uses: actions/upload-artifact@v7
+        if: inputs.upload-artifacts
+        with:
+          name: android-unpublished
+          path: dmm-tools-android-debug-signed.apk
+
   build:
     name: Build (${{ matrix.name }})
     needs: [targets, docs]

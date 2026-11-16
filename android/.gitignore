@@ -2,4 +2,5 @@
 /build/
 /app/build/
 /app/src/main/jniLibs/
+/app/src/main/assets/
 /local.properties

@@ -24,8 +24,8 @@ accepted = [
     "LGPL-2.1-or-later",
     "Unicode-DFS-2016",
 ]
-# The six targets build-matrix.yml ships, as in deny.toml: one file for every
-# archive.
+# The targets build-matrix.yml ships, as in deny.toml: one file for every
+# archive and for the Android APK.
 targets = [
     "x86_64-unknown-linux-gnu",
     "aarch64-unknown-linux-gnu",
@@ -33,6 +33,7 @@ targets = [
     "aarch64-apple-darwin",
     "x86_64-pc-windows-msvc",
     "aarch64-pc-windows-msvc",
+    "aarch64-linux-android",
 ]
 # Build dependencies stay in: a code generator's output can reach the binary,
 # like gl_generator's bindings from khronos_api's Khronos registry.
