@@ -1,237 +1,451 @@
 # Android port feasibility
 
-*Last updated 2026-04-19.*
+*Last updated 2026-11-16. Nothing in this document was built for Android or
+run on a phone.*
 
 ## Summary
 
-An Android port of `dmm-gui` is technically feasible but faces two
-substantive obstacles beyond the usual cross-compilation concerns:
+An Android port of `dmm-gui` is technically feasible. Beyond the usual
+cross-compilation concerns it faces three obstacles:
 
 1. Android's USB security model does not expose `/dev/hidraw*` or
    `/dev/bus/usb/*` to regular applications. Devices must be opened through
    the Java `UsbManager` API, which returns a file descriptor to native
    code.
 2. The `hidapi` crate that `dmm-lib` depends on does not build for
-   `aarch64-linux-android` in any of its supported configurations.
+   `aarch64-linux-android` in any of its supported configurations, and
+   `dmm-lib` cannot simply leave it out: no feature gates the dependency,
+   the four bridge modules and `transport/open.rs` hold its types, and
+   `Error::Hid` is a public variant that `dmm-shared` and `dmm-cli` match
+   on.
+3. Bluetooth LE on Android is reachable only through the Java Bluetooth
+   API. Every Rust route found ships Java classes in the APK and needs
+   runtime permissions requested from an Activity.
 
-Obstacle (1) disappears on rooted devices but (2) does not, so any Android
-build requires either a different Rust USB crate (`nusb` is the leading
-candidate) or a cross-compiled libusb vendored into the build. The
-UI layer itself is the least of the work — eframe has upstream Android
-support and the GUI's existing transport abstraction means no GUI-side
-refactor is needed.
+Rooting the device removes obstacle (1). It removes neither (2) nor (3).
+
+Bluetooth matters because of which meters it reaches. ZOTEK's meters,
+OWON's and the Voltcraft and UNI-T (UT217A, UT217B) models OWON makes, the
+EEVblog 121GW, the Brymen BM78xBT, the UT60BT and the UT202BT have no
+other link. The UT61+, UT161, UT171 and UT181A series are on the radio
+too, through the UT-D07B adapter. The device tables list a cable as the
+only link for the UT8802 and UT8803, the VC-880, VC650BT and VC-890, the
+CH9325 meters (UT803, UT804, UT71, VC920 and their relatives; the UT71
+has an untested Bluetooth route through the UT-D07A) and the Brymen series
+on the BU-86X cable.
+
+That leaves two ends to start from:
+
+- A Bluetooth-only build reaches the most meters and needs no root. It
+  carries the largest unknown: no project combining `btleplug` with a
+  `NativeActivity` or egui application was found (btleplug README and
+  issues, web search, 2026-11-16).
+- A rooted, USB-only build on `nusb` has the fewest unknowns and needs no
+  Java. It reaches the cabled meters only, and the Java glue returns as
+  soon as Bluetooth is wanted.
+
+The UI work is the same for both. eframe has upstream Android support, and
+the GUI reaches the meter only through `dmm-lib`'s transport abstraction.
 
 ## Scope
 
 This document evaluates what an Android build of `dmm-gui` would require.
-It covers the UI toolkit, the USB access path on Android, Rust USB crate
-options, the implications of rooting the target device, and the build
-toolchain. It does not cover alternative delivery approaches (remote
-viewer over network, WebAssembly/browser build) nor UX redesign for small
-screens.
+It covers the UI toolkit, the USB and Bluetooth LE access paths on Android,
+Rust crate options for each, the implications of rooting the target device,
+the Android versions in reach and the build toolchain. It does not cover
+alternative delivery approaches (remote viewer over network,
+WebAssembly/browser build) nor UX redesign for small screens.
 
-Claims below that were confirmed against source or authoritative upstream
+Claims confirmed against this repository's source or authoritative upstream
 material are stated plainly. Claims drawn from external reports are
-attributed inline. Claims that remain untested are called out as such.
+attributed inline. Claims deduced from source without running anything are
+marked as derived. Claims that remain untested are called out as such.
 
 ## UI: eframe on Android
 
 eframe gained upstream Android support in [egui PR
-#5318](https://github.com/emilk/egui/pull/5318), released December 2024.
-Support is delivered via `winit`'s `android-activity` backend: an
-application receives an `AndroidApp` in its `NativeOptions` and exposes a
-`#[no_mangle] fn android_main(app: AndroidApp)` instead of a conventional
-`main`. Working minimal examples exist in [`rib/android-activity`'s
-`agdk-egui`](https://github.com/rib/android-activity/tree/main/examples/agdk-egui)
-and [`inferrna/hello_world_android_egui`](https://github.com/inferrna/hello_world_android_egui).
+#5318](https://github.com/emilk/egui/pull/5318), released in eframe 0.30
+(December 2024). Support is delivered via `winit`'s `android-activity`
+backend: an application receives an `AndroidApp`, passes it in
+`NativeOptions::android_app`, and exposes a
+`#[unsafe(no_mangle)] fn android_main(app: AndroidApp)` instead of a
+conventional `main`. eframe selects the activity type through one of two
+features, `android-native-activity` or `android-game-activity`. The egui
+repository carries a working example,
+[`examples/hello_android`](https://github.com/emilk/egui/tree/main/examples/hello_android),
+which uses the `glow` renderer with `android-native-activity`.
 
-Reported caveats from the PR discussion and example projects:
+`dmm-gui` uses eframe 0.37 with the `glow` and `wgpu` renderers
+(`crates/dmm-gui/Cargo.toml`) and enables neither Android feature. It is a
+binary crate whose `main` parses a `clap` command line before opening the
+window; an Android build needs a `cdylib` target exposing `android_main`.
+The `hello_android` pattern has not been tried against `dmm-gui`.
 
-- Window lifecycle (pause/resume) requires dropping and rebuilding the
-  graphics context; mishandling results in a `winit` panic.
-- Soft-keyboard input works; full IME behaviour is minimal.
-- Status-bar and navigation-bar insets are not handled by default.
+Caveats, from eframe's source and egui's issue tracker:
 
-`dmm-gui` uses `eframe = "0.34"` (`crates/dmm-gui/Cargo.toml:11`).
-Compatibility of the examples above against this specific version has not
-been tested.
+- Suspend and resume: eframe drops the window surface on suspend and
+  recreates it on resume. An application built on `winit` directly must do
+  this itself.
+- Soft keyboard: reported not to open on `NativeActivity` ([egui
+  #5590](https://github.com/emilk/egui/issues/5590)); the workaround given
+  there is a JNI call to `showSoftInput`. `dmm-gui` has typed fields, among
+  them alarm limits, marker notes and the graph's fields.
+- Status-bar and navigation-bar insets are not reported on Android ([egui
+  #7748](https://github.com/emilk/egui/issues/7748)); eframe's safe-area
+  support covers iOS only.
+- Rendering: `wgpu` on the Vulkan drivers of older phones is untested.
+  `dmm-gui` falls back to `glow` when `wgpu` fails to start.
 
 ## GUI coupling to the desktop platform
 
-Inspection of the GUI crate on 2026-04-19 confirms that the UI never calls
-`hidapi` directly. It opens the meter through `dmm_lib::open_device()` or
-`open_auto()` and communicates with the background device thread via `mpsc`
-channels defined in `crates/dmm-gui/src/app/connection.rs`. The Transport abstraction in
-`dmm-lib` is therefore the substitution point for an Android-specific USB
-backend; no GUI refactor is required to accommodate it.
+`dmm-gui`, `dmm-shared` and `dmm-cli` depend on neither `hidapi`,
+`btleplug` nor `tokio`. The GUI opens the meter through
+`dmm_lib::open_device()` or `open_auto()`, and talks to its acquisition
+thread over `mpsc` channels whose message types are defined in
+`crates/dmm-gui/src/app/connection.rs`. The USB cable listing,
+`list_devices()`, reaches it through `dmm-shared`. The `Transport`
+trait in `crates/dmm-lib/src/transport/mod.rs` is therefore the
+substitution point for an Android-specific backend; no GUI refactor is
+required to accommodate one.
 
-Desktop-specific call sites that would need to be conditionally excluded on
-Android:
+One hidapi type does cross the library boundary: `dmm_lib::Error::Hid`
+wraps `hidapi::HidError`, and `dmm-shared` (`l10n/errors.rs`) and `dmm-cli`
+(`open.rs`) match on it. Building `dmm-lib` without hidapi changes that
+public error type.
 
-- `install_desktop_integration()` at `crates/dmm-gui/src/main.rs:191-252`
-  (already gated to `target_os = "linux"`, no change needed).
-- `rfd` file dialog in `crates/dmm-gui/src/app/export.rs` (CSV export).
-- `directories` crate used to resolve the settings path (`dmm-shared`
-  would need an Android branch).
-- The `eframe::run_native()` entry at `crates/dmm-gui/src/main.rs:254`
-  (replaced by `android_main`).
+Desktop-specific pieces an Android build would need to replace or leave
+out:
+
+- `rfd` file dialogs in `crates/dmm-gui/src/app/export.rs`,
+  `app/import.rs` and `app/controls/theme_save.rs`. The `rfd` version in
+  use has no Android backend.
+- The `directories` crate: `config_path()` in `dmm-shared` resolves the
+  settings path, and the user themes folder and the update-check cache
+  follow it; `app/import.rs` uses it for the default folder. What it
+  returns on Android is untested.
+- The update check: `ureq` with `rustls` and the platform certificate
+  verifier, which on Android is initialised through JNI. Building without
+  the `update-check` feature leaves it out.
+- Logging: `env_logger` writes to stderr (`dmm-shared`'s `logging`);
+  Android applications log to logcat.
+- The command line, parsed from `std::env::args_os()` in
+  `crates/dmm-gui/src/main.rs`, and the `eframe::run_native()` calls beside
+  it (replaced by `android_main`).
+- Window size, maximise and decoration commands, and the system-font
+  lookup through `fontique`; both untested on Android.
+
+`install_desktop_integration()` (Linux) and `free_own_console()` (Windows)
+are already excluded, since Android's `target_os` is `android`. Locale
+files, built-in themes, the changelog and the icons are compiled into the
+binary and need no change.
 
 ## USB access model on Android
 
 Android does not expose `/dev/hidraw*` to applications under its default
 security model. USB access goes through `android.hardware.usb.UsbManager`,
-which issues a runtime permission dialog and returns a `UsbDeviceConnection`
+which issues a runtime permission dialog and returns a
+[`UsbDeviceConnection`](https://developer.android.com/reference/android/hardware/usb/UsbDeviceConnection)
 from which native code can obtain a raw file descriptor via
 `getFileDescriptor()`. `libusb` supports initialisation from a
 pre-opened descriptor via `libusb_wrap_sys_device()` combined with
-`LIBUSB_OPTION_NO_DEVICE_DISCOVERY`; that pattern is how most
-Rust-on-Android USB code handles the Android security model.
+`LIBUSB_OPTION_NO_DEVICE_DISCOVERY`; `nusb` offers the same hand-off as
+`Device::from_fd`.
 
-Kernel-driver binding is device-specific:
+Kernel-driver binding, derived from the Linux kernel source and not tested
+on a phone: `usbhid` matches every interface of the HID class, and
+`hid-generic` takes any HID device no specialised driver claims.
+`hid-quirks.c` lists none of the four bridges (CP2110, CH9329, CH9325,
+BU-86X) among the devices it ignores. A kernel built with USB HID support
+should therefore bind all four, and an application must take the interface
+from the kernel: `claimInterface(intf, true)` on the Java side, or a detach
+under root.
 
-- The Silicon Labs CP2110 (VID `0x10C4`, PID `0xEA80`) is a vendor-specific
-  HID device and is not normally claimed by Android's built-in HID drivers.
-- CH9329 and CH9325 can enumerate as standard keyboard/mouse HID devices;
-  whether a given Android kernel binds them is device- and firmware-dependent
-  and has not been tested for this investigation.
+## Bluetooth LE on Android
 
-On Android 9+, `UsbHidDevice` provides HID *peripheral-mode* APIs (the phone
-acts as a HID device to another host). This is unrelated to consuming HID
-devices and is not applicable here.
+`dmm-lib` reaches Bluetooth meters through `btleplug`, behind the default
+`bluetooth` feature (`crates/dmm-lib/src/transport/ble/`). The transport
+owns a current-thread `tokio` runtime and runs each `btleplug` call to
+completion on the caller's thread. It has five GATT profiles, each with
+one characteristic to write and one to take notifications or indications
+from (the same one in two of them); two also read a characteristic while
+bringing the link up. It never pairs or bonds. Its Windows and Linux
+extras have fallbacks on every other platform.
+
+`btleplug` lists Android as supported in its
+[README](https://github.com/deviceplug/btleplug). From the README, its
+build script and issue #418:
+
+- It is a hybrid of Rust and Java. The Java classes build with Gradle
+  into a library (an AAR) that the application bundles into its APK.
+- `btleplug::platform::init` must be called from a thread whose context
+  class loader sees the application's classes. A thread attached from
+  native code must set that first.
+- It requires Android 7.0 (API 24).
+- It cannot query the adapter's state. `central()` in `ble/mod.rs` already
+  accepts an unknown state.
+
+No project combining `btleplug` with `android-activity`, `winit` or egui
+was found (btleplug README and issues, web search, 2026-11-16). btleplug
+issues [#418](https://github.com/deviceplug/btleplug/issues/418) (from a
+Slint application without a Gradle build) and
+[#501](https://github.com/deviceplug/btleplug/issues/501) ask for setup
+steps or a minimal Android example and hold none; the maintainer's advice
+in #418 is a Gradle project with the AAR in its `libs` folder. Whether
+`init` and the blocking calls work from `dmm-gui`'s acquisition thread
+under `NativeActivity` is untested.
+
+Two other crates can do without a Gradle build.
+[`android-ble`](https://github.com/uglyoldbob/android-ble-rs) embeds its
+compiled classes in the Rust library and loads them at run time.
+[`blec`](https://github.com/MnlPhlp/tauri-plugin-blec) does the same
+behind an optional feature; its default is a Gradle module, and its README
+notes that a device may block code loaded at run time. Every route found
+ships Java or Kotlin bytecode in some form (crates.io and GitHub,
+2026-11-16).
+
+Platform requirements, from Android's [Bluetooth permissions
+page](https://developer.android.com/develop/connectivity/bluetooth/bt-permissions):
+
+- An application targeting API 31 or later, on Android 12 and later: the
+  `BLUETOOTH_SCAN` and `BLUETOOTH_CONNECT` runtime permissions.
+- On Android 11 (API 30) and earlier: `BLUETOOTH`, `BLUETOOTH_ADMIN` and
+  the `ACCESS_FINE_LOCATION` runtime permission.
+- Runtime permissions are requested through an `Activity` method.
+  `NativeActivity` passes no permission result to native code, so the
+  crates above either request through JNI and check again on resume, or
+  start a small Java activity for the request.
+
+Two behaviours of the transport meet Android limits; both are untested:
+
+- Scanning. `search()` in `ble/search.rs` scans only when the platform's
+  list of known peripherals does not settle which peer to open, for up to
+  three seconds. A lost session reopens on its address and retries every
+  two seconds. Once an application has started five scans within thirty
+  seconds, Android does not start its next one, and reports neither an
+  error nor results
+  ([AOSP](https://android.googlesource.com/platform/packages/apps/Bluetooth/+/1fdc7c1)).
+  The `btleplug` version in use has no call on Android for the peripherals
+  the system knows, so the known list is the adapter's own list for this
+  process. If that list drops a lost peer, the retry loop runs at the
+  limit.
+- Opening an address that neither the known list nor the scan holds
+  exists on Windows only (`by_address` in `ble/search.rs`); elsewhere it
+  is reported as not found. `btleplug`'s README lists adding a peripheral
+  by address, the call `by_address` uses, as implemented on Android.
+
+Root does not open a second route. Derived from [AOSP's Bluetooth
+architecture](https://source.android.com/docs/core/connect/bluetooth) and
+the notes of [Bumble's Android Remote
+HCI](https://google.github.io/bumble/extras/android_remote_hci.html):
+applications reach the stack through Binder only, and taking the controller
+directly means shutting the system's Bluetooth stack down first. No raw HCI
+path usable beside the system stack was found (web search, 2026-11-16).
+
+## Android versions
+
+- The floor is Android 7.0 (API 24), set by `btleplug`'s Android backend.
+  egui's `hello_android` example declares API 23, and USB host support is
+  older than both.
+- Android 12 (API 31) is where the Bluetooth permissions change. Covering
+  both sides takes the manifest entries for each and one runtime request.
+- Google Play's target-API requirements are rules for Play submissions.
+- A test should include a phone on Android 12 or later for the current
+  permission model, and one on Android 14 or later, where the first MTU
+  request negotiates 517 bytes whatever value the application passes.
 
 ## Rust USB crate landscape
 
 ### `hidapi` (v2.6)
 
-`hidapi = "2.6"` does not build for `aarch64-linux-android`. The crate's
-`build.rs` dispatches on `target.contains("linux")` at line 31; the
-Android triple matches, so all Linux backends are reached. Each fails:
+`hidapi = "2.6"` does not build for `aarch64-linux-android`. On Android
+`dmm-lib` takes its `cfg(not(target_os = "linux"))` dependency line, which
+enables hidapi's default features. The crate's `build.rs` dispatches on
+`target.contains("linux")`; the Android triple matches, so the Linux
+backends are reached. Each fails:
 
-- `linux-static-hidraw` / `linux-shared-hidraw` call
-  `pkg_config::probe_library("libudev")`. `libudev` is not available in
-  the Android NDK sysroot.
+- `linux-static-hidraw` probes `libudev` through `pkg-config`, and
+  `linux-shared-hidraw` probes a system `hidapi-hidraw`. Neither is in the
+  Android NDK sysroot.
 - `linux-static-libusb` / `linux-shared-libusb` require a
-  `libusb-1.0` accessible to `pkg-config`, which the NDK does not
-  provide.
-- `linux-native` and `linux-native-basic-udev` pull in `udev`/`basic-udev`
-  crates that also wrap `libudev` and use netlink/sysfs paths that differ
-  on Android.
+  `libusb-1.0` accessible to `pkg-config` (the shared one a system
+  `hidapi-libusb` too), which the NDK does not provide.
+- `linux-native` and `linux-native-basic-udev` select nothing on Android:
+  hidapi gates their dependencies and the backend module itself on
+  `target_os = "linux"`.
 
-[Issue #122](https://github.com/ruabmbua/hidapi-rs/issues/122) is the
-canonical upstream thread; it remained open as of 2026-01 with no
-feature flag, fork, or merged solution. One reporter confirmed that a
-hand-cross-compiled libusb fed into the `linux-static-libusb` path
-worked, while describing the build process as "horrible". No published
-Rust-on-Android project using `hidapi` is known.
+[Issue #122](https://github.com/ruabmbua/hidapi-rs/issues/122), "Native
+linux backend based on usbfs", is the upstream thread closest to Android.
+Its author, whose use case was Android, reports getting the libusb backend
+to work while describing the build process as "horrible". A later comment
+suggests building such a backend on `nusb`. No Android support has been
+merged, and no published Rust-on-Android project using `hidapi` was found
+(hidapi-rs repository and issues, web search, 2026-11-16).
+
+With its libusb features, hidapi-rs exposes `HidApi::wrap_sys_device()`
+and `HidApi::disable_device_discovery()`, the pair needed to open a device
+from a `UsbManager` file descriptor.
 
 ### `nusb`
 
 [`nusb`](https://crates.io/crates/nusb) is a pure-Rust USB crate that
 talks to usbfs (`/dev/bus/usb/*`) directly via ioctls, with no libusb or C
-dependencies. Issue #122's most recent comment (2026-01-03) recommends it
-as the replacement for hidapi on Android. It has no HID-class helpers, so
-consumers must implement HID report framing themselves.
+dependencies. On Android:
 
-For this project that cost is small: CP2110's UART-over-HID layer in
-`crates/dmm-lib/src/transport/cp2110.rs` is approximately 150 lines of
-interrupt-report chunking plus `SET_REPORT`/`GET_REPORT` feature handling.
-The translation to `nusb`'s interrupt-transfer and control-transfer
-primitives is mechanical. Two structural choices are available:
+- `Device::from_fd` wraps a file descriptor from `UsbDeviceConnection`.
+  The [pull request](https://github.com/kevinmehall/nusb/pull/80) that
+  added it, titled for non-rooted phones, reports a test on a device
+  running Android 14.
+- Device listing is compiled out
+  ([issue #165](https://github.com/kevinmehall/nusb/issues/165)). The
+  application finds the device on the Java side, or under root opens the
+  usbfs node itself.
+- `detach_kernel_driver` does nothing outside `target_os = "linux"`.
+  `detach_and_claim_interface` is compiled for Android and issues the
+  usbfs disconnect-and-claim request (derived from nusb's source, not
+  tested on a `UsbManager` descriptor). `claimInterface(intf, true)` on
+  the Java side is the documented alternative.
 
-- Duplicate the framing into an Android-only module (no refactor of
+It has no HID-class helpers, so consumers must implement HID report framing
+themselves. For this project that cost is small: each bridge in
+`crates/dmm-lib/src/transport/` (`cp2110.rs`, `ch9329.rs`, `ch9325.rs`,
+`bu86x.rs`) is one file of interrupt-report framing plus, for some,
+`SET_REPORT`/`GET_REPORT` feature handling. The translation to `nusb`'s
+interrupt-transfer and control-transfer primitives is mechanical. Two
+structural choices are available:
+
+- Duplicate the framing into Android-only modules (no refactor of
   existing code; some duplication).
-- Extract a small `HidIo` trait that `Cp2110` consumes, with implementations
-  backed by `hidapi::HidDevice` on non-Android targets and `nusb` on
-  Android (no duplication; small refactor touching the desktop build).
+- Extract a small `HidIo` trait that the four bridges consume, with
+  implementations backed by `hidapi::HidDevice` on desktop targets and
+  `nusb` on Android (no duplication; a refactor touching the desktop
+  build).
 
-`nusb` on `aarch64-linux-android` has not been built or tested as part of
-this investigation.
+`nusb` on `aarch64-linux-android` has not been built or tested in this
+workspace.
 
 ### `rusb` / vendored libusb
 
 `rusb` is the standard Rust wrapper over libusb and exposes
-`wrap_sys_device`, which is the pattern used with Java-`UsbManager`-issued
-file descriptors. It has the same build requirement as hidapi's libusb
-backend — a cross-compiled `libusb-1.0` in the NDK sysroot. Including
-libusb also pulls in LGPL-2.1 licensing, a consideration for any
-redistributable APK.
+`open_device_with_fd`, which wraps `libusb_wrap_sys_device()`. Its
+`libusb1-sys` crate has a `vendored` feature that compiles libusb for the
+target, Android included, so the cross-compiled `libusb-1.0` that hidapi's
+libusb backend needs is not a requirement here. Including libusb brings
+LGPL-2.1-or-later licensing, a consideration for any redistributable APK.
+`nusb`'s `from_fd` covers the same hand-off without the C build or the
+licence, which is why the comparison below carries `nusb`.
 
 ## Rooted-device variant
 
-On rooted devices the `UsbManager` permission flow can be bypassed:
+On rooted devices the `UsbManager` permission flow can be bypassed. This
+applies to USB only.
 
-- `/dev/bus/usb/*` becomes reachable after `chmod 666` issued via `su`, or
-  by launching the application process under `su`.
-- `libusb_detach_kernel_driver()` is unrestricted, which may unblock
-  CH9329/CH9325 if their interfaces are bound by kernel HID drivers.
+- libusb's Android notes give two ways to reach `/dev/bus/usb/*`: run the
+  code under `su`, or change the nodes' permissions through `su`.
+- Detaching the kernel's HID driver from the interface is unrestricted.
 - No Kotlin/JNI shim, no USB permission dialog, no `device_filter.xml` is
   required.
 
-SELinux remains relevant. The default domain of an Android application
-typically denies `/dev/bus/usb/*` access even with root shell available;
-Magisk-installed applications usually inherit a permissive-enough context,
-and a narrow `magiskpolicy` rule covers cases where they do not. The
-specific behaviour on /e/OS under Magisk has not been tested.
+SELinux remains relevant. AOSP's policy gives application domains read,
+write and ioctl on USB device nodes but not open (`private/app.te`), so a
+change of permissions alone is not expected to let the application open
+one. Processes started through Magisk's `su` run in its unconstrained
+`magisk` domain (Magisk documentation); the application's own process
+does not. Derived from those two sources: a helper started through `su`
+opens the node and passes the descriptor to the application, or a
+`magiskpolicy` rule adds the open permission. Neither has been tested.
 
-Rooting does not address the `hidapi` build failure. The choice of Rust
-USB stack (`nusb` versus vendored libusb) is independent of whether the
-target device is rooted.
+Rooting does not address the `hidapi` build failure, and `nusb` still
+cannot list devices.
 
 ## Build toolchain
 
-- `cargo-apk` and `cargo-ndk` are not installed by default on Debian.
-  `cargo-apk` is the less friction-y of the two for a first-pass build;
-  `cargo-ndk` with a hand-written Gradle project is the fallback when
-  `cargo-apk` trips on NDK layout.
-- Debian packages installers for NDK releases up to at least r28c under
-  the name `google-android-ndk-rXX-installer`. These are thin wrappers
-  that download the actual NDK on package installation.
+- Java classes are needed for Bluetooth, and for USB on an unrooted phone,
+  and that decides the build tool. `cargo-ndk` with a Gradle application
+  module is what the
+  [`android-activity`](https://github.com/rust-mobile/android-activity)
+  README and btleplug's maintainer point to, and the only route found that
+  consumes btleplug's AAR. `cargo-apk`, which egui's example uses in a
+  patched build, documents no way to add Java classes.
+  [`cargo-apk2`](https://github.com/mzdk100/cargo-apk2) compiles Java
+  sources into the APK; no AAR support was found in it (tool READMEs and
+  btleplug issues, 2026-11-16).
+- None of the three is installed by default on Debian.
+- Debian packages installers for NDK releases under the name
+  `google-android-ndk-rXX-installer`. These are thin wrappers that
+  download the actual NDK on package installation.
 - The Android SDK, `adb`, `apksigner`, and `aapt` are available as
   Debian packages and are sufficient for APK signing and installation.
-- `rustup` shares `~/.cargo/bin` shims with Debian's packaged `cargo`,
-  which produces a PATH conflict on systems that use the distro Rust.
-  The conflict is avoidable by installing rustup with `--no-modify-path`
-  and invoking it via its absolute path, or by removing the distro Rust
-  packages in favour of rustup.
+- rustup's installer stops to ask when it finds the distro `rustc` and
+  `cargo` on `PATH`, and which `cargo` runs afterwards depends on `PATH`
+  order; Debian's own `rustup` package conflicts with its `cargo` and
+  `rustc` packages. Either install rustup with `--no-modify-path` and
+  invoke it via its absolute path, or replace the distro Rust packages
+  with rustup.
 - The `aarch64-linux-android` target requires rustup; it is not available
   through Debian's `rustc` packaging.
 
 ## Option comparison
 
-| Option                                            | Rust-side changes                        | Build complexity                    | Runtime prerequisites         |
-|---------------------------------------------------|------------------------------------------|-------------------------------------|-------------------------------|
-| A. `nusb`, Android-only CP2110 duplicate, rooted  | Small, self-contained                    | Low (pure Rust)                     | Root / Magisk                 |
-| B. `nusb`, `HidIo` trait abstraction, rooted      | Moderate; touches `transport/cp2110.rs`  | Low (pure Rust)                     | Root / Magisk                 |
-| C. JNI to `UsbManager` + `rusb::wrap_sys_device`  | Moderate                                 | Medium (Kotlin + JNI)               | None                          |
-| D. Vendored cross-compiled libusb + `hidapi`      | None                                     | High (NDK libusb cross-build)       | Root or JNI glue still needed |
+Every option needs the eframe work above and a `dmm-lib` that builds
+without `hidapi`. The options are not exclusive: B is A with USB added.
 
-Option A is the lowest-friction path for a proof of concept on hardware
-that is already rooted. Option B is the equivalent with less duplication
-and is the natural foundation if CH9329/CH9325 follow. Option C is the
-shape a general-consumer port would take. Option D is not recommended;
-Issue #122 suggests the build effort is substantial and LGPL-2.1 licensing
-must be accommodated.
+| Option                                                     | Meters reached       | Rust-side changes                                   | Build                    | Runtime prerequisites   |
+|------------------------------------------------------------|----------------------|-----------------------------------------------------|--------------------------|-------------------------|
+| A. Bluetooth only, `btleplug`'s Android backend            | Bluetooth meters     | `btleplug` initialisation, permission request (JNI) | Gradle + bundled AAR     | Bluetooth permissions   |
+| B. A plus USB: `UsbManager` descriptor, `nusb`             | All                  | A, plus bridge framing on `nusb` and a Java shim    | Gradle + bundled AAR     | Bluetooth, USB dialogs  |
+| C. USB only, rooted, `nusb` on usbfs                       | Cabled meters        | Bridge framing on `nusb`                            | Pure Rust                | Root / Magisk           |
+| D. USB only, `hidapi` on libusb with `wrap_sys_device`     | Cabled meters        | Descriptor hand-off; bridges unchanged              | NDK libusb cross-build   | USB dialog, or root     |
+
+Option A is the suggested first experiment: it reaches the most meters on
+an unrooted phone, and it settles the largest unknown, `btleplug` under
+`NativeActivity`. Option B is the shape a full port would take. Option C
+has the fewest unknowns, each of its parts having an upstream test report,
+and is the shortest path for cabled meters on a rooted phone. Option D is
+not recommended; Issue #122 suggests the build effort is substantial and
+LGPL licensing must be accommodated.
+
+Options A to C add `jni`, `nusb` or both as direct dependencies. Neither
+is in `dmm-lib`'s dependency list as `docs/architecture.md` states it.
 
 ## Open questions
 
-- Whether `eframe = "0.34"` works against the current `android-activity`
-  example code without version adjustment.
-- Whether `nusb` builds cleanly for `aarch64-linux-android`.
-- Whether `/dev/bus/usb/*` is reachable from a `su`-launched process on
-  /e/OS under its default SELinux policy, or whether a `magiskpolicy` rule
-  is required.
-- Whether CH9329 and CH9325 are claimed by Android kernel HID drivers in
-  practice.
-- CP2110 endpoint addresses and interface indices required for raw
-  USB operation — these need to be read from the device descriptor and
-  are not recorded in `dmm-lib`.
+- Whether the `hello_android` pattern works for `dmm-gui` on eframe 0.37.
+- Whether `btleplug::platform::init` and the transport's blocking calls
+  work from the acquisition thread under `NativeActivity`.
+- Whether `btleplug`'s Android adapter keeps a lost peer in its list,
+  which decides whether a reconnect loop meets the scan limit.
+- Whether Android kernels bind the four bridges to `usbhid` in practice.
+- Endpoint addresses and interface indices of the four bridges, required
+  for raw USB operation — these need to be read from the device
+  descriptors and are not recorded in `dmm-lib`.
+- Whether `nusb` builds cleanly for `aarch64-linux-android` in this
+  workspace.
+- Whether `/dev/bus/usb/*` is reachable from a `su`-launched process on a
+  custom ROM under its default SELinux policy, or whether a `magiskpolicy`
+  rule is required.
 
 ## References
 
 - [egui PR #5318 — Android support (2024-12)](https://github.com/emilk/egui/pull/5318)
-- [hidapi-rs issue #122 — Android support discussion](https://github.com/ruabmbua/hidapi-rs/issues/122)
-- [`android-activity` `agdk-egui` example](https://github.com/rib/android-activity/tree/main/examples/agdk-egui)
-- [`hello_world_android_egui`](https://github.com/inferrna/hello_world_android_egui)
-- [`nusb` crate](https://crates.io/crates/nusb)
-- [`tauri-plugin-hid` — reference implementation of the `UsbManager` + JNI pattern](https://crates.io/crates/tauri-plugin-hid)
-- [libusb `libusb_wrap_sys_device` documentation](https://libusb.sourceforge.io/api-1.0/group__libusb__dev.html#ga98f0b3a3685d4a1f3056b0e3e53d7d60)
+- [egui `hello_android` example](https://github.com/emilk/egui/tree/main/examples/hello_android)
+- [egui issue #5590 — soft keyboard on Android](https://github.com/emilk/egui/issues/5590)
+- [egui issue #7748 — safe area on Android](https://github.com/emilk/egui/issues/7748)
+- [`android-activity`](https://github.com/rust-mobile/android-activity)
+- [`btleplug`](https://github.com/deviceplug/btleplug), issues
+  [#418](https://github.com/deviceplug/btleplug/issues/418) and
+  [#501](https://github.com/deviceplug/btleplug/issues/501)
+- [`blec`](https://github.com/MnlPhlp/tauri-plugin-blec) and
+  [`android-ble`](https://github.com/uglyoldbob/android-ble-rs)
+- [Android Bluetooth permissions](https://developer.android.com/develop/connectivity/bluetooth/bt-permissions)
+- [AOSP Bluetooth architecture](https://source.android.com/docs/core/connect/bluetooth)
+- [Bumble — Android Remote HCI](https://google.github.io/bumble/extras/android_remote_hci.html)
+- [Android `UsbDeviceConnection`](https://developer.android.com/reference/android/hardware/usb/UsbDeviceConnection)
+- [hidapi-rs issue #122 — usbfs backend, Android use case](https://github.com/ruabmbua/hidapi-rs/issues/122)
+- [`nusb` crate](https://crates.io/crates/nusb), [PR #80](https://github.com/kevinmehall/nusb/pull/80)
+  and [issue #165](https://github.com/kevinmehall/nusb/issues/165)
+- [`tauri-plugin-hid`](https://crates.io/crates/tauri-plugin-hid) — a
+  Kotlin `UsbManager` backend with `claimInterface` and `bulkTransfer`
+  calls on the interface's endpoints; no feature reports and no descriptor
+  hand-off, so a partial reference for these bridges
+- [`cargo-apk2`](https://github.com/mzdk100/cargo-apk2)
+- [libusb `libusb_wrap_sys_device` documentation](https://libusb.sourceforge.io/api-1.0/group__libusb__dev.html#ga98f783e115ceff4eaf88a60e6439563c)
