@@ -1,7 +1,8 @@
 # Android port feasibility
 
-*Last updated 2026-11-16. Nothing in this document was built for Android or
-run on a phone.*
+*Last updated 2026-11-16. Option A below was built as an experiment and run
+on one phone: "Experimental build" has what it showed. The USB sections
+remain untested.*
 
 ## Summary
 
@@ -13,11 +14,9 @@ cross-compilation concerns it faces three obstacles:
    the Java `UsbManager` API, which returns a file descriptor to native
    code.
 2. The `hidapi` crate that `dmm-lib` depends on does not build for
-   `aarch64-linux-android` in any of its supported configurations, and
-   `dmm-lib` cannot simply leave it out: no feature gates the dependency,
-   the four bridge modules and `transport/open.rs` hold its types, and
-   `Error::Hid` is a public variant that `dmm-shared` and `dmm-cli` match
-   on.
+   `aarch64-linux-android` in any of its supported configurations. The
+   experimental build leaves it out there: `transport/hid_absent.rs` stands
+   in for it with a bus that holds no cable.
 3. Bluetooth LE on Android is reachable only through the Java Bluetooth
    API. Every Rust route found ships Java classes in the APK and needs
    runtime permissions requested from an Activity.
@@ -36,16 +35,77 @@ on the BU-86X cable.
 
 That leaves two ends to start from:
 
-- A Bluetooth-only build reaches the most meters and needs no root. It
-  carries the largest unknown: no project combining `btleplug` with a
-  `NativeActivity` or egui application was found (btleplug README and
-  issues, web search, 2026-11-16).
+- A Bluetooth-only build reaches the most meters and needs no root. This
+  is the one that was built; `btleplug` under a `NativeActivity` was its
+  largest unknown, and it works.
 - A rooted, USB-only build on `nusb` has the fewest unknowns and needs no
   Java. It reaches the cabled meters only, and the Java glue returns as
   soon as Bluetooth is wanted.
 
 The UI work is the same for both. eframe has upstream Android support, and
 the GUI reaches the meter only through `dmm-lib`'s transport abstraction.
+
+## Experimental build
+
+Option A of the comparison below exists on the `android` branch: the
+`crates/dmm-android` library, the `android/` Gradle project and
+`scripts/android-build.sh` ("Building for Android" in
+`docs/development.md`). It was run on one phone, Android 12 (API 32),
+arm64, with a UT61E+ on the UT-D07B adapter, on 2026-11-16.
+
+What worked:
+
+- The GUI draws through eframe's `android-native-activity` and glow and
+  follows the screen into landscape. Taps, drags and pinch zoom work on
+  the graph, and the Settings panel is usable; the controls keep their
+  desktop size, which is small for a finger. It survives being sent to the
+  background and brought back.
+- `btleplug::platform::init`, called from `android_main`, and the
+  transport's blocking calls on the acquisition thread: scan, connect,
+  profile choice, detection, the readings stream and its pairs notice.
+- The permission request, made by a small Java activity before the native
+  one starts.
+- Settings, kept in the application's own folder.
+- Export, which writes unasked to a `dmm-tools` folder in the shared
+  Documents; Import, through the system's document picker, shown by the
+  activity's Java side; links, opened in the browser.
+- Reconnecting after the adapter was switched off, for a few seconds and
+  for a minute.
+
+What it showed about Android:
+
+- Scan limit. A lost session retries about every five seconds, six scans
+  in thirty. Every sixth scan heard nothing at all, so one retry in six is
+  wasted; the session still came back once the adapter did.
+- With the radio switched off, `btleplug` reports no adapter state and its
+  scan fails as "no adapter"; the transport reports that as Bluetooth
+  turned off.
+- Switching the radio off under a live session leaves `btleplug`'s
+  peripheral marked connected, and a service discovery on it is never
+  answered. An open on Android therefore forgets the peers of earlier
+  sessions and scans, and discovery and subscribe have a time limit on
+  every platform. The session itself ends on a failed write, not a lost
+  link, so it does not reconnect by itself.
+- The first link after the adapter was powered back on carried no data
+  once; the session dropped it and the next one worked. Not explained, and
+  not compared with a desktop.
+- winit builds one event loop per process and does not end it when the
+  activity is destroyed. The activity is single-task, so opening the app
+  again returns to it, and it ends the process when it finishes. That last
+  path did not run: Back sends this Android version's root activity to the
+  background.
+- The status bar covered the top bar (egui #7748); the activity is full
+  screen.
+- Full screen, the window reaches into the screen's rounded corners. The
+  build asks the system for their radius and keeps a margin clear of them,
+  but this phone's system reported square corners; with the radius given
+  by hand the margin held in portrait and landscape.
+
+Not done or not tested: choosing where an export goes, saving a theme, the
+soft keyboard, the system clipboard, a layout for a phone screen, other
+Android versions, other meters, a release build or signing, CI. The error
+texts are the desktop's, so they say "this computer", and "nothing found"
+still lists USB cables.
 
 ## Scope
 
@@ -79,7 +139,8 @@ which uses the `glow` renderer with `android-native-activity`.
 (`crates/dmm-gui/Cargo.toml`) and enables neither Android feature. It is a
 binary crate whose `main` parses a `clap` command line before opening the
 window; an Android build needs a `cdylib` target exposing `android_main`.
-The `hello_android` pattern has not been tried against `dmm-gui`.
+The experimental build does this: `dmm-gui` is a library with the desktop
+`main` beside it, and `crates/dmm-android` exposes `android_main`.
 
 Caveats, from eframe's source and egui's issue tracker:
 
@@ -118,18 +179,20 @@ out:
 
 - `rfd` file dialogs in `crates/dmm-gui/src/app/export.rs`,
   `app/import.rs` and `app/controls/theme_save.rs`. The `rfd` version in
-  use has no Android backend.
+  use has no Android backend; `file_dialog.rs` stands in for it there.
 - The `directories` crate: `config_path()` in `dmm-shared` resolves the
   settings path, and the user themes folder and the update-check cache
-  follow it; `app/import.rs` uses it for the default folder. What it
-  returns on Android is untested.
+  follow it; `app/import.rs` uses it for the default folder. An Android
+  application has no home directory for it to start from, so the
+  experimental build passes the application's own folder
+  (`dmm_shared::set_config_dir`).
 - The update check: `ureq` with `rustls` and the platform certificate
   verifier, which on Android is initialised through JNI. Building without
   the `update-check` feature leaves it out.
 - Logging: `env_logger` writes to stderr (`dmm-shared`'s `logging`);
   Android applications log to logcat.
 - The command line, parsed from `std::env::args_os()` in
-  `crates/dmm-gui/src/main.rs`, and the `eframe::run_native()` calls beside
+  `crates/dmm-gui/src/lib.rs`, and the `eframe::run_native()` calls beside
   it (replaced by `android_main`).
 - Window size, maximise and decoration commands, and the system-font
   lookup through `fontique`; both untested on Android.
@@ -184,15 +247,16 @@ build script and issue #418:
 - It cannot query the adapter's state. `central()` in `ble/mod.rs` already
   accepts an unknown state.
 
-No project combining `btleplug` with `android-activity`, `winit` or egui
-was found (btleplug README and issues, web search, 2026-11-16). btleplug
+No other project combining `btleplug` with `android-activity`, `winit` or
+egui was found (btleplug README and issues, web search, 2026-11-16). btleplug
 issues [#418](https://github.com/deviceplug/btleplug/issues/418) (from a
 Slint application without a Gradle build) and
 [#501](https://github.com/deviceplug/btleplug/issues/501) ask for setup
 steps or a minimal Android example and hold none; the maintainer's advice
-in #418 is a Gradle project with the AAR in its `libs` folder. Whether
-`init` and the blocking calls work from `dmm-gui`'s acquisition thread
-under `NativeActivity` is untested.
+in #418 is a Gradle project with the AAR in its `libs` folder. The
+experimental build compiles btleplug's Java sources from the locked crate
+into the application instead, and `init` and the blocking calls work from
+`dmm-gui`'s acquisition thread under `NativeActivity`.
 
 Two other crates can do without a Gradle build.
 [`android-ble`](https://github.com/uglyoldbob/android-ble-rs) embeds its
@@ -215,7 +279,8 @@ page](https://developer.android.com/develop/connectivity/bluetooth/bt-permission
   crates above either request through JNI and check again on resume, or
   start a small Java activity for the request.
 
-Two behaviours of the transport meet Android limits; both are untested:
+Two behaviours of the transport meet Android limits ("Experimental build"
+has what the phone showed of the first; the second is untested):
 
 - Scanning. `search()` in `ble/search.rs` scans only when the platform's
   list of known peripherals does not settle which peer to open, for up to
@@ -226,8 +291,8 @@ Two behaviours of the transport meet Android limits; both are untested:
   ([AOSP](https://android.googlesource.com/platform/packages/apps/Bluetooth/+/1fdc7c1)).
   The `btleplug` version in use has no call on Android for the peripherals
   the system knows, so the known list is the adapter's own list for this
-  process. If that list drops a lost peer, the retry loop runs at the
-  limit.
+  process, which an open on Android now clears: every open scans, and the
+  retry loop runs at the limit.
 - Opening an address that neither the known list nor the scan holds
   exists on Windows only (`by_address` in `ble/search.rs`); elsewhere it
   is reported as not found. `btleplug`'s README lists adding a peripheral
@@ -409,11 +474,15 @@ is in `dmm-lib`'s dependency list as `docs/architecture.md` states it.
 
 ## Open questions
 
-- Whether the `hello_android` pattern works for `dmm-gui` on eframe 0.37.
-- Whether `btleplug::platform::init` and the transport's blocking calls
-  work from the acquisition thread under `NativeActivity`.
-- Whether `btleplug`'s Android adapter keeps a lost peer in its list,
-  which decides whether a reconnect loop meets the scan limit.
+- Whether opening a lost peer by its address, which `btleplug` implements
+  on Android, spares the reconnect loop the scan Android drops one time in
+  six.
+- Why the first link after an adapter's power-up carried no data.
+- Whether the activity's exit on finish works, and what a phone layout
+  needs.
+- Keeping the system's status bar on screen as an option: the margin that
+  clears the rounded corners could carry the bar's height too, read from
+  the window's insets by the activity.
 - Whether Android kernels bind the four bridges to `usbhid` in practice.
 - Endpoint addresses and interface indices of the four bridges, required
   for raw USB operation — these need to be read from the device
