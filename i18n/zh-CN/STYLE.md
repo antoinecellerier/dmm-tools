@@ -51,7 +51,7 @@ The UNI-T handheld manuals are image-only: every citation from them was read off
 
 - **«你», mostly unsaid.** MS-SG p.27: "If it's needed, use 你 instead of 您", and omit pronouns where the meaning holds. UT195's manual says «您» (PDF p.4R) and UT61E+'s «你» (PDF p.8L): both exist; the app follows MS-SG.
 - **Buttons, menu items, checkboxes, chips and shortcut-list actions** are short verb phrases or nouns, no «请»: «连接», «导出…», «重置缩放», «窗口置顶», «切换记录». One list, one form (all verbs or all nouns).
-- **Hovers that name what a control does** are verb phrases: «打开到所选万用表的 USB 连接 (Ctrl+O)», «保持当前读数». A hover names the action in a few words.
+- **Hovers that name what a control does** are verb phrases: «连接万用表 (Ctrl+O)», «保持当前读数». A hover names the action in a few words.
 - **Instructions in notices and steps** are imperatives: «检查“设置”(⚙) 中是否选择了正确的设备», «打开万用表». Add «请» only where the bare verb would sound curt, as MS-SG's error example does (p.9 «密码有误，请再试一次»). MS-SG p.15: say «选择» for *select*; for *click* use «单击» (p.11 «可单击“取消”»), never «点击».
 - **Activation steps** (lib.ftl `activation-*`) are numbered imperatives in the manuals' words: «1. 将 USB 连接线插入万用表», «2. 将旋钮转到任意功能档», «3. 按住 SELECT 键的同时开机». See §7.
 - **Everyday words** (MS-SG p.6, p.20–21): «如果» not «倘若/若»; «只是» not «仅是»; «但» not «但是/不过»; «到» not «至» («添加到»).

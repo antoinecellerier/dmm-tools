@@ -43,7 +43,7 @@ settings-mock-auto =
         [yes] Auto (cycle) (--mock-mode)
        *[no] Auto (cycle)
     }
-    .hover = Cycle through all synthetic modes to exercise the GUI
+    .hover = Cycle through all mock modes
 # The chip for the mode --mock-mode picked for this session. $mode is its
 # name, e.g. dcv.
 settings-mock-mode-pinned = { $mode } (--mock-mode)
@@ -52,10 +52,10 @@ settings-mock-mode = Mock mode:
 ## How a connection is made: checkboxes on one row.
 
 settings-auto-connect = Auto-connect on start
-    .hover = Open the USB connection automatically when the app launches
+    .hover = Connect to the meter when the app starts
 # Asking the meter its name makes it beep.
 settings-device-name = Show device name on connect (beeps)
-    .hover = Query the meter's name after connecting — the meter will beep once
+    .hover = Ask the meter its name after connecting
 # The Bluetooth checkbox while --no-bluetooth switched the search off for
 # this session. $setting is the checkbox's own label, e.g. Look for
 # Bluetooth devices.
@@ -112,7 +112,7 @@ settings-graph = Graph
     .hover = Show the rolling time-series plot
 # σ is the standard deviation, as the Statistics panel writes it.
 settings-statistics = Statistics
-    .hover = Show Min / Max / Mean / σ / integral for the live session
+    .hover = Show Min / Max / Mean / σ / integral
 settings-recording = Recording
     .hover = Show the recording controls and sample log
 # The Specifications panel's checkbox. $fields is shown while the panel is

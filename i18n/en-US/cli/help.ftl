@@ -13,7 +13,7 @@
 # $path is where the settings file is on this computer, e.g.
 # /home/me/.config/dmm-tools/settings.json; completion scripts get the
 # words "the settings file" instead.
-help-device = Device to connect to [auto, ut61eplus, ut8803, ut171, ut181a, mock, ...]. If omitted, falls back to `device_family` in { $path } (written by dmm-gui), then to `auto`, which detects the meter over the USB cable
+help-device = Device to connect to [auto, ut61eplus, ut8803, ut171, ut181a, mock, ...]. If omitted, falls back to `device_family` in { $path } (written by dmm-gui), then to `auto`, which detects the connected meter
 # Before the list of devices.
 help-device-intro = Device to connect to.
 

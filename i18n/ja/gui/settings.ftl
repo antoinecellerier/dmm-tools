@@ -52,7 +52,7 @@ settings-mock-mode = シミュレーション モード:
 ## How a connection is made: checkboxes on one row.
 
 settings-auto-connect = 起動時に自動接続する
-    .hover = アプリの起動時に USB で自動的に接続する
+    .hover = アプリの起動時にマルチメーターに接続する
 # Asking the meter its name makes it beep.
 settings-device-name = 接続時にデバイス名を表示する (ビープ音あり)
     .hover = 接続後にマルチメーターの名前を問い合わせる (ビープ音が 1 回鳴る)
@@ -104,7 +104,7 @@ settings-graph = グラフ
     .hover = 流れる時系列グラフを表示する
 # σ is the standard deviation, as the Statistics panel writes it.
 settings-statistics = 統計
-    .hover = 現在のセッションの最小値/最大値/平均値/σ/積分を表示する
+    .hover = 最小値/最大値/平均値/σ/積分を表示する
 settings-recording = 記録
     .hover = 記録の操作とサンプル ログを表示する
 # The Specifications panel's checkbox. $fields is shown while the panel is

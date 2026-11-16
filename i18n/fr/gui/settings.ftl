@@ -52,7 +52,7 @@ settings-mock-mode = Mode simulé :
 ## How a connection is made: checkboxes on one row.
 
 settings-auto-connect = Se connecter au démarrage
-    .hover = Ouvrir automatiquement la connexion USB au lancement de l’application
+    .hover = Se connecter au multimètre au lancement de l’application
 # Asking the meter its name makes it beep.
 settings-device-name = Afficher le nom de l’appareil à la connexion (bip sonore)
     .hover = Demander son nom au multimètre après la connexion : il émet alors un bip sonore
@@ -112,7 +112,7 @@ settings-graph = Graphique
     .hover = Afficher l’évolution des mesures sur un graphique défilant
 # σ is the standard deviation, as the Statistics panel writes it.
 settings-statistics = Statistiques
-    .hover = Afficher Min / Max / Moyenne / σ / intégrale pour la session en cours
+    .hover = Afficher Min / Max / Moyenne / σ / intégrale
 settings-recording = Enregistrement
     .hover = Afficher les commandes d’enregistrement et le journal des échantillons
 # The Specifications panel's checkbox. $fields is shown while the panel is

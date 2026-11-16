@@ -16,7 +16,7 @@ top-bar-imported-file = 导入的文件
 ## Connection buttons.
 
 top-bar-connect = 连接
-    .hover = 通过 USB 连接所选万用表 ({ $keys })
+    .hover = 连接万用表 ({ $keys })
 # In place of Connect while the meter is being opened: stops the attempt.
 top-bar-cancel = 取消
     .hover = 停止连接 ({ $keys })

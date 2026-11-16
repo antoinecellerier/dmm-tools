@@ -54,7 +54,7 @@ flag-mock-mode-cli = Pin the mock device to one measurement mode instead of cycl
 # dmm-gui's: the mock picked in Settings counts too.
 flag-mock-mode-gui = Pin the mock device to one measurement mode instead of cycling through them all, with --device mock or the mock picked in Settings. Overrides the saved Mock mode setting for this session
 # dmm-cli's: its 'list' command shows what is plugged in.
-flag-no-bluetooth-cli = Turn off Bluetooth scanning for this run: nothing scans for adapters or meters and 'list' shows cables only. Overrides dmm-gui's "{ bluetooth-setting }" setting. An address given to --adapter is still opened
+flag-no-bluetooth-cli = Turn off Bluetooth scanning for this run: 'list' shows cables only. Overrides dmm-gui's "{ bluetooth-setting }" setting. An address given to --adapter is still opened
 flag-no-bluetooth-gui = Turn off Bluetooth scanning for this session. Overrides the "{ bluetooth-setting }" setting. An address given to --adapter is still opened
 # dmm-cli's, beside --no-bluetooth.
 flag-bluetooth-cli = Scan for Bluetooth adapters and meters on this run, whatever dmm-gui's "{ bluetooth-setting }" setting says
@@ -104,7 +104,7 @@ setup-bluetooth-off-check = not searched.
 # Linux. Two command lines follow.
 setup-usb-linux-rule = Ensure the udev rule is installed:
 # Linux. The setup guide's address follows.
-setup-usb-linux-replug = Then replug the cable. On a headless machine, keep a group on the rule:
+setup-usb-linux-replug = Then replug the cable. On a headless machine, add a group to the rule:
 # Windows. The quoted names are what Device Manager shows; use the names
 # Windows shows in your language.
 setup-usb-windows-open = Open Device Manager with the cable plugged in:
@@ -119,7 +119,7 @@ setup-usb-macos-privacy = If the device is not found, check System Settings > Pr
 setup-bluetooth-adapter = If both are on, switch the adapter off and on.
 setup-bluetooth-macos-privacy = Allow Bluetooth in System Settings > Privacy & Security.
 # The device catalog's address follows.
-setup-bluetooth-catalog = Supported adapters and meters are listed in the device catalog:
+setup-bluetooth-catalog = Check that your adapter and meter are in the device catalog:
 setup-bluetooth-scan = Run 'dmm-cli list' to scan for adapters and meters in range.
 
 ## Notices both binaries show.

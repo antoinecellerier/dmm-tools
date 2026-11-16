@@ -136,7 +136,7 @@ connection-acquisition-stopped = Acquisition stopped unexpectedly — reconnect 
 # The last line of a notice for a meter whose support isn't fully verified;
 # a link. $warning is the sentence saying how far it is verified.
 connection-feedback = { $warning } Report feedback.
-    .hover = Opens the GitHub issue tracker to report feedback
+    .hover = Open the GitHub issue tracker
 
 ## The notice under the reading when the Bluetooth link delivers readings
 ## two at a time, which can end with a command that fixes it.

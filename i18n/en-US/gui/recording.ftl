@@ -14,7 +14,7 @@
 
 # A button; ● is part of it.
 recording-record = ● Record
-    .hover = Start writing live samples to the recording buffer ({ $keys })
+    .hover = Start recording ({ $keys })
 # The Record button while recording; ■ is part of it.
 recording-stop = ■ Stop
     .hover = Stop recording ({ $keys })

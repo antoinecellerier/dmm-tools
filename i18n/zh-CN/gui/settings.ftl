@@ -52,7 +52,7 @@ settings-mock-mode = 仿真模式:
 ## How a connection is made: checkboxes on one row.
 
 settings-auto-connect = 启动时自动连接
-    .hover = 应用启动时自动打开 USB 连接
+    .hover = 应用启动时连接万用表
 # Asking the meter its name makes it beep.
 settings-device-name = 连接时显示设备名称 (会蜂鸣)
     .hover = 连接后查询万用表的名称，万用表会蜂鸣一声
@@ -110,7 +110,7 @@ settings-graph = 图表
     .hover = 显示滚动的时间序列图
 # σ is the standard deviation, as the Statistics panel writes it.
 settings-statistics = 统计
-    .hover = 显示实时会话的最小值、最大值、平均值、σ 和积分
+    .hover = 显示最小值、最大值、平均值、σ 和积分
 settings-recording = 记录
     .hover = 显示记录控件和样本日志
 # The Specifications panel's checkbox. $fields is shown while the panel is

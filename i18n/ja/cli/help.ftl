@@ -11,7 +11,7 @@
 ## shows, before the list of devices.
 
 # Before the list of devices.
-help-device = 接続するデバイス [auto, ut61eplus, ut8803, ut171, ut181a, mock, ...]。省略すると { $path } (dmm-gui が書き込む) の `device_family`、次に USB ケーブル経由でマルチメーターを検出する `auto` を使用する
+help-device = 接続するデバイス [auto, ut61eplus, ut8803, ut171, ut181a, mock, ...]。省略すると { $path } (dmm-gui が書き込む) の `device_family`、次に接続されたマルチメーターを検出する `auto` を使用する
 help-device-intro = 接続するデバイス。
 
 ## After the options of dmm-cli -h.

@@ -16,7 +16,7 @@ top-bar-imported-file = インポートしたファイル
 ## Connection buttons.
 
 top-bar-connect = 接続
-    .hover = 選択したマルチメーターに USB で接続する ({ $keys })
+    .hover = マルチメーターに接続する ({ $keys })
 # In place of Connect while the meter is being opened: stops the attempt.
 top-bar-cancel = キャンセル
     .hover = 接続を中止する ({ $keys })

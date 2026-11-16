@@ -16,7 +16,7 @@ top-bar-imported-file = Arquivo importado
 ## Connection buttons.
 
 top-bar-connect = Conectar
-    .hover = Abrir a conexão USB com o multímetro selecionado ({ $keys })
+    .hover = Conectar ao multímetro ({ $keys })
 # In place of Connect while the meter is being opened: stops the attempt.
 top-bar-cancel = Cancelar
     .hover = Cancelar a tentativa de conexão ({ $keys })

@@ -55,10 +55,10 @@ scale-offset = Offset
 scale-unit = Unit label
 # Applies the three fields to the reading.
 scale-apply = Apply
-    .hover = Apply these values to every reading from now on
+    .hover = Turn scaling on with these values
 # Turns scaling off; the fields keep their values for the next Apply.
 scale-off = Off
-    .hover = Stop scaling and show the meter's own reading again
+    .hover = Turn scaling off
 
 ## The Scale row's toasts.
 

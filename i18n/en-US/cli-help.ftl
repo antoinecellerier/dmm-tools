@@ -107,7 +107,7 @@ debug--count =
     .help = Number of requests to send (0 = unlimited)
 # dmm-cli debug --interval-ms
 debug--interval-ms =
-    .help = Keep at most one reading per interval, in milliseconds (0 = every reading)
+    .help = Keep at most one reading per interval, in milliseconds (0 = every reading the meter produces)
 # dmm-cli completions
 completions =
     .about = Generate shell completions
@@ -119,7 +119,7 @@ capture =
     .about = Guided protocol capture for bug reports and verification
 # dmm-cli capture --output
 capture--output =
-    .help = Output file (default: capture-<device>.yaml). Overrides auto-naming
+    .help = Output file (default: capture-<device>.yaml)
 # dmm-cli capture --steps
 capture--steps =
     .help = Only run specific steps (comma-separated IDs, e.g. "dcmv,temp,duty")

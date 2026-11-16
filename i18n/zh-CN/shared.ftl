@@ -85,7 +85,7 @@ setup-bluetooth-check = 打开此计算机的蓝牙，并在万用表上打开�
 # Linux. Two command lines follow.
 setup-usb-linux-rule = 确认已安装 udev 规则:
 # Linux. The setup guide's address follows.
-setup-usb-linux-replug = 然后重新插拔连接线。在无显示器的机器上，请在规则中保留一个用户组:
+setup-usb-linux-replug = 然后重新插拔连接线。在无显示器的机器上，请在规则中添加一个用户组:
 # Windows. The quoted names are what Device Manager shows; use the names
 # Windows shows in your language.
 setup-usb-windows-open = 插好连接线，打开“设备管理器”:

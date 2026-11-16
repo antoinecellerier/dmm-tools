@@ -85,7 +85,7 @@ setup-bluetooth-check = ligue o Bluetooth neste computador e a transmissão de d
 # Linux. Two command lines follow.
 setup-usb-linux-rule = Verifique se a regra udev está instalada:
 # Linux. The setup guide's address follows.
-setup-usb-linux-replug = Depois, reconecte o cabo. Em uma máquina sem interface gráfica, mantenha um grupo na regra:
+setup-usb-linux-replug = Depois, reconecte o cabo. Em uma máquina sem interface gráfica, adicione um grupo à regra:
 # Windows. The quoted names are what Device Manager shows; use the names
 # Windows shows in your language.
 setup-usb-windows-open = Abra o Gerenciador de Dispositivos com o cabo conectado:

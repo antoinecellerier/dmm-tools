@@ -11,7 +11,7 @@
 ## shows, before the list of devices.
 
 # Before the list of devices.
-help-device = Dispositivo al que conectarse [auto, ut61eplus, ut8803, ut171, ut181a, mock, ...]. Si se omite, se usa `device_family` de { $path } (escrito por dmm-gui) y, si no, `auto`, que detecta el multímetro por el cable USB
+help-device = Dispositivo al que conectarse [auto, ut61eplus, ut8803, ut171, ut181a, mock, ...]. Si se omite, se usa `device_family` de { $path } (escrito por dmm-gui) y, si no, `auto`, que detecta el multímetro conectado
 help-device-intro = Dispositivo al que conectarse.
 
 ## After the options of dmm-cli -h.

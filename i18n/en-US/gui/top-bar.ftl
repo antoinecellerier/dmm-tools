@@ -16,7 +16,7 @@ top-bar-imported-file = Imported file
 ## Connection buttons.
 
 top-bar-connect = Connect
-    .hover = Open USB connection to the selected meter ({ $keys })
+    .hover = Connect to the meter ({ $keys })
 # In place of Connect while the meter is being opened: stops the attempt.
 top-bar-cancel = Cancel
     .hover = Stop connecting ({ $keys })

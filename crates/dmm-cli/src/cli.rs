@@ -214,7 +214,7 @@ pub(crate) enum Cmd {
         /// Number of requests to send (0 = unlimited)
         #[arg(long, default_value = "1")]
         count: usize,
-        /// Keep at most one reading per interval, in milliseconds (0 = every reading)
+        /// Keep at most one reading per interval, in milliseconds (0 = every reading the meter produces)
         #[arg(long, default_value = "500")]
         interval_ms: u64,
     },
@@ -313,7 +313,7 @@ pub(crate) struct TriageArgs {
 /// The `capture` flags, handed to [`crate::capture::cmd_capture`] whole.
 #[derive(clap::Args)]
 pub(crate) struct CaptureArgs {
-    /// Output file (default: capture-<device>.yaml). Overrides auto-naming.
+    /// Output file (default: capture-<device>.yaml).
     #[expect(
         rustdoc::invalid_html_tags,
         reason = "the doc comment is --help text, so `<device>` stays as users read it"

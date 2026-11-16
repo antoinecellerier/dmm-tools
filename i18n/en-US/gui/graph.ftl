@@ -118,7 +118,7 @@ graph-ref = Ref
 # the field while it is empty; the numbers in the hover are an example of
 # what to type, kept as they are.
 graph-ref-values = Reference values
-    .hover = Reference values, comma- or semicolon-separated, with a unit or in the plotted one (e.g. 3.3, 5 V, 4.7k)
+    .hover = Reference values, with a unit or in the plotted one (e.g. 3.3, 5 V, 4.7k)
 # Lines added to the reference values' hover, one for each value that draws
 # no line. $entry is the value as typed ("abc").
 graph-ref-not-a-number = { $entry }: not a number
