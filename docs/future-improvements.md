@@ -426,11 +426,11 @@ The UT61+ protocol sends the UT-D07B's start command on every Bluetooth link, ad
 
 With no meter named, the Bluetooth search falls back to peers the platform knows (paired or cached) when the scan misses. It tries whichever the platform lists first, so a cached built-in meter that is asleep costs a ~10 s connect and "not found" before a known UT-D07B is tried. Trying known adapters ahead of known built-in meters fixes that, once a report shows it matters.
 
-### Cables described by head and line settings
+### Cables grouped by the meters they serve
 
 **Complexity:** Medium
 
-A named meter falls back to any cable that relays UART bytes ([Opening a meter](architecture.md#opening-a-meter)), but relaying is not enough: the cable's head must fit the meter's optical port, and its bridge must run the meter's line settings, where our init sets the CP2110 to 9600 baud and the CH9325 to 2400, then 19200. A fallback that cannot fit costs an open and a timeout, not a wrong reading. Describing each cable by chip, head and line settings, and each entry by the heads it fits, would let the fallback and detection skip those cables, once the time matters.
+A named meter falls back to any cable that relays UART bytes ([Opening a meter](architecture.md#opening-a-meter)), even one our bridge setup cannot run at the meter's rate: a UT-D09 meter on the CH9325 (2400, then 19200 baud) or a UT-D04 meter on the CP2110 (fixed at 9600). That open times out on the meter instead of finding no cable, and keeps a meter with a Bluetooth adapter off the radio. Tagging each of `KNOWN_TRANSPORTS` with the cable it ships in (UT-D09: CP2110, CH9329; UT-D04: CH9325) and falling back only within the listed cables' group fixes both, with `--adapter` still taking any relaying cable. Every reported pairing stays in its group, as do UNI-T's cable pages and vendor library (ut8803 spec §1.3), but the UT-D04 side rests on the UT804 alone ([#16](https://github.com/antoinecellerier/dmm-tools/issues/16)), and the narrowing would lose a UT-D04 meter on a CH9329 that stores the meter's rate. Worth doing once a report shows the timeout, or a second meter is confirmed on a UT-D04.
 
 ### Bluetooth notifications read in the background
 
