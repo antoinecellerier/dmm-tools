@@ -18,6 +18,18 @@ Find them in the [dev build listing](https://github.com/antoinecellerier/dmm-too
 
 Dev builds may be broken, and only the newest seven are kept. When reporting a problem, include the version you're running, from `dmm-cli --version`.
 
+### Android (experimental)
+
+An experimental build of the GUI runs on phones and tablets with Android 7 or later and a 64-bit ARM processor. It reaches meters over Bluetooth and, on a device that can host USB, over their cable. The [Android port note](research/android-port.md#experimental-build) lists what was tried.
+
+1. On the phone, download the file ending in `-android-arm64.apk` from the newest [dev build](#dev-builds), or from a release from v0.11.0 on, and open it.
+2. Android asks whether the browser or file manager may install unknown apps. Allow it, then choose **Install**. Play Protect may offer to scan the app first.
+3. On first start, allow the permission Android asks for: it covers the search for Bluetooth meters. Plug a cable in and Android offers to open dmm-tools for it.
+
+Where Android refuses apps from unverified developers, either [allow them in Android's settings](https://support.google.com/android/answer/17588095), or install from a computer with `adb install <file>.apk`.
+
+To update, install a newer file the same way; settings are kept. The app shows no update notice.
+
 ## Platform setup
 
 ### Linux — udev rule
@@ -178,6 +190,10 @@ To allow both binaries at once, run this in the extracted folder instead:
 ```sh
 xattr -dr com.apple.quarantine .
 ```
+
+### "App not installed" (Android)
+
+The phone's processor is not 64-bit ARM, or it holds a copy of dmm-tools built on another machine. Uninstall that copy, then install again.
 
 ### GUI shows a black screen or won't render
 

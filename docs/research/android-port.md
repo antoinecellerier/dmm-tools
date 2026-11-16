@@ -105,7 +105,9 @@ What it showed about Android:
   again returns to it, and it ends the process when it finishes. Back
   sends the root activity to the background on Android 12, so that last
   path ran on the second phone only: swiped away from the recent
-  applications, the process ended.
+  applications, the process ended. It ends before the native side hears
+  of it, so a recording not exported goes without the question a desktop
+  asks before closing.
 - The status bar covered the top bar (egui #7748); the activity is full
   screen.
 - The kernel binds the CP2110 to `usbhid`, and `/dev/hidraw*` is root's
@@ -134,9 +136,9 @@ What it showed about Android:
 
 Not done or not tested: the CH9329, CH9325 and BU-86X cables, a meter that
 sends unasked on a cable, two cables at once, choosing where an export
-goes, saving a theme, the soft keyboard, the system clipboard, a layout for
-a phone screen, Android versions other than 12 and 14, other meters, a
-release build or signing, CI. The texts are the desktop's but for three
+goes, naming a saved theme, the soft keyboard, the system clipboard, a
+layout for a phone screen, Android versions other than 12 and 14, other
+meters, the CI jobs that build and sign the package. The texts are the desktop's but for three
 errors that name the phone, its cable prompt or its radio, so help and
 hovers still speak of a computer.
 
@@ -508,6 +510,12 @@ experimental build `jni` stays in `crates/dmm-android`, and `nusb` joins
 - Why the first link after an adapter's power-up carried no data.
 - Whether the application comes back with its settings after the exit on
   finish, and what a phone layout needs.
+- How to end the process without dropping a recording that was not
+  exported: on Android 11 and older, Back finishes the activity.
+- Whether a meter that sends unasked on a cable comes back from a pause
+  with old readings. The input queue holds 64 reports and then holds the
+  device back, where a desktop's HID driver keeps reading; what the bridge
+  kept meanwhile would arrive after the queue was emptied.
 - Keeping the system's status bar on screen as an option: the margin that
   clears the rounded corners could carry the bar's height too, read from
   the window's insets by the activity.

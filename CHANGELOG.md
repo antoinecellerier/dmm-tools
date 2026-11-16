@@ -4,6 +4,7 @@
 
 ### GUI
 
+- **dmm-gui runs on Android, as an experimental APK** — over Bluetooth and USB cables; `docs/setup.md` says how to install it.
 - **Reference values take a unit, kept through auto-range steps and exports** — `1 Ω`, `4.7k` or `10 mohm`; a bare number takes the plotted unit.
 - **Alarm limits take a unit, and then watch only that quantity** — `4980 mV` or `10 kohm`; a bare number stays in the base unit.
 - **Quitting asks first when a recording or its markers aren't exported** — the close button, `Ctrl+Q` and `Ctrl+W` dropped them unasked.
