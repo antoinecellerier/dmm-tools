@@ -7,6 +7,7 @@ use std::sync::Arc;
 use std::sync::atomic::Ordering;
 
 use super::App;
+use crate::a11y::ResponseA11yExt;
 
 impl App {
     pub(super) fn open_whats_new(&mut self) {
@@ -47,7 +48,8 @@ impl App {
             .with_title(title)
             .with_inner_size([520.0, 480.0]);
 
-        ctx.show_viewport_deferred(viewport_id, viewport_builder, move |ui, _class| {
+        let l10n = Arc::clone(&self.l10n);
+        ctx.show_viewport_deferred(viewport_id, viewport_builder, move |ui, class| {
             use egui::{Key, Modifiers};
             let ctx = ui.ctx().clone();
             // The window is the changelog, which is English whatever the
@@ -55,19 +57,23 @@ impl App {
             ctx.accesskit_node_builder(egui::accesskit_root_id(), |node| {
                 node.set_language(dmm_shared::l10n::EN_US.id);
             });
-            let close_requested = ctx.input(|i| i.viewport().close_requested())
+            let mut close_requested = ctx.input(|i| i.viewport().close_requested())
                 || ctx.input_mut(|i| {
                     i.consume_key(Modifiers::NONE, Key::Escape)
                         || i.consume_key(Modifiers::COMMAND, Key::W)
                 });
-            if close_requested {
-                closed.store(true, Ordering::Relaxed);
-                ctx.send_viewport_cmd(egui::ViewportCommand::Close);
-                // Only the root reads `closed`, and with no reading coming in
-                // (paused, disconnected) it would wait for the next input.
-                ctx.request_repaint_of(egui::ViewportId::ROOT);
-            }
             egui::CentralPanel::default().show(ui, |ui| {
+                // Where the platform has one window (Android), egui draws
+                // this one inside it, with no title bar button to close it
+                // and perhaps no keyboard: the window brings its own.
+                if class == egui::ViewportClass::EmbeddedWindow {
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Min), |ui| {
+                        close_requested |= ui
+                            .button("\u{00D7}")
+                            .a11y_label(&dmm_shared::tr!(l10n, "whats-new-close.a11y"))
+                            .clicked();
+                    });
+                }
                 egui::ScrollArea::vertical().show(ui, |ui| {
                     let mut cache = cache
                         .lock()
@@ -75,6 +81,17 @@ impl App {
                     crate::changelog::show_changelog(ui, &mut cache, version);
                 });
             });
+            if close_requested {
+                closed.store(true, Ordering::Relaxed);
+                // Drawn inside the root's window, the command would be the
+                // root's: it would close the application.
+                if class != egui::ViewportClass::EmbeddedWindow {
+                    ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+                }
+                // Only the root reads `closed`, and with no reading coming in
+                // (paused, disconnected) it would wait for the next input.
+                ctx.request_repaint_of(egui::ViewportId::ROOT);
+            }
         });
     }
 }
