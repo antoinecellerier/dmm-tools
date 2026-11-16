@@ -59,16 +59,28 @@ impl App {
             // So the dialog can open there on a first save.
             let _ = std::fs::create_dir_all(dir);
         }
-        let file_name = match self.settings.active_theme() {
-            Some(theme) => theme
-                .file
-                .clone()
-                .unwrap_or_else(|| format!("{}.json", named::file_stem(&theme.name))),
+        let active = self.settings.active_theme();
+        let own_file = active.and_then(|theme| theme.file.clone());
+        #[cfg(target_os = "android")]
+        let replaces_own = own_file.is_some();
+        let file_name = own_file.unwrap_or_else(|| match active {
+            Some(theme) => format!("{}.json", named::file_stem(&theme.name)),
             None => "my-theme.json".to_string(),
+        });
+        // Android's stand-in for the dialog saves under the name offered
+        // without asking. Over the file of the user's theme in use, that is
+        // saving it; any other name must be a free one, or the save would
+        // put a file in a built-in's place, or over a theme not on screen.
+        #[cfg(target_os = "android")]
+        let file_name = match &dir {
+            Some(dir) if !replaces_own => crate::file_dialog::unused(dir.join(&file_name))
+                .file_name()
+                .map_or(file_name, |f| f.to_string_lossy().into_owned()),
+            _ => file_name,
         };
         let file_type = tr!(self.l10n, "colors-save-file-type").into_owned();
         self.theme_save.dialog = Some(Task::spawn("theme-save-dialog", ctx, move || {
-            let mut dialog = rfd::FileDialog::new()
+            let mut dialog = crate::file_dialog::FileDialog::new()
                 .set_file_name(file_name)
                 .add_filter(file_type, &["json"]);
             if let Some(dir) = dir {

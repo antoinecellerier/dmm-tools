@@ -399,7 +399,8 @@ impl App {
         let last = self.settings.last_folder.clone();
         let file_type = tr!(self.l10n, "import-file-type").into_owned();
         self.source.import_dialog = Some(Task::spawn("import-dialog", ctx, move || {
-            let mut dialog = rfd::FileDialog::new().add_filter(file_type, &IMPORT_EXTENSIONS);
+            let mut dialog =
+                crate::file_dialog::FileDialog::new().add_filter(file_type, &IMPORT_EXTENSIONS);
             if let Some(dir) = dialog_folder(last.as_deref()) {
                 dialog = dialog.set_directory(dir);
             }
@@ -430,6 +431,12 @@ impl App {
     /// Keep the folder of a file Import… or Export… picked for the next
     /// dialog to open in.
     pub(super) fn remember_folder(&mut self, file: &Path) {
+        // Android's dialogs open in no folder of ours, and the file an
+        // import hands over is a copy in the cache: remembered, every later
+        // export would be saved beside it, where no file manager looks.
+        if cfg!(target_os = "android") {
+            return;
+        }
         let Some(folder) = file.parent().filter(|p| !p.as_os_str().is_empty()) else {
             return;
         };

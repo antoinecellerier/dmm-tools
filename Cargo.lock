@@ -1166,6 +1166,7 @@ dependencies = [
  "unicode-script",
  "ureq",
  "windows-sys 0.61.2",
+ "winit",
  "winresource",
 ]
 

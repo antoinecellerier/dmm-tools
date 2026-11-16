@@ -609,45 +609,49 @@ impl App {
         // Always on top last: its Wayland caption is a sentence that wraps
         // rather than running off the edge of a narrow window, and egui
         // can't line a widget up beside a wrapped label's last line.
-        ui.horizontal_wrapped(|ui| {
-            if setting_checkbox(
-                ui,
-                &mut self.settings.hide_decorations,
-                &tr!(l10n, "settings-hide-decorations"),
-                &tr!(
+        // Neither row on Android: the app is the screen there, with no title
+        // bar to hide and nothing to stay on top of, and both are ignored.
+        if !cfg!(target_os = "android") {
+            ui.horizontal_wrapped(|ui| {
+                if setting_checkbox(
+                    ui,
+                    &mut self.settings.hide_decorations,
+                    &tr!(l10n, "settings-hide-decorations"),
+                    &tr!(
+                        l10n,
+                        "settings-hide-decorations.hover",
+                        keys = Shortcut::ToggleDecorations.keys(ui.ctx(), l10n)
+                    ),
+                ) {
+                    self.apply_decorations(ui.ctx());
+                }
+                // Greyed rather than hidden on Wayland, and the saved value is
+                // left alone: a `true` written on an X11 session still applies
+                // there.
+                let response = wrapped_checkbox(
+                    ui,
+                    !self.on_wayland,
+                    &mut self.settings.always_on_top,
+                    &tr!(l10n, "settings-always-on-top"),
+                )
+                .on_hover_text(tr!(
                     l10n,
-                    "settings-hide-decorations.hover",
-                    keys = Shortcut::ToggleDecorations.keys(ui.ctx(), l10n)
-                ),
-            ) {
-                self.apply_decorations(ui.ctx());
-            }
-            // Greyed rather than hidden on Wayland, and the saved value is
-            // left alone: a `true` written on an X11 session still applies
-            // there.
-            let response = wrapped_checkbox(
-                ui,
-                !self.on_wayland,
-                &mut self.settings.always_on_top,
-                &tr!(l10n, "settings-always-on-top"),
-            )
-            .on_hover_text(tr!(
-                l10n,
-                "settings-always-on-top.hover",
-                keys = Shortcut::ToggleAlwaysOnTop.keys(ui.ctx(), l10n)
-            ))
-            .on_disabled_hover_text(tr!(l10n, "settings-always-on-top.wayland"));
-            if response.changed() {
-                self.apply_always_on_top(ui.ctx());
-            }
-            if self.on_wayland {
-                ui.label(
-                    RichText::new(tr!(l10n, "settings-always-on-top-wayland"))
-                        .small()
-                        .color(ui.visuals().weak_text_color()),
-                );
-            }
-        });
+                    "settings-always-on-top.hover",
+                    keys = Shortcut::ToggleAlwaysOnTop.keys(ui.ctx(), l10n)
+                ))
+                .on_disabled_hover_text(tr!(l10n, "settings-always-on-top.wayland"));
+                if response.changed() {
+                    self.apply_always_on_top(ui.ctx());
+                }
+                if self.on_wayland {
+                    ui.label(
+                        RichText::new(tr!(l10n, "settings-always-on-top-wayland"))
+                            .small()
+                            .color(ui.visuals().weak_text_color()),
+                    );
+                }
+            });
+        }
 
         // Only downloaded builds ask, so only they have the row.
         if self.update_check.applies() {

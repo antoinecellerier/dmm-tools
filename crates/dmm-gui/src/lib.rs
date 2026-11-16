@@ -6,6 +6,7 @@ mod changelog;
 #[cfg(target_os = "linux")]
 mod desktop_entry;
 mod display;
+mod file_dialog;
 mod graph;
 mod l10n;
 mod listbox;
@@ -121,6 +122,7 @@ struct Args {
 /// What `--renderer` takes.
 #[derive(Clone, Copy, ValueEnum)]
 enum RendererFlag {
+    #[cfg(not(target_os = "android"))]
     Wgpu,
     Glow,
 }
@@ -248,7 +250,7 @@ pub(crate) struct CliOverrides {
     pub(crate) update_notice: Option<app::update_check::Tag>,
 }
 
-#[cfg(test)]
+#[cfg(any(test, target_os = "android"))]
 impl CliOverrides {
     /// No flag given: every override unset, the clock real. Tests set the
     /// flag they are about with struct-update syntax.
@@ -466,6 +468,7 @@ fn parse_args(l: &Localizer, saved: &dmm_shared::SharedSettings) -> CliOverrides
     });
 
     let renderer = args.renderer.map(|r| match r {
+        #[cfg(not(target_os = "android"))]
         RendererFlag::Wgpu => eframe::Renderer::Wgpu,
         RendererFlag::Glow => eframe::Renderer::Glow,
     });
@@ -634,6 +637,101 @@ fn free_own_console() {
     }
 }
 
+/// The renderer a session starts on unless `--renderer` names one.
+#[cfg(not(target_os = "android"))]
+const FIRST_RENDERER: eframe::Renderer = eframe::Renderer::Wgpu;
+/// The Android build has glow alone.
+#[cfg(target_os = "android")]
+const FIRST_RENDERER: eframe::Renderer = eframe::Renderer::Glow;
+
+/// The handle `android_main` receives and [`run_android`] takes.
+#[cfg(target_os = "android")]
+pub use winit::platform::android::activity::AndroidApp;
+
+#[cfg(target_os = "android")]
+pub use file_dialog::FilePicker;
+
+/// What the Android entry point decides before the window opens, in place
+/// of a command line.
+#[cfg(target_os = "android")]
+pub struct AndroidStart {
+    /// Open on the simulated meter, for a run with no meter at hand.
+    pub mock: bool,
+    /// Whether Bluetooth may be used this session.
+    pub bluetooth: bool,
+    /// What Import… asks for its file: the system's picker, which only the
+    /// activity's Java side can show.
+    pub pick_file: Option<FilePicker>,
+}
+
+/// Where exports go on Android, which has no save dialog here: a
+/// `dmm-tools` folder in the shared Documents, where a file manager shows
+/// them, if the system lets the application write there (Android 11 and
+/// later do, for files it makes itself); else the application's own folder
+/// on shared storage.
+#[cfg(target_os = "android")]
+fn android_save_folder(app: &AndroidApp) -> Option<PathBuf> {
+    let shared = std::env::var_os("EXTERNAL_STORAGE").map(PathBuf::from);
+    let documents = shared.map(|root| root.join("Documents").join("dmm-tools"));
+    documents
+        .filter(|dir| std::fs::create_dir_all(dir).is_ok())
+        .or_else(|| app.external_data_path())
+}
+
+/// Run the application in an Android activity. Call it once, from
+/// `android_main`, after `dmm_shared::set_config_dir` and the logger: winit
+/// builds one event loop per process, so there is no retry on another
+/// renderer here.
+#[cfg(target_os = "android")]
+pub fn run_android(app: AndroidApp, start: AndroidStart) -> eframe::Result<()> {
+    if let Some(dir) = android_save_folder(&app) {
+        log::info!("exports are saved in {}", dir.display());
+        file_dialog::set_save_folder(dir);
+    }
+    if let Some(picker) = start.pick_file {
+        file_dialog::set_file_picker(picker);
+    }
+    let (mut settings, unreadable) = settings::Settings::load();
+    let l10n = Arc::new(l10n::startup(&settings.shared.language));
+    l10n.log_load_report();
+    settings.load_problem = unreadable.map(settings::Unreadable::keep);
+    // No folder is remembered here (`App::remember_folder`); a build that
+    // did may have left the import cache in the file.
+    settings.last_folder = None;
+    if settings.named_theme.is_some() {
+        read_themes_for_first_frame(&mut settings, None);
+    }
+    let overrides = CliOverrides {
+        device: start.mock.then(|| "mock".to_string()),
+        no_bluetooth: !start.bluetooth,
+        ..CliOverrides::none()
+    };
+    let options = eframe::NativeOptions {
+        android_app: Some(app),
+        renderer: FIRST_RENDERER,
+        system_font_fallback: false,
+        ..Default::default()
+    };
+    eframe::run_native(
+        "dmm-tools",
+        options,
+        Box::new(move |cc| Ok(Box::new(app::App::new(cc, settings, overrides, l10n)))),
+    )
+}
+
+/// Read the themes folder before the first frame, or take the `catalog`
+/// already read from it. Only for a session that draws a named theme, which
+/// may be one of the folder's files, so that frame is already in the right
+/// colours; for any other, opening Settings is the first read.
+fn read_themes_for_first_frame(
+    settings: &mut settings::Settings,
+    catalog: Option<theme::named::ThemeCatalog>,
+) {
+    let catalog = catalog.unwrap_or_else(theme::named::discover_user);
+    theme::named::log_skipped(&catalog, None);
+    settings.user_themes = std::sync::Arc::new(catalog);
+}
+
 /// Run the desktop application: the whole of the binary's `main`.
 pub fn run() -> eframe::Result<()> {
     #[cfg(windows)]
@@ -666,23 +764,14 @@ pub fn run() -> eframe::Result<()> {
         .expect("failed to load app icon");
 
     let explicit_renderer = overrides.renderer.is_some();
-    let renderer = overrides.renderer.unwrap_or(eframe::Renderer::Wgpu);
+    let renderer = overrides.renderer.unwrap_or(FIRST_RENDERER);
 
-    // The themes folder is read before the first frame only when this
-    // session draws a named theme, which may be one of its files, so that
-    // frame is already in the right colours. Otherwise opening Settings is
-    // the first read.
     let named = match &overrides.theme {
         Some(choice) => matches!(choice, settings::ThemeChoice::Named(_)),
         None => settings.named_theme.is_some(),
     };
     if named {
-        let catalog = overrides
-            .user_themes
-            .clone()
-            .unwrap_or_else(theme::named::discover_user);
-        theme::named::log_skipped(&catalog, None);
-        settings.user_themes = std::sync::Arc::new(catalog);
+        read_themes_for_first_frame(&mut settings, overrides.user_themes.clone());
     }
     // eframe clamps the size to the largest monitor. The title bar is
     // hidden here rather than by the first frame's command, which on

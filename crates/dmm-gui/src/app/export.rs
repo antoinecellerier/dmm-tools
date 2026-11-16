@@ -434,7 +434,7 @@ impl App {
         let file_type = format.file_type(&self.l10n);
         let open_dialog = |default_name| {
             Task::spawn("export-dialog", ctx, move || {
-                let mut dialog = rfd::FileDialog::new()
+                let mut dialog = crate::file_dialog::FileDialog::new()
                     .set_file_name(default_name)
                     .add_filter(file_type, &[format.extension()]);
                 if let Some(dir) = super::import::dialog_folder(last.as_deref()) {
