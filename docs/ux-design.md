@@ -26,7 +26,7 @@ one.
 program, so `--help`, `--completions`, redirection and logs work from a
 shell as they do elsewhere; started from Explorer, it lets go of the console
 Windows made for it, whose closing would end the app (`free_own_console` in
-`main.rs`). A GUI-subsystem build would print after the prompt returns.
+`lib.rs`). A GUI-subsystem build would print after the prompt returns.
 
 ## GUI layout
 

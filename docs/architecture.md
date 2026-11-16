@@ -433,7 +433,7 @@ Protocol families are in [protocol.md](protocol.md); each family's internals are
 
 | Module | Responsibility |
 |---|---|
-| `main.rs` | Parses the command line, builds the first localizer, opens the window |
+| `lib.rs` | Parses the command line, builds the first localizer, opens the window; `main.rs` only calls it |
 | `app/mod.rs` | `App`, `ConnectionState`, the per-frame `ui` |
 | `app/connection.rs` | The acquisition thread and its channel types |
 | `app/messages.rs` | The UI side of the channel: connect, disconnect, drain |

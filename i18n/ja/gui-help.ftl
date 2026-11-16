@@ -1,6 +1,6 @@
 ### dmm-gui's --help: what the program and each option do.
 ###
-### Generated from the doc comments in crates/dmm-gui/src/main.rs by
+### Generated from the doc comments in crates/dmm-gui/src/lib.rs by
 ### `UPDATE_L10N=1 cargo test -p dmm-gui gui_help_ftl`: edit those, not this
 ### file. The run names each ID whose English changed. When the meaning changed
 ### too, delete that message from every language's gui-help.ftl, so it shows in

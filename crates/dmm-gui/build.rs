@@ -23,7 +23,7 @@ fn main() {
     }
 
     // Explorer, the Start menu and shortcuts read an exe's icon from its
-    // embedded resources; the window icon main.rs sets at runtime never
+    // embedded resources; the window icon lib.rs sets at runtime never
     // reaches them. The resource also carries the version shown in Properties.
     // scripts/make-ico.ps1 builds icon.ico from icon.svg.
     if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("windows") {

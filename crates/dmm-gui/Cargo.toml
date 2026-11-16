@@ -6,6 +6,11 @@ edition.workspace = true
 license.workspace = true
 description = "GUI application for USB and Bluetooth digital multimeters"
 
+# Doc comments here are prose for the reader of the code, with no examples
+# to run.
+[lib]
+doctest = false
+
 [dependencies]
 dmm-lib = { path = "../dmm-lib" }
 dmm-shared = { path = "../dmm-shared" }
@@ -38,7 +43,7 @@ directories.workspace = true
 ureq = { version = "3", default-features = false, features = ["platform-verifier", "rustls-no-provider"], optional = true }
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"], optional = true }
 
-# Detaches from the console Windows opens for an Explorer launch (main.rs).
+# Detaches from the console Windows opens for an Explorer launch (lib.rs).
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61", features = ["Win32_System_Console"] }
 

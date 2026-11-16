@@ -243,7 +243,7 @@ impl App {
     ///
     /// A replay's frames come from the file whatever the row names — Connect
     /// re-opens the recording — and the clock flags bend session time, which
-    /// only the mock can be asked to run on (`main.rs` refuses them beside a
+    /// only the mock can be asked to run on (`lib.rs` refuses them beside a
     /// hardware `--device`), so picking a meter would leave the session timing
     /// its recording and dating its exports by a clock no meter ever ran on.
     fn device_row_pin<'a>(&self, l10n: &'a Localizer) -> Option<Cow<'a, str>> {

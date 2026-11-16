@@ -102,7 +102,7 @@ const GUI: &[Resource] = &[
 ];
 
 /// What each option does, as `--help` says it: generated from the doc
-/// comments in `main.rs` by the `gui_help_ftl` test, so the ID scan leaves
+/// comments in `lib.rs` by the `gui_help_ftl` test, so the ID scan leaves
 /// it out of its unused check, as it does `lib.ftl`.
 const GUI_HELP: &[Resource] = &[
     dmm_shared::ftl!("en-US", "gui-help.ftl"),
