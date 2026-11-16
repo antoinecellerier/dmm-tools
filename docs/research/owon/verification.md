@@ -282,9 +282,6 @@ and each still wants a capture of our own.
 - The CMS's MaxMin sub-value against the LCD's Max and Min, and what sets MAX
   or MIN: F1 set either (§9.4) — settles the sub-value's label, "Max" under MAX
   and "Min" under MIN. Needs `maxmin` twice, the LCD's three values noted. (#45)
-- The CMS's Hz/A sub-value with a current in the jaws: AC A read 0 in every
-  frame so far (§9.4) — confirms its scale. Needs `aca_hz` clamped around a
-  conductor carrying AC. (#45)
 - The point a CMS061 sends on its top current range and over 200 µF: 600A
   and 2000µF by its manual, 600.0A and 2.000mF by UT217's — decides those
   rows' keys (`owon/specs.rs`). Needs `dca` over 200 A, `cap` over 200 µF. (#45)

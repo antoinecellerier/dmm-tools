@@ -912,8 +912,11 @@ sub-value, and in duty the two swapped, its LCD showing both with the
 selected one in the large digits [HARDWARE]. Duty is tenths of a percent
 with decimal code 1: `3B 01` read 31.5 %, as its LCD showed beside 30.09 kHz
 [HARDWARE]. In Hz/A it sends Hz as the main reading and AC A as the
-sub-value, and its LCD shows Hz in the large digits [HARDWARE]; the AC A
-was 0 in every frame, so its scale is [UNVERIFIED]. Also the frequency or duty beside AC V and Hz; W with VA, V, A, PF
+sub-value, and its LCD shows Hz in the large digits [HARDWARE]. The AC A
+takes AC A's own scale: clamped around a conductor, `C1 01` read 4.49 A
+beside 49.99 Hz, as its LCD showed, and entering Hz/A carried on the 3.61 A
+the main reading had just shown (#45, UT217A over Bluetooth, @jkay-png)
+[HARDWARE]. Also the frequency or duty beside AC V and Hz; W with VA, V, A, PF
 or Hz on the power functions; VAC or VDC beside AC+DC (VC915-UM p.73); the
 voltage in Motor (p.76); irradiance or temperature in PV mode (VC925-UM
 p.69). Cites: OW65-UM p.26/21-27/22; OW67-UM p.14/9, p.27/22-32/27;

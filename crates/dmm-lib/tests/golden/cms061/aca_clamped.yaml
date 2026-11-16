@@ -1,0 +1,11 @@
+# AC A clamped around a conductor carrying about 3.6 A
+# Captured 2026-11-16 from a UNI-T UT217A (the CMS061) over Bluetooth (issue #45, @jkay-png, 0.11.0-dev 75fbd5a9 report, step aca).
+raw_hex: "E2 00 F0 6C 01 00 A0 01 F0 20 CC 07 04 00 00"
+mode: "AC A"
+value: "3.64"
+unit: "A"
+range_label: ""
+resolution: "0.01A"
+flags:
+  auto_range: true
+aux: []

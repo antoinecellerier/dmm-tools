@@ -1412,7 +1412,9 @@ mod tests {
         const HZ: &str = "Frequency (Hz)";
         // By file: the table's title and the printed range, if any.
         type Want = Option<(&'static str, Option<&'static str>)>;
-        let want: [(&str, Want); 33] = [
+        let want: [(&str, Want); 35] = [
+            ("aca_clamped.yaml", Some(("AC Current (A)", Some("20.00A")))),
+            ("aca_hz_clamped.yaml", Some((HZ, Some("200.00Hz")))),
             ("aca_hz.yaml", Some((HZ, Some("200.00Hz")))),
             ("aca.yaml", Some(("AC Current (A)", Some("20.00A")))),
             ("acmv.yaml", Some(("AC Voltage (V)", Some("200.00mV")))),

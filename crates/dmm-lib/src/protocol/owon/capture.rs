@@ -1304,7 +1304,8 @@ fn cms() -> Vec<CaptureStep> {
 /// sub order is confirmed, and its scale by a 31.5 % beside 30.09 kHz. EF
 /// rests on the first capture's frames: its second run's step filed before
 /// the leads could move. The scope's frames carried no reading at an LCD
-/// reading of Rms 1.77 V. Hz/A's large digits showed Hz, as decoded. Every
+/// reading of Rms 1.77 V. Hz/A's large digits showed Hz, as decoded, and a
+/// later run clamped around a conductor confirmed its AC A beside them. Every
 /// key took effect from the state its step starts from, Max/Min's from a
 /// manual range rather than Auto. MaxMin waits for
 /// the LCD's values: its sub-value came under MAX in two runs, MIN in one.

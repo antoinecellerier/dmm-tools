@@ -1,0 +1,14 @@
+# Hz/A clamped around a conductor carrying about 4.5 A: Hz in the large digits, AC A beside it
+# Captured 2026-11-16 from a UNI-T UT217A (the CMS061) over Bluetooth (issue #45, @jkay-png, 0.11.0-dev 75fbd5a9 report, step aca_hz).
+raw_hex: "A2 11 F0 87 13 00 E2 10 F0 C1 01 00 04 00 00"
+mode: "Hz"
+value: "49.99"
+unit: "Hz"
+range_label: ""
+resolution: "0.01Hz"
+flags:
+  auto_range: true
+aux:
+  - label: "AC A"
+    value: "4.49"
+    unit: "A"
