@@ -676,6 +676,9 @@ pub struct AndroidStart {
     /// it has no session, which opens the cable or says why it does not
     /// open.
     pub cable_offered: Option<CableOffer>,
+    /// Hides the system's status and navigation bars, or shows them again,
+    /// which only the activity's Java side can do: the Full screen setting.
+    pub full_screen: Option<FullScreen>,
 }
 
 /// See [`AndroidStart::cable_offered`]. Called on the window's thread,
@@ -691,6 +694,24 @@ static CABLE_OFFER: std::sync::OnceLock<CableOffer> = std::sync::OnceLock::new()
 #[cfg(target_os = "android")]
 pub(crate) fn take_cable_offer() -> bool {
     CABLE_OFFER.get().is_some_and(|offered| offered())
+}
+
+/// See [`AndroidStart::full_screen`]. Called on the window's thread.
+#[cfg(target_os = "android")]
+pub type FullScreen = Box<dyn Fn(bool) + Send + Sync>;
+
+#[cfg(target_os = "android")]
+static FULL_SCREEN: std::sync::OnceLock<FullScreen> = std::sync::OnceLock::new();
+
+/// Hide the system's bars, or show them again
+/// ([`AndroidStart::full_screen`]); nothing off Android.
+pub(crate) fn set_full_screen(on: bool) {
+    #[cfg(target_os = "android")]
+    if let Some(set) = FULL_SCREEN.get() {
+        set(on);
+    }
+    #[cfg(not(target_os = "android"))]
+    let _ = on;
 }
 
 /// The activity's handle, kept for [`content_rect_px`].
@@ -755,6 +776,12 @@ pub fn run_android(app: AndroidApp, start: AndroidStart) -> eframe::Result<()> {
     settings.last_folder = None;
     if settings.named_theme.is_some() {
         read_themes_for_first_frame(&mut settings, None);
+    }
+    if let Some(set) = start.full_screen {
+        let _ = FULL_SCREEN.set(set);
+    }
+    if settings.full_screen {
+        set_full_screen(true);
     }
     let overrides = CliOverrides {
         device: start.mock.then(|| "mock".to_string()),

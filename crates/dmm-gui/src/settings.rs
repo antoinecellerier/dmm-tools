@@ -407,6 +407,9 @@ pub struct Settings {
     /// Hide window decorations (title bar, borders).
     #[serde(default)]
     pub hide_decorations: bool,
+    /// On Android, hide the system's status and navigation bars.
+    #[serde(default)]
+    pub full_screen: bool,
     /// UI zoom level as a percentage of the scale of the monitor the window
     /// is on (100 = that monitor's scale).
     pub zoom_pct: u32,
@@ -550,6 +553,7 @@ impl Default for Settings {
             auto_connect: true,
             always_on_top: false,
             hide_decorations: false,
+            full_screen: false,
             zoom_pct: 100,
             sample_interval_ms: 0,
             max_samples: DEFAULT_MAX_SAMPLES,
@@ -1151,6 +1155,7 @@ mod tests {
             auto_connect: false,
             always_on_top: true,
             hide_decorations: true,
+            full_screen: true,
             zoom_pct: 150,
             sample_interval_ms: 500,
             max_samples: 2_000_000,
@@ -1192,6 +1197,7 @@ mod tests {
         assert!(deserialized.spec_fields.input_impedance);
         assert!(deserialized.always_on_top);
         assert!(deserialized.hide_decorations);
+        assert!(deserialized.full_screen);
         assert_eq!(deserialized.zoom_pct, 150);
         assert_eq!(deserialized.sample_interval_ms, 500);
         assert_eq!(deserialized.max_samples, 2_000_000);

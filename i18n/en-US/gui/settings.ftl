@@ -182,6 +182,11 @@ settings-zoom-chip =
 # those that step the zoom.
 settings-zoom-reset-chip =
     .hover = Scale the GUI to 100% ({ $reset }, or { $step } to step)
+# On Android only, in place of the two checkboxes below: hides the bars
+# Android draws at the screen's edges, with the clock and the navigation
+# buttons.
+settings-full-screen = Full screen
+    .hover = Hide the status and navigation bars; a swipe from the screen's edge shows them
 # Window decorations are the title bar and border.
 settings-hide-decorations = Hide window decorations
     .hover = Borderless window — use { $keys } to toggle back

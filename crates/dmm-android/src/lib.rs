@@ -68,6 +68,7 @@ fn android_main(app: AndroidApp) {
 
     let activity = app.clone();
     let offers = app.clone();
+    let bars = app.clone();
     let start = AndroidStart {
         mock: set("debug.dmm.mock").as_deref() == Some("1"),
         bluetooth,
@@ -86,6 +87,11 @@ fn android_main(app: AndroidApp) {
                 log::debug!("no word of a USB cable's offer: {e}");
                 false
             })
+        })),
+        full_screen: Some(Box::new(move |on| {
+            if let Err(e) = set_full_screen(&bars, on) {
+                log::warn!("the system's bars stay as they are: {e}");
+            }
         })),
         pick_file: Some(Box::new(move || match pick_file(&activity) {
             Ok(picked) => picked,
@@ -254,6 +260,20 @@ fn open_usb(app: &AndroidApp, name: &str) -> Result<i32, jni::errors::Error> {
             &[JValue::Object(&name)],
         )?
         .i()
+    })
+}
+
+/// Hide the system's status and navigation bars, or show them again, by
+/// `MainActivity.setFullScreen`.
+fn set_full_screen(app: &AndroidApp, on: bool) -> Result<(), jni::errors::Error> {
+    with_activity(app, |env, activity| {
+        env.call_method(
+            activity,
+            jni_str!("setFullScreen"),
+            jni_sig!("(Z)V"),
+            &[JValue::Bool(on)],
+        )?
+        .v()
     })
 }
 

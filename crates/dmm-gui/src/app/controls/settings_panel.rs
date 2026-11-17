@@ -611,7 +611,17 @@ impl App {
         // can't line a widget up beside a wrapped label's last line.
         // Neither row on Android: the app is the screen there, with no title
         // bar to hide and nothing to stay on top of, and both are ignored.
-        if !cfg!(target_os = "android") {
+        // What it has to hide is the system's bars.
+        if cfg!(target_os = "android") {
+            if setting_checkbox(
+                ui,
+                &mut self.settings.full_screen,
+                &tr!(l10n, "settings-full-screen"),
+                &tr!(l10n, "settings-full-screen.hover"),
+            ) {
+                crate::set_full_screen(self.settings.full_screen);
+            }
+        } else {
             ui.horizontal_wrapped(|ui| {
                 if setting_checkbox(
                     ui,

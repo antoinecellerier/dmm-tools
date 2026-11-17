@@ -631,6 +631,12 @@ impl App {
                 Shortcut::AddMarkerAndNote => self.add_marker(true),
                 // Transient window state, deliberately not saved in settings:
                 // a session that ended fullscreen should not reopen that way.
+                // On Android the window is the screen already: the key is
+                // the Full screen setting, which hides the system's bars.
+                Shortcut::ToggleFullscreen if cfg!(target_os = "android") => {
+                    self.settings.full_screen = !self.settings.full_screen;
+                    crate::set_full_screen(self.settings.full_screen);
+                }
                 Shortcut::ToggleFullscreen => {
                     let on = ctx.input(|i| i.viewport().fullscreen.unwrap_or(false));
                     ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(!on));

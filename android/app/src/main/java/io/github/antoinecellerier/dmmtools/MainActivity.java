@@ -19,6 +19,9 @@ import android.provider.DocumentsContract;
 import android.provider.OpenableColumns;
 import android.view.Display;
 import android.view.RoundedCorner;
+import android.view.View;
+import android.view.WindowInsets;
+import android.view.WindowInsetsController;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
@@ -37,6 +40,8 @@ import org.xmlpull.v1.XmlPullParserException;
 /** The activity the native library (crates/dmm-android) draws in. */
 public class MainActivity extends NativeActivity {
     private static final int PICK_FILE = 1;
+    /** Whether the system's bars are to stay hidden (setFullScreen). */
+    private volatile boolean fullScreen;
     /** What the picker answered: the document, or this when none was picked. */
     private static final Uri NO_FILE = Uri.EMPTY;
     private final BlockingQueue<Uri> picked = new ArrayBlockingQueue<>(1);
@@ -134,6 +139,10 @@ public class MainActivity extends NativeActivity {
     @Override
     public void onWindowFocusChanged(boolean hasFocus) {
         super.onWindowFocusChanged(hasFocus);
+        if (hasFocus && fullScreen) {
+            // A dialog or the keyboard may have brought the bars back.
+            applyFullScreen();
+        }
         UsbManager manager = (UsbManager) getSystemService(Context.USB_SERVICE);
         if (!hasFocus || manager == null) {
             return;
@@ -269,6 +278,40 @@ public class MainActivity extends NativeActivity {
             registerReceiver(usbReceiver, filter, Context.RECEIVER_NOT_EXPORTED);
         } else {
             registerReceiver(usbReceiver, filter);
+        }
+    }
+
+    /**
+     * Hide the system's status and navigation bars, or show them again: the
+     * native side's Full screen setting. A swipe from the screen's edge
+     * shows hidden bars for a moment.
+     */
+    public void setFullScreen(boolean on) {
+        fullScreen = on;
+        runOnUiThread(this::applyFullScreen);
+    }
+
+    @SuppressWarnings("deprecation")
+    private void applyFullScreen() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            WindowInsetsController bars = getWindow().getInsetsController();
+            if (bars == null) {
+                return;
+            }
+            if (fullScreen) {
+                bars.setSystemBarsBehavior(
+                        WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
+                bars.hide(WindowInsets.Type.systemBars());
+            } else {
+                bars.show(WindowInsets.Type.systemBars());
+            }
+        } else {
+            // Before Android 11 the bars are the decor view's flags.
+            getWindow().getDecorView().setSystemUiVisibility(fullScreen
+                    ? View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+                            | View.SYSTEM_UI_FLAG_FULLSCREEN
+                            | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                    : 0);
         }
     }
 

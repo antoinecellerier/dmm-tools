@@ -30,6 +30,8 @@ Where Android refuses apps from unverified developers, either [allow them in And
 
 To update, install a newer file the same way; settings are kept. The top bar links to a newer build when one is out ([update checks](gui-reference.md#update-checks)).
 
+**Full screen** in Settings hides Android's status and navigation bars; a swipe from the screen's edge shows them.
+
 On Android 13 and later, Android's settings page for the app offers its languages. The app starts in the one picked there while its own Language setting is on Auto.
 
 ## Platform setup
