@@ -88,6 +88,8 @@ mod tests {
     /// 2026-09-15T12:30:05Z.
     const SECOND: u64 = 1_789_475_405;
 
+    /// `nanos` in whole 100 ns, the tick Windows' `SystemTime` counts in:
+    /// a finer one is lost before the time is written.
     fn at(nanos: u32) -> SystemTime {
         SystemTime::UNIX_EPOCH + Duration::new(SECOND, nanos)
     }
@@ -112,8 +114,8 @@ mod tests {
             "2026-09-15T14:30:05.250100+02:00"
         );
         assert_eq!(
-            written(250_000_001, 7200),
-            "2026-09-15T14:30:05.250000001+02:00"
+            written(250_000_100, 7200),
+            "2026-09-15T14:30:05.250000100+02:00"
         );
     }
 
@@ -136,7 +138,7 @@ mod tests {
 
     #[test]
     fn what_is_written_reads_back() {
-        for nanos in [0, 250_000_000, 250_100_000, 250_000_001] {
+        for nanos in [0, 250_000_000, 250_100_000, 250_000_100] {
             assert_eq!(parse(&rfc3339(at(nanos))).unwrap(), at(nanos));
         }
         assert_eq!(parse("2026-09-15T12:30:05Z").unwrap(), at(0));
