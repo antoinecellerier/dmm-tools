@@ -15,6 +15,7 @@
 - **The ⊞ button steps through big meter and minimal mode** — minimal mode needed `Ctrl+B`.
 - **A Mark button marks the reading on screen** — only the `N` key and the plot's right-click menu did.
 - **Graph and histogram readouts work under a finger** — the histogram showed none, and the hand covered the graph's.
+- **A tap keeps the graph's crosshair and readings on a touchscreen** — they went as the finger lifted.
 - **Ref, Alarm, Scale and Y-range fields underline values they won't use** — the hover says why.
 - **Failure notices name the meter picked in Settings and point to Auto-detect** — "No USB cable found" after a meter swap sent you to drivers.
 - **"No USB cable found" says when Bluetooth wasn't searched** — and how to switch the search on.

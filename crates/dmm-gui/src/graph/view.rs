@@ -599,6 +599,53 @@ impl Graph {
             .collect();
     }
 
+    /// Keep, move or drop the crosshair a tap leaves on the plot
+    /// ([`super::hover::Pin`]).
+    ///
+    /// A tap of a finger pins it where it landed, or moves it there; the ×
+    /// on its readout takes it away (`show_hover_readout`). It goes too with its history, when its time
+    /// scrolls out of view, when the menu opens over it, on the double tap
+    /// that resets the view, and on any click of a mouse, whose pointer
+    /// has a crosshair of its own. While the cursors are on a tap places
+    /// one of those.
+    fn pin_or_unpin(&mut self, ui: &Ui, plot_response: &egui::Response, transform: &PlotTransform) {
+        let menu_open = egui::Popup::is_id_open(ui.ctx(), super::menu::plot_menu_id());
+        let on_screen = self.pin_on_screen(transform, plot_response.rect);
+        if on_screen.is_none() || menu_open || plot_response.double_clicked() {
+            self.pin = None;
+        }
+        if !plot_response.clicked() || plot_response.double_clicked() {
+            return;
+        }
+        // The finger has already left the touches by the frame its tap is a
+        // click; the lift is still among the frame's events.
+        let by_touch = ui.input(|i| {
+            i.events.iter().any(|e| {
+                matches!(
+                    e,
+                    egui::Event::Touch {
+                        phase: egui::TouchPhase::End,
+                        ..
+                    }
+                )
+            })
+        });
+        let tapped = plot_response.interact_pointer_pos();
+        self.pin = match tapped {
+            _ if !by_touch || self.cursors.active || menu_open => None,
+            Some(pos) => {
+                let point = transform.value_from_position(pos);
+                Some(super::hover::Pin {
+                    t: point.x,
+                    y: point.y,
+                    epoch: self.history_epoch,
+                    on_reading: false,
+                })
+            }
+            None => self.pin,
+        };
+    }
+
     /// Process drag, zoom, and cursor-click interactions on the plot.
     pub(super) fn handle_interaction(
         &mut self,
@@ -719,6 +766,8 @@ impl Graph {
         if plot_response.double_clicked() {
             self.reset_view();
         }
+
+        self.pin_or_unpin(ui, plot_response, transform);
 
         // Cursor placement on click — snap to nearest data point. Not the
         // click that closes the plot's menu: that one only dismisses it.

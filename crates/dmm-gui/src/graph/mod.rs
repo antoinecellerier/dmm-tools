@@ -589,6 +589,8 @@ pub struct Graph {
     /// Whether a finger opened the open context menu, which then sits above
     /// the touch rather than under the hand.
     menu_by_touch: bool,
+    /// The crosshair a tap left on the plot ([`hover::Pin`]).
+    pin: Option<hover::Pin>,
 
     // -- Requests for the app, collected by the take_* methods --
     /// A **Show:** chip the user clicked since the last call, with whether
@@ -669,6 +671,7 @@ impl Graph {
             menu: None,
             menu_focus_pending: false,
             menu_by_touch: false,
+            pin: None,
             trace_choice: None,
             clicked_marker: None,
             menu_action: None,

@@ -144,6 +144,11 @@ graph-cursors-hint = click graph to place cursors
 ## The plot: the readout by the pointer, the labels on its lines, and the
 ## flags of markers along its bottom edge.
 
+# The × button on the readout of a crosshair that a tap on a touchscreen
+# left on the plot: it takes the crosshair and the readout away. Its name
+# for a screen reader.
+graph-unpin =
+    .a11y = Remove the crosshair
 # The readout by the pointer, under the time, inside a stretch where the
 # meter read over range (showed OL).
 graph-hover-overload = overload

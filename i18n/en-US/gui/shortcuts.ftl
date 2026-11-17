@@ -131,6 +131,11 @@ shortcuts-mouse-cursor = Place cursor A / B at nearest point
 shortcuts-mouse-menu = Mark, copy, cursors, reference lines, alarm
     .gesture = Right-click
     .touch = Long press
+# On a touchscreen only: a tap leaves the crosshair, the two lines that
+# cross on a reading, and the readings shown beside it, where the finger
+# was; the × beside the readings takes it away.
+shortcuts-touch-pin = Keep the crosshair and its readings there; × removes them
+    .gesture = Tap
 # The minimap is the strip under the graph showing all the readings:
 # dragging in it moves the view, dragging its edges resizes it.
 shortcuts-mouse-minimap = Jump to time / resize viewport

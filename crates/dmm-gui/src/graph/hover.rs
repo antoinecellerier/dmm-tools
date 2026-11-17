@@ -270,15 +270,32 @@ const FINGER_CLEARANCE: f32 = 48.0;
 /// fingertip's half.
 pub(super) const FINGER_GAP: f32 = 24.0;
 
+/// Where a tap on a touchscreen left the crosshair: a finger has no hover,
+/// so the readings it showed would go as it lifts. A point of the plot, in
+/// the history's `epoch` (`Graph::history_epoch`): a restart or a rescale
+/// of the history takes the pin with it.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(super) struct Pin {
+    pub(super) t: f64,
+    pub(super) y: f64,
+    pub(super) epoch: u64,
+    /// Whether `t` and `y` are the reading the crosshair snapped to. A tap
+    /// leaves the finger's point; the first frame that draws the pin puts
+    /// the reading in its place, so the pin stays on that reading however
+    /// the view moves, where a point beside the line would drift off it.
+    pub(super) on_reading: bool,
+}
+
 /// Where a readout for the point at `at` is anchored and which way it grows:
-/// beside a mouse pointer and downwards; for a finger, above it, clear of
-/// the hand. `top` is as high as the anchor may go.
+/// beside a mouse pointer and downwards; `by_touch`, for a finger or the
+/// crosshair one left, above it, clear of the hand. `top` is as high as the
+/// anchor may go.
 pub(super) fn readout_anchor(
-    ctx: &egui::Context,
+    by_touch: bool,
     at: egui::Pos2,
     top: f32,
 ) -> (egui::Pos2, [egui::RectAlign; 4]) {
-    if ctx.input(|i| i.any_touches()) {
+    if by_touch {
         let y = (at.y - FINGER_CLEARANCE).max(top);
         (
             egui::pos2(at.x, y),
@@ -308,14 +325,21 @@ pub(super) fn readout_anchor(
 /// right, or its left where there is no room, never over it: the dots on
 /// the line are what tie each row to its trace. Under a finger it sits
 /// above the touch ([`readout_anchor`]).
+///
+/// With `unpin`, the readout of a crosshair a tap pinned: it ends its first
+/// row with a × button of that accessible name, and the return says the
+/// button was pressed. The button is what makes the pin's way out visible;
+/// egui lets a tooltip take the pointer once it holds one.
 pub(super) fn show_hover_readout(
     plot: &egui::Response,
     at: egui::Pos2,
     time_label: &str,
     series: &[HoverSeries],
     lines: &[HoverRow],
-) {
-    let (anchor, sides) = readout_anchor(&plot.ctx, at, plot.rect.top());
+    by_touch: bool,
+    unpin: Option<&str>,
+) -> bool {
+    let (anchor, sides) = readout_anchor(by_touch, at, plot.rect.top());
     let mut tooltip = egui::Tooltip::always_open(
         plot.ctx.clone(),
         plot.layer_id,
@@ -328,16 +352,35 @@ pub(super) fn show_hover_readout(
         .width(width)
         .align(sides[0])
         .align_alternatives(&sides);
-    tooltip.gap(12.0).show(|ui| {
+    let shown = tooltip.gap(12.0).show(|ui| {
         ui.set_max_width(width);
-        ui.label(time_label);
+        // A row only for the pinned readout: a row is taller than a label,
+        // and the pointer's readout stays as it was.
+        let unpinned = match unpin {
+            None => {
+                ui.label(time_label);
+                false
+            }
+            Some(name) => {
+                ui.horizontal(|ui| {
+                    use crate::a11y::ResponseA11yExt;
+                    ui.label(time_label);
+                    // U+00D7, as the other close buttons: the fonts have no
+                    // U+2715.
+                    ui.button("\u{00D7}").a11y_label(name).clicked()
+                })
+                .inner
+            }
+        };
         let ground = ui.visuals().window_fill;
         for (i, line, _) in lines {
             let color = crate::theme::legible_on(series[*i].color, ground)
                 .unwrap_or(ui.visuals().text_color());
             ui.label(egui::RichText::new(line).color(color));
         }
+        unpinned
     });
+    shown.is_some_and(|shown| shown.inner)
 }
 
 /// A dot on each line at the reading its row of the readout gives, ringed in

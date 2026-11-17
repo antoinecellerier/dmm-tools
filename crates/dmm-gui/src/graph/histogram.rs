@@ -673,7 +673,7 @@ impl Pane<'_> {
         if touch {
             // egui shows no hover text under a finger that is down; ours
             // goes above it, as the graph's readout does.
-            let (anchor, sides) = super::hover::readout_anchor(ui.ctx(), pos, rect.top());
+            let (anchor, sides) = super::hover::readout_anchor(true, pos, rect.top());
             let mut tooltip = egui::Tooltip::always_open(
                 ui.ctx().clone(),
                 response.layer_id,

@@ -263,6 +263,7 @@ AC+DC V) get two more toolbar groups:
 | **Click** (cursors active) | Place cursor A or B, snapping to nearest data point |
 | **Right-click**, or a long press on a touchscreen | The menu for the reading and Y value clicked; see [Main Plot](#main-plot) |
 | **A finger on the plot** (touchscreen) | Shows the crosshair and its readings above the finger; dragging pans |
+| **Tap** (touchscreen) | Keeps the crosshair and its readings on that reading; their **×** removes them |
 
 The graph's keys are listed under [Keyboard Shortcuts](#keyboard-shortcuts).
 

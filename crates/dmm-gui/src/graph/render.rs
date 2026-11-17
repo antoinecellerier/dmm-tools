@@ -489,6 +489,8 @@ struct Hover<'f> {
     /// Inside an overload.
     overload: bool,
     series: Vec<super::hover::HoverSeries<'f>>,
+    /// Read where a tap left the crosshair, not under a pointer.
+    pinned: bool,
 }
 
 /// The main plot, configured: `height` tall, panned by a plain drag along
@@ -1041,10 +1043,21 @@ impl Graph {
         self.plot_transform = Some(transform);
         let body = response.rect;
         let hover = self.hover_at(ui, l10n, tc, &frame, &response, &transform);
+        // Once: written back every frame, a pin would walk along the line.
+        if let (Some(hover), Some(pin)) = (hover.as_ref(), self.pin.as_mut())
+            && hover.pinned
+            && !pin.on_reading
+        {
+            (pin.t, pin.y, pin.on_reading) = (hover.t, hover.y, true);
+        }
         // The crosshair under the labels, where egui_plot's sat: on the
         // reading it snapped to, or on the pointer.
         if let Some(hover) = hover.as_ref() {
-            ui.ctx().set_cursor_icon(egui::CursorIcon::Crosshair);
+            // The pointer's own crosshair, not one a tap left: that one
+            // says nothing of where the pointer is.
+            if !hover.pinned {
+                ui.ctx().set_cursor_icon(egui::CursorIcon::Crosshair);
+            }
             let painter = ui.painter().with_clip_rect(body);
             let stroke = egui::Stroke::new(1.0, tc.graph_crosshair());
             painter.vline(hover.at.x, body.y_range(), stroke);
@@ -1085,6 +1098,7 @@ impl Graph {
             t,
             overload,
             series,
+            pinned,
         }) = hover
         {
             let rows = hover_lines(l10n, &series, t, overload, &|s, point| {
@@ -1128,7 +1142,19 @@ impl Graph {
             // The time alone where no series has a reading. Not over the box
             // being drawn.
             if self.box_zoom.is_none() {
-                show_hover_readout(&response, at, &format_pointer_time(t), &series, &rows);
+                let by_touch = pinned || ui.input(|i| i.any_touches());
+                let unpin = pinned.then(|| tr!(l10n, "graph-unpin.a11y"));
+                if show_hover_readout(
+                    &response,
+                    at,
+                    &format_pointer_time(t),
+                    &series,
+                    &rows,
+                    by_touch,
+                    unpin.as_deref(),
+                ) {
+                    self.pin = None;
+                }
             }
         }
         self.handle_interaction(ui, &response, &transform);
@@ -1245,7 +1271,9 @@ impl Graph {
     /// the reading near it — its place on screen, its height, the time it
     /// reads at and whether that is inside an overload. None off the plot
     /// body, and while the plot's menu is open: the readout under the
-    /// pointer would cover the menu's entry, which opens where it is.
+    /// pointer would cover the menu's entry, which opens where it is. With
+    /// no pointer on the plot, where a tap pinned the crosshair
+    /// ([`super::hover::Pin`]), read the same way.
     fn hover_at<'f>(
         &self,
         ui: &Ui,
@@ -1257,9 +1285,22 @@ impl Graph {
     ) -> Option<Hover<'f>> {
         let menu_open = egui::Popup::is_id_open(ui.ctx(), plot_menu_id());
         let body = response.rect;
-        let pos = response
+        let pointer = response
             .hover_pos()
-            .filter(|pos| !menu_open && body.contains(*pos))?;
+            .filter(|pos| !menu_open && body.contains(*pos));
+        let pinned = pointer.is_none();
+        let pos = match pointer {
+            Some(pos) => pos,
+            // Not under a dialog or an open menu or dropdown: the readout
+            // is a tooltip, which egui draws over everything and which, for
+            // its × button, takes the pointer.
+            None => {
+                let covered = menu_open
+                    || egui::Popup::is_any_open(ui.ctx())
+                    || ui.ctx().memory(|m| m.top_modal_layer().is_some());
+                self.pin_on_screen(transform, body).filter(|_| !covered)?
+            }
+        };
         // The plotted series' name as the screen shows it, which the hover's
         // row names it by. The lines themselves are unnamed: nothing reads
         // their names now that the hover is ours.
@@ -1300,7 +1341,22 @@ impl Graph {
             t,
             overload,
             series,
+            pinned,
         })
+    }
+
+    /// Where the pinned crosshair is on the plot `body`, if there is one in
+    /// this history and its time is in view. Its height is kept on the
+    /// plot: the Y range may have moved on without it.
+    pub(super) fn pin_on_screen(
+        &self,
+        transform: &PlotTransform,
+        body: egui::Rect,
+    ) -> Option<egui::Pos2> {
+        let pin = self.pin.filter(|pin| pin.epoch == self.history_epoch)?;
+        let pos = transform.position_from_point(&PlotPoint::new(pin.t, pin.y));
+        (pos.x.is_finite() && body.x_range().contains(pos.x))
+            .then(|| egui::pos2(pos.x, pos.y.clamp(body.top(), body.bottom())))
     }
 
     /// Set an AccessKit label on the plot that summarizes current state so

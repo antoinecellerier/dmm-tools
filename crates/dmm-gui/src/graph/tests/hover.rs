@@ -433,3 +433,175 @@ fn a_level_reads_as_its_number_and_a_tag_in_the_axis_prefix() {
     let (left, _) = height_tags(12e6, 1e4, "\u{3a9}", Some(&prefix), &[], usize::MAX).unwrap();
     assert_eq!(left, "12.00 M\u{3a9}");
 }
+
+/// One frame of the main plot fed `events`; the text it drew.
+fn plot_frame(g: &mut Graph, ctx: &egui::Context, events: Vec<egui::Event>) -> Vec<String> {
+    plot_output(g, ctx, events).0
+}
+
+/// One frame of the main plot fed `events`: the text it drew, and where
+/// the pinned readout's × is, if it drew one.
+fn plot_output(
+    g: &mut Graph,
+    ctx: &egui::Context,
+    events: Vec<egui::Event>,
+) -> (Vec<String>, Option<egui::Rect>) {
+    fn walk(shape: &egui::Shape, texts: &mut Vec<String>) {
+        match shape {
+            egui::Shape::Text(t) => texts.push(t.galley.text().to_string()),
+            egui::Shape::Vec(shapes) => shapes.iter().for_each(|s| walk(s, texts)),
+            _ => {}
+        }
+    }
+    let tc = ThemeColors::new(true, ColorPreset::Default, &PaletteOverrides::default());
+    let output = headless_frame(ctx, Some(gesture_screen()), None, events, |ui| {
+        g.show_main(
+            ui,
+            &crate::l10n::english(),
+            &tc,
+            &crate::markers::Markers::default(),
+            None,
+            NO_DIGITS,
+        )
+    });
+    let mut texts = Vec::new();
+    for clipped in &output.shapes {
+        walk(&clipped.shape, &mut texts);
+    }
+    let (nodes, _) = crate::app::test_support::a11y(&output);
+    let cross =
+        crate::app::test_support::node_rect(&nodes, |n| n.label() == Some("Remove the crosshair"));
+    (texts, cross)
+}
+/// A finger put down at `pos` and lifted there, as egui-winit reports it:
+/// the touch beside the pointer events it is translated into. Then frames
+/// with no pointer, for the readout to size itself and show.
+fn tap(g: &mut Graph, ctx: &egui::Context, pos: egui::Pos2) -> Vec<String> {
+    let touch = |phase| egui::Event::Touch {
+        device_id: egui::TouchDeviceId(0),
+        id: egui::TouchId(0),
+        phase,
+        pos,
+        force: None,
+    };
+    let button = |pressed| egui::Event::PointerButton {
+        pos,
+        button: egui::PointerButton::Primary,
+        pressed,
+        modifiers: egui::Modifiers::NONE,
+    };
+    let down = vec![
+        touch(egui::TouchPhase::Start),
+        egui::Event::PointerMoved(pos),
+        button(true),
+    ];
+    let up = vec![
+        touch(egui::TouchPhase::End),
+        button(false),
+        egui::Event::PointerGone,
+    ];
+    plot_frame(g, ctx, down);
+    plot_frame(g, ctx, up);
+    plot_frame(g, ctx, vec![]);
+    plot_frame(g, ctx, vec![])
+}
+
+/// A mouse click at `pos`, then the pointer gone.
+fn click(g: &mut Graph, ctx: &egui::Context, pos: egui::Pos2) {
+    let [moved, pressed, released] =
+        crate::app::test_support::click_frames(pos, egui::PointerButton::Primary);
+    for events in [moved, pressed, released, vec![egui::Event::PointerGone]] {
+        plot_frame(g, ctx, events);
+    }
+}
+
+/// A tap leaves the crosshair and its readings where the finger was, which
+/// a hover cannot do for a finger that has lifted; a tap elsewhere moves
+/// it, and the × on its readout takes it away.
+#[test]
+fn a_tap_pins_the_crosshair_and_its_cross_unpins() {
+    let ctx = crate::app::styled_context();
+    ctx.enable_accesskit();
+    let mut g = graph_with_a_minute_of_data();
+    let bare = plot_frame(&mut g, &ctx, vec![]);
+    plot_frame(&mut g, &ctx, vec![]);
+    assert_eq!(g.pin, None);
+
+    let here = over_reading(&g, 3.0, 0.0);
+    let pinned = tap(&mut g, &ctx, here);
+    let pin = g.pin.expect("the tap pinned the crosshair");
+    assert!((pin.t - 3.0).abs() < 0.05, "{pin:?}");
+    assert!(
+        pinned.len() > bare.len(),
+        "no readout without a pointer: {pinned:?}"
+    );
+
+    let there = over_reading(&g, 1.0, 0.0);
+    tap(&mut g, &ctx, there);
+    let moved = g.pin.expect("still pinned");
+    assert!((moved.t - 1.0).abs() < 0.05, "{moved:?}");
+
+    let (_, cross) = plot_output(&mut g, &ctx, vec![]);
+    let cross = cross.expect("the pinned readout has a × to remove it");
+    let after = tap(&mut g, &ctx, cross.center());
+    assert_eq!(g.pin, None, "the × takes the crosshair away");
+    assert_eq!(after.len(), bare.len(), "{after:?}");
+}
+
+/// A mouse has its hover: its click pins nothing, and takes away what a
+/// finger pinned on a screen that has both.
+#[test]
+fn a_mouse_click_pins_nothing() {
+    let ctx = crate::app::styled_context();
+    let mut g = graph_with_a_minute_of_data();
+    plot_frame(&mut g, &ctx, vec![]);
+    plot_frame(&mut g, &ctx, vec![]);
+    let here = over_reading(&g, 3.0, 0.0);
+    click(&mut g, &ctx, here);
+    assert_eq!(g.pin, None);
+
+    // Elsewhere: a tap where the click just was is a double click, which
+    // resets the view.
+    let elsewhere = over_reading(&g, 5.0, 0.0);
+    tap(&mut g, &ctx, elsewhere);
+    assert!(g.pin.is_some());
+    let there = over_reading(&g, 1.0, 0.0);
+    click(&mut g, &ctx, there);
+    assert_eq!(g.pin, None);
+}
+
+/// With the cursors on a tap places a cursor, as a click does, and pins
+/// nothing; a pin does not outlive the history it was taken in.
+#[test]
+fn a_pin_gives_way_to_the_cursors_and_goes_with_its_history() {
+    let ctx = crate::app::styled_context();
+    let mut g = graph_with_a_minute_of_data();
+    plot_frame(&mut g, &ctx, vec![]);
+    plot_frame(&mut g, &ctx, vec![]);
+    let here = over_reading(&g, 3.0, 0.0);
+    tap(&mut g, &ctx, here);
+    assert!(g.pin.is_some());
+    g.history_epoch += 1;
+    plot_frame(&mut g, &ctx, vec![]);
+    assert_eq!(g.pin, None, "the history it was a point of is gone");
+
+    g.cursors.toggle();
+    tap(&mut g, &ctx, here);
+    assert_eq!(g.pin, None);
+    assert!(g.cursors.a.is_some(), "the tap placed a cursor");
+}
+
+/// A readout by touch sits above its point; a mouse's hangs below.
+#[test]
+fn a_touch_readout_sits_above_its_point() {
+    use crate::graph::hover::readout_anchor;
+    let at = egui::pos2(100.0, 200.0);
+    let (finger, _) = readout_anchor(true, at, 0.0);
+    assert!(finger.y < at.y);
+    assert_eq!(
+        readout_anchor(true, at, 190.0).0.y,
+        190.0,
+        "not past the top"
+    );
+    assert_eq!(readout_anchor(false, at, 0.0).0, at);
+}

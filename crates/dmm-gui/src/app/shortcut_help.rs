@@ -217,6 +217,10 @@ fn graph_mouse(ui: &mut egui::Ui, l10n: &Localizer) {
             tr!(l10n, "shortcuts-mouse-menu"),
         ),
         (
+            tr!(l10n, "shortcuts-touch-pin.gesture"),
+            tr!(l10n, "shortcuts-touch-pin"),
+        ),
+        (
             tr!(l10n, "shortcuts-mouse-minimap.gesture"),
             tr!(l10n, "shortcuts-mouse-minimap"),
         ),
