@@ -595,66 +595,66 @@ activation-vc650bt =
     3. Appuyez sur le bouton PC du multimètre
 # Used by: BM788BT/BM787BT
 activation-bm78xbt =
-    1. Déconnectez le multimètre de toute application mobile
+    1. Déconnectez le multimètre de toute autre application
     2. Tournez le commutateur rotatif sur n’importe quelle fonction sauf Auto V/LoZ
     3. Maintenez la touche Δ enfoncée pendant au moins une seconde, jusqu’à ce que ((D)) s’affiche à l’écran
     Remarque : le multimètre s’éteint après 15 à 30 minutes d’inactivité. Maintenez la touche SELECT enfoncée en allumant le multimètre pour désactiver l’arrêt automatique (dSAPO s’affiche).
     Si le multimètre est introuvable ou si son mot de passe de connexion a été modifié, maintenez la touche Hz enfoncée en tournant le commutateur de la position OFF à la position capacité en moins de 0.6 s : le multimètre affiche « Org », et son mot de passe de connexion et son nom Bluetooth reprennent leurs réglages d’usine.
 # Used by: OW69B
 activation-ow69b =
-    1. Déconnectez le multimètre de toute application mobile
+    1. Déconnectez le multimètre de toute autre application
     2. Allumez le multimètre
     3. Maintenez la touche < enfoncée (BLE inscrit au-dessus) jusqu’à ce que l’icône Bluetooth s’affiche
 # Used by: OW67B
 activation-ow67b =
-    1. Déconnectez le multimètre de toute application mobile
+    1. Déconnectez le multimètre de toute autre application
     2. Allumez le multimètre
     3. Maintenez la touche < enfoncée (BLE inscrit au-dessus) jusqu’à ce que l’icône Bluetooth s’affiche
     Remarque : le Bluetooth se désactive après 5 minutes d’inactivité. Maintenez de nouveau la touche < enfoncée pour le réactiver.
 # Used by: VC915, VC925 PV
 activation-vc915 =
-    1. Déconnectez le multimètre de toute application mobile
+    1. Déconnectez le multimètre de toute autre application
     2. Allumez le multimètre
     3. Maintenez le bouton BLE enfoncé pendant environ 2 secondes, jusqu’à ce que le multimètre émette un bip sonore et que le symbole Bluetooth s’affiche
 # Used by: VC871, VC891
 activation-vc871 =
-    1. Déconnectez le multimètre de toute application mobile
+    1. Déconnectez le multimètre de toute autre application
     2. Allumez le multimètre
     3. Maintenez le bouton BLE enfoncé pendant environ 2 secondes, jusqu’à ce que le multimètre émette un bip sonore et que le symbole Bluetooth s’affiche en haut à gauche
     Remarque : le Bluetooth est désactivé à chaque mise en marche du multimètre. Maintenez alors de nouveau le bouton BLE enfoncé.
 # Used by: OW18B/OW16B, OW18E
 activation-ow18b =
-    1. Déconnectez le multimètre de toute application mobile
+    1. Déconnectez le multimètre de toute autre application
     2. Allumez le multimètre
     3. Maintenez la touche Hz/Duty△/ᛒ enfoncée jusqu’à ce que l’icône ᛒ s’affiche
     Remarque : après 10 minutes d’inactivité, le multimètre émet deux bips sonores et le Bluetooth se désactive. Maintenez de nouveau la touche Hz/Duty△/ᛒ enfoncée pour le réactiver.
 # Used by: OW65B
 activation-ow65b =
-    1. Déconnectez le multimètre de toute application mobile
+    1. Déconnectez le multimètre de toute autre application
     2. Allumez le multimètre
     3. Maintenez la touche SETUP enfoncée (BLE inscrit au-dessus) jusqu’à ce que l’icône Bluetooth s’affiche
     Remarque : maintenez de nouveau la touche SETUP enfoncée pour désactiver le Bluetooth.
 # Used by: CMS061, CMS101
 activation-cms061 =
-    1. Déconnectez le multimètre de toute application mobile
+    1. Déconnectez le multimètre de toute autre application
     2. Allumez le multimètre
     3. Maintenez la touche Tab⇌ enfoncée (BLE inscrit au-dessus) jusqu’à ce que l’icône Bluetooth s’affiche
     Remarque : le multimètre ne s’éteint pas de lui-même tant que le Bluetooth est activé.
 # Used by: CM2100B
 activation-cm2100b =
-    1. Déconnectez le multimètre de toute application mobile
+    1. Déconnectez le multimètre de toute autre application
     2. Allumez le multimètre
     3. Maintenez la touche ZERO/ᛒ enfoncée pendant environ 2 secondes, jusqu’à ce que l’icône ᛒ s’affiche en haut à gauche de l’écran
     Remarque : le Bluetooth se désactive après 5 minutes d’inactivité, ou quand vous maintenez de nouveau la touche ZERO/ᛒ enfoncée. Le multimètre s’éteint après environ 15 minutes d’inactivité. Maintenez la touche SELECT enfoncée en allumant le multimètre pour désactiver l’arrêt automatique jusqu’à la prochaine mise hors tension.
 # Used by: B33
 activation-b33 =
-    1. Déconnectez le multimètre de toute application mobile
+    1. Déconnectez le multimètre de toute autre application
     2. Allumez le multimètre
     3. Maintenez la touche △/ᛒ enfoncée jusqu’à ce que l’icône ᛒ s’affiche
     Remarque : après 10 minutes d’inactivité, le multimètre émet deux bips sonores et le Bluetooth se désactive. Le Bluetooth se désactive aussi à la fin d’un enregistrement hors ligne. Maintenez de nouveau la touche △/ᛒ enfoncée pour le réactiver.
 # Used by: B35T+, B41T+
 activation-b35t-plus =
-    1. Déconnectez le multimètre de toute application mobile
+    1. Déconnectez le multimètre de toute autre application
     2. Allumez le multimètre
     3. Maintenez la touche △/ᛒ enfoncée jusqu’à ce que l’icône ᛒ s’affiche
     Remarque : après 10 minutes d’inactivité, le multimètre émet deux bips sonores et le Bluetooth se désactive. Maintenez de nouveau la touche △/ᛒ enfoncée pour le réactiver.

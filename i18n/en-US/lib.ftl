@@ -591,66 +591,66 @@ activation-vc650bt =
     3. Press the PC button on the meter
 # Used by: BM788BT/BM787BT
 activation-bm78xbt =
-    1. Disconnect the meter from any phone app
+    1. Disconnect the meter from any other app
     2. Turn the dial to any function but Auto V/LoZ
     3. Hold Δ for one second or more, until ((D)) shows on the display
     Note: the meter switches off after 15 to 30 minutes idle; hold SELECT while turning it on to disable that (dSAPO shows).
     If the meter is not found or its connection password was changed, hold the Hz button while turning the dial from OFF to capacitance within 0.6 s: the meter shows "Org" and its connection password and Bluetooth name are back to the factory settings.
 # Used by: OW69B
 activation-ow69b =
-    1. Disconnect the meter from any phone app
+    1. Disconnect the meter from any other app
     2. Turn the meter on
     3. Hold the < key (BLE printed above it) until the Bluetooth icon shows
 # Used by: OW67B
 activation-ow67b =
-    1. Disconnect the meter from any phone app
+    1. Disconnect the meter from any other app
     2. Turn the meter on
     3. Hold the < key (BLE printed above it) until the Bluetooth icon shows
     Note: Bluetooth switches off after 5 minutes idle; hold < again to switch it back on.
 # Used by: VC915, VC925 PV
 activation-vc915 =
-    1. Disconnect the meter from any phone app
+    1. Disconnect the meter from any other app
     2. Turn the meter on
     3. Hold the BLE button for about 2 seconds, until the meter beeps and the Bluetooth symbol shows
 # Used by: VC871, VC891
 activation-vc871 =
-    1. Disconnect the meter from any phone app
+    1. Disconnect the meter from any other app
     2. Turn the meter on
     3. Hold the BLE button for about 2 seconds, until the meter beeps and the Bluetooth symbol shows at the top left
     Note: Bluetooth is off each time the meter is switched on; hold BLE again then.
 # Used by: OW18B/OW16B, OW18E
 activation-ow18b =
-    1. Disconnect the meter from any phone app
+    1. Disconnect the meter from any other app
     2. Turn the meter on
     3. Hold the Hz/Duty△/ᛒ key until the ᛒ icon shows
     Note: Bluetooth switches off after 10 minutes idle, after two beeps; hold Hz/Duty△/ᛒ again to switch it back on.
 # Used by: OW65B
 activation-ow65b =
-    1. Disconnect the meter from any phone app
+    1. Disconnect the meter from any other app
     2. Turn the meter on
     3. Hold the SETUP key (BLE printed above it) until the Bluetooth icon shows
     Note: holding SETUP again switches Bluetooth off.
 # Used by: CMS061, CMS101
 activation-cms061 =
-    1. Disconnect the meter from any phone app
+    1. Disconnect the meter from any other app
     2. Turn the meter on
     3. Hold the Tab⇌ key (BLE printed above it) until the Bluetooth icon shows
     Note: the meter does not switch itself off while Bluetooth is on.
 # Used by: CM2100B
 activation-cm2100b =
-    1. Disconnect the meter from any phone app
+    1. Disconnect the meter from any other app
     2. Turn the meter on
     3. Hold the ZERO/ᛒ key for about 2 seconds, until the ᛒ icon shows at the top left of the display
     Note: Bluetooth switches off after 5 minutes idle, or when ZERO/ᛒ is held again. The meter switches off after about 15 minutes idle; hold SELECT while turning it on to disable that until it is next switched off.
 # Used by: B33
 activation-b33 =
-    1. Disconnect the meter from any phone app
+    1. Disconnect the meter from any other app
     2. Turn the meter on
     3. Hold the △/ᛒ key until the ᛒ icon shows
     Note: Bluetooth switches off after 10 minutes idle, after two beeps, and when an offline recording ends; hold △/ᛒ again to switch it back on.
 # Used by: B35T+, B41T+
 activation-b35t-plus =
-    1. Disconnect the meter from any phone app
+    1. Disconnect the meter from any other app
     2. Turn the meter on
     3. Hold the △/ᛒ key until the ᛒ icon shows
     Note: Bluetooth switches off after 10 minutes idle, after two beeps; hold △/ᛒ again to switch it back on.

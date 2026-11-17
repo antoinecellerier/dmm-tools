@@ -36,7 +36,7 @@ const NAMES_VOLTCRAFT: &[&str] = &["BDM", "VC8", "VC9"];
 /// p.22/17, the same. Any phone app goes first: a B35T+ takes one central at
 /// a time (spec §14.4).
 const ACTIVATION_OW: &str = "\
-1. Disconnect the meter from any phone app
+1. Disconnect the meter from any other app
 2. Turn the meter on
 3. Hold the Hz/Duty△/ᛒ key until the ᛒ icon shows
 Note: Bluetooth switches off after 10 minutes idle, after two beeps; hold Hz/Duty△/ᛒ again to switch it back on.";
@@ -44,7 +44,7 @@ Note: Bluetooth switches off after 10 minutes idle, after two beeps; hold Hz/Dut
 /// B33-UM p.23/18 (Bluetooth on), p.21/16-22/17 (off after 10 minutes
 /// idle), p.28/23 (off when an offline recording ends).
 const ACTIVATION_B33: &str = "\
-1. Disconnect the meter from any phone app
+1. Disconnect the meter from any other app
 2. Turn the meter on
 3. Hold the △/ᛒ key until the ᛒ icon shows
 Note: Bluetooth switches off after 10 minutes idle, after two beeps, and when an offline recording ends; hold △/ᛒ again to switch it back on.";
@@ -52,7 +52,7 @@ Note: Bluetooth switches off after 10 minutes idle, after two beeps, and when an
 /// B35-UM p.25/20 (Bluetooth on), p.24/19-25/20 (off after 10 minutes
 /// idle); the manual covers the B35 series and the B41T.
 const ACTIVATION_B35_B41: &str = "\
-1. Disconnect the meter from any phone app
+1. Disconnect the meter from any other app
 2. Turn the meter on
 3. Hold the △/ᛒ key until the ᛒ icon shows
 Note: Bluetooth switches off after 10 minutes idle, after two beeps; hold △/ᛒ again to switch it back on.";
@@ -61,7 +61,7 @@ Note: Bluetooth switches off after 10 minutes idle, after two beeps; hold △/�
 /// (held about 2 s, the key switches Bluetooth on or off), p.14/11-15/12
 /// (auto power-off, and cancelling it until the next power cycle).
 const ACTIVATION_CM2100B: &str = "\
-1. Disconnect the meter from any phone app
+1. Disconnect the meter from any other app
 2. Turn the meter on
 3. Hold the ZERO/ᛒ key for about 2 seconds, until the ᛒ icon shows at the top left of the display
 Note: Bluetooth switches off after 5 minutes idle, or when ZERO/ᛒ is held again. The meter switches off after about 15 minutes idle; hold SELECT while turning it on to disable that until it is next switched off.";
@@ -70,7 +70,7 @@ Note: Bluetooth switches off after 5 minutes idle, or when ZERO/ᛒ is held agai
 /// which carries the BLE label (p.12/7), held until the Bluetooth icon
 /// shows; auto power-off is off while Bluetooth is on.
 const ACTIVATION_CMS: &str = "\
-1. Disconnect the meter from any phone app
+1. Disconnect the meter from any other app
 2. Turn the meter on
 3. Hold the Tab⇌ key (BLE printed above it) until the Bluetooth icon shows
 Note: the meter does not switch itself off while Bluetooth is on.";
@@ -78,7 +78,7 @@ Note: the meter does not switch itself off while Bluetooth is on.";
 /// OW65-UM p.13/8 (SETUP, BLE above it, held turns Bluetooth on or off),
 /// p.28/23.
 const ACTIVATION_OW65B: &str = "\
-1. Disconnect the meter from any phone app
+1. Disconnect the meter from any other app
 2. Turn the meter on
 3. Hold the SETUP key (BLE printed above it) until the Bluetooth icon shows
 Note: holding SETUP again switches Bluetooth off.";
@@ -86,28 +86,28 @@ Note: holding SETUP again switches Bluetooth off.";
 /// OW67-UM p.13/8 (<, BLE above it), p.33/28 (held until the icon shows;
 /// off after 5 minutes idle).
 const ACTIVATION_OW67B: &str = "\
-1. Disconnect the meter from any phone app
+1. Disconnect the meter from any other app
 2. Turn the meter on
 3. Hold the < key (BLE printed above it) until the Bluetooth icon shows
 Note: Bluetooth switches off after 5 minutes idle; hold < again to switch it back on.";
 
 /// OW69-UM p.13/8, p.30/25.
 const ACTIVATION_OW69B: &str = "\
-1. Disconnect the meter from any phone app
+1. Disconnect the meter from any other app
 2. Turn the meter on
 3. Hold the < key (BLE printed above it) until the Bluetooth icon shows";
 
 /// VC871-UM p.92 and VC891-UM p.82, the same text; VC-APP p.10, the app
 /// manual for both: Bluetooth is off at every power-on.
 const ACTIVATION_VC871_VC891: &str = "\
-1. Disconnect the meter from any phone app
+1. Disconnect the meter from any other app
 2. Turn the meter on
 3. Hold the BLE button for about 2 seconds, until the meter beeps and the Bluetooth symbol shows at the top left
 Note: Bluetooth is off each time the meter is switched on; hold BLE again then.";
 
 /// VC915-UM p.88 and VC925-UM p.94, the same steps.
 const ACTIVATION_VC915_VC925: &str = "\
-1. Disconnect the meter from any phone app
+1. Disconnect the meter from any other app
 2. Turn the meter on
 3. Hold the BLE button for about 2 seconds, until the meter beeps and the Bluetooth symbol shows";
 

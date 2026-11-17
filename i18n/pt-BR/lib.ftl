@@ -591,66 +591,66 @@ activation-vc650bt =
     3. Pressione a tecla PC do multímetro
 # Used by: BM788BT/BM787BT
 activation-bm78xbt =
-    1. Desconecte o multímetro de qualquer aplicativo de celular
+    1. Desconecte o multímetro de qualquer outro aplicativo
     2. Gire a chave seletora para qualquer função, exceto Auto V/LoZ
     3. Mantenha a tecla Δ pressionada por um segundo ou mais, até ((D)) aparecer no display
     Observação: o multímetro desliga após 15 a 30 minutos de inatividade; para desativar o desligamento automático, mantenha a tecla SELECT pressionada ao ligar o multímetro (dSAPO aparece).
     Se o multímetro não for encontrado ou se a senha de conexão tiver sido alterada, mantenha a tecla Hz pressionada enquanto gira a chave seletora de OFF para capacitância em menos de 0.6 s: o multímetro exibe “Org”, e a senha de conexão e o nome Bluetooth voltam às configurações de fábrica.
 # Used by: OW69B
 activation-ow69b =
-    1. Desconecte o multímetro de qualquer aplicativo de celular
+    1. Desconecte o multímetro de qualquer outro aplicativo
     2. Ligue o multímetro
     3. Mantenha pressionada a tecla < (com BLE impresso acima dela) até o ícone do Bluetooth aparecer
 # Used by: OW67B
 activation-ow67b =
-    1. Desconecte o multímetro de qualquer aplicativo de celular
+    1. Desconecte o multímetro de qualquer outro aplicativo
     2. Ligue o multímetro
     3. Mantenha pressionada a tecla < (com BLE impresso acima dela) até o ícone do Bluetooth aparecer
     Observação: o Bluetooth desliga após 5 minutos de inatividade; mantenha a tecla < pressionada de novo para religá-lo.
 # Used by: VC915, VC925 PV
 activation-vc915 =
-    1. Desconecte o multímetro de qualquer aplicativo de celular
+    1. Desconecte o multímetro de qualquer outro aplicativo
     2. Ligue o multímetro
     3. Mantenha a tecla BLE pressionada por cerca de 2 segundos, até o multímetro emitir um bip e o símbolo do Bluetooth aparecer
 # Used by: VC871, VC891
 activation-vc871 =
-    1. Desconecte o multímetro de qualquer aplicativo de celular
+    1. Desconecte o multímetro de qualquer outro aplicativo
     2. Ligue o multímetro
     3. Mantenha a tecla BLE pressionada por cerca de 2 segundos, até o multímetro emitir um bip e o símbolo do Bluetooth aparecer no canto superior esquerdo
     Observação: o Bluetooth vem desligado sempre que o multímetro é ligado; para ativá-lo, mantenha a tecla BLE pressionada de novo.
 # Used by: OW18B/OW16B, OW18E
 activation-ow18b =
-    1. Desconecte o multímetro de qualquer aplicativo de celular
+    1. Desconecte o multímetro de qualquer outro aplicativo
     2. Ligue o multímetro
     3. Mantenha a tecla Hz/Duty△/ᛒ pressionada até o ícone ᛒ aparecer
     Observação: após 10 minutos de inatividade, o multímetro emite dois bipes e desliga o Bluetooth; mantenha a tecla Hz/Duty△/ᛒ pressionada de novo para religá-lo.
 # Used by: OW65B
 activation-ow65b =
-    1. Desconecte o multímetro de qualquer aplicativo de celular
+    1. Desconecte o multímetro de qualquer outro aplicativo
     2. Ligue o multímetro
     3. Mantenha pressionada a tecla SETUP (com BLE impresso acima dela) até o ícone do Bluetooth aparecer
     Observação: para desligar o Bluetooth, mantenha a tecla SETUP pressionada de novo.
 # Used by: CMS061, CMS101
 activation-cms061 =
-    1. Desconecte o multímetro de qualquer aplicativo de celular
+    1. Desconecte o multímetro de qualquer outro aplicativo
     2. Ligue o multímetro
     3. Mantenha pressionada a tecla Tab⇌ (com BLE impresso acima dela) até o ícone do Bluetooth aparecer
     Observação: o multímetro não se desliga sozinho enquanto o Bluetooth está ligado.
 # Used by: CM2100B
 activation-cm2100b =
-    1. Desconecte o multímetro de qualquer aplicativo de celular
+    1. Desconecte o multímetro de qualquer outro aplicativo
     2. Ligue o multímetro
     3. Mantenha a tecla ZERO/ᛒ pressionada por cerca de 2 segundos, até o ícone ᛒ aparecer no canto superior esquerdo do display
     Observação: o Bluetooth desliga após 5 minutos de inatividade ou ao manter a tecla ZERO/ᛒ pressionada de novo. O multímetro desliga após cerca de 15 minutos de inatividade; para desativar o desligamento automático até a próxima vez que o multímetro for desligado, mantenha a tecla SELECT pressionada ao ligá-lo.
 # Used by: B33
 activation-b33 =
-    1. Desconecte o multímetro de qualquer aplicativo de celular
+    1. Desconecte o multímetro de qualquer outro aplicativo
     2. Ligue o multímetro
     3. Mantenha a tecla △/ᛒ pressionada até o ícone ᛒ aparecer
     Observação: após 10 minutos de inatividade, o multímetro emite dois bipes e desliga o Bluetooth, que também desliga ao fim de um registro offline; mantenha a tecla △/ᛒ pressionada de novo para religá-lo.
 # Used by: B35T+, B41T+
 activation-b35t-plus =
-    1. Desconecte o multímetro de qualquer aplicativo de celular
+    1. Desconecte o multímetro de qualquer outro aplicativo
     2. Ligue o multímetro
     3. Mantenha a tecla △/ᛒ pressionada até o ícone ᛒ aparecer
     Observação: após 10 minutos de inatividade, o multímetro emite dois bipes e desliga o Bluetooth; mantenha a tecla △/ᛒ pressionada de novo para religá-lo.

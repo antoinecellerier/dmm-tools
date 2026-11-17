@@ -190,7 +190,7 @@ Not run on a meter yet ([open checks](research/121gw/verification.md)).
 ## Brymen BM788BT / BM787BT
 
 Handheld. Bluetooth built in, no cable; the meter shows up as "BM78xBT"
-([setup](setup.md#bluetooth)). Switch on: disconnect any phone app, turn the
+([setup](setup.md#bluetooth)). Switch on: disconnect any other app, turn the
 dial to any function but Auto V/LoZ, and hold Δ for one second or more until
 ((D)) shows.
 
@@ -241,7 +241,7 @@ sells the CMS101 and CMS061 as the UT217B and UT217A, per UNI-T's
 Bluetooth built in, no cable; the meter shows up as "BDM", or as "Lilliput"
 on some systems (B35T+, B41T+), and a Voltcraft meter may show up under its
 model name
-([setup](setup.md#bluetooth)). Switch on: disconnect any phone app, then
+([setup](setup.md#bluetooth)). Switch on: disconnect any other app, then
 hold △/ᛒ on the B33, B35T+ and B41T+, Hz/Duty△/ᛒ on the OW16B, OW18B and
 OW18E, ZERO/ᛒ for about 2 s on the CM2100B, Tab⇌ on the CMS101 and CMS061,
 SETUP on the OW65B, the < key on the OW67B and OW69B, or BLE for about 2 s on the

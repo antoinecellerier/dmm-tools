@@ -136,14 +136,14 @@ The EEVblog 121GW has Bluetooth built in and needs no pairing either: hold
 30 minutes; set APO.oF in its SETUP menu to disable that.
 
 The Brymen BM788BT and BM787BT have Bluetooth built in and need no pairing
-either: disconnect any phone app, then, on any function but Auto V/LoZ, hold
+either: disconnect any other app, then, on any function but Auto V/LoZ, hold
 Δ for one second or more until ((D)) shows, and it shows up as "BM78xBT". It
 switches off after 15 to 30 minutes idle; hold SELECT while turning it on to
 disable that. A renamed meter opens with
 `--device bm78xbt --adapter <address>`.
 
 OWON's meters and the Voltcraft VC871, VC891, VC915 and VC925 PV have
-Bluetooth built in and need no pairing either: disconnect any phone app,
+Bluetooth built in and need no pairing either: disconnect any other app,
 then hold the meter's Bluetooth key, as
 [supported devices](supported-devices.md) lists, until the Bluetooth symbol
 shows. The meter shows up as "BDM", or as "Lilliput" on some systems (B35T+,

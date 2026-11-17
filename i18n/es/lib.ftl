@@ -592,66 +592,66 @@ activation-vc650bt =
     3. Presiona el botón PC del multímetro
 # Used by: BM788BT/BM787BT
 activation-bm78xbt =
-    1. Desconecta el multímetro de cualquier aplicación del teléfono
+    1. Desconecta el multímetro de cualquier otra aplicación
     2. Gira el selector a cualquier función excepto Auto V/LoZ
     3. Mantén presionado Δ durante un segundo o más, hasta que aparezca ((D)) en la pantalla
     Nota: el multímetro se apaga después de 15 a 30 minutos de inactividad. Mantén presionado SELECT mientras lo enciendes para desactivar el apagado automático (aparece dSAPO).
     Si no se encuentra el multímetro o se cambió su contraseña de conexión, mantén presionado el botón Hz mientras giras el selector de OFF a capacitancia en menos de 0.6 s: el multímetro muestra “Org”, y la contraseña de conexión y el nombre de Bluetooth vuelven a los valores de fábrica.
 # Used by: OW69B
 activation-ow69b =
-    1. Desconecta el multímetro de cualquier aplicación del teléfono
+    1. Desconecta el multímetro de cualquier otra aplicación
     2. Enciende el multímetro
     3. Mantén presionado el botón < (con BLE impreso encima) hasta que aparezca el icono de Bluetooth
 # Used by: OW67B
 activation-ow67b =
-    1. Desconecta el multímetro de cualquier aplicación del teléfono
+    1. Desconecta el multímetro de cualquier otra aplicación
     2. Enciende el multímetro
     3. Mantén presionado el botón < (con BLE impreso encima) hasta que aparezca el icono de Bluetooth
     Nota: el Bluetooth se desactiva después de 5 minutos de inactividad. Vuelve a mantener presionado < para reactivarlo.
 # Used by: VC915, VC925 PV
 activation-vc915 =
-    1. Desconecta el multímetro de cualquier aplicación del teléfono
+    1. Desconecta el multímetro de cualquier otra aplicación
     2. Enciende el multímetro
     3. Mantén presionado el botón BLE unos 2 segundos, hasta que el multímetro emita un pitido y aparezca el símbolo de Bluetooth
 # Used by: VC871, VC891
 activation-vc871 =
-    1. Desconecta el multímetro de cualquier aplicación del teléfono
+    1. Desconecta el multímetro de cualquier otra aplicación
     2. Enciende el multímetro
     3. Mantén presionado el botón BLE unos 2 segundos, hasta que el multímetro emita un pitido y aparezca el símbolo de Bluetooth arriba a la izquierda
     Nota: el Bluetooth queda desactivado cada vez que se enciende el multímetro. Después de encenderlo, vuelve a mantener presionado BLE.
 # Used by: OW18B/OW16B, OW18E
 activation-ow18b =
-    1. Desconecta el multímetro de cualquier aplicación del teléfono
+    1. Desconecta el multímetro de cualquier otra aplicación
     2. Enciende el multímetro
     3. Mantén presionado el botón Hz/Duty△/ᛒ hasta que aparezca el icono ᛒ
     Nota: el Bluetooth se desactiva con dos pitidos después de 10 minutos de inactividad. Vuelve a mantener presionado Hz/Duty△/ᛒ para reactivarlo.
 # Used by: OW65B
 activation-ow65b =
-    1. Desconecta el multímetro de cualquier aplicación del teléfono
+    1. Desconecta el multímetro de cualquier otra aplicación
     2. Enciende el multímetro
     3. Mantén presionado el botón SETUP (con BLE impreso encima) hasta que aparezca el icono de Bluetooth
     Nota: si vuelves a mantener presionado SETUP, el Bluetooth se desactiva.
 # Used by: CMS061, CMS101
 activation-cms061 =
-    1. Desconecta el multímetro de cualquier aplicación del teléfono
+    1. Desconecta el multímetro de cualquier otra aplicación
     2. Enciende el multímetro
     3. Mantén presionado el botón Tab⇌ (con BLE impreso encima) hasta que aparezca el icono de Bluetooth
     Nota: el multímetro no se apaga automáticamente mientras el Bluetooth esté activado.
 # Used by: CM2100B
 activation-cm2100b =
-    1. Desconecta el multímetro de cualquier aplicación del teléfono
+    1. Desconecta el multímetro de cualquier otra aplicación
     2. Enciende el multímetro
     3. Mantén presionado el botón ZERO/ᛒ unos 2 segundos, hasta que aparezca el icono ᛒ arriba a la izquierda de la pantalla
     Nota: el Bluetooth se desactiva después de 5 minutos de inactividad o al volver a mantener presionado ZERO/ᛒ. El multímetro se apaga después de unos 15 minutos de inactividad. Mantén presionado SELECT mientras lo enciendes para desactivar el apagado automático hasta la próxima vez que se apague.
 # Used by: B33
 activation-b33 =
-    1. Desconecta el multímetro de cualquier aplicación del teléfono
+    1. Desconecta el multímetro de cualquier otra aplicación
     2. Enciende el multímetro
     3. Mantén presionado el botón △/ᛒ hasta que aparezca el icono ᛒ
     Nota: el Bluetooth se desactiva con dos pitidos después de 10 minutos de inactividad, y también al terminar una grabación sin conexión. Vuelve a mantener presionado △/ᛒ para reactivarlo.
 # Used by: B35T+, B41T+
 activation-b35t-plus =
-    1. Desconecta el multímetro de cualquier aplicación del teléfono
+    1. Desconecta el multímetro de cualquier otra aplicación
     2. Enciende el multímetro
     3. Mantén presionado el botón △/ᛒ hasta que aparezca el icono ᛒ
     Nota: el Bluetooth se desactiva con dos pitidos después de 10 minutos de inactividad. Vuelve a mantener presionado △/ᛒ para reactivarlo.

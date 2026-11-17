@@ -15,7 +15,7 @@ use crate::protocol::registry::{Brand, SelectableDevice};
 /// meter takes a second connection is not stated (spec §2).
 const ACTIVATION: &str = concat!(
     "\
-1. Disconnect the meter from any phone app
+1. Disconnect the meter from any other app
 2. Turn the dial to any function but Auto V/LoZ
 3. Hold Δ for one second or more, until ((D)) shows on the display
 Note: the meter switches off after 15 to 30 minutes idle; hold SELECT while turning it on to disable that (dSAPO shows).

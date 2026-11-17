@@ -1170,7 +1170,7 @@ mod tests {
             assert!(
                 entry
                     .activation_instructions
-                    .starts_with("1. Disconnect the meter from any phone app\n"),
+                    .starts_with("1. Disconnect the meter from any other app\n"),
                 "{}",
                 m.entry.id
             );
