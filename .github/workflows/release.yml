@@ -58,6 +58,9 @@ jobs:
     permissions:
       contents: read
     uses: ./.github/workflows/build-matrix.yml
+    # For its android-sign job alone: a called workflow is handed no secret,
+    # its environment's included, unless the caller passes them on.
+    secrets: inherit
     with:
       # Named after the tag, so each release's downloads are told apart. A
       # branch dispatch keeps the bare name: a branch can contain a slash.
