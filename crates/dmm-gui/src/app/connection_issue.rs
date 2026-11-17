@@ -712,7 +712,7 @@ mod tests {
         let help = n.help_text(&crate::l10n::english());
         assert!(help.contains("USB cable: check it is plugged in"), "{help}");
         assert!(help.contains("Bluetooth: turn on Bluetooth"), "{help}");
-        assert!(help.ends_with("Click \"Connect\" after resolving the issue."));
+        assert!(help.ends_with("Resolve the issue, then \"Connect\" again."));
     }
 
     /// An address nothing answered is about that link alone: no cable steps,
@@ -768,7 +768,7 @@ mod tests {
                 .help()
                 .sections(&LinksSearched::BluetoothAt("12:34:56:78:9A:BC"))
         );
-        assert_eq!(n.body, "Click \"Connect\" after resolving the issue.");
+        assert_eq!(n.body, "Resolve the issue, then \"Connect\" again.");
 
         // Without an address, or with a USB one, it stays the bare error.
         for adapter in [None, Some("00C5B27A")] {
@@ -855,7 +855,7 @@ mod tests {
             ConnectionIssue::from_error(stack(), None, Some(ut60bt.listing())),
         );
         assert_eq!(n.kind, NoticeKind::BluetoothUnreachable);
-        assert_eq!(n.title, "Bluetooth: turned off on this computer");
+        assert_eq!(n.title, "Bluetooth: turned off");
         assert_eq!(
             n.sections,
             crate::l10n::english().help().sections(&own_steps)
@@ -943,7 +943,7 @@ mod tests {
         );
         assert!(
             n.body
-                .ends_with("Click \"Connect\" after resolving the issue.")
+                .ends_with("Resolve the issue, then \"Connect\" again.")
         );
         // The meter named the way out: no second line about the pick.
         assert!(!n.body.contains("selected in Settings"), "{}", n.body);
@@ -961,7 +961,7 @@ mod tests {
         assert!(n.body.starts_with(selected), "{}", n.body);
         assert!(
             n.body
-                .ends_with("Click \"Connect\" after resolving the issue.")
+                .ends_with("Resolve the issue, then \"Connect\" again.")
         );
         picked.connection.state = ConnectionState::Connected;
         let n = notice_for(&mut picked, checksum_mismatch());
@@ -972,7 +972,7 @@ mod tests {
 
         let mut auto = app(registry::AUTO_DEVICE_ID);
         let n = notice_for(&mut auto, not_found(false));
-        assert_eq!(n.body, "Click \"Connect\" after resolving the issue.");
+        assert_eq!(n.body, "Resolve the issue, then \"Connect\" again.");
 
         // The title names a radio meter already: only the way out follows.
         let ut60bt = registry::find_device("ut60bt").expect("registry entry");
@@ -1273,7 +1273,7 @@ mod tests {
             assert_eq!(n.title, "Connection failed");
             assert_eq!(
                 n.body,
-                format!("{text}\n\nClick \"Connect\" after resolving the issue.")
+                format!("{text}\n\nResolve the issue, then \"Connect\" again.")
             );
             assert!(!n.body.contains("enable data transmission"), "{}", n.body);
         }
@@ -1307,8 +1307,8 @@ mod tests {
         assert_eq!(
             n.body,
             "checksum mismatch: expected 0x01a3, got 0x0003\n\nUNI-T UT61E+ is selected in Settings \
-             (\u{2699}). If your meter is another, pick it there, or pick Auto-detect.\n\nClick \
-             \"Connect\" after resolving the issue."
+             (\u{2699}). If your meter is another, pick it there, or pick Auto-detect.\n\nResolve \
+             the issue, then \"Connect\" again."
         );
     }
 

@@ -127,7 +127,7 @@ graph-triggers = Gatilhos
 graph-cursors = Cursores
     .hover = Clique no gráfico para colocar dois cursores ({ $keys })
 # Small text after Cursors until both are placed.
-graph-cursors-hint = clique no gráfico para colocar os cursores
+graph-cursors-hint = coloque os cursores no gráfico
 
 ## The plot: the readout by the pointer, the labels on its lines, and the
 ## flags of markers along its bottom edge.

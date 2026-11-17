@@ -127,7 +127,7 @@ graph-triggers = Disparos
 graph-cursors = Cursores
     .hover = Haz clic en el gráfico para colocar dos cursores ({ $keys })
 # Small text after Cursors until both are placed.
-graph-cursors-hint = haz clic en el gráfico para colocar los cursores
+graph-cursors-hint = coloca los cursores en el gráfico
 
 ## The plot: the readout by the pointer, the labels on its lines, and the
 ## flags of markers along its bottom edge.

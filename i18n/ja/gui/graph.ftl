@@ -127,7 +127,7 @@ graph-triggers = トリガー
 graph-cursors = カーソル
     .hover = グラフをクリックして 2 本のカーソルを配置する ({ $keys })
 # Small text after Cursors until both are placed.
-graph-cursors-hint = グラフをクリックしてカーソルを配置
+graph-cursors-hint = グラフ上にカーソルを配置
 
 ## The plot: the readout by the pointer, the labels on its lines, and the
 ## flags of markers along its bottom edge.

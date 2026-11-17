@@ -28,7 +28,7 @@ connection-waiting-switch-on = マルチメーターのデータ転送をオン�
 ## closing line.
 
 # The closing line under the steps. "Connect" is the top bar's button.
-connection-click-connect = 問題を解決したら、[接続] をクリックしてください。
+connection-click-connect = 問題を解決してから、もう一度 [接続] を選択してください。
 # The closing line after the Bluetooth steps when nothing answered at the
 # address given with --adapter, a command-line option kept as it is. "It"
 # is the scan command the steps above name.

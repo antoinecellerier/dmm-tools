@@ -212,8 +212,8 @@ error-wrong-meter-untold-frame-kind = ni el código de modelo del multímetro ni
 
 # $detail is what the operating system said.
 error-bluetooth-runtime = no se pudo iniciar el entorno de ejecución de Bluetooth: { $detail }
-error-bluetooth-no-adapter = no disponible en este equipo
-error-bluetooth-powered-off = desactivado en este equipo
+error-bluetooth-no-adapter = no disponible
+error-bluetooth-powered-off = desactivado
 # $role is write (the characteristic commands are written to) or notify
 # (the one the meter's data arrives on).
 error-bluetooth-no-characteristic =

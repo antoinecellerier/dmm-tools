@@ -208,8 +208,8 @@ error-wrong-meter-untold-frame-kind = 无法从万用表的型号代码或数据
 
 # $detail is what the operating system said.
 error-bluetooth-runtime = 无法启动蓝牙运行时: { $detail }
-error-bluetooth-no-adapter = 此计算机上无法使用
-error-bluetooth-powered-off = 此计算机上已关闭
+error-bluetooth-no-adapter = 无法使用
+error-bluetooth-powered-off = 已关闭
 # $role is write (the characteristic commands are written to) or notify
 # (the one the meter's data arrives on).
 error-bluetooth-no-characteristic =

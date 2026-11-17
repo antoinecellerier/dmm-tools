@@ -139,7 +139,7 @@ graph-triggers = Triggers
 graph-cursors = Cursors
     .hover = Click the graph to place two cursors ({ $keys })
 # Small text after Cursors until both are placed.
-graph-cursors-hint = click graph to place cursors
+graph-cursors-hint = place cursors on the graph
 
 ## The plot: the readout by the pointer, the labels on its lines, and the
 ## flags of markers along its bottom edge.

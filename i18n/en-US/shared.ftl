@@ -97,7 +97,12 @@ not-found-bluetooth-only = No { $model } found over Bluetooth
 # $check is setup-usb-check or setup-bluetooth-check.
 setup-label = { $link }: { $check }
 setup-usb-check = check it is plugged in and the meter is powered on.
-setup-bluetooth-check = turn on Bluetooth on this computer and data transmission on the meter.
+# $host is phone where the app runs on one (Android), else computer.
+setup-bluetooth-check =
+    { $host ->
+        [phone] turn on Bluetooth on this phone and data transmission on the meter.
+       *[computer] turn on Bluetooth on this computer and data transmission on the meter.
+    }
 # After "Bluetooth:", when the search was switched off; how to switch it on
 # follows as a step of its own.
 setup-bluetooth-off-check = not searched.
@@ -116,7 +121,13 @@ setup-usb-windows-nothing = - Nothing appears: try a different USB port.
 # macOS. Name the settings as macOS shows them in your language.
 setup-usb-macos-auto = The cable should be recognized automatically (no driver needed).
 setup-usb-macos-privacy = If the device is not found, check System Settings > Privacy & Security > Input Monitoring.
-setup-bluetooth-adapter = If both are on, switch the adapter off and on.
+# $host as in setup-bluetooth-check. The adapter is the computer's
+# Bluetooth adapter.
+setup-bluetooth-adapter =
+    { $host ->
+        [phone] If both are on, switch this phone's Bluetooth off and on.
+       *[computer] If both are on, switch the adapter off and on.
+    }
 setup-bluetooth-macos-privacy = Allow Bluetooth in System Settings > Privacy & Security.
 # The device catalog's address follows.
 setup-bluetooth-catalog = Check that your adapter and meter are in the device catalog:
@@ -136,19 +147,28 @@ saved-mock-mode-unknown = The settings file's mock_mode "{ $given }" is not a mo
 # When the meter opened, other cables were there to open and the session
 # took the first, with --adapter a command-line option kept as it is. $count
 # is 2 or more. dmm-gui shows it in a toast, dmm-cli after "Warning:".
+# $host is phone where the app runs on one (Android), which has no command
+# line to pass --adapter on, else computer.
 cables-at-open =
-    { $count ->
-       *[other] { $count } USB cables this session could open are plugged in. It took the first it found. Pass --adapter to pick another.
+    { $host ->
+        [phone] { $count } USB cables this session could open are plugged in. It took the first it found.
+       *[computer] { $count } USB cables this session could open are plugged in. It took the first it found. Pass --adapter to pick another.
     }
 # When the meter opened over Bluetooth, other adapters or meters matched as
 # well and the session took the first, with --adapter a command-line option
-# kept as it is. $count is 2 or more.
+# kept as it is. $count is 2 or more. $host as in cables-at-open.
 bluetooth-tied =
-    { $count ->
-       *[other] { $count } Bluetooth adapters or meters match equally well. This session took the first it found. Pass --adapter with one that 'dmm-cli list' prints to pick another.
+    { $host ->
+        [phone] { $count } Bluetooth adapters or meters match equally well. This session took the first it found.
+       *[computer] { $count } Bluetooth adapters or meters match equally well. This session took the first it found. Pass --adapter with one that 'dmm-cli list' prints to pick another.
     }
-# Follows cables-at-open when nothing tells those cables apart.
-cables-no-reconnect = These cables can't be told apart, so a dropped link will end this session unless --adapter names a cable's path.
+# Follows cables-at-open when nothing tells those cables apart. $host as
+# there.
+cables-no-reconnect =
+    { $host ->
+        [phone] These cables can't be told apart, so a dropped link will end this session.
+       *[computer] These cables can't be told apart, so a dropped link will end this session unless --adapter names a cable's path.
+    }
 # The meter named another model than the one picked. $reported is the name
 # it gave, e.g. UT161E; $picked the model picked, e.g. UNI-T UT61E+. Each
 # app follows it with what to pick (choose-meter-gui, choose-meter-cli).

@@ -127,7 +127,7 @@ graph-triggers = 触发
 graph-cursors = 光标
     .hover = 单击图表放置两个光标 ({ $keys })
 # Small text after Cursors until both are placed.
-graph-cursors-hint = 单击图表放置光标
+graph-cursors-hint = 在图表上放置光标
 
 ## The plot: the readout by the pointer, the labels on its lines, and the
 ## flags of markers along its bottom edge.

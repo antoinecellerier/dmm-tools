@@ -81,7 +81,11 @@ not-found-bluetooth-only = Bluetooth でマルチメーター { $model } が見�
 # $check is setup-usb-check or setup-bluetooth-check.
 setup-label = { $link }: { $check }
 setup-usb-check = ケーブルが接続され、マルチメーターの電源が入っていることをご確認ください。
-setup-bluetooth-check = このコンピューターの Bluetooth と、マルチメーターのデータ転送をオンにしてください。
+setup-bluetooth-check =
+    { $host ->
+        [phone] このスマートフォンの Bluetooth と、マルチメーターのデータ転送をオンにしてください。
+       *[computer] このコンピューターの Bluetooth と、マルチメーターのデータ転送をオンにしてください。
+    }
 # Linux. Two command lines follow.
 setup-usb-linux-rule = udev ルールがインストールされていることをご確認ください:
 # Linux. The setup guide's address follows.
@@ -98,7 +102,11 @@ setup-usb-windows-nothing = - 何も表示されない場合は、別の USB ポ
 # macOS. Name the settings as macOS shows them in your language.
 setup-usb-macos-auto = ケーブルは自動的に認識されます (ドライバーは不要です)。
 setup-usb-macos-privacy = デバイスが見つからない場合は、[システム設定] > [プライバシーとセキュリティ] > [入力監視] をご確認ください。
-setup-bluetooth-adapter = 両方ともオンになっている場合は、アダプターをオフにしてからもう一度オンにしてください。
+setup-bluetooth-adapter =
+    { $host ->
+        [phone] 両方ともオンになっている場合は、このスマートフォンの Bluetooth をオフにしてからもう一度オンにしてください。
+       *[computer] 両方ともオンになっている場合は、アダプターをオフにしてからもう一度オンにしてください。
+    }
 setup-bluetooth-macos-privacy = [システム設定] > [プライバシーとセキュリティ] > [Bluetooth] で Bluetooth の使用を許可してください。
 # The device catalog's address follows.
 setup-bluetooth-catalog = 対応しているアダプターとマルチメーターの一覧は、デバイス カタログをご覧ください:
@@ -109,9 +117,17 @@ setup-bluetooth-scan = 'dmm-cli list' を実行すると、通信範囲内のア
 # When the meter opened, other cables were there to open and the session
 # took the first, with --adapter a command-line option kept as it is. $count
 # is 2 or more. dmm-gui shows it in a toast, dmm-cli after "Warning:".
-cables-at-open = 使用できる USB ケーブルが { $count } 本接続されています。最初に見つかったケーブルを使用しています。別のケーブルを選択するには、--adapter を指定してください。
+cables-at-open =
+    { $host ->
+        [phone] 使用できる USB ケーブルが { $count } 本接続されています。最初に見つかったケーブルを使用しています。
+       *[computer] 使用できる USB ケーブルが { $count } 本接続されています。最初に見つかったケーブルを使用しています。別のケーブルを選択するには、--adapter を指定してください。
+    }
 # Follows cables-at-open when nothing tells those cables apart.
-cables-no-reconnect = これらのケーブルは区別できません。--adapter でケーブルのパスを指定しない限り、リンクが切断されるとそのまま接続が終了します。
+cables-no-reconnect =
+    { $host ->
+        [phone] これらのケーブルは区別できません。リンクが切断されるとそのまま接続が終了します。
+       *[computer] これらのケーブルは区別できません。--adapter でケーブルのパスを指定しない限り、リンクが切断されるとそのまま接続が終了します。
+    }
 # The meter named another model than the one picked. $reported is the name
 # it gave, e.g. UT161E; $picked the model picked, e.g. UNI-T UT61E+. Each
 # app follows it with what to pick (choose-meter-gui, choose-meter-cli).

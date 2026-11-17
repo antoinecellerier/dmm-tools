@@ -323,18 +323,23 @@ impl<'a> Help<'a> {
     /// That `several` cables could have been opened and the first was: the
     /// notice both binaries give once a meter opens on one.
     pub fn cables_at_open(self, several: SeveralCables) -> Cow<'a, str> {
-        tr!(self.0, "cables-at-open", count = several.count)
+        tr!(
+            self.0,
+            "cables-at-open",
+            count = several.count,
+            host = host()
+        )
     }
 
     /// That `count` Bluetooth peers matched equally well and the open took
     /// the first: the notice both binaries give once a meter opens on one.
     pub fn bluetooth_tied(self, count: usize) -> Cow<'a, str> {
-        tr!(self.0, "bluetooth-tied", count = count)
+        tr!(self.0, "bluetooth-tied", count = count, host = host())
     }
 
     /// After [`Self::cables_at_open`], when nothing tells the cables apart.
     pub fn cables_no_reconnect(self) -> Cow<'a, str> {
-        tr!(self.0, "cables-no-reconnect")
+        tr!(self.0, "cables-no-reconnect", host = host())
     }
 
     /// What to check after the meter refused a switch of `setting` (its
@@ -485,7 +490,7 @@ impl<'a> Help<'a> {
                     .collect();
                 vec![SetupSection {
                     link: self.short_name(Link::Bluetooth).into_owned(),
-                    check: tr!(self.0, "setup-bluetooth-check").into_owned(),
+                    check: tr!(self.0, "setup-bluetooth-check", host = host()).into_owned(),
                     steps,
                 }]
             }
@@ -556,14 +561,18 @@ impl<'a> Help<'a> {
     /// standby, and its own power switch wakes it), what this computer's
     /// radio may need, then `closing`.
     fn bluetooth_section(self, closing: Vec<Step<'a>>) -> SetupSection {
-        let steps = std::iter::once(Step::Prose(tr!(self.0, "setup-bluetooth-adapter")))
-            .chain(self.bluetooth_host_steps())
-            .chain(closing)
-            .map(Step::line)
-            .collect();
+        let steps = std::iter::once(Step::Prose(tr!(
+            self.0,
+            "setup-bluetooth-adapter",
+            host = host()
+        )))
+        .chain(self.bluetooth_host_steps())
+        .chain(closing)
+        .map(Step::line)
+        .collect();
         SetupSection {
             link: self.short_name(Link::Bluetooth).into_owned(),
-            check: tr!(self.0, "setup-bluetooth-check").into_owned(),
+            check: tr!(self.0, "setup-bluetooth-check", host = host()).into_owned(),
             steps,
         }
     }
@@ -1136,6 +1145,17 @@ impl Diagnosis {
             _ if err.kind() == ErrorKind::Protocol => Self::BadData,
             _ => Self::Other,
         }
+    }
+}
+
+/// What the app runs on: a message selects on `phone` or `computer` where
+/// the reader has to tell it from the meter, or where only a computer has
+/// the command line a sentence points to.
+fn host() -> &'static str {
+    if cfg!(target_os = "android") {
+        "phone"
+    } else {
+        "computer"
     }
 }
 

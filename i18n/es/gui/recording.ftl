@@ -39,8 +39,8 @@ recording-buffer-full = (búfer lleno)
 # how many samples the graph holds.
 recording-history-hint =
     { $count ->
-        [one] Sin grabación. “Exportar” guarda { $count } muestra del gráfico. Haz clic en “Grabar” para seguir capturando aunque cambie el modo.
-       *[other] Sin grabación. “Exportar” guarda { $count } muestras del gráfico. Haz clic en “Grabar” para seguir capturando aunque cambie el modo.
+        [one] Sin grabación. “Exportar” guarda { $count } muestra del gráfico. Con “Grabar”, la captura continúa aunque cambie el modo.
+       *[other] Sin grabación. “Exportar” guarda { $count } muestras del gráfico. Con “Grabar”, la captura continúa aunque cambie el modo.
     }
 
 ## Messages that show for a few seconds at the top right.

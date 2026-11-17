@@ -81,7 +81,11 @@ not-found-bluetooth-only = Aucun multimètre { $model } trouvé en Bluetooth
 # $check is setup-usb-check or setup-bluetooth-check.
 setup-label = { $link } : { $check }
 setup-usb-check = vérifiez qu’il est branché et que le multimètre est allumé.
-setup-bluetooth-check = activez le Bluetooth sur cet ordinateur et la transmission des données sur le multimètre.
+setup-bluetooth-check =
+    { $host ->
+        [phone] activez le Bluetooth sur ce téléphone et la transmission des données sur le multimètre.
+       *[computer] activez le Bluetooth sur cet ordinateur et la transmission des données sur le multimètre.
+    }
 # Linux. Two command lines follow.
 setup-usb-linux-rule = Vérifiez que la règle udev est installée :
 # Linux. The setup guide's address follows.
@@ -98,7 +102,11 @@ setup-usb-windows-nothing = - Rien n’apparaît : essayez un autre port USB.
 # macOS. Name the settings as macOS shows them in your language.
 setup-usb-macos-auto = Le câble devrait être reconnu automatiquement (aucun pilote nécessaire).
 setup-usb-macos-privacy = Si l’appareil est introuvable, vérifiez l’autorisation dans Réglages Système > Confidentialité et sécurité > Surveillance de l’entrée.
-setup-bluetooth-adapter = Si les deux sont activés, éteignez puis rallumez l’adaptateur.
+setup-bluetooth-adapter =
+    { $host ->
+        [phone] Si les deux sont activés, désactivez puis réactivez le Bluetooth de ce téléphone.
+       *[computer] Si les deux sont activés, éteignez puis rallumez l’adaptateur.
+    }
 setup-bluetooth-macos-privacy = Autorisez le Bluetooth dans Réglages Système > Confidentialité et sécurité > Bluetooth.
 # The device catalog's address follows.
 setup-bluetooth-catalog = Les adaptateurs et multimètres pris en charge figurent dans le catalogue des appareils :
@@ -110,12 +118,24 @@ setup-bluetooth-scan = Lancez 'dmm-cli list' pour rechercher les adaptateurs et 
 # took the first, with --adapter a command-line option kept as it is. $count
 # is 2 or more. dmm-gui shows it in a toast, dmm-cli after "Warning:".
 cables-at-open =
-    { $count ->
-        [one] { $count } câble USB utilisable par cette session est branché : il a été ouvert. Utilisez --adapter pour en choisir un autre.
-       *[other] { $count } câbles USB utilisables par cette session sont branchés : le premier trouvé a été ouvert. Utilisez --adapter pour en choisir un autre.
+    { $host ->
+        [phone]
+            { $count ->
+                [one] { $count } câble USB utilisable par cette session est branché : il a été ouvert.
+               *[other] { $count } câbles USB utilisables par cette session sont branchés : le premier trouvé a été ouvert.
+            }
+       *[computer]
+            { $count ->
+                [one] { $count } câble USB utilisable par cette session est branché : il a été ouvert. Utilisez --adapter pour en choisir un autre.
+               *[other] { $count } câbles USB utilisables par cette session sont branchés : le premier trouvé a été ouvert. Utilisez --adapter pour en choisir un autre.
+            }
     }
 # Follows cables-at-open when nothing tells those cables apart.
-cables-no-reconnect = Rien ne permet de distinguer ces câbles : sauf si --adapter indique le chemin d’un câble, une coupure de la liaison mettra fin à cette session.
+cables-no-reconnect =
+    { $host ->
+        [phone] Rien ne permet de distinguer ces câbles : une coupure de la liaison mettra fin à cette session.
+       *[computer] Rien ne permet de distinguer ces câbles : sauf si --adapter indique le chemin d’un câble, une coupure de la liaison mettra fin à cette session.
+    }
 # The meter named another model than the one picked. $reported is the name
 # it gave, e.g. UT161E; $picked the model picked, e.g. UNI-T UT61E+. Each
 # app follows it with what to pick (choose-meter-gui, choose-meter-cli).

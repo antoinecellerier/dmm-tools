@@ -1225,7 +1225,7 @@ mod tests {
         assert_eq!(
             history_hint(&l10n, 1),
             "No recording. \"Export\u{2026}\" saves 1 sample from the graph. \
-             Click \"Record\" to capture across mode changes."
+             \"Record\" captures across mode changes."
         );
         assert!(
             history_hint(&l10n, 1234)

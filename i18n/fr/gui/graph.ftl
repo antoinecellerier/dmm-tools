@@ -127,7 +127,7 @@ graph-triggers = Déclencheurs
 graph-cursors = Curseurs
     .hover = Cliquer sur le graphique pour placer deux curseurs ({ $keys })
 # Small text after Cursors until both are placed.
-graph-cursors-hint = cliquez sur le graphique pour placer les curseurs
+graph-cursors-hint = placez les curseurs sur le graphique
 
 ## The plot: the readout by the pointer, the labels on its lines, and the
 ## flags of markers along its bottom edge.

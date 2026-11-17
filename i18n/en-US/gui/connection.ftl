@@ -37,7 +37,7 @@ connection-selected-meter-named = If your meter is another, pick it in Settings 
 # { project-link } is the top bar's Help & Feedback link.
 connection-unrecognised-report = Please report it through { project-link } in the top bar.
 # The closing line under the steps. "Connect" is the top bar's button.
-connection-click-connect = Click "Connect" after resolving the issue.
+connection-click-connect = Resolve the issue, then "Connect" again.
 # The closing line after the Bluetooth steps when nothing answered at the
 # address given with --adapter, a command-line option kept as it is. "It"
 # is the scan command the steps above name.

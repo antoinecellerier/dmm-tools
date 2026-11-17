@@ -252,6 +252,28 @@ fn write_export(
     )
 }
 
+/// The shared storage an export is under where no dialog asked for its
+/// place, as on Android; `None` where one did.
+fn unasked_root() -> Option<std::path::PathBuf> {
+    cfg!(target_os = "android")
+        .then(|| std::env::var_os("EXTERNAL_STORAGE"))
+        .flatten()
+        .map(Into::into)
+}
+
+/// How the toast names the file written to `path`. Its name, not the whole
+/// path: the extension names the format written, which is the part the user
+/// needs confirmed. With `root`, the storage a file manager shows, of an
+/// export nobody was asked to place: the path from there, as nothing else
+/// has told the user where the file went.
+fn exported_as(path: &Path, root: Option<&Path>) -> String {
+    root.and_then(|root| path.strip_prefix(root).ok())
+        .map_or_else(
+            || super::import::file_name(path),
+            |below| below.display().to_string(),
+        )
+}
+
 /// What the toast says, and what the recording marks saved, once the write
 /// to `path` finished with `result`.
 fn export_outcome(
@@ -263,10 +285,8 @@ fn export_outcome(
     match result {
         Ok(()) => {
             info!("exported {sample_count} samples to {}", path.display());
-            // The file name, not the whole path: its extension names the
-            // format written, which is the part the user needs confirmed.
             ExportOutcome {
-                written: Ok((sample_count, super::import::file_name(path))),
+                written: Ok((sample_count, exported_as(path, unasked_root().as_deref()))),
                 exported: mark.map(|mark| (mark, sample_count)),
             }
         }
@@ -565,6 +585,29 @@ impl App {
 
 #[cfg(test)]
 mod tests {
+    /// A desktop names the file it was told to write; a phone, which was
+    /// told nothing, says where the file went.
+    #[test]
+    fn an_export_nobody_placed_names_its_folder() {
+        let root = Path::new("/storage/emulated/0");
+        let path = root.join("Documents/dmm-tools/measurements-ut61eplus-dcv.csv");
+        assert_eq!(exported_as(&path, None), "measurements-ut61eplus-dcv.csv");
+        assert_eq!(
+            exported_as(&path, Some(root)),
+            "Documents/dmm-tools/measurements-ut61eplus-dcv.csv"
+        );
+        // The application's own folder, where Documents is closed to it.
+        let own = root.join("Android/data/app/files/a.csv");
+        assert_eq!(
+            exported_as(&own, Some(root)),
+            "Android/data/app/files/a.csv"
+        );
+        assert_eq!(
+            exported_as(Path::new("/elsewhere/a.csv"), Some(root)),
+            "a.csv"
+        );
+    }
+
     use super::*;
     use crate::app::connection::ConnectedMeter;
     use crate::app::test_support::test_app;

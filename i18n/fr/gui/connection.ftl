@@ -28,7 +28,7 @@ connection-waiting-switch-on = Activez la transmission des données du multimèt
 ## closing line.
 
 # The closing line under the steps. "Connect" is the top bar's button.
-connection-click-connect = Cliquez sur « Connecter » après avoir résolu le problème.
+connection-click-connect = Résolvez le problème, puis appuyez de nouveau sur « Connecter ».
 # The closing line after the Bluetooth steps when nothing answered at the
 # address given with --adapter, a command-line option kept as it is. "It"
 # is the scan command the steps above name.

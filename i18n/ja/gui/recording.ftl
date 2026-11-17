@@ -33,7 +33,7 @@ recording-buffer-full = (バッファーがいっぱい)
 # saves the samples the graph holds, which a mode change restarts, where a
 # recording keeps them. Export and Record are the buttons' names. $count is
 # how many samples the graph holds.
-recording-history-hint = 記録はありません。[エクスポート…] でグラフのサンプル { $count } 件を保存できます。モードを変更しても続けて取り込むには、[記録] をクリックしてください。
+recording-history-hint = 記録はありません。[エクスポート…] でグラフのサンプル { $count } 件を保存できます。[記録] では、モードを変更しても続けて取り込めます。
 
 ## Messages that show for a few seconds at the top right.
 

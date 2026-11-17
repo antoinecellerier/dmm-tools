@@ -81,7 +81,11 @@ not-found-bluetooth-only = 通过蓝牙找不到万用表 { $model }
 # $check is setup-usb-check or setup-bluetooth-check.
 setup-label = { $link }: { $check }
 setup-usb-check = 检查连接线是否已插好、万用表是否已开机。
-setup-bluetooth-check = 打开此计算机的蓝牙，并在万用表上打开数据传输。
+setup-bluetooth-check =
+    { $host ->
+        [phone] 打开手机蓝牙，并在万用表上打开数据传输。
+       *[computer] 打开此计算机的蓝牙，并在万用表上打开数据传输。
+    }
 # Linux. Two command lines follow.
 setup-usb-linux-rule = 确认已安装 udev 规则:
 # Linux. The setup guide's address follows.
@@ -99,7 +103,11 @@ setup-usb-windows-nothing = - 没有任何显示: 换一个 USB 端口试试。
 # macOS. Name the settings as macOS shows them in your language.
 setup-usb-macos-auto = 系统应能自动识别连接线 (无需驱动程序)。
 setup-usb-macos-privacy = 如果找不到设备，请检查“系统设置 > 隐私与安全 > 输入监控”。
-setup-bluetooth-adapter = 如果两者都已打开，请关闭再打开适配器。
+setup-bluetooth-adapter =
+    { $host ->
+        [phone] 如果两者都已打开，请将手机蓝牙关闭后再重新打开。
+       *[computer] 如果两者都已打开，请将适配器关闭后再重新打开。
+    }
 setup-bluetooth-macos-privacy = 在“系统设置 > 隐私与安全 > 蓝牙”中允许蓝牙。
 # The device catalog's address follows.
 setup-bluetooth-catalog = 受支持的适配器和万用表列在设备目录中:
@@ -111,11 +119,22 @@ setup-bluetooth-scan = 运行 'dmm-cli list' 扫描蓝牙范围内的适配器�
 # took the first, with --adapter a command-line option kept as it is. $count
 # is 2 or more. dmm-gui shows it in a toast, dmm-cli after "Warning:".
 cables-at-open =
-    { $count ->
-       *[other] 本次会话检测到 { $count } 根可用的 USB 连接线，已使用最先找到的一根。可通过 --adapter 选择其他连接线。
+    { $host ->
+        [phone]
+            { $count ->
+               *[other] 本次会话检测到 { $count } 根可用的 USB 连接线，已使用最先找到的一根。
+            }
+       *[computer]
+            { $count ->
+               *[other] 本次会话检测到 { $count } 根可用的 USB 连接线，已使用最先找到的一根。可通过 --adapter 选择其他连接线。
+            }
     }
 # Follows cables-at-open when nothing tells those cables apart.
-cables-no-reconnect = 这些连接线无法相互区分，除非用 --adapter 指定连接线的路径，否则连接断开后本次会话将结束。
+cables-no-reconnect =
+    { $host ->
+        [phone] 这些连接线无法相互区分，连接断开后本次会话将结束。
+       *[computer] 这些连接线无法相互区分，除非用 --adapter 指定连接线的路径，否则连接断开后本次会话将结束。
+    }
 # The meter named another model than the one picked. $reported is the name
 # it gave, e.g. UT161E; $picked the model picked, e.g. UNI-T UT61E+. Each
 # app follows it with what to pick (choose-meter-gui, choose-meter-cli).

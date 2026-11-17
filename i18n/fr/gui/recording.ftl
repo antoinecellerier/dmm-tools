@@ -39,8 +39,8 @@ recording-buffer-full = (tampon plein)
 # how many samples the graph holds.
 recording-history-hint =
     { $count ->
-        [one] Aucun enregistrement. « Exporter… » sauvegarde { $count } échantillon du graphique. Cliquez sur « Enregistrer » pour capturer les mesures même quand le mode change.
-       *[other] Aucun enregistrement. « Exporter… » sauvegarde { $count } échantillons du graphique. Cliquez sur « Enregistrer » pour capturer les mesures même quand le mode change.
+        [one] Aucun enregistrement. « Exporter… » sauvegarde { $count } échantillon du graphique. « Enregistrer » capture les mesures même quand le mode change.
+       *[other] Aucun enregistrement. « Exporter… » sauvegarde { $count } échantillons du graphique. « Enregistrer » capture les mesures même quand le mode change.
     }
 
 ## Messages that show for a few seconds at the top right.

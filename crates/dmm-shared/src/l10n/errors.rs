@@ -480,16 +480,8 @@ impl Localizer {
             BluetoothIssue::Runtime { detail } => {
                 tr!(self, "error-bluetooth-runtime", detail = detail)
             }
-            BluetoothIssue::NoAdapter => tr!(
-                self,
-                "error-bluetooth-no-adapter",
-                host = dmm_lib::error::host()
-            ),
-            BluetoothIssue::PoweredOff => tr!(
-                self,
-                "error-bluetooth-powered-off",
-                host = dmm_lib::error::host()
-            ),
+            BluetoothIssue::NoAdapter => tr!(self, "error-bluetooth-no-adapter"),
+            BluetoothIssue::PoweredOff => tr!(self, "error-bluetooth-powered-off"),
             BluetoothIssue::NoCharacteristic { role } => tr!(
                 self,
                 "error-bluetooth-no-characteristic",

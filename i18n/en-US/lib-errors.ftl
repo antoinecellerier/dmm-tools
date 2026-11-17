@@ -95,7 +95,7 @@ error-bluetooth-only-usb-adapter = { $model } connects over Bluetooth only, and 
 error-cable-not-allowed = the USB cable is waiting for your permission: accept Android's prompt, or plug the cable in again to see it
 # On Android, where the meter may be on either: nothing was found on USB
 # and Bluetooth could not be searched.
-error-no-cable-bluetooth-off = no USB cable is plugged in, and Bluetooth is turned off on this phone
+error-no-cable-bluetooth-off = no USB cable is plugged in, and Bluetooth is turned off
 # Opening the meter was stopped part-way, by Disconnect or by quitting.
 error-cancelled = open called off
 
@@ -231,18 +231,10 @@ error-wrong-meter-untold-frame-kind = neither the meter's model code nor its fra
 
 # $detail is what the operating system said.
 error-bluetooth-runtime = could not start the Bluetooth runtime: { $detail }
-# $host is phone on Android, else computer.
-error-bluetooth-no-adapter =
-    { $host ->
-        [phone] not available on this phone
-       *[computer] not available on this computer
-    }
-# $host is phone on Android, else computer.
-error-bluetooth-powered-off =
-    { $host ->
-        [phone] turned off on this phone
-       *[computer] turned off on this computer
-    }
+# Both follow "Bluetooth: " (error-bluetooth) and name no computer or
+# phone: the app runs on either.
+error-bluetooth-no-adapter = not available
+error-bluetooth-powered-off = turned off
 # $role is write (the characteristic commands are written to) or notify
 # (the one the meter's data arrives on).
 error-bluetooth-no-characteristic =

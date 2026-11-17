@@ -17,16 +17,6 @@
 use std::fmt;
 use thiserror::Error;
 
-/// What the program runs on, as a reason names it: `phone` or `computer`.
-/// An app's wording selects on the same word.
-pub fn host() -> &'static str {
-    if cfg!(target_os = "android") {
-        "phone"
-    } else {
-        "computer"
-    }
-}
-
 /// Why the Bluetooth stack could not do what was asked.
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
 pub enum BluetoothIssue {
@@ -39,12 +29,13 @@ pub enum BluetoothIssue {
     #[error("could not start the Bluetooth runtime: {detail}")]
     Runtime { detail: String },
 
-    /// The computer has no Bluetooth adapter.
-    #[error("not available on this {}", host())]
+    /// The computer or phone has no Bluetooth adapter. The text names
+    /// neither, so it reads right on both.
+    #[error("not available")]
     NoAdapter,
 
-    /// The computer's Bluetooth adapter is powered off.
-    #[error("turned off on this {}", host())]
+    /// The Bluetooth adapter is powered off.
+    #[error("turned off")]
     PoweredOff,
 
     /// The peer answered but carries no profile we know: the closest one
@@ -112,8 +103,8 @@ mod tests {
                 },
                 "could not start the Bluetooth runtime: Too many open files (os error 24)",
             ),
-            (BluetoothIssue::NoAdapter, "not available on this computer"),
-            (BluetoothIssue::PoweredOff, "turned off on this computer"),
+            (BluetoothIssue::NoAdapter, "not available"),
+            (BluetoothIssue::PoweredOff, "turned off"),
             (
                 BluetoothIssue::NoCharacteristic {
                     role: CharacteristicRole::Write,

@@ -208,8 +208,8 @@ error-wrong-meter-untold-frame-kind = マルチメーターのモデル コー�
 
 # $detail is what the operating system said.
 error-bluetooth-runtime = Bluetooth ランタイムを起動できませんでした: { $detail }
-error-bluetooth-no-adapter = このコンピューターでは使用できません
-error-bluetooth-powered-off = このコンピューターでオフになっています
+error-bluetooth-no-adapter = 使用できません
+error-bluetooth-powered-off = オフになっています
 # $role is write (the characteristic commands are written to) or notify
 # (the one the meter's data arrives on).
 error-bluetooth-no-characteristic =

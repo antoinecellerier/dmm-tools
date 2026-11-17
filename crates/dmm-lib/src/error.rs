@@ -5,7 +5,7 @@ use thiserror::Error;
 mod bluetooth;
 mod reason;
 mod wrong_meter;
-pub use bluetooth::{BluetoothIssue, CharacteristicRole, host};
+pub use bluetooth::{BluetoothIssue, CharacteristicRole};
 pub use reason::{Rejected, Sent, Unsupported};
 pub use wrong_meter::{FrameRemedy, Unread, WrongMeter};
 
@@ -159,7 +159,7 @@ pub enum Error {
 
     /// On Android, where either link may carry the meter: no cable is
     /// plugged in, and the radio is off so it was not searched.
-    #[error("no USB cable is plugged in, and Bluetooth is turned off on this phone")]
+    #[error("no USB cable is plugged in, and Bluetooth is turned off")]
     NoCableBluetoothOff,
 
     /// The caller called the open off through

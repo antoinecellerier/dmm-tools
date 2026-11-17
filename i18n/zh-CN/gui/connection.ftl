@@ -28,7 +28,7 @@ connection-waiting-switch-on = 打开万用表的数据传输，或在“设置�
 ## closing line.
 
 # The closing line under the steps. "Connect" is the top bar's button.
-connection-click-connect = 解决问题后，单击“连接”。
+connection-click-connect = 解决问题后，再次选择“连接”。
 # The closing line after the Bluetooth steps when nothing answered at the
 # address given with --adapter, a command-line option kept as it is. "It"
 # is the scan command the steps above name.

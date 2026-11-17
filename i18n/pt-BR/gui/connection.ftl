@@ -28,7 +28,7 @@ connection-waiting-switch-on = Ligue a transmissão de dados do multímetro, ou 
 ## closing line.
 
 # The closing line under the steps. "Connect" is the top bar's button.
-connection-click-connect = Clique em “Conectar” depois de resolver o problema.
+connection-click-connect = Resolva o problema e use “Conectar” de novo.
 # The closing line after the Bluetooth steps when nothing answered at the
 # address given with --adapter, a command-line option kept as it is. "It"
 # is the scan command the steps above name.

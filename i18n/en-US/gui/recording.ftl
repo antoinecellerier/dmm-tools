@@ -43,8 +43,8 @@ recording-buffer-full = (buffer full)
 # how many samples the graph holds.
 recording-history-hint =
     { $count ->
-        [one] No recording. "Export…" saves { $count } sample from the graph. Click "Record" to capture across mode changes.
-       *[other] No recording. "Export…" saves { $count } samples from the graph. Click "Record" to capture across mode changes.
+        [one] No recording. "Export…" saves { $count } sample from the graph. "Record" captures across mode changes.
+       *[other] No recording. "Export…" saves { $count } samples from the graph. "Record" captures across mode changes.
     }
 
 ## Messages that show for a few seconds at the top right.
