@@ -66,7 +66,8 @@ What worked:
 
 - The GUI draws through eframe's `android-native-activity` and glow and
   follows the screen into landscape. Taps, drags and pinch zoom work on
-  the graph, and the Settings panel is usable; the controls keep their
+  the graph, a tap leaves the crosshair on its reading, and the Settings
+  panel is usable; the controls keep their
   desktop size, which is small for a finger. It survives being sent to the
   background and brought back.
 - `btleplug::platform::init`, called from `android_main`, and the
@@ -117,8 +118,21 @@ What it showed about Android:
   applications, the process ended. It ends before the native side hears
   of it, so a recording not exported goes without the question a desktop
   asks before closing.
-- The status bar covered the top bar (egui #7748); the activity is full
-  screen.
+- The status bar covered the top bar (egui #7748), and a full-screen
+  activity, the first answer to that, is not resized for the soft
+  keyboard, which then covered the field being typed in. The system does
+  report what it leaves the application: `android-activity`'s content
+  rectangle left out the status bar, and the keyboard while it was up, in
+  portrait and landscape. winit drops the event that says it changed, so
+  the window reads the rectangle every frame and lays itself out inside
+  it. A Full screen setting hides the system's bars for a screen short of
+  height.
+- The soft keyboard opens when a text field takes the focus, and typing
+  reaches the field, on the Android 12 phone; egui #5590 did not show.
+  egui asks for the keyboard only while the focused field is in view, so
+  a field that a change of height pushes out of view for a frame and
+  scrolls back brings up a keyboard the user has just put away; the
+  window keeps the keyboard's state steady across such a change.
 - The kernel binds the CP2110 to `usbhid`, and `/dev/hidraw*` is root's
   alone. `nusb`'s disconnect-and-claim request is accepted on a
   `UsbManager` descriptor, and a duplicate of the descriptor outlives the
@@ -138,18 +152,20 @@ What it showed about Android:
   Android keeps a cable's serial number from an application that has no
   permission yet, so a session on Android is not tied to its cable's serial
   number.
-- Full screen, the window reaches into the screen's rounded corners. The
+- The window reaches into the screen's rounded corners. The
   build asks the system for their radius and keeps a margin clear of them,
   but this phone's system reported square corners; with the radius given
   by hand the margin held in portrait and landscape.
 
 Not done or not tested: the CH9329, CH9325 and BU-86X cables, a meter that
 sends unasked on a cable, two cables at once, choosing where an export
-goes, naming a saved theme, the soft keyboard, the system clipboard, a
+goes, naming a saved theme, the system clipboard, a
 layout for a phone screen, Android versions other than 12 and 14, other
-meters. The texts are the desktop's but for three errors that name the
-phone, its cable prompt or its radio, so help and hovers still speak of a
-computer.
+meters. The texts a phone shows unasked name the phone where the reader has to
+tell it from the meter, and leave out the command-line advice; hovers,
+which a finger does not bring up, and the keys they name are the
+desktop's, as are the list of USB cables in the nothing-found error and
+What's New.
 
 ## Scope
 
@@ -194,10 +210,14 @@ Caveats, from eframe's source and egui's issue tracker:
 - Soft keyboard: reported not to open on `NativeActivity` ([egui
   #5590](https://github.com/emilk/egui/issues/5590)); the workaround given
   there is a JNI call to `showSoftInput`. `dmm-gui` has typed fields, among
-  them alarm limits, marker notes and the graph's fields.
+  them alarm limits, marker notes and the graph's fields. It opened on the
+  phone tried (Experimental build).
 - Status-bar and navigation-bar insets are not reported on Android ([egui
   #7748](https://github.com/emilk/egui/issues/7748)); eframe's safe-area
-  support covers iOS only.
+  support covers iOS only. The experimental build takes them from the
+  activity's content rectangle. An application targeting Android 15 draws
+  under the bars, where that rectangle may no longer leave them out; the
+  build targets Android 14.
 - Rendering: `wgpu` on the Vulkan drivers of older phones is untested.
   `dmm-gui` falls back to `glow` when `wgpu` fails to start.
 
@@ -531,9 +551,9 @@ experimental build `jni` stays in `crates/dmm-android`, and `nusb` joins
   with old readings. The input queue holds 64 reports and then holds the
   device back, where a desktop's HID driver keeps reading; what the bridge
   kept meanwhile would arrive after the queue was emptied.
-- Keeping the system's status bar on screen as an option: the margin that
-  clears the rounded corners could carry the bar's height too, read from
-  the window's insets by the activity.
+- What a top bar does on a screen narrower than its second row, about
+  250 points: the version, the links and the two buttons still run past
+  the edge there.
 - Whether the CH9329, CH9325 and BU-86X work as the CP2110 does. Their
   HID interface and endpoints are read from the descriptors when the cable
   opens; a cable with no interrupt OUT endpoint takes its reports on the
