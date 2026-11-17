@@ -47,3 +47,9 @@ The hook's test run was about 20 s of every commit's 24 s, most of it a few GUI 
 - Optimising `dmm-lib` itself in dev: its exhaustive decoder tests are now the slowest (about 3 s for the BM86x spec walk), but every edit build of the library would pay for it.
 
 Reopens if: the test run grows back past about 15 s.
+
+### Pausing acquisition in the Android background
+
+Stopping the Android app's acquisition while its window is gone would bound the queue that [readings in the background](future-improvements.md#readings-while-the-android-app-is-in-the-background) build up, but a quick switch to another app would leave a gap in the graph and the recording. The app keeps reading instead, and Android freezing or killing an app left in the background bounds the queue.
+
+Reopens if: a report of the queue growing large on a phone that does neither.

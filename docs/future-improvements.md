@@ -516,3 +516,11 @@ Use cases: unverified families, where a key's effect is often in a byte the deco
 The macOS archive holds bare binaries, so Finder shows dmm-gui with the generic executable icon and opens a Terminal window before the GUI; the Dock icon only appears once it runs. Shipping `dmm-gui.app` (an `Info.plist`, an `.icns` built from `assets/icon.svg`, the whole bundle re-signed ad hoc so Apple Silicon will run it) would fix both, and the first-launch steps in [setup.md](setup.md#macos-wont-open-dmm-cli-or-dmm-gui) would change with it. dmm-cli stays a bare binary, as command-line tools are on macOS. Needs someone with a Mac to try a dev build before it ships.
 
 Use cases: launching dmm-gui from Finder, Launchpad or the Dock like any other Mac app.
+
+### Readings while the Android app is in the background
+
+**Complexity:** Medium
+
+With the activity in the background or the screen off, eframe runs none of the app's logic, so the acquisition thread's readings wait in its unbounded message channel: the graph and recording fill in with their own timestamps on return, and alarms are judged only then. What bounds that queue today is Android freezing or killing an app left in the background with no foreground service; a phone that does neither lets it grow. Logging with the screen off needs a foreground service with its notification (the connected-device type on Android 14), a partial wake lock, and a way to drain the channel without a window. Neither a long stay in the background nor the screen off has been tried on a phone yet. Pausing acquisition instead is [ruled out](future-improvements-ruled-out.md#pausing-acquisition-in-the-android-background).
+
+Use cases: a long unattended log on a phone with its screen off.

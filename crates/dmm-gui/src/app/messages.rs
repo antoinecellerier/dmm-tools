@@ -352,7 +352,10 @@ impl App {
 
         // Unbounded: `drain_messages` empties the message channel every
         // frame, and from `App::logic` while the window is hidden, so it only
-        // ever holds what arrived since the last pass.
+        // ever holds what arrived since the last pass. On Android eframe
+        // calls neither while the activity has no window, and the channel
+        // grows until it is back ("Readings while the Android app is in the
+        // background" in docs/future-improvements.md).
         let (msg_tx, msg_rx) = mpsc::channel();
         let (ctrl_tx, ctrl_rx) = mpsc::channel();
         let (cmd_tx, cmd_rx) = mpsc::channel::<RemoteCommand>();
