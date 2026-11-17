@@ -355,9 +355,9 @@ there are (`1m 49s #1103`).
   latest million; export for the rest) showing timestamp, value, unit, flags
   and any sub-values, with each marker on its reading's row; with nothing
   recorded, it lists the markers alone
-- **Markers** — `N` marks the reading on screen, `Ctrl+N` marks it and puts
-  the cursor in its note, and clicking a marker's flag on the graph opens its
-  note. To mark an earlier reading, hover its row and click the `+` that
+- **Markers** — **Mark**, or `N`, marks the reading on screen, `Ctrl+N` marks
+  it and puts the cursor in its note, and clicking a marker's flag on the
+  graph opens its note. To mark an earlier reading, hover its row and click the `+` that
   appears, or use the plot's right-click menu. A marker's row ends with its
   number, note and `×` to delete it (or right-click its line on the plot);
   `Enter` keeps a note, `Esc` puts back

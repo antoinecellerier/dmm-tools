@@ -416,6 +416,20 @@ impl App {
             if !imported && ui.button(btn_label).on_hover_text(btn_tooltip).clicked() {
                 self.toggle_recording();
             }
+            // The `N` key's button: a touchscreen has no other way to mark
+            // the reading on screen.
+            let keys = Shortcut::AddMarker.keys(ui.ctx(), l10n);
+            // Never greyed: with no reading to mark the toast says so, as
+            // for the key, where a greyed button's hover would not under a
+            // finger.
+            let mark = ui.button(tr!(l10n, "recording-mark")).on_hover_text(tr!(
+                l10n,
+                "recording-mark.hover",
+                keys = &keys
+            ));
+            if mark.clicked() {
+                self.add_marker(false);
+            }
             self.show_export_button(ui);
             let count = self.capture.recording.recording_samples().len();
             let recorded = self.capture.recording.role() == BufferRole::Recording;
@@ -1035,8 +1049,8 @@ mod tests {
         run.frame(1.0, vec![]);
         let arrow = run.node_rect("Export file type");
 
-        // Import…, Record, Export… and then the arrow.
-        for _ in 0..4 {
+        // Import…, Record, Mark, Export… and then the arrow.
+        for _ in 0..5 {
             run.key(Key::Tab);
         }
         let focused = run.focused_rect().expect("Tab reached the arrow");
@@ -1181,6 +1195,28 @@ mod tests {
         run.frame(1.0, vec![]);
         assert!(!run.shows_text(&history_hint(&l10n, 1)));
         assert!(run.shows_text("1 sample"));
+    }
+
+    /// The Mark button is the `N` key for a finger: it marks the reading on
+    /// screen, and with no reading yet a click marks nothing and says so.
+    #[test]
+    fn the_mark_button_marks_the_reading_on_screen() {
+        let mut run = MenuRun::new();
+        run.frame(1.0, vec![]);
+        let mark = run.node_rect("Mark").center();
+        run.click(mark);
+        assert!(run.app.markers.is_empty(), "no reading, nothing to mark");
+        assert_eq!(
+            run.app.toasts.latest().map(|t| t.message.as_str()),
+            Some("No reading to mark yet")
+        );
+
+        run.app
+            .deliver(crate::app::connection::DmmMessage::Measurement(reading()));
+        run.frame(1.0, vec![]);
+        let mark = run.node_rect("Mark").center();
+        run.click(mark);
+        assert_eq!(run.app.markers.iter().count(), 1);
     }
 
     #[test]
@@ -2040,7 +2076,7 @@ mod tests {
         let number = run.node_rect("Show marker 1 on the graph");
         let note = run.node_rect("Note for marker 1");
         let mut stops = Vec::new();
-        for _ in 0..6 {
+        for _ in 0..7 {
             run.key(Key::Tab);
             if let Some(r) = run.focused_rect() {
                 stops.push(r.center());

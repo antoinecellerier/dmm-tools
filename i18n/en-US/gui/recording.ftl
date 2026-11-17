@@ -18,6 +18,10 @@ recording-record = ● Record
 # The Record button while recording; ■ is part of it.
 recording-stop = ■ Stop
     .hover = Stop recording ({ $keys })
+# A button: puts a numbered marker on the reading the meter shows now. The
+# graph's menu has an entry of the same name; keep the two alike.
+recording-mark = Mark
+    .hover = Mark the reading on screen ({ $keys })
 # Shown after Export… once a recording has stopped. Export… is the button
 # beside it, which saves the samples to a file.
 recording-discard = Discard
