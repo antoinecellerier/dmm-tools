@@ -681,8 +681,8 @@ pub struct AndroidStart {
     pub full_screen: Option<FullScreen>,
 }
 
-/// See [`AndroidStart::cable_offered`]. Called on the window's thread,
-/// every frame.
+/// See [`AndroidStart::cable_offered`]. Called about once a second, on a
+/// thread of its own ([`watch_the_activity`]).
 #[cfg(target_os = "android")]
 pub type CableOffer = Box<dyn Fn() -> bool + Send + Sync>;
 
@@ -693,7 +693,73 @@ static CABLE_OFFER: std::sync::OnceLock<CableOffer> = std::sync::OnceLock::new()
 /// ([`AndroidStart::cable_offered`]).
 #[cfg(target_os = "android")]
 pub(crate) fn take_cable_offer() -> bool {
-    CABLE_OFFER.get().is_some_and(|offered| offered())
+    CABLE_OFFERED.swap(false, std::sync::atomic::Ordering::Relaxed)
+}
+
+/// Set by [`watch_the_activity`] when the activity says an offer was
+/// answered, for the window to take.
+#[cfg(target_os = "android")]
+static CABLE_OFFERED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Wake the window when the activity has something for it that no event
+/// brings: the part of the window the system leaves it changed (the soft
+/// keyboard came or went, the system's bars did), or a USB cable's offer
+/// was answered. The window draws no frame while nothing changes, so it
+/// would not look; this thread looks for it, which costs a lock where a
+/// frame costs a pass over the whole window.
+///
+/// Only while the activity has a window: in the background it looks once a
+/// second, to see the window come back.
+#[cfg(target_os = "android")]
+fn watch_the_activity(ctx: egui::Context) {
+    use std::sync::atomic::Ordering;
+    use std::time::Duration;
+    /// How soon a keyboard's coming or going is seen.
+    const LOOK: Duration = Duration::from_millis(150);
+    /// How often the Java side is asked about a cable's offer, which is a
+    /// call across to it, and how often a hidden activity is looked at.
+    const ASK: Duration = Duration::from_secs(1);
+
+    let watch = move || {
+        let Some(app) = ANDROID_APP.get() else {
+            return;
+        };
+        let mut seen = app.content_rect();
+        let mut since_asked = Duration::ZERO;
+        loop {
+            if app.native_window().is_none() {
+                std::thread::sleep(ASK);
+                continue;
+            }
+            std::thread::sleep(LOOK);
+            since_asked += LOOK;
+            let now = app.content_rect();
+            let mut wake = now != seen;
+            seen = now;
+            if since_asked >= ASK {
+                since_asked = Duration::ZERO;
+                if CABLE_OFFER.get().is_some_and(|offered| offered()) {
+                    CABLE_OFFERED.store(true, Ordering::Relaxed);
+                    wake = true;
+                }
+            }
+            if wake {
+                ctx.request_repaint();
+            }
+        }
+    };
+    let spawned = std::thread::Builder::new()
+        .name("activity-watch".into())
+        .spawn(move || {
+            if std::panic::catch_unwind(std::panic::AssertUnwindSafe(watch)).is_err() {
+                log::error!(
+                    "the activity watcher stopped: the window no longer follows the keyboard"
+                );
+            }
+        });
+    if let Err(e) = spawned {
+        log::error!("no thread to watch the activity: {e}");
+    }
 }
 
 /// See [`AndroidStart::full_screen`]. Called on the window's thread.
@@ -722,7 +788,8 @@ static ANDROID_APP: std::sync::OnceLock<AndroidApp> = std::sync::OnceLock::new()
 /// pixels: what its bars and the soft keyboard do not cover. `None` off
 /// Android, where a window is all the application's.
 ///
-/// Read every frame: the event that says it changed stops in winit.
+/// Read every frame: the event that says it changed stops in winit, and
+/// [`watch_the_activity`] asks for a frame when it does.
 pub(crate) fn content_rect_px() -> Option<egui::Rect> {
     #[cfg(target_os = "android")]
     {
@@ -798,7 +865,10 @@ pub fn run_android(app: AndroidApp, start: AndroidStart) -> eframe::Result<()> {
     eframe::run_native(
         "dmm-tools",
         options,
-        Box::new(move |cc| Ok(Box::new(app::App::new(cc, settings, overrides, l10n)))),
+        Box::new(move |cc| {
+            watch_the_activity(cc.egui_ctx.clone());
+            Ok(Box::new(app::App::new(cc, settings, overrides, l10n)))
+        }),
     )
 }
 

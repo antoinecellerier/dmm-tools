@@ -1235,8 +1235,9 @@ impl App {
         /// Whether a session ran since the offer was last looked at.
         static SESSION_SINCE: AtomicBool = AtomicBool::new(false);
 
-        // Asked of the activity's Java side, so only while there is a use
-        // for the answer. An open in progress leaves it for the frame after
+        // Taken only while there is a use for the answer (the watcher that
+        // hears of an offer wakes the window for it, `watch_the_activity`).
+        // An open in progress leaves it for the frame after
         // it has ended: failed, which it may well have for want of this
         // cable, the cable is the next thing to try.
         match self.connection.state {
@@ -1253,9 +1254,6 @@ impl App {
         let stale = SESSION_SINCE.swap(false, Ordering::Relaxed);
         if offered && !stale && !self.source.is_import() {
             self.connect(ctx);
-        } else {
-            // Nothing wakes the window when the offer comes.
-            ctx.request_repaint_after(std::time::Duration::from_secs(1));
         }
     }
 }
@@ -1315,12 +1313,7 @@ impl eframe::App for App {
     fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.hold_close(ctx);
         #[cfg(target_os = "android")]
-        {
-            self.connect_to_offered_cable(ctx);
-            // Nothing wakes the window when the soft keyboard goes or the
-            // screen's bars change, and a paused session draws no frame.
-            ctx.request_repaint_after(std::time::Duration::from_secs(1));
-        }
+        self.connect_to_offered_cable(ctx);
         self.logic_pass();
     }
 

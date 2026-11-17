@@ -125,7 +125,9 @@ What it showed about Android:
   rectangle left out the status bar, and the keyboard while it was up, in
   portrait and landscape. winit drops the event that says it changed, so
   the window reads the rectangle every frame and lays itself out inside
-  it. A Full screen setting hides the system's bars for a screen short of
+  it, and a thread that watches the rectangle asks for a frame when it
+  changes: paused, with no field in focus, the application then drew
+  nothing and took under half a percent of one processor core. A Full screen setting hides the system's bars for a screen short of
   height.
 - The soft keyboard opens when a text field takes the focus, and typing
   reaches the field, on the Android 12 phone; egui #5590 did not show.
