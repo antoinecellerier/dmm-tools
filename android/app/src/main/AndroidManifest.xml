@@ -15,8 +15,12 @@
         android:usesPermissionFlags="neverForLocation" />
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
 
+    <!-- localeConfig: Android 13 and later offer the application's
+         languages in the system's settings; the native side asks the
+         activity for the one picked. -->
     <application
         android:label="dmm-tools"
+        android:localeConfig="@xml/locales_config"
         android:icon="@mipmap/ic_launcher"
         android:theme="@android:style/Theme.DeviceDefault.NoActionBar">
 

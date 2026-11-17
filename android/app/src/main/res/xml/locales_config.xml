@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The languages the application ships, which Android 13 and later offer
+     for it in the system's settings: SHIPPED in
+     crates/dmm-shared/src/l10n/lang.rs, which a test there holds this file
+     to. -->
+<locale-config xmlns:android="http://schemas.android.com/apk/res/android">
+    <locale android:name="en-US" />
+    <locale android:name="es" />
+    <locale android:name="fr" />
+    <locale android:name="pt-BR" />
+    <locale android:name="ja" />
+    <locale android:name="zh-CN" />
+</locale-config>

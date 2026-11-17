@@ -261,6 +261,29 @@ mod tests {
         assert_eq!(names, sorted, "English first, then by native name");
     }
 
+    /// The languages Android offers for the application in its settings
+    /// have to be the ones shipped: one left out cannot be picked there,
+    /// and one too many would be offered and shown in English.
+    #[test]
+    fn android_offers_exactly_the_shipped_languages() {
+        let path = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../android/app/src/main/res/xml/locales_config.xml"
+        );
+        let config = std::fs::read_to_string(path).expect("read locales_config.xml");
+        let offered: Vec<&str> = config
+            .lines()
+            .filter_map(|line| {
+                line.split_once("<locale android:name=\"")?
+                    .1
+                    .split_once('"')
+            })
+            .map(|(name, _)| name)
+            .collect();
+        let shipped: Vec<&str> = SHIPPED.iter().map(|l| l.id).collect();
+        assert_eq!(offered, shipped);
+    }
+
     #[test]
     fn tags_match_by_language() {
         assert_eq!(id("fr"), Some("fr"));

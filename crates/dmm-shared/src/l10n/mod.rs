@@ -61,8 +61,22 @@ pub const L10N_DIR_VAR: &str = "DMM_TOOLS_L10N_DIR";
 /// preferred languages. With no setting, an en-US Windows 11 gives both apps
 /// English.
 pub fn resolve_from_env(flag: Option<&str>, setting: &str) -> &'static Language {
-    let system: Vec<String> = sys_locale::get_locales().collect();
+    let system: Vec<String> = match SYSTEM_LANGUAGES.get() {
+        Some(named) => named.clone(),
+        None => sys_locale::get_locales().collect(),
+    };
     resolve(flag, setting, |k| std::env::var(k).ok(), &system)
+}
+
+/// The languages [`set_system_languages`] named.
+static SYSTEM_LANGUAGES: OnceLock<Vec<String>> = OnceLock::new();
+
+/// Name the languages the user prefers, most wanted first, for a platform
+/// that tells the application what `sys_locale` cannot read: on Android,
+/// the language picked for this application alone in the system's settings.
+/// Call it before the first [`resolve_from_env`]; the first call stands.
+pub fn set_system_languages(tags: Vec<String>) {
+    let _ = SYSTEM_LANGUAGES.set(tags);
 }
 
 /// One `.ftl` file compiled into a binary.

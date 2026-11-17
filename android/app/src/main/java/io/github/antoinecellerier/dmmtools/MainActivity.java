@@ -310,6 +310,15 @@ public class MainActivity extends NativeActivity {
     }
 
     /**
+     * The languages the user wants the application in, most wanted first,
+     * as comma-separated BCP 47 tags: the one picked for it in the system's
+     * settings, where Android offers that, then the system's own.
+     */
+    public String appLanguages() {
+        return getResources().getConfiguration().getLocales().toLanguageTags();
+    }
+
+    /**
      * Whether the device is one of the cables res/xml/usb_cables.xml lists,
      * the ones the system offers the application for.
      */

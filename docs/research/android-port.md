@@ -71,6 +71,11 @@ What worked:
 - The permission request, made by a small Java activity before the native
   one starts.
 - Settings, kept in the application's own folder.
+- The language picked for the application in Android's settings, on the
+  second phone: the package lists its languages (Android 13 and later
+  offer them), and the activity's Java side reads the one picked, which
+  the system's locale property does not hold. It applies at the next
+  start.
 - Export, which writes unasked to a `dmm-tools` folder in the shared
   Documents; Import, through the system's document picker, shown by the
   activity's Java side; links, opened in the browser.

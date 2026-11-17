@@ -47,6 +47,12 @@ fn android_main(app: AndroidApp) {
         Some(dir) => dmm_shared::set_config_dir(dir),
         None => log::error!("no application data folder: settings will not be kept"),
     }
+    // Before the window reads its language. Unread, the system's own
+    // language stands, without the one picked for the application.
+    match app_languages(&app) {
+        Ok(tags) => dmm_shared::l10n::set_system_languages(tags),
+        Err(e) => log::warn!("the application's language could not be read: {e}"),
+    }
 
     // An open on a btleplug that was not initialised panics, so a failure
     // here keeps this session off the radio.
@@ -130,6 +136,23 @@ fn pick_file(app: &AndroidApp) -> Result<Option<PathBuf>, jni::errors::Error> {
         }
         let path = env.cast_local::<JString>(path)?;
         Ok(Some(PathBuf::from(path.try_to_string(env)?)))
+    })
+}
+
+/// The languages the user wants the application in, most wanted first,
+/// from `MainActivity.appLanguages`.
+fn app_languages(app: &AndroidApp) -> Result<Vec<String>, jni::errors::Error> {
+    with_activity(app, |env, activity| {
+        let tags = env
+            .call_method(
+                activity,
+                jni_str!("appLanguages"),
+                jni_sig!("()Ljava/lang/String;"),
+                &[],
+            )?
+            .l()?;
+        let tags = env.cast_local::<JString>(tags)?.try_to_string(env)?;
+        Ok(tags.split(',').map(str::to_string).collect())
     })
 }
 

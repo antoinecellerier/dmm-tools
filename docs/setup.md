@@ -30,6 +30,8 @@ Where Android refuses apps from unverified developers, either [allow them in And
 
 To update, install a newer file the same way; settings are kept. The app shows no update notice.
 
+On Android 13 and later, Android's settings page for the app offers its languages. The app starts in the one picked there while its own Language setting is on Auto.
+
 ## Platform setup
 
 ### Linux — udev rule
