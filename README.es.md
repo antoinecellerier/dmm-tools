@@ -1,4 +1,4 @@
-<!-- translated from README.md d82a1f991ed2042480fcf5ec1170049adb779dff -->
+<!-- translated from README.md 8f9099d73366f65286dd5eb86fd88460fe72c98a -->
 # dmm-tools
 
 [![CI](https://github.com/antoinecellerier/dmm-tools/actions/workflows/ci.yml/badge.svg)](https://github.com/antoinecellerier/dmm-tools/actions/workflows/ci.yml)
@@ -9,7 +9,7 @@
 
 *Esta página es una traducción automática; la versión de referencia es el [README en inglés](README.md). Se agradece la revisión de hablantes nativos: [cómo colaborar](CONTRIBUTING.md#translations) (en inglés).*
 
-Aplicación de escritorio y herramienta de línea de comandos, ambas de código abierto, para leer, registrar, representar gráficamente y controlar a distancia multímetros digitales (DMM) y pinzas amperimétricas de UNI-T, ZOTEK (ZOYI, ANENG, BSIDE), OWON, Brymen (Minipa), EEVblog y Voltcraft, por USB y Bluetooth, en Linux, Windows, macOS y Raspberry Pi.
+Aplicación de escritorio y herramienta de línea de comandos, ambas de código abierto, para leer, registrar, representar gráficamente y controlar a distancia multímetros digitales (DMM) y pinzas amperimétricas de UNI-T, ZOTEK (ZOYI, ANENG, BSIDE), OWON, Brymen (Minipa), EEVblog y Voltcraft, por USB y Bluetooth, en Linux, Windows, macOS, Raspberry Pi y Android (experimental).
 
 Funciona con los UNI-T UT61E+, UT181A, UT161, UT71, UT60BT y UT804, ANENG AN9002 (ZOTEK ZT-300AB), Brymen BM869s, EEVblog 121GW, OWON OW18E y B41T+, Voltcraft VC-890 y [más](#dispositivos-compatibles).
 
@@ -131,7 +131,7 @@ En [dispositivos compatibles](docs/supported-devices.md) (en inglés) se detalla
    dmm-gui                 # abrir la aplicación de escritorio
    ```
 
-En [Instalación y solución de problemas](docs/setup.md) (en inglés) se tratan los controladores, los detalles de udev, los equipos sin pantalla, la compilación desde el código fuente y las compilaciones de desarrollo.
+En [Instalación y solución de problemas](docs/setup.md) (en inglés) se tratan los controladores, los detalles de udev, los equipos sin pantalla, la compilación desde el código fuente, las compilaciones de desarrollo y Android.
 
 ## Documentación
 

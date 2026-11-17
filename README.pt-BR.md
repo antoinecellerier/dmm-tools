@@ -1,4 +1,4 @@
-<!-- translated from README.md d82a1f991ed2042480fcf5ec1170049adb779dff -->
+<!-- translated from README.md 8f9099d73366f65286dd5eb86fd88460fe72c98a -->
 # dmm-tools
 
 [![CI](https://github.com/antoinecellerier/dmm-tools/actions/workflows/ci.yml/badge.svg)](https://github.com/antoinecellerier/dmm-tools/actions/workflows/ci.yml)
@@ -9,7 +9,7 @@
 
 *Esta página foi traduzida automaticamente; a referência é o [README em inglês](README.md). Uma revisão por falante nativo é bem-vinda: [como ajudar](CONTRIBUTING.md#translations) (em inglês).*
 
-Aplicativo de desktop e ferramenta de linha de comando, ambos de código aberto, para ler, gravar, plotar e controlar remotamente multímetros digitais (DMMs) e alicates amperímetros das marcas UNI-T, ZOTEK (ZOYI, ANENG, BSIDE), OWON, Brymen (Minipa), EEVblog e Voltcraft, via USB e Bluetooth, no Linux, Windows, macOS e Raspberry Pi.
+Aplicativo de desktop e ferramenta de linha de comando, ambos de código aberto, para ler, gravar, plotar e controlar remotamente multímetros digitais (DMMs) e alicates amperímetros das marcas UNI-T, ZOTEK (ZOYI, ANENG, BSIDE), OWON, Brymen (Minipa), EEVblog e Voltcraft, via USB e Bluetooth, no Linux, Windows, macOS, Raspberry Pi e Android (experimental).
 
 Funciona com UNI-T UT61E+, UT181A, UT161, UT71, UT60BT e UT804, ANENG AN9002 (ZOTEK ZT-300AB), Brymen BM869s, EEVblog 121GW, OWON OW18E e B41T+, Voltcraft VC-890 e [outros](#dispositivos-compatíveis).
 
@@ -131,7 +131,7 @@ Veja em [dispositivos compatíveis](docs/supported-devices.md) (em inglês) os c
    dmm-gui                 # abrir a GUI
    ```
 
-[Configuração e solução de problemas](docs/setup.md) (em inglês) trata de drivers, detalhes do udev, máquinas sem interface gráfica, compilação a partir do código-fonte e versões de desenvolvimento.
+[Configuração e solução de problemas](docs/setup.md) (em inglês) trata de drivers, detalhes do udev, máquinas sem interface gráfica, compilação a partir do código-fonte, versões de desenvolvimento e Android.
 
 ## Documentação
 

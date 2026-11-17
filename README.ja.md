@@ -1,4 +1,4 @@
-<!-- translated from README.md d82a1f991ed2042480fcf5ec1170049adb779dff -->
+<!-- translated from README.md 8f9099d73366f65286dd5eb86fd88460fe72c98a -->
 # dmm-tools
 
 [![CI](https://github.com/antoinecellerier/dmm-tools/actions/workflows/ci.yml/badge.svg)](https://github.com/antoinecellerier/dmm-tools/actions/workflows/ci.yml)
@@ -9,7 +9,7 @@
 
 *このページは自動翻訳です。基準となるのは[英語版の README](README.md) です。日本語を母語とする方のレビューを歓迎します ([翻訳への協力](CONTRIBUTING.md#translations)、英語)。*
 
-dmm-tools は、UNI-T、ZOTEK (ZOYI、ANENG、BSIDE)、OWON、Brymen (Minipa)、EEVblog、Voltcraft のデジタル マルチメーター (DMM) とクランプ メーターに USB または Bluetooth で接続し、測定値の読み取り、記録、グラフ表示、メーターのリモート操作を行うオープンソースのデスクトップ アプリとコマンド ライン ツールです。Linux、Windows、macOS、Raspberry Pi で動作します。
+dmm-tools は、UNI-T、ZOTEK (ZOYI、ANENG、BSIDE)、OWON、Brymen (Minipa)、EEVblog、Voltcraft のデジタル マルチメーター (DMM) とクランプ メーターに USB または Bluetooth で接続し、測定値の読み取り、記録、グラフ表示、メーターのリモート操作を行うオープンソースのデスクトップ アプリとコマンド ライン ツールです。Linux、Windows、macOS、Raspberry Pi、Android (試験的) で動作します。
 
 UNI-T UT61E+、UT181A、UT161、UT71、UT60BT、UT804、ANENG AN9002 (ZOTEK ZT-300AB)、Brymen BM869s、EEVblog 121GW、OWON OW18E と B41T+、Voltcraft VC-890 をはじめ、[さまざまな機種](#対応機種)に対応しています。
 
@@ -131,7 +131,7 @@ Bluetooth の「アダプター」は UNI-T のオプション品 UT-D07A/B で�
    dmm-gui                 # GUI を起動する
    ```
 
-[セットアップとトラブルシューティング](docs/setup.md) (英語) では、ドライバー、udev の詳細、ディスプレイのないマシン、ソースからのビルド、開発版ビルドについて説明しています。
+[セットアップとトラブルシューティング](docs/setup.md) (英語) では、ドライバー、udev の詳細、ディスプレイのないマシン、ソースからのビルド、開発版ビルド、Android について説明しています。
 
 ## ドキュメント
 

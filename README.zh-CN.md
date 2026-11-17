@@ -1,4 +1,4 @@
-<!-- translated from README.md d82a1f991ed2042480fcf5ec1170049adb779dff -->
+<!-- translated from README.md 8f9099d73366f65286dd5eb86fd88460fe72c98a -->
 # dmm-tools
 
 [![CI](https://github.com/antoinecellerier/dmm-tools/actions/workflows/ci.yml/badge.svg)](https://github.com/antoinecellerier/dmm-tools/actions/workflows/ci.yml)
@@ -9,7 +9,7 @@
 
 *本页为机器翻译，内容以[英文 README](README.md) 为准。欢迎母语人士[帮助审校](CONTRIBUTING.md#translations)（英文）。*
 
-一套开源的桌面应用和命令行工具，通过 USB 或蓝牙连接数字万用表（DMM）和钳形表，采集并记录读数、绘制图表、遥控仪表。支持 UNI-T、ZOTEK（ZOYI、ANENG、BSIDE）、OWON、Brymen（Minipa）、EEVblog 和 Voltcraft，可在 Linux、Windows、macOS 和 Raspberry Pi 上运行。
+一套开源的桌面应用和命令行工具，通过 USB 或蓝牙连接数字万用表（DMM）和钳形表，采集并记录读数、绘制图表、遥控仪表。支持 UNI-T、ZOTEK（ZOYI、ANENG、BSIDE）、OWON、Brymen（Minipa）、EEVblog 和 Voltcraft，可在 Linux、Windows、macOS、Raspberry Pi 和 Android（实验性）上运行。
 
 适用于 UNI-T UT61E+、UT181A、UT161、UT71、UT60BT 和 UT804，ANENG AN9002（ZOTEK ZT-300AB），Brymen BM869s，EEVblog 121GW，OWON OW18E 和 B41T+，Voltcraft VC-890，以及[更多型号](#支持的设备)。
 
@@ -131,7 +131,7 @@ $ dmm-cli read --interval-ms 2500 --count 5
    dmm-gui                 # 启动图形界面
    ```
 
-[安装与故障排除](docs/setup.md)（英文）涵盖驱动程序、udev 详情、在无图形界面的计算机上运行、从源码构建和开发版本。
+[安装与故障排除](docs/setup.md)（英文）涵盖驱动程序、udev 详情、在无图形界面的计算机上运行、从源码构建、开发版本和 Android。
 
 ## 文档
 
