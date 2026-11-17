@@ -693,6 +693,28 @@ pub(crate) fn take_cable_offer() -> bool {
     CABLE_OFFER.get().is_some_and(|offered| offered())
 }
 
+/// The activity's handle, kept for [`content_rect_px`].
+#[cfg(target_os = "android")]
+static ANDROID_APP: std::sync::OnceLock<AndroidApp> = std::sync::OnceLock::new();
+
+/// The part of the window the system leaves to the application, in
+/// pixels: what its bars and the soft keyboard do not cover. `None` off
+/// Android, where a window is all the application's.
+///
+/// Read every frame: the event that says it changed stops in winit.
+pub(crate) fn content_rect_px() -> Option<egui::Rect> {
+    #[cfg(target_os = "android")]
+    {
+        let r = ANDROID_APP.get()?.content_rect();
+        Some(egui::Rect::from_min_max(
+            egui::pos2(r.left as f32, r.top as f32),
+            egui::pos2(r.right as f32, r.bottom as f32),
+        ))
+    }
+    #[cfg(not(target_os = "android"))]
+    None
+}
+
 /// Where exports go on Android, which has no save dialog here: a
 /// `dmm-tools` folder in the shared Documents, where a file manager shows
 /// them, if the system lets the application write there (Android 11 and
@@ -723,6 +745,7 @@ pub fn run_android(app: AndroidApp, start: AndroidStart) -> eframe::Result<()> {
     if let Some(offered) = start.cable_offered {
         let _ = CABLE_OFFER.set(offered);
     }
+    let _ = ANDROID_APP.set(app.clone());
     let (mut settings, unreadable) = settings::Settings::load();
     let l10n = Arc::new(l10n::startup(&settings.shared.language));
     l10n.log_load_report();

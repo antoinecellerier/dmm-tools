@@ -215,7 +215,10 @@ impl App {
             let v = i.viewport();
             (v.maximized, v.fullscreen, v.minimized)
         });
-        if fullscreen != Some(true) && minimized != Some(true) {
+        // Not on Android: the window is the screen, whose size is not the
+        // user's to keep, and the soft keyboard coming and going would
+        // write the settings each time.
+        if !cfg!(target_os = "android") && fullscreen != Some(true) && minimized != Some(true) {
             if let Some(maximized) = maximized
                 && maximized != self.settings.window_maximized
             {

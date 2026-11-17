@@ -455,7 +455,21 @@ impl UiA11yExt for Ui {
     }
 }
 
-/// Bring the control that just took keyboard focus into view.
+/// Say whether the window's content has just changed height: a soft
+/// keyboard came up or went, or the window was resized, and the panels
+/// moved under the focused control. [`scroll_to_focus`] then brings it
+/// back into view, as when it took the focus. Called once a frame, before
+/// the panels.
+pub(crate) fn window_height_changed(ctx: &egui::Context, changed: bool) {
+    ctx.data_mut(|d| d.insert_temp(resized_id(), changed));
+}
+
+fn resized_id() -> egui::Id {
+    egui::Id::unique("window_height_changed")
+}
+
+/// Bring the control that just took keyboard focus into view, and again
+/// when the window changes height under it ([`window_height_changed`]).
 ///
 /// egui scrolls to a focused widget only when assistive tech asks it to, so
 /// Tab through a scrolled panel left the focused control below the fold with
@@ -472,8 +486,12 @@ impl UiA11yExt for Ui {
 /// first field lost the cursor in the same frame).
 pub(crate) fn scroll_to_focus(ui: &Ui) {
     let ctx = ui.ctx();
+    let resized = ctx.data(|d| d.get_temp(resized_id()).unwrap_or(false));
     // `Response::gained_focus`, without the `Response`.
-    let Some(id) = ctx.memory(|m| m.focused().filter(|&id| !m.had_focus_last_frame(id))) else {
+    let Some(id) = ctx.memory(|m| {
+        m.focused()
+            .filter(|&id| resized || !m.had_focus_last_frame(id))
+    }) else {
         return;
     };
     // `read_response`'s lookup: this pass's rect, or the last pass's while

@@ -50,13 +50,15 @@
              a recreated activity would start android_main a second time.
              singleTask for the same reason: opening the app from its icon
              while it is in the background comes back to the one there is.
-             Full screen: egui is told nothing of the status bar's height on
-             Android (egui issue 7748) and would draw its top bar under it. -->
+             Not a full-screen theme: the native side keeps its drawing
+             inside the content rectangle the system reports, below the
+             status bar, and a full-screen window is not resized for the
+             soft keyboard. -->
         <activity
             android:name=".MainActivity"
             android:exported="false"
             android:launchMode="singleTask"
-            android:theme="@android:style/Theme.DeviceDefault.NoActionBar.Fullscreen"
+            android:theme="@android:style/Theme.DeviceDefault.NoActionBar"
             android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|density|keyboard|keyboardHidden|navigation|uiMode|fontScale|locale|layoutDirection">
             <meta-data android:name="android.app.lib_name" android:value="dmm_android" />
         </activity>

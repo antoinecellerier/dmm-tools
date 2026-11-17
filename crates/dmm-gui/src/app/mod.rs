@@ -548,8 +548,21 @@ pub struct App {
     /// Transient big meter mode (not persisted to settings).
     big_meter_mode: BigMeterMode,
     /// The radius of the screen's rounded corners in pixels, when the window
-    /// fills such a screen; 0 otherwise. See [`App::corner_insets`].
+    /// fills such a screen; 0 otherwise. See [`App::safe_insets`].
     screen_corner_px: f32,
+    /// The margins last given to egui ([`App::safe_insets`]), to log a
+    /// change of them once.
+    safe_area: Option<egui::SafeAreaInsets>,
+    /// How tall the window's content was last frame, in points: a frame
+    /// that finds it changed (a soft keyboard came up or went) brings the
+    /// focused field back into view.
+    content_height: f32,
+    /// Frames left in which to do so: the panels take a few to settle at
+    /// the new height, and the field's place is last frame's.
+    resettle_frames: u8,
+    /// The focused text field and what it last told the system's keyboard
+    /// ([`App::keep_the_keyboard_as_it_is`]).
+    last_ime: Option<(egui::Id, egui::output::IMEOutput)>,
     shortcut_help: ShortcutHelp,
     whats_new: WhatsNew,
     /// Whether a newer release is out; off unless [`App::new`] turns it on.
@@ -632,15 +645,39 @@ impl App {
         app
     }
 
-    /// The margin, in points, that keeps the window's content out of the
-    /// screen's rounded corners: the same on every side, so it holds
-    /// whichever way the screen is turned. A corner of radius r hides
-    /// nothing further than r·(1 − 1/√2) in from both of its edges.
-    fn corner_insets(&self, pixels_per_point: f32) -> Option<egui::SafeAreaInsets> {
-        (self.screen_corner_px > 0.0 && pixels_per_point > 0.0).then(|| {
-            let inset = self.screen_corner_px * (1.0 - std::f32::consts::FRAC_1_SQRT_2);
-            egui::SafeAreaInsets(egui::epaint::MarginF32::same(inset / pixels_per_point))
-        })
+    /// The margins, in points, that keep the window's content where it can
+    /// be seen and touched; `None` for a window that is all the
+    /// application's, as on a desktop.
+    ///
+    /// Out of the screen's rounded corners: the same on every side, so it
+    /// holds whichever way the screen is turned. A corner of radius r hides
+    /// nothing further than r·(1 − 1/√2) in from both of its edges. And
+    /// inside `content`, the part of a `window` (both in pixels, from the
+    /// window's corner) that the system's bars and the soft keyboard leave
+    /// free: each side takes the larger of the two.
+    fn safe_insets(
+        &self,
+        pixels_per_point: f32,
+        window: egui::Vec2,
+        content: Option<egui::Rect>,
+    ) -> Option<egui::SafeAreaInsets> {
+        if pixels_per_point <= 0.0 || (content.is_none() && self.screen_corner_px <= 0.0) {
+            return None;
+        }
+        let corner = self.screen_corner_px.max(0.0) * (1.0 - std::f32::consts::FRAC_1_SQRT_2);
+        let whole = egui::Rect::from_min_size(egui::Pos2::ZERO, window);
+        // Until the system has laid the window out the rectangle is empty,
+        // and one that reaches outside the window is not this window's.
+        let content = content
+            .filter(|c| c.is_positive() && whole.expand(0.5).contains_rect(*c))
+            .unwrap_or(whole);
+        let side = |bar: f32| bar.max(corner) / pixels_per_point;
+        Some(egui::SafeAreaInsets(egui::epaint::MarginF32 {
+            left: side(content.left()),
+            right: side(window.x - content.right()),
+            top: side(content.top()),
+            bottom: side(window.y - content.bottom()),
+        }))
     }
 
     /// The app state for `settings` on `clock`, before any frame. Separate
@@ -690,6 +727,10 @@ impl App {
             stats_widths: stats_panel::StatsWidths::default(),
             big_meter_mode: BigMeterMode::Off,
             screen_corner_px: 0.0,
+            safe_area: None,
+            content_height: 0.0,
+            resettle_frames: 0,
+            last_ime: None,
             shortcut_help: ShortcutHelp::default(),
             whats_new: WhatsNew::default(),
             update_check: update_check::UpdateCheck::default(),
@@ -1219,11 +1260,54 @@ impl App {
     }
 }
 
+impl App {
+    /// Keep telling the system what the focused text field last told it
+    /// while that field is out of view.
+    ///
+    /// egui speaks for a text field only while it is drawn, and egui-winit
+    /// reads its silence, then its return, as the keyboard no longer wanted,
+    /// then wanted again. A field that a change of height pushed out of
+    /// view and that is scrolling back would bring a soft keyboard the user
+    /// has just put away straight back up, and take down one that has just
+    /// come up. The field holds the keyboard for as long as it holds the
+    /// focus, as a phone's own text fields do.
+    fn keep_the_keyboard_as_it_is(&mut self, ctx: &egui::Context) {
+        if self.resettle_frames > 0 {
+            self.resettle_frames -= 1;
+            ctx.request_repaint();
+        }
+        let focused = ctx.memory(|m| m.focused());
+        match (ctx.output(|o| o.ime), self.last_ime) {
+            (Some(ime), _) => {
+                let ime = egui::output::IMEOutput {
+                    should_interrupt_composition: false,
+                    ..ime
+                };
+                self.last_ime = focused.map(|id| (id, ime));
+            }
+            (None, Some((id, ime))) if focused == Some(id) => {
+                ctx.output_mut(|o| o.ime = Some(ime));
+            }
+            (None, _) => self.last_ime = None,
+        }
+    }
+}
+
 impl eframe::App for App {
     fn raw_input_hook(&mut self, ctx: &egui::Context, raw_input: &mut egui::RawInput) {
-        // Every frame: egui keeps the insets it was last given, and the
-        // zoom changes how many points the corner takes.
-        if let Some(insets) = self.corner_insets(ctx.pixels_per_point()) {
+        // Every frame: egui keeps the insets it was last given, the zoom
+        // changes how many points a margin takes, and nothing says when
+        // the soft keyboard comes or goes.
+        let ppp = ctx.pixels_per_point();
+        let window = raw_input.screen_rect.unwrap_or_else(|| ctx.viewport_rect());
+        let content = crate::content_rect_px();
+        if let Some(insets) = self.safe_insets(ppp, window.size() * ppp, content) {
+            if self.safe_area.replace(insets) != Some(insets) {
+                log::debug!(
+                    "window {:?} px, content {content:?} px: insets {insets:?} pt",
+                    window.size() * ppp
+                );
+            }
             raw_input.safe_area_insets = Some(insets);
         }
     }
@@ -1231,7 +1315,12 @@ impl eframe::App for App {
     fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.hold_close(ctx);
         #[cfg(target_os = "android")]
-        self.connect_to_offered_cable(ctx);
+        {
+            self.connect_to_offered_cable(ctx);
+            // Nothing wakes the window when the soft keyboard goes or the
+            // screen's bars change, and a paused session draws no frame.
+            ctx.request_repaint_after(std::time::Duration::from_secs(1));
+        }
         self.logic_pass();
     }
 
@@ -1242,6 +1331,16 @@ impl eframe::App for App {
         // and the panels fill the ui they are shown in: with insets
         // (`raw_input_hook`) they go in a child laid over what is left.
         let content = ctx.content_rect();
+        if (content.height() - self.content_height).abs() > 0.5 {
+            self.resettle_frames = 4;
+        }
+        self.content_height = content.height();
+        // A phone's window changes height under the user only for the soft
+        // keyboard or the system's bars; on a desktop the user is dragging
+        // its edge, and a panel scrolling back to the focus would fight
+        // them.
+        let resettling = cfg!(target_os = "android") && self.resettle_frames > 0;
+        crate::a11y::window_height_changed(&ctx, resettling);
         let mut inset;
         let ui = if content == root.max_rect() {
             root
@@ -1373,6 +1472,7 @@ impl eframe::App for App {
         // Last, so a change made this frame is seen this frame. A paused or
         // disconnected app draws nothing by itself, so a pending save asks
         // for the frame it is due in.
+        self.keep_the_keyboard_as_it_is(&ctx);
         let now = std::time::Instant::now();
         self.settings_save.check(&self.settings, now);
         match self.settings_save.poll(now) {
@@ -1440,12 +1540,45 @@ mod tests {
                 ..crate::CliOverrides::none()
             },
         );
-        let egui::SafeAreaInsets(margin) = app.corner_insets(2.0).expect("a rounded screen");
+        let window = egui::vec2(1080.0, 2400.0);
+        let egui::SafeAreaInsets(margin) = app
+            .safe_insets(2.0, window, None)
+            .expect("a rounded screen");
         for side in [margin.left, margin.right, margin.top, margin.bottom] {
             assert!((side - 14.645).abs() < 0.01, "{side}");
         }
         app.screen_corner_px = 0.0;
-        assert_eq!(app.corner_insets(2.0), None);
+        assert_eq!(app.safe_insets(2.0, window, None), None);
+    }
+
+    /// The window keeps clear of what the system draws over it: a status
+    /// bar above, a soft keyboard below. A side the system leaves alone
+    /// still clears the screen's corner, and a rectangle from before the
+    /// window was laid out, or not this window's, is no rectangle.
+    #[test]
+    fn the_window_stays_inside_what_the_system_leaves_it() {
+        let mut app = App::from_cli(Settings::default(), crate::CliOverrides::none());
+        let window = egui::vec2(1080.0, 2400.0);
+        let px = |l: f32, t: f32, r: f32, b: f32| {
+            Some(egui::Rect::from_min_max(egui::pos2(l, t), egui::pos2(r, b)))
+        };
+        let insets = |app: &App, content| {
+            let egui::SafeAreaInsets(m) = app.safe_insets(2.0, window, content).expect("insets");
+            [m.left, m.top, m.right, m.bottom]
+        };
+        // A 60 px status bar and a 900 px keyboard.
+        let keyboard = px(0.0, 60.0, 1080.0, 1500.0);
+        assert_eq!(insets(&app, keyboard), [0.0, 30.0, 0.0, 450.0]);
+        // The whole window: zero insets, sent all the same, as egui keeps
+        // the last ones it was given.
+        assert_eq!(insets(&app, px(0.0, 0.0, 1080.0, 2400.0)), [0.0; 4]);
+        assert_eq!(insets(&app, px(0.0, 0.0, 0.0, 0.0)), [0.0; 4]);
+        assert_eq!(insets(&app, px(0.0, 0.0, 2400.0, 1080.0)), [0.0; 4]);
+
+        app.screen_corner_px = 100.0;
+        let [left, top, right, bottom] = insets(&app, keyboard);
+        assert!((left - 14.645).abs() < 0.01 && (right - 14.645).abs() < 0.01);
+        assert_eq!([top, bottom], [30.0, 450.0]);
     }
 
     fn app(device: &str, mock_mode: &str) -> App {
