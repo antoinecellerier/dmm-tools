@@ -291,7 +291,8 @@ jobs:
           # Published binaries are also optimised as one unit across all
           # crates (fat LTO) and stripped of symbols, which takes about 38%
           # off the Linux pair at the same opt-level; the smoke build skips
-          # both, as the whole-program pass reruns on every push.
+          # both, as the whole-program pass reruns on every push. The android
+          # job's Build step repeats these settings.
           CARGO_PROFILE_RELEASE_INCREMENTAL: "false"
           CARGO_PROFILE_RELEASE_CODEGEN_UNITS: ${{ inputs.published && '1' || '16' }}
           CARGO_PROFILE_RELEASE_LTO: ${{ inputs.published && 'fat' || 'false' }}
