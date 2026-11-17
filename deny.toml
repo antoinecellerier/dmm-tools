@@ -45,6 +45,8 @@ allow = [
     "BSD-2-Clause",
     "BSD-3-Clause",
     "BSL-1.0",
+    "CDLA-Permissive-2.0", # webpki-roots: Mozilla's CA list, in the Android
+                           # build's update check
     "GPL-3.0-or-later", # the workspace crates themselves
     "ISC",
     "MIT",

@@ -38,21 +38,26 @@ log.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 directories.workspace = true
-ureq = { version = "3", default-features = false, features = ["platform-verifier", "rustls-no-provider"], optional = true }
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"], optional = true }
 
 # The window and the file dialogs differ on Android: eframe refuses its
 # default accesskit feature beside android-native-activity, the Android entry
 # draws with glow alone, and rfd has no Android backend (file_dialog.rs).
+#
+# The update check trusts the operating system's certificate store. On
+# Android that store is reached through a Kotlin component fetched at build
+# time, so the Android build carries Mozilla's CA list instead.
 [target.'cfg(not(target_os = "android"))'.dependencies]
 eframe = { version = "0.37", features = ["glow", "wgpu"] }
 rfd = "0.18"
+ureq = { version = "3", default-features = false, features = ["platform-verifier", "rustls-no-provider"], optional = true }
 
 # winit for the type of the application handle android_main receives, on
 # the version and activity eframe uses.
 [target.'cfg(target_os = "android")'.dependencies]
 eframe = { version = "0.37", default-features = false, features = ["glow", "default_fonts", "links", "android-native-activity"] }
 winit = { version = "0.30", default-features = false, features = ["android-native-activity"] }
+ureq = { version = "3", default-features = false, features = ["rustls-webpki-roots", "rustls-no-provider"], optional = true }
 
 # Detaches from the console Windows opens for an Explorer launch (lib.rs).
 [target.'cfg(windows)'.dependencies]

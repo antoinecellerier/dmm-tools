@@ -14,6 +14,8 @@
         android:name="android.permission.BLUETOOTH_SCAN"
         android:usesPermissionFlags="neverForLocation" />
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+    <!-- The daily request for a newer build, the only network access. -->
+    <uses-permission android:name="android.permission.INTERNET" />
 
     <!-- localeConfig: Android 13 and later offer the application's
          languages in the system's settings; the native side asks the

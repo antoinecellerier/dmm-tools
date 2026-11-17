@@ -363,18 +363,25 @@ fn get(_url: &str) -> Result<Vec<u8>, String> {
 }
 
 /// The body GitHub answers `url` with, over HTTPS only.
+/// The operating system's trust store, not a bundled CA list.
+#[cfg(all(feature = "update-check", not(target_os = "android")))]
+const ROOTS: ureq::tls::RootCerts = ureq::tls::RootCerts::PlatformVerifier;
+/// Android's store is reached only through a Kotlin component the verifier
+/// crate has Gradle fetch, so there the build carries Mozilla's CA list.
+#[cfg(all(feature = "update-check", target_os = "android"))]
+const ROOTS: ureq::tls::RootCerts = ureq::tls::RootCerts::WebPki;
+
 #[cfg(feature = "update-check")]
 fn get(url: &str) -> Result<Vec<u8>, String> {
     let agent: ureq::Agent = ureq::Agent::config_builder()
         .https_only(true)
         .timeout_global(Some(TIMEOUT))
         .user_agent(format!("dmm-tools/{}", env!("CARGO_PKG_VERSION")))
-        // The operating system's trust store, not a bundled CA list; ring as
-        // the crypto provider, handed over explicitly because ureq picks none
-        // without its bundled list.
+        // ring as the crypto provider, handed over explicitly because ureq
+        // picks none by itself in this configuration.
         .tls_config(
             ureq::tls::TlsConfig::builder()
-                .root_certs(ureq::tls::RootCerts::PlatformVerifier)
+                .root_certs(ROOTS)
                 .unversioned_rustls_crypto_provider(std::sync::Arc::new(
                     rustls::crypto::ring::default_provider(),
                 ))

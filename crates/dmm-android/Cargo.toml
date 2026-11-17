@@ -14,7 +14,7 @@ crate-type = ["cdylib"]
 # btleplug and jni at the versions dmm-lib's Bluetooth transport and
 # android-activity already use: one copy of each, initialised here.
 [target.'cfg(target_os = "android")'.dependencies]
-dmm-gui = { path = "../dmm-gui", default-features = false }
+dmm-gui = { path = "../dmm-gui" }
 dmm-lib = { path = "../dmm-lib" }
 dmm-shared = { path = "../dmm-shared" }
 btleplug = "0.13.3"

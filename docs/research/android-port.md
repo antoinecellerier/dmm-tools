@@ -231,8 +231,14 @@ out:
   experimental build passes the application's own folder
   (`dmm_shared::set_config_dir`).
 - The update check: `ureq` with `rustls` and the platform certificate
-  verifier, which on Android is initialised through JNI. Building without
-  the `update-check` feature leaves it out.
+  verifier. On Android that verifier needs a Kotlin component which Gradle
+  fetches from the verifier project's repository, the Kotlin standard
+  library, and a network security configuration allowing clear-text
+  requests to certificate authorities' revocation hosts. The experimental
+  build carries Mozilla's CA list (`webpki-roots`) there instead; the check
+  is the reason for its `INTERNET` permission.
+  On the Android 12 phone the check found a newer dev build, and its
+  notice opened the release page in the browser.
 - Logging: `env_logger` writes to stderr (`dmm-shared`'s `logging`);
   Android applications log to logcat.
 - The command line, parsed from `std::env::args_os()` in

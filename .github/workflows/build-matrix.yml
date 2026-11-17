@@ -185,6 +185,7 @@ jobs:
       - name: Build
         env:
           # As the desktop Build step below sets them.
+          DMM_PUBLISHED_BUILD: ${{ inputs.published && '1' || '' }}
           CARGO_PROFILE_RELEASE_INCREMENTAL: "false"
           CARGO_PROFILE_RELEASE_CODEGEN_UNITS: ${{ inputs.published && '1' || '16' }}
           CARGO_PROFILE_RELEASE_LTO: ${{ inputs.published && 'fat' || 'false' }}
