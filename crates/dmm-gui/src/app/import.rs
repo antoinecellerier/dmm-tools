@@ -13,7 +13,7 @@
 //! view can still be worked on and exported again.
 
 use std::path::{Path, PathBuf};
-use std::time::{Duration, Instant, SystemTime};
+use std::time::{Duration, Instant};
 
 use dmm_lib::measurement::Measurement;
 use dmm_lib::transport::Link;
@@ -312,7 +312,7 @@ fn load_replay(text: &str, base: Instant, limit: usize) -> Result<Loaded, Unread
     // A manual clock stands still until the playback sleeps on it: its now
     // is the instant the wall origin pins.
     let start = clock.now();
-    let clock = clock.with_wall_origin(SystemTime::from(recorded));
+    let clock = clock.with_wall_origin(recorded);
     let mut dmm = replay.open(clock)?;
     let experimental = !dmm.profile().stability.is_verified();
     let family_slots = dmm.profile().max_aux_values;
@@ -581,7 +581,7 @@ impl App {
                 if index == ingest.taken {
                     let reading = super::marker_list::log_line(&self.l10n, &m);
                     self.markers
-                        .insert(m.timestamp, number, note, m.wall_time.into(), reading);
+                        .insert(m.timestamp, number, note, m.wall_time, reading);
                 }
             }
             // After the file's marker, as for a live reading, in the unit it

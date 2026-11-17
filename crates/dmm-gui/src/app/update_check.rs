@@ -17,10 +17,10 @@
 
 use std::path::PathBuf;
 
-use chrono::{DateTime, SubsecRound, TimeDelta, Utc};
 use dmm_shared::l10n::Localizer;
 use dmm_shared::tr;
 use eframe::egui;
+use jiff::{SignedDuration, Timestamp};
 use serde::{Deserialize, Serialize};
 
 use super::task::Task;
@@ -35,7 +35,7 @@ const API: &str = "https://api.github.com/repos/antoinecellerier/dmm-tools";
 const RELEASE_PAGE: &str = "https://github.com/antoinecellerier/dmm-tools/releases/tag/";
 
 /// At most one request per day, whatever its outcome.
-const INTERVAL: TimeDelta = TimeDelta::days(1);
+const INTERVAL: SignedDuration = SignedDuration::from_hours(24);
 /// A page of 30 holds the seven kept dev builds and the releases between them
 /// many times over.
 const PAGE_SIZE: u32 = 30;
@@ -137,12 +137,12 @@ pub(super) fn newer_release(version: &str, hash: &str, releases: &[Release]) -> 
     };
     let own = parse_version(base)?;
     let valid = releases.iter().filter(|r| !r.draft).filter_map(|r| {
-        let published = DateTime::parse_from_rfc3339(r.published_at.as_deref()?).ok()?;
-        Some((Tag::parse(&r.tag_name)?, published.with_timezone(&Utc)))
+        let published: Timestamp = r.published_at.as_deref()?.parse().ok()?;
+        Some((Tag::parse(&r.tag_name)?, published))
     });
 
     let mut best_release: Option<Version> = None;
-    let mut newest_dev: Option<(String, DateTime<Utc>)> = None;
+    let mut newest_dev: Option<(String, Timestamp)> = None;
     for (tag, published) in valid {
         match tag {
             Tag::Release(v) if v > own || (dev && v == own) => {
@@ -175,7 +175,7 @@ pub(super) fn newer_release(version: &str, hash: &str, releases: &[Release]) -> 
 #[serde(default)]
 pub(super) struct Cache {
     /// When the last attempt was made, whether or not it got an answer.
-    checked_at: Option<DateTime<Utc>>,
+    checked_at: Option<Timestamp>,
     /// The version label of the build that made it: another build's answer
     /// says nothing about this one.
     checked_by: Option<String>,
@@ -211,11 +211,11 @@ impl Cache {
     /// Whether this build should ask again at `now`. A clock set back to
     /// before the last attempt counts as due, so it can't silence the check
     /// until the clock catches up.
-    fn is_due(&self, now: DateTime<Utc>, running: &str) -> bool {
+    fn is_due(&self, now: Timestamp, running: &str) -> bool {
         match self.checked_at {
             _ if self.checked_by.as_deref() != Some(running) => true,
             None => true,
-            Some(at) => now < at || now - at >= INTERVAL,
+            Some(at) => now < at || now.duration_since(at) >= INTERVAL,
         }
     }
 
@@ -331,8 +331,9 @@ impl UpdateCheck {
 }
 
 /// Whole seconds, so the cache file reads `2026-09-29T08:15:02Z`.
-fn now() -> DateTime<Utc> {
-    Utc::now().trunc_subsecs(0)
+fn now() -> Timestamp {
+    let now = Timestamp::now();
+    Timestamp::from_second(now.as_second()).unwrap_or(now)
 }
 
 /// Ask GitHub, on a thread of its own.
@@ -406,8 +407,8 @@ fn get(url: &str) -> Result<Vec<u8>, String> {
 mod tests {
     use super::*;
 
-    fn at(rfc3339: &str) -> DateTime<Utc> {
-        DateTime::parse_from_rfc3339(rfc3339).unwrap().to_utc()
+    fn at(rfc3339: &str) -> Timestamp {
+        rfc3339.parse().unwrap()
     }
 
     fn release(tag: &str, published: &str) -> Release {
@@ -611,7 +612,7 @@ mod tests {
         };
         assert!(Cache::default().is_due(at, running));
         assert!(!cache.is_due(at, running));
-        let second = TimeDelta::seconds(1);
+        let second = SignedDuration::from_secs(1);
         assert!(!cache.is_due(at + INTERVAL - second, running));
         assert!(cache.is_due(at + INTERVAL, running));
         assert!(cache.is_due(at - second, running), "clock set back");

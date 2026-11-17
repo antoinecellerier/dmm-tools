@@ -281,12 +281,11 @@ impl App {
         let Some(next) = self.source.replay_markers.pop_front() else {
             return;
         };
-        let wall_time = m.wall_time.into();
         if !self.markers.insert(
             m.timestamp,
             next.number,
             next.note.clone(),
-            wall_time,
+            m.wall_time,
             log_line(&self.l10n, m),
         ) {
             // A marker the user put on this reading first: this one waits.
@@ -369,7 +368,7 @@ impl App {
             .recording
             .sample_at(at)
             .map(|s| s.wall_time)
-            .unwrap_or_else(|| self.clock.wall_time_for(at).into());
+            .unwrap_or_else(|| self.clock.wall_time_for(at));
         let (number, added) = match self.markers.add(at, wall_time, reading) {
             Ok(number) => (number, true),
             // Ctrl+N opens the note already there.
@@ -505,7 +504,9 @@ impl App {
                 RichText::new(tr!(
                     l10n,
                     "markers-log-cut",
-                    time = samples[first].wall_time.format("%H:%M:%S").to_string()
+                    time = dmm_shared::wall_time::local(samples[first].wall_time)
+                        .strftime("%H:%M:%S")
+                        .to_string()
                 ))
                 .small()
                 .color(weak),
@@ -845,7 +846,10 @@ fn marker_row_label<'a>(
         None
     };
     (
-        format!("{}  {reading}", m.wall_time.format("%H:%M:%S%.3f")),
+        format!(
+            "{}  {reading}",
+            dmm_shared::wall_time::local(m.wall_time).strftime("%H:%M:%S%.3f")
+        ),
         tag,
     )
 }
@@ -884,7 +888,7 @@ fn sample_row(
     l10n: &Localizer,
     s: &Sample,
 ) -> Option<(Instant, String)> {
-    let time = s.wall_time.format("%H:%M:%S%.3f");
+    let time = dmm_shared::wall_time::local(s.wall_time).strftime("%H:%M:%S%.3f");
     let row_rect = ui.max_rect();
     // One line, cut short of the tag it may offer: a wrapped line would run
     // into the row below.

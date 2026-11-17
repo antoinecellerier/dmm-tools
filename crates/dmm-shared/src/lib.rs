@@ -40,6 +40,7 @@ pub mod logging;
 pub mod reopen;
 pub mod replay;
 pub mod session;
+pub mod wall_time;
 
 use dmm_lib::stats::ShownDigits;
 use serde::{Deserialize, Serialize};

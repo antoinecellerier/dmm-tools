@@ -6,7 +6,7 @@
 //! Each reason is one sentence, with its variable parts as fields, so an app
 //! words it in the user's language ([`Localizer::read_error`]); `Display` is
 //! the English the logs and `dmm-gui`'s startup errors keep. What the system
-//! or a parser (csv, serde, chrono) said passes through as it is, in English.
+//! or a parser (csv, serde, jiff) said passes through as it is, in English.
 //!
 //! Deliberately not `#[non_exhaustive]`: the renderer's exhaustive `match`
 //! stops compiling when a reason is added, rather than falling back to

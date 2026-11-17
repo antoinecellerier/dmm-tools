@@ -19,9 +19,7 @@
 //! their own language, so a reader sees the output their `dmm-cli` prints.
 //!
 //! `UPDATE_DOCS=1 cargo test -p dmm-cli` rewrites a stale block; a plain run
-//! fails with a diff. The run pins `TZ=UTC`, which chrono's `Local` ignores on
-//! Windows, so the test is Linux and macOS only.
-#![cfg(not(windows))]
+//! fails with a diff. The run pins `TZ=UTC`.
 
 mod common;
 

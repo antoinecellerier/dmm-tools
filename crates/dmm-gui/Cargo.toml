@@ -30,7 +30,7 @@ sys-locale = "0.3"
 unicode-script = "0.5"
 egui_plot = "0.38"
 raw-window-handle = "0.6"
-chrono.workspace = true
+jiff = { workspace = true, features = ["serde"] } # the update check's cache file
 csv.workspace = true
 clap.workspace = true
 clap_complete.workspace = true

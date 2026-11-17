@@ -553,7 +553,7 @@ fn read_replay(
     }
     let recorded =
         dmm_shared::replay::recorded_at(&replay).map_err(|e| NotReadable::new(path, e))?;
-    let dmm = replay.open(clock.with_wall_origin(recorded.into()))?;
+    let dmm = replay.open(clock.with_wall_origin(recorded))?;
     // A copy is dated from its first frame, whose wall time the pinned
     // origin maps to when it was measured, so a copy that starts partway
     // through keeps the times of the session it came from.
@@ -760,7 +760,7 @@ impl Run {
             dmm_lib::measurement::MeasuredValue::NoReading(_) => None,
             _ => Some(m.mode.as_ref()),
         };
-        self.writer.saw(mode, m.wall_time.into())?;
+        self.writer.saw(mode, m.wall_time)?;
         let extra_aux = file_extra + self.transform.extra_aux_count();
         self.out
             .write(&mut self.writer, &m, integral_display, extra_aux, marker)?;

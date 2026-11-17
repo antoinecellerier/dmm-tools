@@ -5,18 +5,18 @@
 //! snippet is generated from one — so the timestamps are asserted exactly
 //! rather than by shape, and a second run is compared byte for byte.
 //!
-//! `read` prints times in the machine's own zone, and the zone cannot be
-//! pinned for the binary everywhere (`TZ` is ignored on Windows), so the
-//! expected times are the recorded instant rendered in that same zone.
+//! `read` prints times in the machine's own zone, which the tests leave as
+//! it is, so the expected times are the recorded instant rendered in that
+//! same zone.
 //!
 //! `--format replay` against a meter has no test here: it needs the cable.
 
 mod common;
 
-use chrono::{DateTime, Local, TimeDelta, Utc};
 use common::dmm_cli;
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
+use std::time::{Duration, SystemTime};
 
 /// The `# recorded:` line every recording below carries.
 const RECORDED: &str = "2026-09-02T10:00:00Z";
@@ -33,16 +33,17 @@ const RECORDING: &str = "\
 200 02 31 2D 20 30 2E 30 30 30 00 00 30 34 31
 ";
 
-/// When the frame `offset_ms` into a recording below was recorded, in this
-/// machine's zone: the `# recorded:` header plus the frame's own offset.
-fn recorded_at(offset_ms: i64) -> DateTime<Local> {
-    let start: DateTime<Utc> = RECORDED.parse().expect("the recordings' start");
-    (start + TimeDelta::milliseconds(offset_ms)).with_timezone(&Local)
+/// When the frame `offset_ms` into a recording below was recorded: the
+/// `# recorded:` header plus the frame's own offset.
+fn recorded_at(offset_ms: u64) -> SystemTime {
+    let start = dmm_shared::wall_time::parse(RECORDED).expect("the recordings' start");
+    start + Duration::from_millis(offset_ms)
 }
 
-/// What that frame exports as, in the RFC3339 form `read` prints.
-fn timestamp(offset_ms: i64) -> String {
-    recorded_at(offset_ms).to_rfc3339()
+/// What that frame exports as, in the RFC3339 form `read` prints, in this
+/// machine's zone.
+fn timestamp(offset_ms: u64) -> String {
+    dmm_shared::export::timestamp(recorded_at(offset_ms))
 }
 
 /// Two frames six seconds apart: a meter that stopped answering part-way
@@ -85,7 +86,9 @@ const AUTO_NAME_STEM: &str = "measurements-UT61E+";
 
 /// The first frame's time as a file name carries it.
 fn auto_name_start() -> String {
-    recorded_at(0).format("%Y-%m-%d_%H-%M-%S").to_string()
+    dmm_shared::wall_time::local(recorded_at(0))
+        .strftime("%Y-%m-%d_%H-%M-%S")
+        .to_string()
 }
 
 /// An empty directory of this test's own: what it runs in, so a file the run
@@ -133,7 +136,7 @@ fn recording_in(dir: &Path) -> PathBuf {
 /// Run the binary as a user would, with nothing of the environment left to
 /// move the output: `NO_COLOR` fixes the styling, and an inherited
 /// `RUST_LOG` would add lines of its own. The zone is left as it is, the
-/// same one [`recorded_at`] renders in.
+/// same one [`timestamp`] renders in.
 fn run(args: &[&str]) -> (String, String, bool) {
     run_in(&std::env::temp_dir(), args)
 }

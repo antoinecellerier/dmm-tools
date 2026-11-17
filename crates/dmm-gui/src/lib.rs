@@ -327,7 +327,7 @@ fn load_replay(path: PathBuf, draws_keys: bool, l: &Localizer) -> Result<ReplayS
         replay: Arc::new(replay),
         path,
         draws_keys,
-        recorded: recorded.into(),
+        recorded,
     })
 }
 

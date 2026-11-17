@@ -217,7 +217,7 @@ fn marked(times: &[Instant]) -> crate::markers::Markers {
     let mut markers = crate::markers::Markers::default();
     for &at in times {
         markers
-            .add(at, chrono::Local::now(), String::new())
+            .add(at, std::time::SystemTime::now(), String::new())
             .expect("one marker per reading");
     }
     markers

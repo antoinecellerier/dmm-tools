@@ -229,7 +229,7 @@ fn format_csv(
     // to chars with no character-set validation, and an unrecognised mode byte
     // becomes `Unknown(0x..)`. One comma or quote in there and every
     // downstream column shifts.
-    let ts = dmm_shared::export::timestamp(m.wall_time.into());
+    let ts = dmm_shared::export::timestamp(m.wall_time);
     // Cells resolved ahead of the writer so the borrowed ones outlive the
     // record.
     let cells = layout.row(m, &ts, integral, extra_aux, marker);
@@ -259,7 +259,7 @@ fn format_json(
     dmm_shared::export::write_measurement_json(
         &mut line,
         m,
-        &dmm_shared::export::timestamp(m.wall_time.into()),
+        &dmm_shared::export::timestamp(m.wall_time),
         experimental,
         integral,
         marker,
@@ -792,8 +792,8 @@ mod tests {
         // Offsets run from the first frame, not from wherever the session was.
         assert_eq!(replay.duration(), Duration::from_millis(250));
         // And the header is that frame's wall time.
-        let dated = chrono::DateTime::parse_from_rfc3339(&replay.recorded).unwrap();
-        assert_eq!(std::time::SystemTime::from(dated), recorded);
+        let dated = dmm_shared::wall_time::parse(&replay.recorded).unwrap();
+        assert_eq!(dated, recorded);
     }
 
     /// A reading with no frame behind it would go out as a bare offset, which

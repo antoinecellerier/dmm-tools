@@ -410,6 +410,7 @@ Protocol families are in [protocol.md](protocol.md); each family's internals are
 | `export/read.rs` | Reading an export back |
 | `export/read_error.rs` | Why an export or a recording's header did not read |
 | `replay.rs` | What `--replay` opens |
+| `wall_time.rs` | A reading's wall time as both binaries show it in local time, write it and read it back |
 | `help.rs` | Help and version text both binaries print; `Diagnosis`, which help a failed open or command gets |
 | `reopen.rs` | What a lost link may come back on |
 | `input.rs` | Why a typed number was refused, worded once for both binaries |

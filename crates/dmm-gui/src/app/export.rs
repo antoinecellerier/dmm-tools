@@ -4,7 +4,6 @@
 //! the samples pinned at the click; the write runs off the UI thread again,
 //! and its outcome comes back as a toast.
 
-use chrono::{DateTime, Local};
 use dmm_lib::measurement::MeasuredValue;
 use dmm_lib::transport::Link;
 use dmm_shared::export::CsvLayout;
@@ -15,6 +14,7 @@ use log::{error, info, warn};
 use std::collections::HashSet;
 use std::collections::vec_deque;
 use std::path::{Path, PathBuf};
+use std::time::SystemTime;
 
 use super::App;
 use super::task::Task;
@@ -108,7 +108,7 @@ impl ExportFormat {
 
     /// The name the dialog opens with. Shared with `dmm-cli read -o`, so an
     /// export saved here and one the CLI wrote sort together.
-    fn default_name(self, model: &str, mode: Option<&str>, start: DateTime<Local>) -> String {
+    fn default_name(self, model: &str, mode: Option<&str>, start: SystemTime) -> String {
         dmm_shared::export::default_name(model, mode, start, self.extension())
     }
 }
@@ -612,7 +612,6 @@ mod tests {
     use crate::app::connection::ConnectedMeter;
     use crate::app::test_support::test_app;
     use crate::settings::Settings;
-    use chrono::TimeZone;
     use dmm_lib::measurement::{AuxValue, MeasuredValue, Measurement};
     use std::collections::VecDeque;
     use std::time::Instant;
@@ -669,7 +668,7 @@ mod tests {
         let t0 = Instant::now();
         let before = push_at(&mut app, t0, 0..2);
         app.markers
-            .add(before[1], chrono::Local::now(), "1.234 V".into())
+            .add(before[1], SystemTime::now(), "1.234 V".into())
             .expect("a new marker");
         app.capture.recording.toggle(t0);
         push_at(&mut app, t0, 2..4);
@@ -774,10 +773,11 @@ mod tests {
     /// a user who keeps the default gets the file the menu promised.
     #[test]
     fn each_format_names_its_own_file() {
-        let start = Local
-            .with_ymd_and_hms(2026, 9, 15, 14, 30, 5)
-            .single()
-            .expect("a fixed local timestamp");
+        let start = jiff::civil::date(2026, 9, 15)
+            .at(14, 30, 5, 0)
+            .to_zoned(jiff::tz::TimeZone::system())
+            .expect("a date in range")
+            .into();
         assert_eq!(
             ExportFormat::Csv.default_name("UT61E+", Some("DC V"), start),
             "measurements-UT61E+-DC-V-2026-09-15_14-30-05.csv"

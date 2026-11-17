@@ -16,12 +16,12 @@ pub use read::{
 };
 pub use read_error::{ReadError, ReadReason};
 
-use chrono::{DateTime, Local};
 use dmm_lib::flags::StatusFlags;
 use dmm_lib::measurement::{MeasuredValue, Measurement};
 use serde::Serialize;
 use serde_json::{Value, json};
 use std::borrow::Cow;
+use std::time::SystemTime;
 
 /// Longest note a marker takes, in characters. A note labels a moment; the
 /// cap bounds what a stuck key or a paste can put in every export row.
@@ -199,19 +199,14 @@ struct JsonAuxValue<'a> {
 /// user's meters apart, and the file's own `device` field names both. A
 /// recording that crossed a function switch has no one mode and leaves that
 /// segment out.
-pub fn default_name(
-    model: &str,
-    mode: Option<&str>,
-    start: DateTime<Local>,
-    extension: &str,
-) -> String {
+pub fn default_name(model: &str, mode: Option<&str>, start: SystemTime, extension: &str) -> String {
     let mode = mode
         .map(|m| format!("{}-", file_safe(m)))
         .unwrap_or_default();
     format!(
         "measurements-{}-{mode}{}.{extension}",
         file_safe(dmm_lib::protocol::registry::without_brand(model)),
-        start.format("%Y-%m-%d_%H-%M-%S"),
+        crate::wall_time::local(start).strftime("%Y-%m-%d_%H-%M-%S"),
     )
 }
 
@@ -232,7 +227,6 @@ pub fn file_safe(name: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use chrono::TimeZone;
     use dmm_lib::measurement::AuxValue;
 
     /// An alarm's note follows the marker's own, and the pair stays within
@@ -251,11 +245,12 @@ mod tests {
         assert!(note.ends_with("Ω…; Above high limit 5 V"), "{note}");
     }
 
-    fn start() -> DateTime<Local> {
-        Local
-            .with_ymd_and_hms(2026, 9, 15, 14, 30, 5)
-            .single()
-            .expect("a fixed local timestamp")
+    fn start() -> SystemTime {
+        jiff::civil::date(2026, 9, 15)
+            .at(14, 30, 5, 0)
+            .to_zoned(jiff::tz::TimeZone::system())
+            .expect("a date in range")
+            .into()
     }
 
     #[test]

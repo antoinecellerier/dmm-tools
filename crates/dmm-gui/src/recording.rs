@@ -1,12 +1,11 @@
 use crate::markers::{Marker, Markers};
 use crate::settings::DEFAULT_MAX_SAMPLES;
-use chrono::{DateTime, Local};
 use dmm_lib::measurement::Measurement;
 use dmm_shared::export::{CsvLayout, device_comment};
 use std::collections::{HashSet, VecDeque};
 use std::io::Write;
 use std::ops::Range;
-use std::time::Instant;
+use std::time::{Instant, SystemTime};
 
 /// Render samples as a CSV document, provenance header included.
 ///
@@ -160,7 +159,7 @@ pub(crate) fn render_replay(
 /// and it is the only part of a reading no decoded field can reconstruct.
 #[derive(Debug, Clone)]
 pub struct Sample {
-    pub wall_time: DateTime<Local>,
+    pub wall_time: SystemTime,
     pub measurement: Measurement,
     /// How many trailing sub-values of `measurement` were appended by
     /// software (a transform's `Raw`) rather than sent by the meter, as of
@@ -176,7 +175,7 @@ pub struct Sample {
 impl Sample {
     pub fn from_measurement(m: &Measurement, extra_aux: usize) -> Self {
         Self {
-            wall_time: m.wall_time.into(),
+            wall_time: m.wall_time,
             measurement: m.clone(),
             extra_aux,
         }
@@ -1729,7 +1728,7 @@ mod tests {
         let mut m = make_measurement(b"  1.000");
         m.wall_time = std::time::SystemTime::UNIX_EPOCH + Duration::from_secs(1_790_000_000);
         let s = Sample::from_measurement(&m, 0);
-        assert_eq!(std::time::SystemTime::from(s.wall_time), m.wall_time);
+        assert_eq!(s.wall_time, m.wall_time);
     }
 
     /// Three frames 250 ms apart, as the buffer would hold them.
@@ -1768,7 +1767,7 @@ mod tests {
         // The link the session was on, so playing the file back says so too.
         assert_eq!(replay.link, Some(dmm_lib::transport::Link::Bluetooth));
         assert_eq!(replay.duration(), Duration::from_millis(500));
-        chrono::DateTime::parse_from_rfc3339(&replay.recorded)
+        dmm_shared::wall_time::parse(&replay.recorded)
             .expect("`# recorded:` is what --replay parses as a clock origin");
 
         // Offsets run from the first frame, whatever session time it landed
@@ -1979,7 +1978,7 @@ mod tests {
             dmm_shared::export::write_measurement_json(
                 &mut expected,
                 &s.measurement,
-                &s.wall_time.to_rfc3339(),
+                &dmm_shared::export::timestamp(s.wall_time),
                 true,
                 None,
                 None,

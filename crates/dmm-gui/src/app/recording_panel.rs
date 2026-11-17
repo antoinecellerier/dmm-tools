@@ -1686,7 +1686,9 @@ mod tests {
             .recording
             .sample_at(at)
             .expect("a buffered sample");
-        let time = sample.wall_time.format("%H:%M:%S%.3f").to_string();
+        let time = dmm_shared::wall_time::local(sample.wall_time)
+            .strftime("%H:%M:%S%.3f")
+            .to_string();
         run.tree
             .iter()
             .any(|(_, n)| n.value().is_some_and(|v| v.starts_with(&time)))
@@ -1953,7 +1955,9 @@ mod tests {
             .recording
             .sample_at(at)
             .expect("a buffered sample");
-        let time = sample.wall_time.format("%H:%M:%S%.3f").to_string();
+        let time = dmm_shared::wall_time::local(sample.wall_time)
+            .strftime("%H:%M:%S%.3f")
+            .to_string();
         node_rect(&run.tree, |n| {
             n.value().is_some_and(|v| v.starts_with(&time))
         })
@@ -1973,7 +1977,9 @@ mod tests {
             .nth(295)
             .expect("samples");
         let at = sample.measurement.timestamp;
-        let time = sample.wall_time.format("%H:%M:%S%.3f").to_string();
+        let time = dmm_shared::wall_time::local(sample.wall_time)
+            .strftime("%H:%M:%S%.3f")
+            .to_string();
         let add = format!("Add a marker at {time}");
         assert!(!run.shows_widget(&add), "only on a hovered row");
         let row = sample_rect(&run, at);
@@ -1999,7 +2005,9 @@ mod tests {
             .expect("samples");
         let (at, time) = (
             sample.measurement.timestamp,
-            sample.wall_time.format("%H:%M:%S%.3f").to_string(),
+            dmm_shared::wall_time::local(sample.wall_time)
+                .strftime("%H:%M:%S%.3f")
+                .to_string(),
         );
         let row = sample_rect(&run, at);
         run.frame(1.0, vec![egui::Event::PointerMoved(row.center())]);

@@ -10,21 +10,20 @@
 //! frame to parse to; playback parses the frame itself.
 
 use crate::export::{ReadError, ReadReason};
-use chrono::{DateTime, FixedOffset, Local, SecondsFormat};
 use dmm_lib::error::{Error, Result};
 use dmm_lib::measurement::Measurement;
 use dmm_lib::protocol::registry;
 use dmm_lib::replay::{self, Replay};
 use dmm_lib::transport::Link;
 use std::path::Path;
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime};
 
 /// When `replay` was recorded, from its `# recorded:` header line.
 ///
 /// `dmm-lib` keeps the line as written, having no date library of its own;
 /// turning it into a session origin is the apps' job.
-pub fn recorded_at(replay: &Replay) -> std::result::Result<DateTime<FixedOffset>, ReadError> {
-    DateTime::parse_from_rfc3339(&replay.recorded).map_err(|e| {
+pub fn recorded_at(replay: &Replay) -> std::result::Result<SystemTime, ReadError> {
+    crate::wall_time::parse(&replay.recorded).map_err(|e| {
         let text = format!("# recorded: {}", replay.recorded);
         ReadError::whole(not_a_date(&text, e))
     })
@@ -32,8 +31,8 @@ pub fn recorded_at(replay: &Replay) -> std::result::Result<DateTime<FixedOffset>
 
 /// `t` as a replay's `# recorded:` header line holds it, and [`recorded_at`]
 /// reads it back: RFC 3339 to the millisecond.
-pub fn recorded_text(t: DateTime<Local>) -> String {
-    t.to_rfc3339_opts(SecondsFormat::Millis, false)
+pub fn recorded_text(t: SystemTime) -> String {
+    crate::wall_time::rfc3339_millis(t)
 }
 
 /// Writes a replay file a reading at a time, for both binaries: dmm-cli as
@@ -96,7 +95,7 @@ impl Writer {
         let first = match self.first {
             Some(first) => first,
             None => {
-                let recorded = recorded_text(m.wall_time.into());
+                let recorded = recorded_text(m.wall_time);
                 out.push_str(&replay::header(
                     &self.device,
                     &recorded,
@@ -120,7 +119,7 @@ impl Writer {
 
 /// Why `text`, meant as an RFC 3339 date, was refused — a replay's header or
 /// an export's timestamp cell.
-pub(crate) fn not_a_date(text: &str, e: chrono::ParseError) -> ReadReason {
+pub(crate) fn not_a_date(text: &str, e: jiff::Error) -> ReadReason {
     ReadReason::NotADate {
         text: text.to_string(),
         detail: e.to_string(),
@@ -159,7 +158,7 @@ fn fixture(dir_name: &str, text: &str) -> std::result::Result<Replay, String> {
         .find_map(|line| line.strip_prefix("raw_hex:"))
         .ok_or("no top-level `raw_hex:` line; is this a golden fixture?")?;
     let payload = decode_hex(unquote(raw_hex.trim()))?;
-    let recorded = recorded_text(Local::now());
+    let recorded = recorded_text(SystemTime::now());
     // The writers `Replay::parse` is kept in step with, rather than text of
     // our own.
     let mut recording = replay::header(device.id, &recorded, None, None);

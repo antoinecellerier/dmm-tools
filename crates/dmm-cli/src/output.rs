@@ -6,10 +6,10 @@
 //! — so it cannot be created until a reading has arrived, and the header waits
 //! in memory until then.
 
-use chrono::{DateTime, Local};
 use std::fs::File;
 use std::io::{self, BufWriter, Write};
 use std::path::{Path, PathBuf};
+use std::time::SystemTime;
 
 /// How many names a self-named file may step through before giving up:
 /// itself, then `-2` up to `-99`. The name has second resolution, so this is
@@ -67,7 +67,7 @@ pub(crate) enum Wrote {
 
 struct Named {
     path: PathBuf,
-    start: DateTime<Local>,
+    start: SystemTime,
     /// The mode `path` carries: `None` when the run opened on a word the
     /// meter shows instead of a reading, which names no mode.
     in_name: Option<String>,
@@ -132,7 +132,7 @@ impl Writer {
     /// ("Auto" with the probes lifted): its mode is that word, not a
     /// function switch, so it neither names the file nor unnames it — as the
     /// GUI's export leaves it out of the name it picks.
-    pub(crate) fn saw(&mut self, mode: Option<&str>, at: DateTime<Local>) -> io::Result<()> {
+    pub(crate) fn saw(&mut self, mode: Option<&str>, at: SystemTime) -> io::Result<()> {
         let Some(auto) = &mut self.auto else {
             return Ok(());
         };
@@ -385,7 +385,7 @@ mod tests {
                 extension: "csv",
                 named: Some(Named {
                     path: PathBuf::from("unused.csv"),
-                    start: Local::now(),
+                    start: SystemTime::now(),
                     in_name: in_name.map(str::to_string),
                     mode: in_name.map(str::to_string),
                     one_mode: true,
@@ -403,7 +403,7 @@ mod tests {
     #[test]
     fn a_no_reading_keeps_the_mode_in_the_name() {
         let mut writer = named(Some("DC V"));
-        let at = Local::now();
+        let at = SystemTime::now();
         writer.saw(None, at).expect("no disk access");
         writer.saw(Some("DC V"), at).expect("no disk access");
         assert_eq!(final_mode(&writer), Some("DC V"));
@@ -415,7 +415,7 @@ mod tests {
     #[test]
     fn a_run_opened_on_a_no_reading_takes_the_first_readings_mode() {
         let mut writer = named(None);
-        let at = Local::now();
+        let at = SystemTime::now();
         assert_eq!(final_mode(&writer), None);
         writer.saw(Some("DC V"), at).expect("no disk access");
         writer.saw(None, at).expect("no disk access");

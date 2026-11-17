@@ -9,7 +9,6 @@
 //! sub-value's unit even where the meter left it to the main reading's.
 
 use super::{ReadError, ReadReason};
-use chrono::{DateTime, Local};
 use dmm_lib::flags::{Flag, StatusFlags};
 use dmm_lib::measurement::{AuxValue, MeasuredValue, Measurement};
 use dmm_lib::transform::RAW_LABEL;
@@ -222,15 +221,13 @@ fn device_name(name: &str) -> Option<String> {
 
 /// A reading's wall time as both binaries write it, in a CSV `timestamp`
 /// cell or a JSON `timestamp` key: RFC 3339, which [`wall_time`] reads back.
-pub fn timestamp(t: DateTime<Local>) -> String {
-    t.to_rfc3339()
+pub fn timestamp(t: SystemTime) -> String {
+    crate::wall_time::rfc3339(t)
 }
 
 /// A timestamp cell or key: RFC 3339, as [`timestamp`] writes it.
 fn wall_time(line: usize, text: &str) -> Result<SystemTime, ReadError> {
-    DateTime::parse_from_rfc3339(text)
-        .map(SystemTime::from)
-        .map_err(|e| at(line, crate::replay::not_a_date(text, e)))
+    crate::wall_time::parse(text).map_err(|e| at(line, crate::replay::not_a_date(text, e)))
 }
 
 /// A value as a CSV cell or a JSON sub-value string writes it: the meter's
@@ -617,7 +614,6 @@ pub fn read_json_from(input: impl BufRead, limit: Option<usize>) -> Result<Impor
 mod tests {
     use super::*;
     use crate::export::{CsvLayout, device_comment, metadata_line, write_measurement_json};
-    use chrono::{DateTime, Local};
     use std::path::Path;
     use std::time::Duration;
 
@@ -676,7 +672,7 @@ mod tests {
     }
 
     fn ts(m: &Measurement) -> String {
-        DateTime::<Local>::from(m.wall_time).to_rfc3339()
+        timestamp(m.wall_time)
     }
 
     fn csv_of(readings: &[Measurement], marks: &[Option<(u32, &str)>]) -> String {

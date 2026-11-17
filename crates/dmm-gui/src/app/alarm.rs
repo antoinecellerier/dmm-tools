@@ -169,7 +169,7 @@ fn percent_of_zero(l10n: &Localizer) -> String {
 /// frame's drain.
 pub(super) struct PendingBreach {
     at: std::time::Instant,
-    wall_time: chrono::DateTime<chrono::Local>,
+    wall_time: std::time::SystemTime,
     reading: String,
     /// In the app's language, as a note typed into the marker would be:
     /// the user reads it and can edit it, and recordings and exports keep
@@ -181,7 +181,7 @@ impl PendingBreach {
     fn new(l10n: &Localizer, m: &Measurement, breach: &Breach) -> Self {
         Self {
             at: m.timestamp,
-            wall_time: m.wall_time.into(),
+            wall_time: m.wall_time,
             reading: log_line(l10n, m),
             note: l10n.breach_note(breach),
         }

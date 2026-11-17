@@ -478,7 +478,7 @@ mod tests {
             let at = m.timestamp + std::time::Duration::from_millis(i);
             let _ = app
                 .markers
-                .add(at, chrono::Local::now(), "1.234 V".to_string());
+                .add(at, std::time::SystemTime::now(), "1.234 V".to_string());
         }
         app.last_measurement = Some(m);
 

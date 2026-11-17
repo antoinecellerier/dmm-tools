@@ -8,7 +8,7 @@
 //! system's and the Bluetooth stack's text, file paths, values the user
 //! typed, hexadecimal codes. So do the developer diagnostics whose detail is
 //! built from open-ended parts: [`Error::InvalidResponse`]'s message and
-//! [`Error::Replay`]'s, which name a line of a file and quote serde, chrono
+//! [`Error::Replay`]'s, which name a line of a file and quote serde, jiff
 //! or io errors. Their lead-in translates; the detail stays English, and
 //! the replay one, quoting the file, has its control characters escaped. Mode,
 //! range and state names go through [`Localizer::label`] by the kind each

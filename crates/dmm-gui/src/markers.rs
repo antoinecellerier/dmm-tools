@@ -7,9 +7,8 @@
 //! keeps its trace. A marker lives as long as its reading is in either — see
 //! [`Markers::retain`].
 
-use chrono::{DateTime, Local};
 use std::collections::VecDeque;
-use std::time::Instant;
+use std::time::{Instant, SystemTime};
 
 pub(crate) use dmm_shared::export::NOTE_MAX_CHARS;
 
@@ -27,7 +26,7 @@ pub(crate) struct Marker {
     /// When the reading was taken and what it read, as the list shows them.
     /// Kept here rather than looked up, because the reading may have left the
     /// sample buffer while the graph still holds it.
-    pub(crate) wall_time: DateTime<Local>,
+    pub(crate) wall_time: SystemTime,
     pub(crate) reading: String,
 }
 
@@ -53,7 +52,7 @@ impl Markers {
     pub(crate) fn add(
         &mut self,
         at: Instant,
-        wall_time: DateTime<Local>,
+        wall_time: SystemTime,
         reading: String,
     ) -> Result<u32, u32> {
         let i = self.list.partition_point(|m| m.at < at);
@@ -84,7 +83,7 @@ impl Markers {
     pub(crate) fn add_noted(
         &mut self,
         at: Instant,
-        wall_time: DateTime<Local>,
+        wall_time: SystemTime,
         reading: String,
         note: &str,
     ) -> u32 {
@@ -107,7 +106,7 @@ impl Markers {
         at: Instant,
         number: u32,
         note: String,
-        wall_time: DateTime<Local>,
+        wall_time: SystemTime,
         reading: String,
     ) -> bool {
         let i = self.list.partition_point(|m| m.at < at);
@@ -185,7 +184,7 @@ mod tests {
     use std::time::Duration;
 
     fn add(markers: &mut Markers, at: Instant) -> Result<u32, u32> {
-        markers.add(at, Local::now(), "1.234 V".to_string())
+        markers.add(at, SystemTime::now(), "1.234 V".to_string())
     }
 
     #[test]
@@ -215,7 +214,7 @@ mod tests {
         let t = Instant::now();
         let reading = || "1.234 V".to_string();
         assert_eq!(
-            m.add_noted(t, Local::now(), reading(), "Above high limit 1 V"),
+            m.add_noted(t, SystemTime::now(), reading(), "Above high limit 1 V"),
             1
         );
         assert_eq!(m.get(1).unwrap().note, "Above high limit 1 V");
@@ -223,7 +222,7 @@ mod tests {
         m.iter_mut().last().unwrap().note = "load on".to_string();
         let later = t + Duration::from_secs(1);
         assert_eq!(
-            m.add_noted(later, Local::now(), reading(), "Below low limit 0 V"),
+            m.add_noted(later, SystemTime::now(), reading(), "Below low limit 0 V"),
             2
         );
         assert_eq!(m.get(2).unwrap().note, "load on; Below low limit 0 V");
@@ -255,14 +254,19 @@ mod tests {
         let mut m = Markers::default();
         let t = Instant::now();
         m.reserve(2);
-        assert!(m.insert(t, 1, "start".into(), Local::now(), String::new()));
-        let breach = m.add_noted(t + Duration::from_secs(5), Local::now(), String::new(), "x");
+        assert!(m.insert(t, 1, "start".into(), SystemTime::now(), String::new()));
+        let breach = m.add_noted(
+            t + Duration::from_secs(5),
+            SystemTime::now(),
+            String::new(),
+            "x",
+        );
         assert_eq!(breach, 3);
         assert!(m.insert(
             t + Duration::from_secs(9),
             2,
             "end".into(),
-            Local::now(),
+            SystemTime::now(),
             String::new()
         ));
         let numbers: Vec<u32> = m.iter().map(|k| k.number).collect();

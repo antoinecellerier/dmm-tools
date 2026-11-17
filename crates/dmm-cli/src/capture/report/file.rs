@@ -236,7 +236,7 @@ pub(in crate::capture) fn populate_report_metadata(
     device_name: String,
     supported: bool,
 ) {
-    report.date = chrono::Local::now().to_rfc3339();
+    report.date = dmm_shared::wall_time::rfc3339(std::time::SystemTime::now());
     report.tool_version = tool_version();
     report.device_name = device_name;
     report.transport_name = Some(dmm.transport().transport_name().to_string());

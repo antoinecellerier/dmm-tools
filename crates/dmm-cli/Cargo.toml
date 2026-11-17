@@ -17,7 +17,6 @@ clap.workspace = true
 clap_complete.workspace = true
 serde.workspace = true
 serde_json = { workspace = true, features = ["preserve_order"] } # `get --format json` leads with the header fields
-chrono.workspace = true
 ctrlc = "3"
 log.workspace = true
 console = "0.16"
