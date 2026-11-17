@@ -75,6 +75,12 @@ impl App {
             .notice(self.settings.check_for_updates)
             .map_or(0.0, |tag| text_width(ui, &tag.label(l10n)) + spacing);
         let one_row = cached_left + link_shown_w + cached_right + notice_w + spacing < available;
+        // The left group alone is wider than the window.
+        let status_below = cached_left + link_shown_w > available;
+        let mut status_width = 0.0;
+        let mut row_width = 0.0;
+        let mut link = (0.0, 0.0);
+        let (mut dot_color, mut status_text) = (gray, String::new());
 
         // Row 1: device label, action buttons, status indicator
         ui.horizontal(|ui| {
@@ -111,7 +117,7 @@ impl App {
             // Whether the suffix ends up on the bar this frame, which is what
             // the row's width has to be corrected by below.
             let mut link_drawn = false;
-            let (dot_color, status_text) = match &self.connection.state {
+            (dot_color, status_text) = match &self.connection.state {
                 ConnectionState::Connected => {
                     let name = self
                         .connection
@@ -158,54 +164,13 @@ impl App {
                 }
             };
 
-            // Group status indicators (dot, label, stability badge) so the
-            // whole region exposes a Role::Status landmark to AT.
-            //
-            // Explicit id_salt: this scope sits inside a horizontal whose
-            // sibling layout changes whenever the connection state flips
-            // (Connect button vs. Disconnect+Pause+Clear). Without an
-            // explicit salt, the auto-derived scope id flips on every
-            // state transition and AT loses the Status landmark.
-            ui.landmark("status_landmark", egui::accesskit::Role::Status, |ui| {
-                let hover = self.status_hover(l10n);
-
-                // Status dot — decorative, so not focusable, but it hovers
-                // with the text beside it rather than being a dead spot in
-                // the middle of the status.
-                let (rect, dot) =
-                    ui.allocate_exact_size(egui::vec2(12.0, 12.0), egui::Sense::hover());
-                if self.source.imported.is_some() {
-                    // A ring, not a dot: no meter is on the other end, and a
-                    // shape says so where a colour alone would not.
-                    ui.painter().circle_stroke(
-                        rect.center(),
-                        4.5,
-                        egui::Stroke::new(1.5, ui.visuals().text_color()),
-                    );
-                } else {
-                    ui.painter().circle_filled(rect.center(), 5.0, dot_color);
-                }
-                let status = ui.label(RichText::new(&status_text).small());
-                if !hover.is_empty() {
-                    dot.on_hover_text(&hover);
-                    status.on_hover_text(&hover);
-                }
-
-                if let Some((model_name, stability, url)) = self.stability_badge(l10n) {
-                    ui.hyperlink_to(
-                        RichText::new(badge_text(l10n, stability))
-                            .small()
-                            .strong()
-                            .color(orange),
-                        url,
-                    )
-                    .on_hover_text(tr!(
-                        l10n,
-                        "top-bar-badge-hover",
-                        warning = l10n.help().stability_warning(&model_name, stability)
-                    ));
-                }
-            });
+            // The status on the row while the row has room for it; where it
+            // has not (a phone, a long name, a large zoom) it takes a row of
+            // its own below instead of running off the window's edge.
+            let buttons_right = ui.min_rect().right();
+            if !status_below {
+                status_width = self.show_status(ui, l10n, dot_color, &status_text, orange);
+            }
 
             // The link is measured rather than read off the drawn row, so
             // both numbers mean the same thing whether or not it is on the
@@ -222,11 +187,10 @@ impl App {
                 0.0
             };
             let drawn = if link_drawn { link_w } else { 0.0 };
-            let left_width = ui.min_rect().right() - left_start - drawn;
-            ui.data_mut(|d| {
-                d.insert_temp(left_id, left_width);
-                d.insert_temp(link_id, link_w);
-            });
+            // What the row needs with the status on it, wherever the
+            // status was drawn this frame.
+            row_width = buttons_right - left_start;
+            link = (link_w, drawn);
 
             // If wide enough, render right-side items on the same row
             if one_row {
@@ -234,12 +198,92 @@ impl App {
             }
         });
 
-        // If not wide enough, render right-side items on a second row
-        if !one_row {
-            ui.horizontal(|ui| {
-                self.show_top_bar_right(ui, right_id);
+        // A row that ran past the window's edge has widened this ui with
+        // it: the rows below are laid out in the width there really is.
+        let narrow_row = |ui: &mut Ui, add: &mut dyn FnMut(&mut Ui)| {
+            let height = ui.spacing().interact_size.y;
+            let rect = egui::Rect::from_min_size(ui.cursor().min, egui::vec2(available, height));
+            ui.scope_builder(egui::UiBuilder::new().max_rect(rect), |ui| {
+                ui.horizontal(|ui| add(ui));
+            });
+        };
+        if status_below {
+            narrow_row(ui, &mut |ui| {
+                status_width = self.show_status(ui, l10n, dot_color, &status_text, orange);
             });
         }
+        let (link_w, drawn) = link;
+        let left_width = row_width + spacing + status_width - drawn;
+        ui.data_mut(|d| {
+            d.insert_temp(left_id, left_width);
+            d.insert_temp(link_id, link_w);
+        });
+
+        // If not wide enough, render right-side items on a second row
+        if !one_row {
+            narrow_row(ui, &mut |ui| self.show_top_bar_right(ui, right_id));
+        }
+    }
+
+    /// The status: its dot, its text and the meter's stability badge.
+    /// Returns the width it took.
+    fn show_status(
+        &self,
+        ui: &mut Ui,
+        l10n: &Localizer,
+        dot_color: egui::Color32,
+        status_text: &str,
+        orange: egui::Color32,
+    ) -> f32 {
+        let start = ui.cursor().left();
+        // Group status indicators (dot, label, stability badge) so the
+        // whole region exposes a Role::Status landmark to AT.
+        //
+        // Explicit id_salt: this scope sits inside a horizontal whose
+        // sibling layout changes whenever the connection state flips
+        // (Connect button vs. Disconnect+Pause+Clear). Without an
+        // explicit salt, the auto-derived scope id flips on every
+        // state transition and AT loses the Status landmark.
+        ui.landmark("status_landmark", egui::accesskit::Role::Status, |ui| {
+            let hover = self.status_hover(l10n);
+
+            // Status dot — decorative, so not focusable, but it hovers
+            // with the text beside it rather than being a dead spot in
+            // the middle of the status.
+            let (rect, dot) = ui.allocate_exact_size(egui::vec2(12.0, 12.0), egui::Sense::hover());
+            if self.source.imported.is_some() {
+                // A ring, not a dot: no meter is on the other end, and a
+                // shape says so where a colour alone would not.
+                ui.painter().circle_stroke(
+                    rect.center(),
+                    4.5,
+                    egui::Stroke::new(1.5, ui.visuals().text_color()),
+                );
+            } else {
+                ui.painter().circle_filled(rect.center(), 5.0, dot_color);
+            }
+            let status = ui.label(RichText::new(status_text).small());
+            if !hover.is_empty() {
+                dot.on_hover_text(&hover);
+                status.on_hover_text(&hover);
+            }
+
+            if let Some((model_name, stability, url)) = self.stability_badge(l10n) {
+                ui.hyperlink_to(
+                    RichText::new(badge_text(l10n, stability))
+                        .small()
+                        .strong()
+                        .color(orange),
+                    url,
+                )
+                .on_hover_text(tr!(
+                    l10n,
+                    "top-bar-badge-hover",
+                    warning = l10n.help().stability_warning(&model_name, stability)
+                ));
+            }
+        });
+        ui.min_rect().right() - start
     }
 
     /// The connection's buttons for its state: Connect; Cancel while it

@@ -2393,6 +2393,29 @@ mod tests {
         })
     }
 
+    /// A window too narrow for the top bar's first row, as a phone's is at
+    /// a large zoom: the status takes a row of its own, and the settings
+    /// button stays inside the window, not out past the edge the first row
+    /// ran over.
+    #[test]
+    fn a_top_bar_wider_than_the_window_stays_inside_it() {
+        let mut app = crate::app::test_support::test_app();
+        app.settings.shared.device_family = "ut161d".to_string();
+        let width = 280.0;
+        let nodes = frame_nodes(&mut app, width, 400.0, |app, ui| {
+            let ctx = ui.ctx().clone();
+            egui::Panel::top("top_bar").show(ui, |ui| app.show_top_bar(ui, &ctx));
+        });
+        for text in ["Settings", "EXPERIMENTAL", "Disconnected"] {
+            let rect = crate::app::test_support::node_rect(&nodes, |n| node_text(n) == Some(text))
+                .unwrap_or_else(|| panic!("no {text:?} on the bar"));
+            assert!(
+                rect.left() >= 0.0 && rect.right() <= width,
+                "{text:?} at {rect:?} is outside the {width} pt window"
+            );
+        }
+    }
+
     /// The text AccessKit reports for a node: a plain label carries it as the
     /// node's value, a button or a link as its label.
     fn node_text(node: &Node) -> Option<&str> {
