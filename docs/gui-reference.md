@@ -261,7 +261,8 @@ AC+DC V) get two more toolbar groups:
 | **Shift + click & drag** | Draw a bounding box to zoom both time and value to the selected region, every Y axis included. Release to apply; press Escape to cancel. |
 | **Double-click** | Return to live mode with auto Y |
 | **Click** (cursors active) | Place cursor A or B, snapping to nearest data point |
-| **Right-click** | The menu for the reading and Y value clicked; see [Main Plot](#main-plot) |
+| **Right-click**, or a long press on a touchscreen | The menu for the reading and Y value clicked; see [Main Plot](#main-plot) |
+| **A finger on the plot** (touchscreen) | Shows the crosshair and its readings above the finger; dragging pans |
 
 The graph's keys are listed under [Keyboard Shortcuts](#keyboard-shortcuts).
 
@@ -275,7 +276,7 @@ How the plotted series' visible readings spread, turned on by the
 - A strip right of the plot shares its Y axis; in a graph too narrow for it, a
   band under the minimap has a value axis of its own.
 - Each bar's length is its percentage of the readings, on the scale beside it.
-- Hover a bar for its readings and count.
+- Hover a bar, or touch it, for its readings and count.
 - The share of readings beyond the Y axis shows at the end they lie past:
   `↑` and `↓` at the strip's top and bottom, `←` and `→` at the band's ends.
   Over-range readings show as `OL` at the top or right end, as a share of

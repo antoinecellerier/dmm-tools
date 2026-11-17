@@ -229,6 +229,12 @@ or apart from it would overflow.
 show/hide state while the view is pinned every frame (`paint_plot_key` in
 `graph/key.rs`), so the **Show:** chips are the control.
 
+**Under a finger, readouts and menus go above it.** A touch has no hover, and
+the hand covers what a mouse pointer leaves in view: the crosshair's readings,
+the histogram's and the menu a long press opens sit above the finger, not
+below it as for a pointer. Nothing else is laid out for touch: on a phone the
+window is the desktop's, controls at their desktop size.
+
 **Session choices are never saved, hidden traces are.** A scale or plotted
 series restored silently at the next launch would corrupt readings or plot a
 sub-value the user doesn't suspect; a plotted series lasts while the meter
