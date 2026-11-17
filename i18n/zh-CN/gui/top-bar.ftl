@@ -127,8 +127,8 @@ top-bar-project-link =
     .hover = 在 GitHub 上打开 dmm-tools 项目页面
 # The ? button. $keys and $other are its two keys, ? and F1.
 top-bar-shortcuts =
-    .hover = 显示键盘快捷键和鼠标手势 ({ $keys } 或 { $other })
-    .a11y = 键盘快捷键和鼠标手势
+    .hover = 显示键盘快捷键和图表手势 ({ $keys } 或 { $other })
+    .a11y = 键盘快捷键和图表手势
 # The ⚙ button.
 top-bar-settings =
     .hover = 显示或隐藏设置面板

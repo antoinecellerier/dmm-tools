@@ -654,7 +654,7 @@ examples.
 
 ## Keyboard Shortcuts
 
-Press `?` or `F1`, or click the `?` button in the top bar, to open an in-app reference of keyboard shortcuts and mouse gestures.
+Press `?` or `F1`, or click the `?` button in the top bar, to open an in-app reference of keyboard shortcuts and graph gestures.
 
 ### General
 

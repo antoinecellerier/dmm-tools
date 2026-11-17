@@ -1,8 +1,8 @@
-### The keyboard and mouse help, a dialog opened with ? or F1 or the ?
+### The shortcuts and gestures help, a dialog opened with ? or F1 or the ?
 ### button in the top bar (no screenshot in the docs): a title row, then
-### three tables (General, Graph (keys), Graph (mouse)) and a note.
+### three tables (General, Graph (keys), Graph (mouse and touch)) and a note.
 ###
-### Each table row has two columns: the keys or the mouse gesture on the
+### Each table row has two columns: the keys or the gesture on the
 ### left, in a monospace font, and what they do on the right. The key
 ### column is written by the app as this computer spells the keys, e.g.
 ### Ctrl+O or ⌘O, and is not translated; these messages are the right-hand
@@ -12,7 +12,7 @@
 ## The title row.
 
 # The dialog's title.
-shortcuts-title = Keyboard & Mouse
+shortcuts-title = Shortcuts & gestures
 # The × button at the right end of the title row, which closes the dialog:
 # its name for a screen reader.
 shortcuts-close =
@@ -91,40 +91,46 @@ shortcuts-graph-triggers = Toggle trigger markers (with Ref on)
 # C: shows or hides the two cursors that measure between points.
 shortcuts-graph-cursors = Toggle cursors
 
-## The Graph (mouse) table: what the mouse does on the graph. Each message
-## is what the gesture does; its .gesture is the gesture itself, in the
-## left column. Shift and Ctrl are key names: keep them as they are, the
+## The Graph (mouse and touch) table: what the mouse, or a finger on a
+## touchscreen, does on the graph. Each message is what the gesture does;
+## its .gesture is the mouse's gesture, in the left column, and its .touch
+## the finger's, on a second line under it, where both do the same. Shift and Ctrl are key names: keep them as they are, the
 ## way the key column spells them.
 
 # The table's heading.
-shortcuts-graph-mouse = Graph (mouse)
+shortcuts-graph-mouse = Graph (mouse and touch)
+# .swipe is the same on a laptop touchpad: two fingers moved left or right
+# together.
 shortcuts-mouse-drag = Pan left / right through history
     .gesture = Drag
-# On a laptop touchpad: two fingers moved left or right together.
-shortcuts-mouse-swipe = Pan left / right through history
-    .gesture = Two-finger swipe
+    .swipe = Two-finger swipe
 # The box dragged out sets both the span of time and the range of values
 # shown. $shift is the Shift key's name, or ⇧ on a Mac.
 shortcuts-mouse-box-zoom = Zoom to bounding box (time & value)
     .gesture = { $shift } + drag
-# X axis: the time axis. Zooms around the mouse pointer. $ctrl is the key's
+# X axis: the time axis. Zooms around the mouse pointer; a pinch is two
+# fingers moved apart or together on a touchscreen. $ctrl is the key's
 # name: Ctrl, or Cmd or ⌘ on a Mac.
 shortcuts-mouse-zoom = Zoom X axis centered on cursor
     .gesture = { $ctrl } + scroll wheel
+    .touch = Pinch
 # The wheel alone scrolls the window's panels, not the graph.
 shortcuts-mouse-scroll = Scroll the panel
     .gesture = Scroll wheel
 # Follows the newest readings again and fits the value axis to them.
 shortcuts-mouse-reset = Reset to live follow + auto Y
     .gesture = Double-click
-# While the cursors are shown (C), a click places cursor A or B on the
+    .touch = Double-tap
+# While the cursors are shown (C), a click or a tap places cursor A or B on the
 # reading nearest to it.
 shortcuts-mouse-cursor = Place cursor A / B at nearest point
     .gesture = Click (cursors on)
-# Opens a menu to add a marker, copy the reading, place the cursors, set
+    .touch = Tap (cursors on)
+# A long press is a finger held on a touchscreen. Opens a menu to add a marker, copy the reading, place the cursors, set
 # reference lines or set an alarm.
 shortcuts-mouse-menu = Mark, copy, cursors, reference lines, alarm
     .gesture = Right-click
+    .touch = Long press
 # The minimap is the strip under the graph showing all the readings:
 # dragging in it moves the view, dragging its edges resizes it.
 shortcuts-mouse-minimap = Jump to time / resize viewport
@@ -149,11 +155,15 @@ shortcuts-key-end = End
 shortcuts-key-plus = Plus
 shortcuts-key-minus = Minus
 
-## The note under the tables, in small grey text.
+## The notes in small grey text: one after the last table, one under the
+## tables.
 
 # Space, Escape, Up/Down, PgUp/PgDn and Home/End are key names: write them
 # the way the key names above do.
-shortcuts-note = Graph and Space shortcuts are disabled while any widget has keyboard focus — press Escape to release it. Up/Down, PgUp/PgDn and Home/End scroll this help.
+shortcuts-note-focus = Graph and Space shortcuts are disabled while any widget has keyboard focus — press Escape to release it.
+# Shown under the tables, and only while they are too tall for the
+# dialog and scroll.
+shortcuts-note-scroll = Up/Down, PgUp/PgDn and Home/End scroll this help.
 
 ## Ctrl+T on Wayland, where a window can't put itself above the others.
 

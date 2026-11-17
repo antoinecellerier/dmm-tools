@@ -124,8 +124,8 @@ top-bar-project-link =
     .hover = GitHub で dmm-tools のプロジェクト ページを開く
 # The ? button. $keys and $other are its two keys, ? and F1.
 top-bar-shortcuts =
-    .hover = キーボード ショートカットとマウス操作を表示する ({ $keys } または { $other })
-    .a11y = キーボード ショートカットとマウス操作
+    .hover = キーボード ショートカットとグラフの操作を表示する ({ $keys } または { $other })
+    .a11y = キーボード ショートカットとグラフの操作
 # The ⚙ button.
 top-bar-settings =
     .hover = 設定パネルの表示/非表示を切り替える

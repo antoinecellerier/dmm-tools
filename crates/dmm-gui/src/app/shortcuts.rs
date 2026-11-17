@@ -339,14 +339,22 @@ impl Shortcut {
     /// folded into another row. `inert` marks a key that does nothing in
     /// this session, so the modal can grey the row as well as say so.
     ///
-    /// `on_wayland` marks the one key the compositor makes inert.
+    /// `on_wayland` marks the one key the compositor makes inert. `android`
+    /// leaves out the keys with nothing to act on there: the app is the
+    /// screen, with no window to keep on top, undress, close or quit.
     fn help_row<'a>(
         self,
         ctx: &egui::Context,
         l10n: &'a Localizer,
         on_wayland: bool,
+        android: bool,
     ) -> Option<(String, Cow<'a, str>, bool)> {
         let action = match self {
+            Self::ToggleAlwaysOnTop | Self::ToggleDecorations | Self::Close | Self::Quit
+                if android =>
+            {
+                return None;
+            }
             Self::ConnectToggle => tr!(l10n, "shortcuts-connect"),
             Self::TogglePause => tr!(l10n, "shortcuts-pause"),
             Self::ClearSession => tr!(l10n, "shortcuts-clear"),
@@ -491,10 +499,11 @@ pub(super) fn help_rows<'a>(
     ctx: &'a egui::Context,
     l10n: &'a Localizer,
     on_wayland: bool,
+    android: bool,
 ) -> impl Iterator<Item = (String, Cow<'a, str>, bool)> + 'a {
     Shortcut::HELP_ORDER
         .iter()
-        .filter_map(move |s| s.help_row(ctx, l10n, on_wayland))
+        .filter_map(move |s| s.help_row(ctx, l10n, on_wayland, android))
 }
 
 impl App {
@@ -702,7 +711,7 @@ mod tests {
             assert_eq!(
                 binding
                     .shortcut
-                    .help_row(&ctx, &crate::l10n::english(), false)
+                    .help_row(&ctx, &crate::l10n::english(), false, false)
                     .is_some(),
                 !folded,
                 "{:?} help row disagrees with the folded list",
@@ -806,7 +815,7 @@ mod tests {
     fn help_rows_are_the_documented_general_rows() {
         let ctx = nix_context();
         let l10n = crate::l10n::english();
-        let rows: Vec<_> = help_rows(&ctx, &l10n, false).collect();
+        let rows: Vec<_> = help_rows(&ctx, &l10n, false, false).collect();
         assert_eq!(
             rows.iter()
                 .map(|(key, action, _)| (key.as_str(), action.as_ref()))
@@ -832,6 +841,31 @@ mod tests {
         );
     }
 
+    /// A phone has no window to keep on top, undress, close or quit: those
+    /// rows are left out there, and the rest stand as on a desktop.
+    #[test]
+    fn android_leaves_out_the_window_rows() {
+        let ctx = nix_context();
+        let l10n = crate::l10n::english();
+        let desktop: Vec<_> = help_rows(&ctx, &l10n, false, false).collect();
+        let android: Vec<_> = help_rows(&ctx, &l10n, false, true).collect();
+        let gone: Vec<_> = desktop
+            .iter()
+            .filter(|row| !android.contains(row))
+            .map(|(_, action, _)| action.as_ref())
+            .collect();
+        assert_eq!(
+            gone,
+            [
+                "Toggle always on top",
+                "Toggle window decorations",
+                "Close this help",
+                "Quit"
+            ]
+        );
+        assert_eq!(android.len() + gone.len(), desktop.len());
+    }
+
     /// On Wayland the grid explains the one key the compositor ignores, greys
     /// it, and changes nothing else, so the modal doesn't quietly diverge per
     /// session. The explanation is the settings caption's, word for word.
@@ -852,7 +886,7 @@ mod tests {
             tr!(l10n, "settings-always-on-top-wayland"),
             format!("({toast})")
         );
-        let expected: Vec<_> = help_rows(&ctx, &l10n, false)
+        let expected: Vec<_> = help_rows(&ctx, &l10n, false, false)
             .map(|(key, action, inert)| {
                 assert!(!inert, "{key} is inert off Wayland");
                 if key == "Ctrl+T" {
@@ -862,7 +896,10 @@ mod tests {
                 }
             })
             .collect();
-        assert_eq!(help_rows(&ctx, &l10n, true).collect::<Vec<_>>(), expected);
+        assert_eq!(
+            help_rows(&ctx, &l10n, true, false).collect::<Vec<_>>(),
+            expected
+        );
     }
 
     /// The help's hover names its keys as the keyboard prints them.
@@ -920,7 +957,7 @@ mod tests {
         let l10n = crate::l10n::english();
         let mut rows = Vec::new();
         headless_frame(&ctx, None, None, vec![], |ui| {
-            rows = help_rows(ui.ctx(), &l10n, false)
+            rows = help_rows(ui.ctx(), &l10n, false, false)
                 .map(|(key, action, inert)| (key, action.into_owned(), inert))
                 .collect::<Vec<_>>();
         });

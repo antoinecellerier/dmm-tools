@@ -128,8 +128,8 @@ top-bar-project-link =
     .hover = Ouvrir la page du projet dmm-tools sur GitHub
 # The ? button. $keys and $other are its two keys, ? and F1.
 top-bar-shortcuts =
-    .hover = Afficher les raccourcis clavier et les gestes de la souris ({ $keys } ou { $other })
-    .a11y = Raccourcis clavier et gestes de la souris
+    .hover = Afficher les raccourcis clavier et les gestes du graphique ({ $keys } ou { $other })
+    .a11y = Raccourcis clavier et gestes du graphique
 # The ⚙ button.
 top-bar-settings =
     .hover = Afficher ou masquer le panneau des paramètres

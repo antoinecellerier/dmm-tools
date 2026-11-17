@@ -12,7 +12,7 @@
 ## The title row.
 
 # The dialog's title.
-shortcuts-title = 键盘和鼠标
+shortcuts-title = 快捷键和手势
 # The × button at the right end of the title row, which closes the dialog:
 # its name for a screen reader.
 shortcuts-close =
@@ -97,12 +97,10 @@ shortcuts-graph-cursors = 显示/隐藏光标
 ## way the key column spells them.
 
 # The table's heading.
-shortcuts-graph-mouse = 图表 (鼠标)
+shortcuts-graph-mouse = 图表 (鼠标和触摸)
 shortcuts-mouse-drag = 在历史数据中向左/向右平移
     .gesture = 拖动
-# On a laptop touchpad: two fingers moved left or right together.
-shortcuts-mouse-swipe = 在历史数据中向左/向右平移
-    .gesture = 双指滑动
+    .swipe = 双指滑动
 # The box dragged out sets both the span of time and the range of values
 # shown.
 shortcuts-mouse-box-zoom = 框选缩放 (时间和数值)
@@ -110,20 +108,24 @@ shortcuts-mouse-box-zoom = 框选缩放 (时间和数值)
 # X axis: the time axis. Zooms around the mouse pointer.
 shortcuts-mouse-zoom = 以鼠标指针为中心缩放 X 轴
     .gesture = { $ctrl } + 滚轮
+    .touch = 双指张合
 # The wheel alone scrolls the window's panels, not the graph.
 shortcuts-mouse-scroll = 滚动面板
     .gesture = 滚轮
 # Follows the newest readings again and fits the value axis to them.
 shortcuts-mouse-reset = 重置为实时跟随和自动 Y 轴
     .gesture = 双击
+    .touch = 点按两次
 # While the cursors are shown (C), a click places cursor A or B on the
 # reading nearest to it.
 shortcuts-mouse-cursor = 将光标 A/B 放到最近的点
     .gesture = 单击 (光标开启时)
+    .touch = 点按 (光标开启时)
 # Opens a menu to add a marker, copy the reading, place the cursors, set
 # reference lines or set an alarm.
 shortcuts-mouse-menu = 标记、复制、光标、参考线、报警
     .gesture = 右键单击
+    .touch = 长按
 # The minimap is the strip under the graph showing all the readings:
 # dragging in it moves the view, dragging its edges resizes it.
 shortcuts-mouse-minimap = 跳到某个时间/调整视区大小
@@ -152,7 +154,8 @@ shortcuts-key-minus = 减号
 
 # Space, Escape, Up/Down, PgUp/PgDn and Home/End are key names: write them
 # the way the key names above do.
-shortcuts-note = 任一控件获得键盘焦点时，图表和空格键的快捷键会停用，按 Esc 可释放焦点。向上键/向下键、Page Up/Page Down 和 Home/End 可滚动此帮助。
+shortcuts-note-focus = 任一控件获得键盘焦点时，图表和空格键的快捷键会停用，按 Esc 可释放焦点。
+shortcuts-note-scroll = 按向上键/向下键、Page Up/Page Down 或 Home/End 可滚动此帮助。
 
 ## Ctrl+T on Wayland, where a window can't put itself above the others.
 

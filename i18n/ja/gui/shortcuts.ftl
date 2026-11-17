@@ -12,7 +12,7 @@
 ## The title row.
 
 # The dialog's title.
-shortcuts-title = キーボードとマウス
+shortcuts-title = ショートカットとジェスチャ
 # The × button at the right end of the title row, which closes the dialog:
 # its name for a screen reader.
 shortcuts-close =
@@ -97,12 +97,10 @@ shortcuts-graph-cursors = カーソルの切り替え
 ## way the key column spells them.
 
 # The table's heading.
-shortcuts-graph-mouse = グラフ (マウス)
+shortcuts-graph-mouse = グラフ (マウスとタッチ)
 shortcuts-mouse-drag = 履歴を左右にスクロール
     .gesture = ドラッグ
-# On a laptop touchpad: two fingers moved left or right together.
-shortcuts-mouse-swipe = 履歴を左右にスクロール
-    .gesture = 2 本指でスワイプ
+    .swipe = 2 本指でスワイプ
 # The box dragged out sets both the span of time and the range of values
 # shown.
 shortcuts-mouse-box-zoom = 境界ボックスにズーム (時間と値)
@@ -110,20 +108,24 @@ shortcuts-mouse-box-zoom = 境界ボックスにズーム (時間と値)
 # X axis: the time axis. Zooms around the mouse pointer.
 shortcuts-mouse-zoom = マウス ポインターを中心に X 軸をズーム
     .gesture = { $ctrl } + マウス ホイール
+    .touch = ピンチ
 # The wheel alone scrolls the window's panels, not the graph.
 shortcuts-mouse-scroll = パネルのスクロール
     .gesture = マウス ホイール
 # Follows the newest readings again and fits the value axis to them.
 shortcuts-mouse-reset = ライブ追従と Y 軸の自動調整に戻す
     .gesture = ダブルクリック
+    .touch = ダブルタップ
 # While the cursors are shown (C), a click places cursor A or B on the
 # reading nearest to it.
 shortcuts-mouse-cursor = 最も近い点にカーソル A/B を配置
     .gesture = クリック (カーソル オン時)
+    .touch = タップ (カーソル オン時)
 # Opens a menu to add a marker, copy the reading, place the cursors, set
 # reference lines or set an alarm.
 shortcuts-mouse-menu = マーカー、コピー、カーソル、基準線、アラーム
     .gesture = 右クリック
+    .touch = 長押し
 # The minimap is the strip under the graph showing all the readings:
 # dragging in it moves the view, dragging its edges resizes it.
 shortcuts-mouse-minimap = 時刻へ移動/ビューポートのサイズ変更
@@ -152,7 +154,8 @@ shortcuts-key-minus = マイナス
 
 # Space, Escape, Up/Down, PgUp/PgDn and Home/End are key names: write them
 # the way the key names above do.
-shortcuts-note = いずれかのコントロールにキーボード フォーカスがある間は、グラフと Space キーのショートカットは無効です。フォーカスを解除するには Esc キーを押してください。↑/↓キー、PageUp/PageDown キー、Home/End キーでこのヘルプをスクロールできます。
+shortcuts-note-focus = いずれかのコントロールにキーボード フォーカスがある間は、グラフと Space キーのショートカットは無効です。フォーカスを解除するには Esc キーを押してください。
+shortcuts-note-scroll = ↑/↓キー、PageUp/PageDown キー、Home/End キーでこのヘルプをスクロールできます。
 
 ## Ctrl+T on Wayland, where a window can't put itself above the others.
 

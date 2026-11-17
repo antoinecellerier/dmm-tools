@@ -12,7 +12,7 @@
 ## The title row.
 
 # The dialog's title.
-shortcuts-title = Teclado y mouse
+shortcuts-title = Métodos abreviados y gestos
 # The × button at the right end of the title row, which closes the dialog:
 # its name for a screen reader.
 shortcuts-close =
@@ -97,12 +97,10 @@ shortcuts-graph-cursors = Mostrar u ocultar los cursores
 ## way the key column spells them.
 
 # The table's heading.
-shortcuts-graph-mouse = Gráfico (mouse)
+shortcuts-graph-mouse = Gráfico (mouse y pantalla táctil)
 shortcuts-mouse-drag = Desplazar el historial a la izquierda / derecha
     .gesture = Arrastrar
-# On a laptop touchpad: two fingers moved left or right together.
-shortcuts-mouse-swipe = Desplazar el historial a la izquierda / derecha
-    .gesture = Deslizar con dos dedos
+    .swipe = Deslizar con dos dedos
 # The box dragged out sets both the span of time and the range of values
 # shown.
 shortcuts-mouse-box-zoom = Hacer zoom en el rectángulo delimitador (tiempo y valor)
@@ -110,20 +108,24 @@ shortcuts-mouse-box-zoom = Hacer zoom en el rectángulo delimitador (tiempo y va
 # X axis: the time axis. Zooms around the mouse pointer.
 shortcuts-mouse-zoom = Hacer zoom en el eje X alrededor del puntero
     .gesture = { $ctrl } + rueda del mouse
+    .touch = Pellizcar
 # The wheel alone scrolls the window's panels, not the graph.
 shortcuts-mouse-scroll = Desplazar el panel
     .gesture = Rueda del mouse
 # Follows the newest readings again and fits the value axis to them.
 shortcuts-mouse-reset = Volver al seguimiento en vivo y al eje Y automático
     .gesture = Doble clic
+    .touch = Doble toque
 # While the cursors are shown (C), a click places cursor A or B on the
 # reading nearest to it.
 shortcuts-mouse-cursor = Colocar el cursor A / B en el punto más cercano
     .gesture = Clic (cursores activados)
+    .touch = Toque (cursores activados)
 # Opens a menu to add a marker, copy the reading, place the cursors, set
 # reference lines or set an alarm.
 shortcuts-mouse-menu = Marcar, copiar, cursores, líneas de referencia, alarma
     .gesture = Clic derecho
+    .touch = Mantener presionado
 # The minimap is the strip under the graph showing all the readings:
 # dragging in it moves the view, dragging its edges resizes it.
 shortcuts-mouse-minimap = Ir a un momento / cambiar el tamaño del área visible
@@ -152,7 +154,8 @@ shortcuts-key-minus = Menos
 
 # Space, Escape, Up/Down, PgUp/PgDn and Home/End are key names: write them
 # the way the key names above do.
-shortcuts-note = Los métodos abreviados del gráfico y la tecla Espacio se desactivan mientras un control tiene el foco del teclado. Presiona Esc para liberarlo. Flecha arriba/Flecha abajo, Re Pág/Av Pág e Inicio/Fin desplazan esta ayuda.
+shortcuts-note-focus = Los métodos abreviados del gráfico y la tecla Espacio se desactivan mientras un control tiene el foco del teclado. Presiona Esc para liberarlo.
+shortcuts-note-scroll = Flecha arriba/Flecha abajo, Re Pág/Av Pág e Inicio/Fin desplazan esta ayuda.
 
 ## Ctrl+T on Wayland, where a window can't put itself above the others.
 

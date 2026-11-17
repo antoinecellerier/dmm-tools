@@ -7,6 +7,7 @@ use crate::l10n::key_name;
 use dmm_shared::l10n::Localizer;
 use dmm_shared::tr;
 use eframe::egui::{self, Key, RichText};
+use std::borrow::Cow;
 
 use super::shortcuts;
 use super::{App, HelpScroll};
@@ -27,7 +28,7 @@ const COLUMN_GAP: f32 = 24.0;
 /// Space between two tables in a column, on top of the item spacing.
 const SECTION_GAP: f32 = 8.0;
 
-/// The help's sections — General, Graph (keys), Graph (mouse) with the
+/// The help's sections — General, Graph (keys), Graph (mouse and touch) with the
 /// note — split into one, two or three columns. General is the tallest, so
 /// it stands alone as soon as there are two. Each column is the `start..end`
 /// of its sections.
@@ -43,6 +44,11 @@ pub(super) struct HelpLayout {
     title_height: f32,
     /// How many columns last frame was drawn in.
     columns: usize,
+    /// Whether the tables were taller than their scroller last frame: the
+    /// line that says which keys scroll is then shown under it.
+    scrolls: bool,
+    /// How tall that line was drawn, the spacing above it included.
+    footer_height: f32,
 }
 
 impl Default for HelpLayout {
@@ -51,6 +57,8 @@ impl Default for HelpLayout {
             section_heights: [0.0; 3],
             title_height: 0.0,
             columns: 1,
+            scrolls: false,
+            footer_height: 0.0,
         }
     }
 }
@@ -154,16 +162,19 @@ fn graph_mouse(ui: &mut egui::Ui, l10n: &Localizer) {
     // Each gesture travels with what it does, as one message. The modifiers
     // are the ones the graph reads: egui zooms on the command modifier, which
     // is Cmd on a Mac.
+    // Two gestures that do the same share a row, the second on a line of
+    // its own: the column is never wrapped, and one line naming both would
+    // widen it past a narrow window.
+    let with_touch = |mouse: Cow<'_, str>, touch: Cow<'_, str>| format!("{mouse}\n{touch}").into();
     let ctrl = shortcuts::modifier_text(ui.ctx(), l10n, egui::Modifiers::COMMAND);
     let shift = shortcuts::modifier_text(ui.ctx(), l10n, egui::Modifiers::SHIFT);
     let rows = [
         (
-            tr!(l10n, "shortcuts-mouse-drag.gesture"),
+            with_touch(
+                tr!(l10n, "shortcuts-mouse-drag.gesture"),
+                tr!(l10n, "shortcuts-mouse-drag.swipe"),
+            ),
             tr!(l10n, "shortcuts-mouse-drag"),
-        ),
-        (
-            tr!(l10n, "shortcuts-mouse-swipe.gesture"),
-            tr!(l10n, "shortcuts-mouse-swipe"),
         ),
         (
             tr!(
@@ -174,7 +185,10 @@ fn graph_mouse(ui: &mut egui::Ui, l10n: &Localizer) {
             tr!(l10n, "shortcuts-mouse-box-zoom"),
         ),
         (
-            tr!(l10n, "shortcuts-mouse-zoom.gesture", ctrl = ctrl.as_str()),
+            with_touch(
+                tr!(l10n, "shortcuts-mouse-zoom.gesture", ctrl = ctrl.as_str()),
+                tr!(l10n, "shortcuts-mouse-zoom.touch"),
+            ),
             tr!(l10n, "shortcuts-mouse-zoom"),
         ),
         (
@@ -182,15 +196,24 @@ fn graph_mouse(ui: &mut egui::Ui, l10n: &Localizer) {
             tr!(l10n, "shortcuts-mouse-scroll"),
         ),
         (
-            tr!(l10n, "shortcuts-mouse-reset.gesture"),
+            with_touch(
+                tr!(l10n, "shortcuts-mouse-reset.gesture"),
+                tr!(l10n, "shortcuts-mouse-reset.touch"),
+            ),
             tr!(l10n, "shortcuts-mouse-reset"),
         ),
         (
-            tr!(l10n, "shortcuts-mouse-cursor.gesture"),
+            with_touch(
+                tr!(l10n, "shortcuts-mouse-cursor.gesture"),
+                tr!(l10n, "shortcuts-mouse-cursor.touch"),
+            ),
             tr!(l10n, "shortcuts-mouse-cursor"),
         ),
         (
-            tr!(l10n, "shortcuts-mouse-menu.gesture"),
+            with_touch(
+                tr!(l10n, "shortcuts-mouse-menu.gesture"),
+                tr!(l10n, "shortcuts-mouse-menu.touch"),
+            ),
             tr!(l10n, "shortcuts-mouse-menu"),
         ),
         (
@@ -207,7 +230,7 @@ fn graph_mouse(ui: &mut egui::Ui, l10n: &Localizer) {
     );
     ui.add_space(SECTION_GAP);
     ui.label(
-        RichText::new(tr!(l10n, "shortcuts-note"))
+        RichText::new(tr!(l10n, "shortcuts-note-focus"))
             .small()
             .color(ui.visuals().weak_text_color()),
     );
@@ -356,8 +379,18 @@ impl App {
                 // The title row stays put; only the tables scroll. With room
                 // for all of them the scroller shrinks to its content and the
                 // modal looks exactly as it did before it had one.
-                let heights = egui::ScrollArea::vertical()
+                // Under them, while they scroll, the line that says which
+                // keys do: at the end of the tables it showed only to a
+                // reader who had already scrolled there.
+                let scrolls = self.shortcut_help.layout.scrolls;
+                let footer = if scrolls {
+                    self.shortcut_help.layout.footer_height
+                } else {
+                    0.0
+                };
+                let scroller = egui::ScrollArea::vertical()
                     .id_salt("shortcut_help_scroll")
+                    .max_height((ui.available_height() - footer).max(0.0))
                     .show(ui, |ui| {
                         // `ScrollArea` handles the wheel but no keys, and the
                         // modal keeps focus on the close button, so the keys
@@ -387,7 +420,12 @@ impl App {
                                     ui,
                                     "shortcuts_app",
                                     &tr!(l10n, "shortcuts-general"),
-                                    shortcuts::help_rows(ctx, l10n, on_wayland),
+                                    shortcuts::help_rows(
+                                        ctx,
+                                        l10n,
+                                        on_wayland,
+                                        cfg!(target_os = "android"),
+                                    ),
                                 ),
                                 1 => graph_keys(ui, l10n),
                                 _ => graph_mouse(ui, l10n),
@@ -424,18 +462,48 @@ impl App {
                             }
                         });
                         heights
-                    })
-                    .inner;
+                    });
+                let heights = scroller.inner;
+                let mut footer_height = 0.0;
+                if scrolls {
+                    let top = ui.min_rect().bottom();
+                    ui.add(
+                        egui::Label::new(
+                            RichText::new(tr!(l10n, "shortcuts-note-scroll"))
+                                .small()
+                                .color(ui.visuals().weak_text_color()),
+                        )
+                        .wrap(),
+                    );
+                    // The spacing above the line with it.
+                    footer_height = ui.min_rect().bottom() - top;
+                }
                 // The sizing pass lays out fresh grids, taller than they
                 // settle; choosing from it would open in the wrong layout.
                 if !ui.is_sizing_pass() {
-                    measured = Some((heights, title_height));
+                    // Against the room the tables would have without the
+                    // line: tables that only overflow for want of the
+                    // line's own height fit, and get neither.
+                    let overflows =
+                        scroller.content_size.y > scroller.inner_rect.height() + footer + 0.5;
+                    measured = Some((heights, title_height, overflows, footer_height));
                 }
             });
-        if let Some((heights, title_height)) = measured {
+        if let Some((heights, title_height, overflows, footer_height)) = measured {
             let layout = &mut self.shortcut_help.layout;
             layout.section_heights = heights;
             layout.title_height = title_height;
+            // A frame drawn before the line had its room is taller than the
+            // window allows, and the modal keeps that height: discard it.
+            let footer_changed =
+                footer_height > 0.0 && (footer_height - layout.footer_height).abs() > 0.5;
+            if overflows != layout.scrolls || footer_changed {
+                ctx.request_discard("shortcut help footer");
+            }
+            layout.scrolls = overflows;
+            if footer_height > 0.0 {
+                layout.footer_height = footer_height;
+            }
         }
 
         // Close on: (a) close button click, (b) Esc / backdrop click via
@@ -572,12 +640,18 @@ mod tests {
         let mut app = help_app();
         let screen = short_window();
         run_frame(&ctx, &mut app, screen, vec![]);
-        let before = row_top(&run_frame(&ctx, &mut app, screen, vec![]), "Graph (mouse)");
+        let before = row_top(
+            &run_frame(&ctx, &mut app, screen, vec![]),
+            "Graph (mouse and touch)",
+        );
         run_frame(&ctx, &mut app, screen, key_tap(egui::Key::ArrowDown));
         // egui animates the move and places the content a frame behind the
         // offset, so the rows have moved two frames after the key.
         run_frame(&ctx, &mut app, screen, vec![]);
-        let after = row_top(&run_frame(&ctx, &mut app, screen, vec![]), "Graph (mouse)");
+        let after = row_top(
+            &run_frame(&ctx, &mut app, screen, vec![]),
+            "Graph (mouse and touch)",
+        );
         assert!(
             after < before,
             "ArrowDown left the rows at {before} (now {after})"
@@ -610,6 +684,27 @@ mod tests {
             frame.focus, close,
             "ArrowDown moved the keyboard off the close button"
         );
+    }
+
+    /// The line naming the keys that scroll the help shows while there is
+    /// something to scroll, from the first screenful, and not otherwise.
+    #[test]
+    fn the_scroll_keys_are_named_while_the_help_scrolls() {
+        let hint = "Up/Down, PgUp/PgDn and Home/End scroll this help.";
+        let shown = |screen: Rect| {
+            let ctx = crate::app::styled_context();
+            ctx.enable_accesskit();
+            let mut app = help_app();
+            for _ in 0..4 {
+                run_frame(&ctx, &mut app, screen, vec![]);
+            }
+            let frame = run_frame(&ctx, &mut app, screen, vec![]);
+            let rect = modal_rect(&ctx);
+            assert!(screen.contains_rect(rect), "{rect:?} outside {screen:?}");
+            frame.nodes.iter().any(|(_, n)| n.value() == Some(hint))
+        };
+        assert!(shown(Rect::from_min_size(Pos2::ZERO, vec2(500.0, 400.0))));
+        assert!(!shown(Rect::from_min_size(Pos2::ZERO, vec2(1200.0, 900.0))));
     }
 
     /// Given the room, nothing scrolls: a 900 pt window shows the whole help,
@@ -646,13 +741,13 @@ mod tests {
         let at_top = row_top(&first, "General");
         // "General" leaves the accessibility tree once it is scrolled out of
         // view, so the scroll itself is read off a heading that stays.
-        let mouse_at_top = row_top(&first, "Graph (mouse)");
+        let mouse_at_top = row_top(&first, "Graph (mouse and touch)");
 
         run_frame(&ctx, &mut app, short_window(), key_tap(egui::Key::End));
         run_frame(&ctx, &mut app, short_window(), vec![]);
         let scrolled = run_frame(&ctx, &mut app, short_window(), vec![]);
         assert!(
-            row_top(&scrolled, "Graph (mouse)") < mouse_at_top,
+            row_top(&scrolled, "Graph (mouse and touch)") < mouse_at_top,
             "End did not scroll the help"
         );
 
@@ -766,7 +861,7 @@ mod tests {
         let frame = settled_help(&ctx, &mut app, screen);
         let general = row_bounds(&frame, "General");
         let keys = row_bounds(&frame, "Graph (keys)");
-        let mouse = row_bounds(&frame, "Graph (mouse)");
+        let mouse = row_bounds(&frame, "Graph (mouse and touch)");
         assert_eq!(keys.y0, general.y0, "the graph keys are not beside General");
         assert!(
             keys.x0 > general.x0 + f64::from(COLUMN_WIDTH) / 2.0,
@@ -788,7 +883,8 @@ mod tests {
         ctx.enable_accesskit();
         let mut app = help_app();
         let frame = settled_help(&ctx, &mut app, screen);
-        let tops = ["General", "Graph (keys)", "Graph (mouse)"].map(|t| row_bounds(&frame, t));
+        let tops =
+            ["General", "Graph (keys)", "Graph (mouse and touch)"].map(|t| row_bounds(&frame, t));
         for pair in tops.windows(2) {
             assert_eq!(pair[0].y0, pair[1].y0, "the tables are not side by side");
             assert!(
