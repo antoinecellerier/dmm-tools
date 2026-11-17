@@ -17,7 +17,8 @@ dmm-gui [OPTIONS]
 ## Description
 
 A desktop GUI for live measurement display, time-series graphing, recording,
-and remote control of digital multimeters over USB or Bluetooth.
+and remote control of digital multimeters over USB or Bluetooth. An
+experimental build runs on [Android](setup.md#android-experimental).
 
 [Connecting](#connecting) · [Top Bar](#top-bar) · [Reading Display](#reading-display) · [Remote Control](#remote-control) · [Graph](#graph) · [Statistics](#statistics) · [Recording](#recording) · [Specifications](#specifications) · [Alarm](#alarm) · [Scale](#scale) · [Layout Modes](#layout-modes) · [Settings](#settings) · [Keyboard Shortcuts](#keyboard-shortcuts) · [Command-Line Options](#command-line-options) · [Accessibility](#accessibility) · [Appendix](#appendix)
 
