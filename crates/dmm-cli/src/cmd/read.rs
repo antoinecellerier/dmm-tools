@@ -309,6 +309,7 @@ fn read_meter(
                 device,
                 reopen,
                 interval: dmm_shared::RECONNECT_INTERVAL,
+                limit: dmm_shared::RECONNECT_LIMIT,
             }),
             None,
         )
@@ -1028,12 +1029,15 @@ struct Reopen<D> {
 }
 
 /// How a wait for a lost link ended.
-#[derive(Debug, PartialEq)]
+#[derive(Debug)]
 enum Reconnect<D> {
     Reopened(D),
     /// Ctrl+C.
     Stopped,
     Refused(SeveralCables),
+    /// The link stayed down past the limit, with the last attempt's
+    /// failure: `None` when it waited for its own cable.
+    GaveUp(Option<dmm_lib::error::Error>),
 }
 
 /// What a run on a real meter has that the mock and a recording don't.
@@ -1045,6 +1049,8 @@ struct Meter<T: dmm_lib::transport::Transport> {
     reopen: Option<Reopen<dmm_lib::Dmm<T>>>,
     /// The wait before each attempt to reopen the link.
     interval: Duration,
+    /// How long after the link drops the run stops trying to reopen it.
+    limit: Duration,
 }
 
 /// What `run_read_loop` plays back from a recording besides its frames.
@@ -1080,7 +1086,8 @@ fn run_read_loop<T: dmm_lib::transport::Transport>(
             device,
             reopen,
             interval,
-        }) => (Some(device), reopen.map(|r| (r, interval))),
+            limit,
+        }) => (Some(device), reopen.map(|r| (r, interval, limit))),
         None => (None, None),
     };
     // One marker per reading, by `ReplayMarker::is_due`, so a frame
@@ -1198,7 +1205,7 @@ fn run_read_loop<T: dmm_lib::transport::Transport>(
             // link.
             Err(_) if stop.load(Ordering::SeqCst) => break,
             Err(e) => {
-                let Some((reopen, interval)) = &mut reopen else {
+                let Some((reopen, interval, limit)) = &mut reopen else {
                     fatal = Some(e);
                     break;
                 };
@@ -1217,12 +1224,17 @@ fn run_read_loop<T: dmm_lib::transport::Transport>(
                 // after the reopen that would cut the link just brought back
                 // up on the same adapter.
                 drop(dmm);
-                dmm = match reconnect(reopen, &stop, *interval) {
+                dmm = match reconnect(reopen, &stop, *interval, *limit) {
                     Reconnect::Reopened(reopened) => reopened,
                     Reconnect::Stopped => break,
                     Reconnect::Refused(several) => {
                         warn_several_cables(several);
                         fatal = Some(e);
+                        break;
+                    }
+                    Reconnect::GaveUp(last) => {
+                        eprintln!("{} {}", warning_label(), l.help().reconnect_gave_up());
+                        fatal = Some(last.unwrap_or(e));
                         break;
                     }
                 };
@@ -1250,13 +1262,29 @@ fn stream_over<'a, T: dmm_lib::transport::Transport>(
 const RECONNECT_POLL: Duration = Duration::from_millis(50);
 
 /// Open `reopen`'s link every `interval` until it succeeds, Ctrl+C raises
-/// `stop`, or what is plugged in refuses it. Every failed open is retried,
-/// whatever its kind: an adapter that doesn't answer yet is what the wait is
-/// for.
-fn reconnect<D>(reopen: &mut Reopen<D>, stop: &AtomicBool, interval: Duration) -> Reconnect<D> {
+/// `stop`, what is plugged in refuses it, or `limit` has passed since the
+/// call. Every failed open is retried, whatever its kind and whatever the
+/// link: an adapter that doesn't answer yet is what the wait is for.
+fn reconnect<D>(
+    reopen: &mut Reopen<D>,
+    stop: &AtomicBool,
+    interval: Duration,
+    limit: Duration,
+) -> Reconnect<D> {
+    let lost = Instant::now();
     let mut attempt: u32 = 0;
     let mut told_waiting = false;
+    // What the latest attempt found, for the run to end with.
+    let mut last_error = None;
     loop {
+        if Instant::now()
+            .checked_duration_since(lost)
+            .is_some_and(|down| down >= limit)
+        {
+            log::warn!("no reconnect in {limit:?}, giving up");
+            return Reconnect::GaveUp(last_error);
+        }
+        last_error = None;
         let until = Instant::now() + interval;
         loop {
             if stop.load(Ordering::SeqCst) {
@@ -1297,6 +1325,7 @@ fn reconnect<D>(reopen: &mut Reopen<D>, stop: &AtomicBool, interval: Duration) -
             Err(e) => {
                 let e = reopen.pin.open_error(e);
                 log::warn!("reconnect attempt {attempt} failed: {e}");
+                last_error = Some(e);
             }
         }
     }
@@ -1575,6 +1604,9 @@ mod tests {
         );
     }
 
+    /// A limit no test reaches.
+    const LIMIT: Duration = dmm_shared::RECONNECT_LIMIT;
+
     /// A reopen with nothing pinned and nothing listed, opening with `open`.
     fn reopen_with<D>(open: impl Fn() -> dmm_lib::error::Result<D> + 'static) -> Reopen<D> {
         Reopen {
@@ -1597,8 +1629,33 @@ mod tests {
                 n => Ok(n),
             }
         });
-        let reopened = reconnect(&mut reopen, &stop, Duration::from_millis(1));
-        assert_eq!(reopened, Reconnect::Reopened(3));
+        let reopened = reconnect(&mut reopen, &stop, Duration::from_millis(1), LIMIT);
+        assert!(matches!(reopened, Reconnect::Reopened(3)));
+    }
+
+    /// A link that stays down past the limit ends the wait, however the
+    /// attempts fail.
+    #[test]
+    fn a_link_down_past_the_limit_ends_the_wait() {
+        let stop = AtomicBool::new(false);
+        let attempts = std::rc::Rc::new(std::cell::Cell::new(0));
+        let count = std::rc::Rc::clone(&attempts);
+        let mut reopen = reopen_with(move || -> dmm_lib::error::Result<()> {
+            count.set(count.get() + 1);
+            Err(dmm_lib::error::Error::Timeout)
+        });
+        // Room for a second attempt on a slow timer.
+        let ended = reconnect(
+            &mut reopen,
+            &stop,
+            Duration::from_millis(1),
+            Duration::from_millis(300),
+        );
+        assert!(matches!(
+            ended,
+            Reconnect::GaveUp(Some(dmm_lib::error::Error::Timeout))
+        ));
+        assert!(attempts.get() > 1, "it retried before the limit");
     }
 
     /// Ctrl+C ends the wait for a link that never comes back.
@@ -1607,8 +1664,8 @@ mod tests {
         let stop = AtomicBool::new(true);
         let mut reopen =
             reopen_with(|| -> dmm_lib::error::Result<()> { panic!("no attempt after Ctrl+C") });
-        let reopened = reconnect(&mut reopen, &stop, Duration::from_millis(1));
-        assert_eq!(reopened, Reconnect::Stopped);
+        let reopened = reconnect(&mut reopen, &stop, Duration::from_millis(1), LIMIT);
+        assert!(matches!(reopened, Reconnect::Stopped));
     }
 
     /// Ctrl+C during an attempt ends the wait there, whatever the attempt
@@ -1625,8 +1682,8 @@ mod tests {
                 raised.store(true, Ordering::SeqCst);
                 outcome()
             });
-            let ended = reconnect(&mut reopen, &stop, Duration::from_millis(1));
-            assert_eq!(ended, Reconnect::Stopped);
+            let ended = reconnect(&mut reopen, &stop, Duration::from_millis(1), LIMIT);
+            assert!(matches!(ended, Reconnect::Stopped));
             assert_eq!(opens.get(), 1, "another attempt after Ctrl+C");
         };
         attempt(|| Err(dmm_lib::error::Error::Cancelled));
@@ -1642,8 +1699,11 @@ mod tests {
             panic!("no open with several cables listed")
         });
         reopen.listed = Box::new(|| vec![cable("CP2110"), cable("CH9329")]);
-        let reopened = reconnect(&mut reopen, &stop, Duration::from_millis(1));
-        assert_eq!(reopened, Reconnect::Refused(SeveralCables { count: 2 }));
+        let reopened = reconnect(&mut reopen, &stop, Duration::from_millis(1), LIMIT);
+        assert!(matches!(
+            reopened,
+            Reconnect::Refused(SeveralCables { count: 2 })
+        ));
     }
 
     /// With its own cable gone and another plugged in, the wait opens nothing
@@ -1677,8 +1737,8 @@ mod tests {
             }),
             open: Box::new(|pin| Ok(pin.options(None).adapter.map(str::to_owned))),
         };
-        let reopened = reconnect(&mut reopen, &stop, Duration::from_millis(1));
-        assert_eq!(reopened, Reconnect::Reopened(Some("OURS".to_owned())));
+        let reopened = reconnect(&mut reopen, &stop, Duration::from_millis(1), LIMIT);
+        assert!(matches!(reopened, Reconnect::Reopened(Some(serial)) if serial == "OURS"));
     }
 
     /// A UT61E+ link that answers with its frames, then fails as a pulled
@@ -1764,6 +1824,7 @@ mod tests {
             device: registry::find_device("ut61eplus").expect("a registry device"),
             reopen,
             interval: Duration::from_millis(1),
+            limit: LIMIT,
         };
         run_read_loop(
             stop,

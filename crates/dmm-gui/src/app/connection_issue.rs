@@ -36,6 +36,9 @@ pub(crate) enum ConnectionIssue {
     /// A lost link with nothing to say which cable is this meter's. Held as
     /// the reason, and worded where it is drawn.
     SeveralCables(SeveralCables),
+    /// A lost link stayed down past the reconnect limit, its last attempt
+    /// skipped for another cable plugged in: there is no error to show.
+    GaveUp,
     /// The acquisition thread ended without saying why.
     Stopped,
     /// The acquisition thread panicked, with the panic's own text, or could
@@ -75,6 +78,8 @@ pub(super) enum NoticeKind {
     BadData,
     /// A lost link that nothing says which cable to reopen on.
     SeveralCables,
+    /// A lost link that stayed down past the reconnect limit.
+    GaveUp,
     /// Any other failure: a fixed title, the error itself in the body.
     Failed,
 }
@@ -295,6 +300,15 @@ impl App {
                     "{} {}",
                     l10n.help().several_cables(*several),
                     tr!(l10n, "connection-several-cables-action")
+                ),
+            ),
+            ConnectionIssue::GaveUp => notice(
+                NoticeKind::GaveUp,
+                tr!(l10n, "connection-several-cables").into_owned(),
+                format!(
+                    "{}\n\n{}",
+                    l10n.help().reconnect_gave_up(),
+                    tr!(l10n, "connection-click-connect")
                 ),
             ),
             ConnectionIssue::Stopped => notice(

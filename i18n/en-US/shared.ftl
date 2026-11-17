@@ -198,6 +198,14 @@ several-cables =
     { $count ->
        *[other] { $count } USB cables this session could open are plugged in and can't be told apart. A reconnect could open another meter's.
     }
+# Why a dropped link is no longer being reopened: it stayed down for
+# $minutes minutes, and the session has ended. A notice or the error that
+# ended the run says what the last attempt found.
+reconnect-gave-up =
+    { $minutes ->
+        [one] Stopped reconnecting: the link to the meter was down for { $minutes } minute.
+       *[other] Stopped reconnecting: the link to the meter was down for { $minutes } minutes.
+    }
 # While a dropped link is being reopened: its cable has gone and another is
 # plugged in. Each binary follows it with how to use that other cable.
 waiting-for-own-cable = Another USB cable is plugged in, but this session is waiting for the one it opened.

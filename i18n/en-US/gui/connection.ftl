@@ -107,7 +107,8 @@ connection-no-response-auto =
 # frame, or a mode this tool does not know. The error itself follows.
 connection-bad-data = Meter sent data that could not be read
 # A dropped link that was not reconnected. shared.ftl's several-cables
-# follows, then connection-several-cables-action. "Connect" is the top bar's
+# follows, then connection-several-cables-action; or shared.ftl's
+# reconnect-gave-up, then connection-click-connect. "Connect" is the top bar's
 # button.
 connection-several-cables = Link lost
 connection-several-cables-action = Leave only this meter's cable plugged in, then Connect.

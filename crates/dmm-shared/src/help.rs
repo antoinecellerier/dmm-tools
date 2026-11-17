@@ -608,6 +608,13 @@ impl<'a> Help<'a> {
         tr!(self.0, "several-cables", count = several.count)
     }
 
+    /// Why a lost link is no longer being reopened: it stayed down for
+    /// [`crate::RECONNECT_LIMIT`].
+    pub fn reconnect_gave_up(self) -> Cow<'a, str> {
+        let minutes = crate::RECONNECT_LIMIT.as_secs() / 60;
+        tr!(self.0, "reconnect-gave-up", minutes = minutes)
+    }
+
     /// Why a reopen is still waiting with another cable plugged in; each
     /// binary follows it with how to switch to that cable.
     pub fn waiting_for_own_cable(self) -> Cow<'a, str> {

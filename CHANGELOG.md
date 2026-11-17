@@ -16,6 +16,7 @@
 - **A Mark button marks the reading on screen** — only the `N` key and the plot's right-click menu did.
 - **Graph and histogram readouts work under a finger** — the histogram showed none, and the hand covered the graph's.
 - **A tap keeps the graph's crosshair and readings on a touchscreen** — they went as the finger lifted.
+- **dmm-gui stops reconnecting after ten minutes** — it retried a lost link for as long as it ran.
 - **Ref, Alarm, Scale and Y-range fields underline values they won't use** — the hover says why.
 - **Failure notices name the meter picked in Settings and point to Auto-detect** — "No USB cable found" after a meter swap sent you to drivers.
 - **"No USB cable found" says when Bluetooth wasn't searched** — and how to switch the search on.
@@ -32,6 +33,7 @@
 - **`--alarm-high` and `--alarm-low` take a unit, and then watch only that quantity** — `4980mV` or `10kohm`; a bare number stays in the base unit.
 - **An unknown `--device` value points to `--help`, which lists the devices**
 - **A mistyped `command` name is answered with the meter's commands**
+- **`read` ends with an error after ten minutes without its meter** — it waited for a lost link until Ctrl+C.
 - **dmm-cli's connection warnings come in the chosen language** — several USB cables or Bluetooth adapters, a meter naming or sending another model, unknown data, late Bluetooth readings.
 - **dmm-cli says which meter is picked when its data won't read**
 - **"No USB cable found" says when Bluetooth wasn't searched** — and how to switch the search on.

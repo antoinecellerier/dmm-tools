@@ -17,8 +17,8 @@
 //! [`help`], the help and version text both print; [`l10n`], the
 //! [`Localizer`](l10n::Localizer) and resources both speak; [`input`], why a
 //! typed number was refused; [`logging`], the log
-//! levels both start with; [`RECONNECT_INTERVAL`], how often both retry
-//! a lost link, and [`reopen`], what it may come back on; and [`stat_figure`], how both write a figure of the
+//! levels both start with; [`RECONNECT_INTERVAL`] and [`RECONNECT_LIMIT`],
+//! how often and how long both retry a lost link, and [`reopen`], what it may come back on; and [`stat_figure`], how both write a figure of the
 //! statistics and the integral. The canonical settings location is
 //! `<XDG_CONFIG_HOME>/dmm-tools/settings.json` on Linux and the equivalent
 //! platform path on macOS and Windows (computed via `directories`, or from
@@ -53,6 +53,13 @@ use std::time::Duration;
 /// How long a lost link waits before each attempt to reopen it, in dmm-gui
 /// and in `dmm-cli read`.
 pub const RECONNECT_INTERVAL: Duration = Duration::from_secs(2);
+
+/// How long after the link drops dmm-gui and `dmm-cli read` stop trying to
+/// reopen it. A cable plugged back in, an adapter switched off and on or a
+/// battery swapped comes back well within it; a meter that switched itself
+/// off or was carried away doesn't come back on its own, and retrying for
+/// hours only keeps the radio or the bus busy.
+pub const RECONNECT_LIMIT: Duration = Duration::from_secs(10 * 60);
 
 /// A figure of the statistics or the integral as `dmm-cli read`'s summary
 /// and dmm-gui's statistics write it, number and unit apart.

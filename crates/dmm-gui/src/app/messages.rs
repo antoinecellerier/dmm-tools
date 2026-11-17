@@ -15,8 +15,8 @@ use std::time::{Duration, Instant, SystemTime};
 
 use super::alarm::PendingBreach;
 use super::connection::{
-    self, ConnectedMeter, DmmMessage, RECONNECT_INTERVAL, RemoteCommand, ReopenSource,
-    ThreadContext, spawn_acquisition,
+    self, ConnectedMeter, DmmMessage, RECONNECT_INTERVAL, RECONNECT_LIMIT, RemoteCommand,
+    ReopenSource, ThreadContext, spawn_acquisition,
 };
 use super::connection_issue::{ConnectionIssue, NoticeKind};
 use super::toast::{ERROR_GLYPH, Toast, dismiss_button};
@@ -380,6 +380,7 @@ impl App {
             sample_interval_ms,
             simulated: false,
             reconnect_interval: RECONNECT_INTERVAL,
+            reconnect_limit: RECONNECT_LIMIT,
             stop_flag,
             wake,
             reopen: None,
@@ -679,6 +680,17 @@ impl App {
                             "connection-several-cables-recording"
                         )));
                     }
+                    clear_channel = true;
+                }
+                DmmMessage::GaveUp(last_error) => {
+                    warn!("UI: no reconnect: the link stayed down");
+                    let reason = self.l10n.help().reconnect_gave_up().into_owned();
+                    self.toasts.push(Toast::error(reason));
+                    // What the last attempt found, and its help, is what
+                    // to act on. It found nothing when it waited for its
+                    // own cable, which the top bar said meanwhile.
+                    self.connection.last_error =
+                        Some(last_error.map_or(ConnectionIssue::GaveUp, |e| self.issue_from(e)));
                     clear_channel = true;
                 }
                 DmmMessage::CablesAtOpen {
@@ -1184,6 +1196,44 @@ mod tests {
         assert_eq!(notice.kind, NoticeKind::SeveralCables);
         assert!(notice.body.starts_with("2 USB cables"), "{}", notice.body);
         assert!(notice.body.ends_with("then Connect."), "{}", notice.body);
+    }
+
+    /// A link that stayed down past the limit ends the session: a toast says
+    /// why the retries stopped, and the notice what the last one found.
+    #[test]
+    fn giving_up_on_a_lost_link_ends_the_session() {
+        let mut app = app("ut61eplus", false);
+        app.connection.state = ConnectionState::Connected;
+        app.deliver(DmmMessage::Disconnected(dmm_lib::error::Error::LinkLost));
+        assert_eq!(app.connection.state, ConnectionState::Reconnecting);
+        app.deliver(DmmMessage::GaveUp(Some(dmm_lib::error::Error::Timeout)));
+        assert_eq!(app.connection.state, ConnectionState::Disconnected);
+        assert!(matches!(
+            app.connection.last_error,
+            Some(ConnectionIssue::Lib {
+                error: dmm_lib::error::Error::Timeout,
+                ..
+            })
+        ));
+        let toast = app.toasts.take_latest().expect("a toast");
+        assert_eq!(toast.kind, ToastKind::Error);
+        assert!(
+            toast.message.starts_with("Stopped reconnecting"),
+            "{}",
+            toast.message
+        );
+        // A last attempt that waited for its own cable has no error: the
+        // notice says why the retries stopped instead.
+        app.connection.state = ConnectionState::Connected;
+        app.deliver(DmmMessage::Disconnected(dmm_lib::error::Error::LinkLost));
+        app.deliver(DmmMessage::GaveUp(None));
+        let notice = app.connection_notice().expect("the reason is on screen");
+        assert_eq!(notice.kind, NoticeKind::GaveUp);
+        assert!(
+            notice.body.starts_with("Stopped reconnecting"),
+            "{}",
+            notice.body
+        );
     }
 
     /// What the first open found beside it is said once connected, as a
@@ -1855,6 +1905,7 @@ mod tests {
                 sample_interval_ms: 10,
                 simulated: false,
                 reconnect_interval: RECONNECT_INTERVAL,
+                reconnect_limit: RECONNECT_LIMIT,
                 stop_flag,
                 wake: Arc::default(),
                 reopen: None,

@@ -93,8 +93,9 @@ read-alarm-breach = { $breach } ({ $reading })
 # been skipped so far.
 read-unreadable-frame = { $error } (skipped { $count } so far)
 # After "Warning:". The cable or Bluetooth link to the meter dropped, and the
-# run keeps trying to open it again until it comes back or the user presses
-# Ctrl+C. $error says why (lib-errors.ftl).
+# run keeps trying to open it again until it comes back, the user presses
+# Ctrl+C, or it has been down for ten minutes (shared.ftl's
+# reconnect-gave-up). $error says why (lib-errors.ftl).
 read-link-lost = link to the meter lost ({ $error }); reconnecting, Ctrl+C ends the run
 # After "Note:". The link is back and the readings resume.
 read-reconnected = reconnected; readings resume

@@ -73,6 +73,9 @@ const PAUSE_POLL_INTERVAL: Duration = Duration::from_millis(100);
 /// How long a lost link waits before each attempt to reopen it.
 pub(super) const RECONNECT_INTERVAL: Duration = dmm_shared::RECONNECT_INTERVAL;
 
+/// How long after the link drops the thread stops trying to reopen it.
+pub(super) const RECONNECT_LIMIT: Duration = dmm_shared::RECONNECT_LIMIT;
+
 /// How soon a new reading is drawn.
 ///
 /// Non-zero on purpose: egui answers a zero-delay request with two frames,
@@ -287,6 +290,9 @@ pub(crate) enum DmmMessage {
     /// A lost link can't be reopened: nothing says which cable is this
     /// meter's. The thread has ended.
     SeveralCables(SeveralCables),
+    /// A lost link stayed down for [`RECONNECT_LIMIT`], with the last
+    /// attempt's failure, if one was made. The thread has ended.
+    GaveUp(Option<dmm_lib::error::Error>),
     /// The first open found other cables it could have taken, and nothing
     /// named the one it did. `reconnects` says whether a lost link would come
     /// back to this one, or end the session.
@@ -406,6 +412,8 @@ pub(super) struct ThreadContext {
     pub simulated: bool,
     /// [`RECONNECT_INTERVAL`] outside the tests, which have no meter to wait for.
     pub reconnect_interval: Duration,
+    /// [`RECONNECT_LIMIT`] outside the tests, which have no time to wait it out.
+    pub reconnect_limit: Duration,
     pub stop_flag: Arc<AtomicBool>,
     /// Raised by the UI after each control message and command
     /// ([`super::Worker`]): it ends the wait for the next reading.
@@ -547,6 +555,7 @@ where
         sample_interval_ms,
         simulated,
         reconnect_interval,
+        reconnect_limit,
         stop_flag,
         wake,
         reopen,
@@ -749,7 +758,19 @@ where
                 // the UI keeps until the one after.
                 let mut last_error: Option<dmm_lib::error::Error> = None;
                 let mut waiting_for_own_cable = false;
+                let lost = Instant::now();
                 loop {
+                    // Whatever the link: a meter that stays away this long
+                    // doesn't come back on its own.
+                    if Instant::now()
+                        .checked_duration_since(lost)
+                        .is_some_and(|down| down >= reconnect_limit)
+                    {
+                        warn!("background thread: no reconnect in {reconnect_limit:?}, giving up");
+                        let _ = msg_tx.send(DmmMessage::GaveUp(last_error));
+                        ctx.request_repaint();
+                        return;
+                    }
                     attempt += 1;
                     let _ = msg_tx.send(DmmMessage::Reconnecting {
                         attempt,
@@ -1323,6 +1344,7 @@ mod tests {
             sample_interval_ms: 10,
             simulated: false,
             reconnect_interval: Duration::from_millis(10),
+            reconnect_limit: RECONNECT_LIMIT,
             stop_flag: Arc::new(AtomicBool::new(false)),
             wake: Arc::default(),
             reopen: None,
@@ -1719,6 +1741,42 @@ mod tests {
                 waiting_for_own_cable: false,
             }
         )));
+    }
+
+    /// A link that stays down past the limit ends the thread, with what the
+    /// last attempt found, rather than retrying for as long as the app runs.
+    #[test]
+    fn a_link_down_past_the_limit_ends_the_thread() {
+        let live = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let (msg_tx, msg_rx) = mpsc::channel();
+        let (_ctrl_tx, ctrl_rx) = mpsc::channel();
+        let (_cmd_tx, cmd_rx) = mpsc::channel();
+        let opens = std::sync::atomic::AtomicUsize::new(0);
+        let entry = dmm_lib::protocol::registry::find_device("ut61eplus").expect("registry");
+        let open_fn = move |_: Option<&ReopenPin>| {
+            if opens.fetch_add(1, Ordering::SeqCst) > 0 {
+                return Err(dmm_lib::error::Error::Timeout);
+            }
+            dmm_lib::Dmm::new(Dropout::open(&live), (entry.new_protocol)()).map(|d| (d, None))
+        };
+        let mut thread_ctx = thread_context(msg_tx, ctrl_rx, cmd_rx);
+        // Room for a second attempt on a slow timer.
+        thread_ctx.reconnect_limit = Duration::from_millis(300);
+        // Ends on its own: the UI's channels stay open.
+        std::thread::spawn(move || run_device_thread(open_fn, thread_ctx))
+            .join()
+            .unwrap();
+        let messages: Vec<DmmMessage> = msg_rx.try_iter().collect();
+        assert!(
+            messages
+                .iter()
+                .any(|m| matches!(m, DmmMessage::Reconnecting { attempt: 2, .. })),
+            "it retried before the limit"
+        );
+        assert!(matches!(
+            messages.last(),
+            Some(DmmMessage::GaveUp(Some(dmm_lib::error::Error::Timeout)))
+        ));
     }
 
     /// A reopen source with no flag on a machine where `listed` is plugged in.
