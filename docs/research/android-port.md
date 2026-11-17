@@ -1,6 +1,6 @@
 # Android port feasibility
 
-*Last updated 2026-11-16. Options A and B below were built as an experiment
+*Last updated 2026-11-17. Options A and B below were built as an experiment
 and run on two phones: "Experimental build" has what they showed. The rooted
 variant remains untested.*
 
@@ -49,7 +49,7 @@ the GUI reaches the meter only through `dmm-lib`'s transport abstraction.
 ## Experimental build
 
 Option B of the comparison below, which is option A with the cables
-added, exists on the `android` branch: the `crates/dmm-android` library,
+added, is in the repository: the `crates/dmm-android` library,
 the `android/` Gradle project and `scripts/android-build.sh` ("Building for
 Android" in `docs/development.md`). It was run on one phone, Android 12
 (API 32), arm64, with a UT61E+ on the UT-D07B adapter and on its CP2110
@@ -57,6 +57,10 @@ cable, on 2026-11-16. The same package was then installed on a second
 phone, Android 14 (API 34), arm64, whose screen has square corners: it
 connected over a cable, opened by the system's offer at plug-in, and over
 Bluetooth. What follows is the first phone's unless it names the second.
+
+CI builds the package on every push, and dev builds publish it signed with
+the project's key. The first of those, of 2026-11-17, was installed on the
+Android 12 phone from its release page and ran.
 
 What worked:
 
@@ -143,9 +147,9 @@ Not done or not tested: the CH9329, CH9325 and BU-86X cables, a meter that
 sends unasked on a cable, two cables at once, choosing where an export
 goes, naming a saved theme, the soft keyboard, the system clipboard, a
 layout for a phone screen, Android versions other than 12 and 14, other
-meters, the CI jobs that build and sign the package. The texts are the desktop's but for three
-errors that name the phone, its cable prompt or its radio, so help and
-hovers still speak of a computer.
+meters. The texts are the desktop's but for three errors that name the
+phone, its cable prompt or its radio, so help and hovers still speak of a
+computer.
 
 ## Scope
 
