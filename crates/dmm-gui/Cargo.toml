@@ -46,7 +46,7 @@ rustls = { version = "0.23", default-features = false, features = ["ring", "std"
 # draws with glow alone, and rfd has no Android backend (file_dialog.rs).
 [target.'cfg(not(target_os = "android"))'.dependencies]
 eframe = { version = "0.37", features = ["glow", "wgpu"] }
-rfd = "0.17"
+rfd = "0.18"
 
 # winit for the type of the application handle android_main receives, on
 # the version and activity eframe uses.
