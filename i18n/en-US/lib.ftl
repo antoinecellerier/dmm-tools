@@ -703,12 +703,104 @@ activation-mock = No setup required — this is a simulated device.
 ## fine (0,6). A translation that changes, drops or adds a number is shown in
 ## English. Bands that are numbers and units only are not listed.
 
+# Used by: VC920/VC940/VC960
+band-4000-counts = (4000 counts)
+# Used by: VC920/VC940/VC960
+band-plus-40-to-plus-400-degc = +40 to +400 °C
+# Used by: VC920/VC940/VC960
+band-plus-40-to-plus-400-degc-2 = +40 to +400 °C (4000 counts)
+# Used by: VC920/VC940/VC960
+band-plus-400-to-plus-1000-degc = +400 to +1000 °C
+# Used by: VC920/VC940/VC960
+band-plus-400-to-plus-1000-degc-2 = +400 to +1000 °C (4000 counts)
+# Used by: VC920/VC940/VC960
+band-40-to-plus-40-degc = -40 to +40 °C
+# Used by: VC920/VC940/VC960
+band-40-to-plus-40-degc-4000 = -40 to +40 °C (4000 counts)
+# Used by: VC920/VC940/VC960
+band-10khz-120khz-4000-counts = 10kHz~120kHz (4000 counts)
+# Used by: VC920/VC940/VC960
+band-10khz-120khz-10-15-pct-of = 10kHz~120kHz, 10 - 15% of MR
+# Used by: VC920/VC940/VC960
+band-10khz-120khz-15-100-pct-of = 10kHz~120kHz, 15 - 100% of MR
+# Used by: VC920/VC940/VC960
+band-120khz-250khz-4000-counts = 120kHz~250kHz (4000 counts)
+# Used by: VC920/VC940/VC960
+band-120khz-250khz-10-30-pct-of = 120kHz~250kHz, 10 - 30% of MR
+# Used by: VC920/VC940/VC960
+band-120khz-250khz-30-100-pct-of = 120kHz~250kHz, 30 - 100% of MR
+# Used by: VC920/VC940/VC960
+band-1khz-10khz-4000-counts = 1kHz~10kHz (4000 counts)
+# Used by: VC920/VC940/VC960
+band-250khz-400khz-10-30-pct-of = 250kHz~400kHz, 10 - 30% of MR
+# Used by: VC920/VC940/VC960
+band-250khz-400khz-10-30-pct-of-2 = 250kHz~400kHz, 10 - 30% of MR (4000 counts)
+# Used by: VC920/VC940/VC960
+band-30-100-pct-of-mr = 30 - 100% of MR
+# Used by: VC920/VC940/VC960
+band-30-100-pct-of-mr-4000 = 30 - 100% of MR (4000 counts)
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
 # In: Logic Level Frequency (⎍Hz) & Duty Cycle (D%)
 band-3d-khz-plus-2d = 3d/kHz+2d
+# Used by: VC920/VC940/VC960
+# In: Temperature
+band-4-000-plus-40-to-plus = 4.000: +40 to +400 °C
+# Used by: VC920/VC940/VC960
+# In: Temperature
+band-4-000-plus-400-to-plus = 4.000: +400 to +1000 °C
+# Used by: VC920/VC940/VC960
+# In: Temperature
+band-4-000-40-to-plus-40 = 4.000: -40 to +40 °C
+# Used by: VC920/VC940/VC960
+# In: AC / V
+band-4-000-10khz-120khz-10-15 = 4.000: 10kHz~120kHz, 10 - 15% of MR
+# Used by: VC920/VC940/VC960
+# In: AC / V
+band-4-000-10khz-120khz-15-100 = 4.000: 10kHz~120kHz, 15 - 100% of MR
+# Used by: VC920/VC940/VC960
+# In: AC / V
+band-4-000-120khz-250khz-10-30 = 4.000: 120kHz~250kHz, 10 - 30% of MR
+# Used by: VC920/VC940/VC960
+# In: AC / V
+band-4-000-120khz-250khz-30-100 = 4.000: 120kHz~250kHz, 30 - 100% of MR
+# Used by: VC920/VC940/VC960
+# In: AC / V
+band-4-000-250khz-400khz-10-30 = 4.000: 250kHz~400kHz, 10 - 30% of MR
+# Used by: VC920/VC940/VC960
+# In: AC / V
+band-4-000-30-100-pct-of = 4.000: 30 - 100% of MR
+# Used by: VC920/VC940/VC960
+# In: Temperature
+band-40-000-plus-40-to-plus = 40.000: +40 to +400 °C
+# Used by: VC920/VC940/VC960
+# In: Temperature
+band-40-000-plus-400-to-plus = 40.000: +400 to +1000 °C
+# Used by: VC920/VC940/VC960
+# In: Temperature
+band-40-000-40-to-plus-40 = 40.000: -40 to +40 °C
+# Used by: VC920/VC940/VC960
+# In: AC / V
+band-40-000-10khz-120khz-10-15 = 40.000: 10kHz~120kHz, 10 - 15% of MR
+# Used by: VC920/VC940/VC960
+# In: AC / V
+band-40-000-10khz-120khz-15-100 = 40.000: 10kHz~120kHz, 15 - 100% of MR
+# Used by: VC920/VC940/VC960
+# In: AC / V
+band-40-000-120khz-250khz-10-30 = 40.000: 120kHz~250kHz, 10 - 30% of MR
+# Used by: VC920/VC940/VC960
+# In: AC / V
+band-40-000-120khz-250khz-30-100 = 40.000: 120kHz~250kHz, 30 - 100% of MR
+# Used by: VC920/VC940/VC960
+# In: AC / V
+band-40-000-250khz-400khz-10-30 = 40.000: 250kHz~400kHz, 10 - 30% of MR
+# Used by: VC920/VC940/VC960
+# In: AC / V
+band-40-000-30-100-pct-of = 40.000: 30 - 100% of MR
 # Used by: Mock UT61E+, UT161E, UT61E+
 # In: AC Voltage
 band-40hz-100hz-lpf = 40Hz~100Hz (LPF)
+# Used by: VC920/VC940/VC960
+band-45hz-1khz-4000-counts = 45Hz~1kHz (4000 counts)
 # Used by: UT803
 # In: B. AC Voltage
 band-50khz-100khz = >50kHZ–100kHz
@@ -721,8 +813,8 @@ band-in-rel-state = In REL state
 # Used by: UT71A, UT71B, UT71C/D/E, UT804
 # In: B. AC Voltage (AC+DC measurement is available); I. Frequency
 band-not-specified = Not Specified
-# Used by: UT181A, UT71A, UT71B, UT71C/D/E, UT804
-# In: (9) Capacitance; H. Capacitance
+# Used by: UT181A, UT71A, UT71B, UT71C/D/E, UT804, VC920/VC940/VC960
+# In: 4 tables
 band-not-specified-2 = Not specified
 # Used by: UT181A
 # In: (1) AC Voltage; (3) AC Voltage + DC Voltage
@@ -784,8 +876,8 @@ input-fuse-0-44a-1000v = Fuse 0.44A 1000V
 # Used by: UT71A, UT71B, UT71C/D/E
 # In: C. DC Current; D. AC Current (AC+DC measurement is available); K. 4~20 mA loop current (UT71B/C/D/E)
 input-fuse-0-5a-1000v = Fuse 0.5A 1000V
-# Used by: UT804
-# In: C. DC Current; D. AC Current (AC+DC measurement is available); L. 4~20 mA loop current
+# Used by: UT804, VC920/VC940/VC960
+# In: 5 tables
 input-fuse-0-5a-250v = Fuse 0.5A 250V
 # Used by: UT181A
 # In: (4) AC Current; (5) DC Current; (6) AC Current + DC Current
@@ -796,8 +888,8 @@ input-fuse-10a-1000v = Fuse 10A 1000V
 # Used by: Mock UT61E+, UT61B+, UT61D+, UT61E+
 # In: AC Current; DC Current
 input-fuse-10a-240v = Fuse 10A 240V
-# Used by: UT803, UT804
-# In: C. DC Current; D. AC Current; D. AC Current (AC+DC measurement is available)
+# Used by: UT803, UT804, VC920/VC940/VC960
+# In: 5 tables
 input-fuse-10a-250v = Fuse 10A 250V
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s, UT161B, UT161D, UT161E
 # In: 4 tables
@@ -827,9 +919,15 @@ input-initially-approx-3-0kohm-165pf-nominal = Initially approx. 3.0kΩ, 165pF n
 ## is fine (0,6). A translation that changes, drops or adds a number is shown
 ## in English.
 
+# Used by: VC920/VC940/VC960
+# In: Power
+note-0-1150w-continuous-1150w-2500w-max = 0–1150W continuous; >1150W–2500W max. 10s, then 15min pause
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
 # In: AC & AC+DC Current; DC Current
 note-10a-continuous-10a-to-20a-30s = 10A continuous; >10A to 20A: 30s max, 5 min cool-down
+# Used by: VC920/VC940/VC960
+# In: AC / A; DC / A
+note-10a-0-5a-continuous-5a-10a = 10A: 0–5A continuous; >5A–10A max. 10s, then 15min pause
 # Used by: UT71A, UT71B, UT71C/D/E
 # In: C. DC Current; D. AC Current (AC+DC measurement is available)
 note-10a-5a-continuous-5a-10a-10s-2 = 10A: ≤5A continuous; 5A–10A ≤10s at a time, >15min apart
@@ -956,6 +1054,9 @@ note-ac-99-99v-15-00-10 = AC 99.99V: 15.00 ~ 10.00kHz, sensitivity 25V (sine RMS
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
 # In: Line Level Frequency (~Hz)
 note-ac-999-9v-15-00-10 = AC 999.9V: 15.00 ~ 10.00kHz, sensitivity 100V (sine RMS)
+# Used by: VC920/VC940/VC960
+# In: AC / A; AC / V
+note-ac-plus-dc-add-1-pct-2 = AC+DC: add 1%+30 digits to accuracy
 # Used by: UT71A, UT71B, UT71C/D/E, UT804
 # In: B. AC Voltage (AC+DC measurement is available); D. AC Current (AC+DC measurement is available)
 note-ac-plus-dc-add-1-pct = AC+DC: add 1%+35 digits to accuracy
@@ -1040,6 +1141,9 @@ note-burden-voltage-2-1mv-ma = Burden voltage 2.1mV/mA
 # Used by: 7 meters
 # In: Continuity and Diode
 note-continuity-audio-visual-alarm-50ohm-no = Continuity: audio/visual alarm <50Ω; no beep ≥70Ω
+# Used by: VC920/VC940/VC960
+# In: Ω
+note-continuity-beeps-50ohm = Continuity: beeps <50Ω
 # Used by: UT803
 # In: B. AC Voltage
 note-crest-factor-3-0-1000v-1 = Crest factor 3.0 (1000V: 1.5)
@@ -1049,6 +1153,9 @@ note-crest-factor-2-1-at-full = Crest factor < 2:1 at full scale, < 4:1 at half 
 # Used by: UT804
 # In: B. AC Voltage (AC+DC measurement is available)
 note-crest-factor-up-to-3-0 = Crest factor up to 3.0 (1000V: 1.5)
+# Used by: VC920/VC940/VC960
+# In: AC / A; AC / V
+note-crest-factor-3 = Crest factor ≤3
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
 # In: Crest mode (Instantaneous Peak Hold)
 note-crest-specified-accuracy-adds-250-digits = Crest: specified accuracy adds 250 digits for changes > 1.0 ms
@@ -1070,6 +1177,9 @@ note-duty-cycle-specified-for-5hz-10khz = Duty cycle specified for 5Hz ~ 10kHz
 # Used by: 7 meters
 # In: Frequency/Duty Ratio
 note-duty-square-waves-only-1vpp-20vpp = Duty: square waves only, 1Vpp–20Vpp, ≤10kHz, 10.0%–90.0%
+# Used by: VC920/VC940/VC960
+# In: Ω
+note-fixed-at-4000-counts = Fixed at 4000 counts
 # Used by: Mock UT61E+, UT161E, UT61E+
 # In: AC+DC Voltage
 note-for-ac-voltage-shorted-leads-residual = For AC voltage, shorted leads: residual ≤200 digits
@@ -1253,6 +1363,9 @@ note-result-reading-shorted-lead-resistance = Result = reading − shorted-lead 
 # Used by: Mock ZT-5B, ZT-5B
 # In: Auto
 note-sel-ncv-continuity-diode-cap-hz = SEL/NCV: continuity/diode, cap, Hz, °C
+# Used by: VC920/VC940/VC960
+# In: Frequency
+note-sensitivity-10hz-40mhz-200mv-40mhz-not = Sensitivity 10Hz–40MHz: 200mV; >40MHz not specified
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
 # In: Logic Level Frequency (⎍Hz) & Duty Cycle (D%)
 note-sensitivity-2-5vp-square-wave-for = Sensitivity: 2.5Vp square wave, for 3V & 5V logic family
@@ -1265,6 +1378,9 @@ note-shorted-input-residual-under-30-digits = Shorted input: residual under ~30 
 # Used by: UT71A, UT71B, UT71C/D/E, UT804
 # In: B. AC Voltage (AC+DC measurement is available); D. AC Current (AC+DC measurement is available)
 note-shorted-leads-80-digit-residual-accuracy = Shorted leads: 80-digit residual, accuracy unaffected
+# Used by: VC920/VC940/VC960
+# In: AC / V
+note-shorted-leads-display-70-digits = Shorted leads: display ≤70 digits
 # Used by: Mock UT61E+, UT161E, UT61E+
 # In: AC Voltage
 note-shorted-leads-residual-10-digits = Shorted leads: residual ≤10 digits
@@ -1283,9 +1399,15 @@ note-signal-1hz-20mhz-1v-rms = Signal: 1Hz–20MHz, ≥ 1V rms
 # Used by: UT71B, UT71C/D/E
 # In: J. Temperature (UT71B/C/D/E)
 note-supplied-k-type-point-probe-below = Supplied K-type point probe: below 230°C only
+# Used by: VC920/VC940/VC960
+# In: Temperature
+note-supplied-wire-thermocouple-max-plus-230degc = Supplied wire thermocouple: max. +230°C
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
 # In: Diode Tester
 note-test-current-0-4ma-typical = Test current 0.4mA typical
+# Used by: VC920/VC940/VC960
+# In: Diode test
+note-test-voltage-max-2-8v-test = Test voltage max. 2.8V; test current ≈1mA
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
 # In: AutoCheck™ (ACV)
 note-then-typically-18kohm-100v-125kohm-300v = Then typically 18kΩ@100V, 125kΩ@300V, 320kΩ@600V, 460kΩ@1000V
@@ -1295,6 +1417,9 @@ note-then-typically-18kohm-100v-125kohm-300v-2 = Then typically 18kΩ@100V, 125k
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
 # In: Non-Contact EF-Detection
 note-tolerance-10v-36v-23v-83v-59v = Tolerance: 10V~36V, 23V~83V, 59V~165V, 124V~330V, > 250V
+# Used by: VC920/VC940/VC960
+# In: AC / A; AC / V
+note-true-rms-accuracy-valid-10-pct-2 = True RMS accuracy valid 10%–100% of range
 # Used by: UT804
 # In: B. AC Voltage (AC+DC measurement is available)
 note-true-rms-and-accuracy-valid-10 = True RMS and accuracy valid 10%–100% of range
@@ -1346,6 +1471,9 @@ note-valid-10-pct-90-pct-of = Valid 10%–90% of range, 5Hz–2kHz only
 # Used by: UT803
 # In: K. Transistor
 note-vce-2-2v-bo-10ua = Vce ≈2.2V, bo ≈10µA
+# Used by: VC920/VC940/VC960
+# In: Power
+note-voltage-190v-250v-ac = Voltage 190V–250V AC
 # Used by: UT71C/D/E
 # In: L. Power Measurement (UT71E only)
 note-voltage-input-50v-250v-ac = Voltage input 50V–250V AC

@@ -47,7 +47,9 @@ source carry URLs, sizes and MD5s.
    German editions; the 2006 English "Model VC940" manual), the USB
    adapter 120317 operating instructions (03/09) and the VC9x0 computer
    interface software manual (2005), from Conrad's file server. Tagged
-   [KNOWN]. `references/vc920/manuals/`, `references/vc920/other/`.
+   [KNOWN]. The VC920/VC940/VC960 spec data is the Version 11/10 manual's
+   English technical data (PDF pp. 60-62), cross-checked against the 2006
+   VC940 manual. `references/vc920/manuals/`, `references/vc920/other/`.
 
 6. **UNI-T's UT71 interface software CD** — "110401700522 UT71系列接口软件光盘",
    RAR from the Chinese download centre (server date 2026-05-15, listed as

@@ -222,6 +222,76 @@ pub(crate) fn golden_ids() -> Vec<String> {
     ids
 }
 
+/// Whether reading `m` gets a spec row, panicking unless the spec table and
+/// row it is given are ones `protocol`'s sheet lists, so the translated texts
+/// (lib.ftl) and the `dump_specs` review sheet cover every spec the panel can
+/// show; a reading with a row has its table too. `by` names the reading.
+///
+/// A spec that is a view of its sheet row ([`Protocol::spec_source`]) keeps
+/// the row's resolution, or none, and lists some of the row's figures under
+/// labels of its own; any other spec is the row itself.
+#[cfg(test)]
+pub(crate) fn assert_spec_on_sheet(
+    protocol: &dyn Protocol,
+    m: &crate::measurement::Measurement,
+    by: &str,
+) -> bool {
+    let sheet = protocol.spec_sheet();
+    let spec = protocol.spec_info(m);
+    let source = protocol.spec_source(m);
+    assert_eq!(
+        spec.is_some(),
+        source.is_some(),
+        "{by}: {:?} has a spec without a sheet row, or one without a spec",
+        m.mode
+    );
+    let Some(mode) = protocol.mode_spec_info(m) else {
+        assert!(
+            spec.is_none(),
+            "{by}: {:?} has a spec row but no table",
+            m.mode
+        );
+        return false;
+    };
+    let tables: Vec<_> = sheet
+        .iter()
+        .filter(|t| std::ptr::eq(t.mode, mode))
+        .collect();
+    assert!(
+        !tables.is_empty(),
+        "{by}: {:?}'s mode spec is not on the sheet",
+        m.mode
+    );
+    let (Some(spec), Some(source)) = (spec, source) else {
+        return false;
+    };
+    assert!(
+        tables
+            .iter()
+            .flat_map(|t| &t.rows)
+            .any(|row| std::ptr::eq(row.spec, source)),
+        "{by}: {:?} {:?}'s spec row is not in its table on the sheet",
+        m.mode,
+        m.range_label
+    );
+    if !std::ptr::eq(spec, source) {
+        let what = format!("{by}: {:?} {:?}'s view of its row", m.mode, m.range_label);
+        assert!(
+            spec.resolution.is_empty() || spec.resolution == source.resolution,
+            "{what} has another resolution, {:?}",
+            spec.resolution
+        );
+        assert!(!spec.accuracy.is_empty(), "{what} lists no band");
+        for band in spec.accuracy {
+            assert!(
+                source.accuracy.iter().any(|b| b.accuracy == band.accuracy),
+                "{what} lists {band:?}, a figure the row has not"
+            );
+        }
+    }
+    true
+}
+
 /// Device `id`'s protocol and each golden fixture under `tests/golden/<id>/`
 /// decoded with it, by file name. Panics when `id` is not a registry id or
 /// has no fixtures. Only `raw_hex` is read; `tests/golden_tests.rs` checks
@@ -922,6 +992,15 @@ pub trait Protocol: Send {
         None
     }
 
+    /// The sheet row whose figures [`Protocol::spec_info`] gives reading
+    /// `m`, for checking a spec against the sheet: the spec itself, but where
+    /// a family shows a reading a view of its row (a VC920 reading lists its
+    /// own display's column of the two printed).
+    #[cfg(test)]
+    fn spec_source(&self, m: &Measurement) -> Option<&'static SpecInfo> {
+        self.spec_info(m)
+    }
+
     /// Per-mode specs (input impedance, overload protection, notes) for
     /// reading `m`.
     /// Default `None` — families without a spec table can leave this unimplemented.
@@ -1170,56 +1249,21 @@ mod tests {
     }
 
     /// The spec table and row a reading is given are ones its entry's spec
-    /// sheet lists, so the translated texts (lib.ftl) and the `dump_specs`
-    /// review sheet cover every spec the panel can show; a reading with a row
-    /// has its table too. Checked over every golden reading and each mock
-    /// scenario's first reading, and each source whose entry has a sheet must
-    /// reach a row of it. The UT61+ checks its lookups more closely in its own
-    /// spec tests, the simulated ZT-5B forwards to the ZT-5B driver, which the
-    /// zt5b goldens cover, and the UT803 and CMS101, with no golden directory
-    /// yet, have their families' own coverage tests.
+    /// sheet lists ([`assert_spec_on_sheet`]), over every golden reading and
+    /// each mock scenario's first reading, and each source whose entry has a
+    /// sheet must reach a row of it. The UT61+ checks its lookups more
+    /// closely in its own spec tests, the simulated ZT-5B forwards to the
+    /// ZT-5B driver, which the zt5b goldens cover, and the UT803 and CMS101,
+    /// with no golden directory yet, have their families' own coverage tests;
+    /// the VC920's feed every reading through the same check.
     #[test]
     fn every_spec_a_reading_gets_is_on_its_sheet() {
         use crate::mock::{MockMode, MockProtocol};
-        fn check(protocol: &dyn Protocol, m: &crate::measurement::Measurement, by: &str) -> bool {
-            let sheet = protocol.spec_sheet();
-            let spec = protocol.spec_info(m);
-            let Some(mode) = protocol.mode_spec_info(m) else {
-                assert!(
-                    spec.is_none(),
-                    "{by}: {:?} has a spec row but no table",
-                    m.mode
-                );
-                return false;
-            };
-            let tables: Vec<_> = sheet
-                .iter()
-                .filter(|t| std::ptr::eq(t.mode, mode))
-                .collect();
-            assert!(
-                !tables.is_empty(),
-                "{by}: {:?}'s mode spec is not on the sheet",
-                m.mode
-            );
-            let Some(spec) = spec else {
-                return false;
-            };
-            assert!(
-                tables
-                    .iter()
-                    .flat_map(|t| &t.rows)
-                    .any(|row| std::ptr::eq(row.spec, spec)),
-                "{by}: {:?} {:?}'s spec row is not in its table on the sheet",
-                m.mode,
-                m.range_label
-            );
-            true
-        }
         for id in golden_ids() {
             let (protocol, readings) = golden_readings(&id);
             let mut reached = false;
             for (file, m) in &readings {
-                reached |= check(protocol.as_ref(), m, &format!("{id}/{file}"));
+                reached |= assert_spec_on_sheet(protocol.as_ref(), m, &format!("{id}/{file}"));
             }
             assert!(
                 reached || protocol.spec_sheet().is_empty(),
@@ -1232,7 +1276,7 @@ mod tests {
             let m = protocol
                 .request_measurement(&crate::transport::NullTransport)
                 .unwrap();
-            reached |= check(&protocol, &m, &format!("mock {mode:?}"));
+            reached |= assert_spec_on_sheet(&protocol, &m, &format!("mock {mode:?}"));
         }
         assert!(reached, "no mock reading reaches a row of its spec sheet");
     }

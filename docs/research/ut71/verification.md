@@ -66,10 +66,6 @@ every function it has (#22); no UT71A/B/C/E or VC9x0 has been read.
   2005-2006 manuals say; the 2007 calibration calls it RANGE (§4.2) — decides
   the VC920's `manual_range`, `max_min`, `auto_range` steps. Needs a VC9x0. (#23)
 
-## Spec data
-
-- Spec tables for `vc920`, from the Voltcraft manuals. (#23)
-
 ## Detection
 
 - The CH9325 detection row, which claims a UT71 or VC9x0 as a UT804: in the

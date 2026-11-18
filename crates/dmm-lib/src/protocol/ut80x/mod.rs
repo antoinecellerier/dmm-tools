@@ -66,6 +66,7 @@ mod specs_ut71b;
 mod specs_ut71cde;
 mod specs_ut803;
 mod specs_ut804;
+mod specs_vc920;
 
 /// Which meter model the packets come from. All share the framing; the
 /// UT803 has a payload layout of its own, and the rest send the UT804's.
@@ -890,6 +891,10 @@ pub(crate) fn all_labels(out: &mut crate::text::Labels) {
             out.add(TextKind::Mode, DUTY_MODE, by);
         }
     }
+    // A VC920 reading's bands are relabelled from the sheet's.
+    for label in specs_vc920::view_labels() {
+        out.add(TextKind::Band, label, Model::Vc920.report_id());
+    }
 }
 
 /// Parse a UT803 packet, by the vendor parser's positions
@@ -1058,8 +1063,23 @@ impl Ut80xProtocol {
                 let row = specs_ut71::has_rows(f.coupling(), f.count_mode()).then_some(f.range);
                 Some((table, row))
             }
-            // No spec tables transcribed from their manuals yet.
-            Model::Vc920 => None,
+            Model::Vc920 => {
+                let f = Ut804Fields::decode(&m.raw_payload).ok()?;
+                ut804_mode_info(f.mode, f.range)?;
+                let table = specs_vc920::table(f.mode, f.coupling(), f.duty())?;
+                if !specs_vc920::has_rows(f.mode, f.coupling()) {
+                    return Some((table, None));
+                }
+                // A range the table does not list takes its mode data only:
+                // frequency starts at 4kHz.
+                let Some(row) = table.row(f.range) else {
+                    return Some((table, None));
+                };
+                let shown = f
+                    .count_mode()
+                    .and_then(|counts| specs_vc920::count_mode_spec(row, counts));
+                Some((table, shown.map(|_| f.range)))
+            }
         }
     }
 
@@ -1141,6 +1161,20 @@ impl Protocol for Ut80xProtocol {
     }
 
     fn spec_info(&self, m: &Measurement) -> Option<&'static SpecInfo> {
+        let row = self.spec_row(m)?;
+        match self.model {
+            // Only the bands of the reading's own display (`specs_vc920`).
+            Model::Vc920 => {
+                let counts = Ut804Fields::decode(&m.raw_payload).ok()?.count_mode()?;
+                specs_vc920::count_mode_spec(row, counts)
+            }
+            _ => Some(&row.spec),
+        }
+    }
+
+    #[cfg(test)]
+    fn spec_source(&self, m: &Measurement) -> Option<&'static SpecInfo> {
+        self.spec_info(m)?;
         self.spec_row(m).map(|row| &row.spec)
     }
 
@@ -1156,7 +1190,7 @@ impl Protocol for Ut80xProtocol {
                 .flat_map(|tables| tables.all)
                 .map(|t| t.sheet_table())
                 .collect(),
-            Model::Vc920 => Vec::new(),
+            Model::Vc920 => specs_vc920::ALL.iter().map(|t| t.sheet_table()).collect(),
         }
     }
 
@@ -3728,6 +3762,72 @@ raw_payload=11"#
         unreached: &[],
     };
 
+    const VC920_SPECS: HandheldSpecs = HandheldSpecs {
+        model: Model::Vc920,
+        no_spec: &[
+            (
+                "duty cycle: its row prints neither resolution nor accuracy",
+                |f| f.duty(),
+            ),
+            (
+                "AC or AC+DC mV: no Voltcraft manual has an AC mV function",
+                |f| f.mode == 0x3 && matches!(f.coupling(), Some(Coupling::Ac | Coupling::AcDc)),
+            ),
+        ],
+        mode_spec_only: &[
+            ("continuity: only a remark of the Ω table covers it", |f| {
+                f.mode == 0xA
+            }),
+            ("°F: the temperature table is °C only", |f| f.mode == 0xD),
+            (
+                "frequency ranges 0 and 1 (40Hz, 400Hz): the table starts at 4kHz",
+                |f| f.mode == 0xC && f.range <= 1,
+            ),
+            (
+                "AC+DC V and current: the remarks add (1%+30 digits) to the AC table, a sum the manual does not print",
+                |f| f.coupling() == Some(Coupling::AcDc),
+            ),
+            (
+                "an overload or LO: the packet does not say which display it came from",
+                |f| f.count_mode().is_none(),
+            ),
+            (
+                "AC V 400V and diode on the 4000-count display: their rows print nothing for it",
+                |f| {
+                    f.count_mode() == Some(CountMode::Count4000)
+                        && (f.mode == 0xB
+                            || (matches!(f.mode, 0x1 | 0x2)
+                                && f.coupling() == Some(Coupling::Ac)
+                                && f.range == 3))
+                },
+            ),
+            (
+                "AC V 40V and 750V on the 4000-count display: their rows print only Not specified for it",
+                |f| {
+                    f.count_mode() == Some(CountMode::Count4000)
+                        && matches!(f.mode, 0x1 | 0x2)
+                        && f.coupling() == Some(Coupling::Ac)
+                        && matches!(f.range, 2 | 4)
+                },
+            ),
+            ("capacitance 40mF: its row prints only Not specified", |f| {
+                f.mode == 0x5 && f.range == 7
+            }),
+        ],
+        unreached: &[
+            (
+                "Duty Cycle",
+                "10Hz - 2kHz",
+                "duty readings have no spec: the row prints neither resolution nor accuracy",
+            ),
+            (
+                "Capacity",
+                "40mF",
+                "40mF readings take the table's mode data only: the row prints only Not specified",
+            ),
+        ],
+    };
+
     /// The protocol for handheld `model`.
     fn handheld_protocol(model: Model) -> Ut80xProtocol {
         let i = HANDHELDS.iter().position(|&m| m == model).unwrap();
@@ -3800,9 +3900,18 @@ raw_payload=11"#
                 (Some(row), None) => {
                     let spec = proto.spec_info(&m);
                     assert!(spec.is_some(), "{} {p:02X?}: a row, no spec", m.mode);
-                    if case.model != Model::Vc920 {
-                        assert!(std::ptr::eq(spec.unwrap(), &row.spec));
-                    }
+                    // A VC920 reading shows its own display's view of the row.
+                    let expected = match case.model {
+                        Model::Vc920 => f
+                            .count_mode()
+                            .and_then(|counts| specs_vc920::count_mode_spec(row, counts)),
+                        _ => Some(&row.spec),
+                    };
+                    assert!(
+                        expected.is_some_and(|e| std::ptr::eq(spec.unwrap(), e)),
+                        "{} {p:02X?}: not its row's spec",
+                        m.mode
+                    );
                     assert!(mode_spec.is_some());
                     rows_reached.insert(std::ptr::from_ref(&row.spec));
                 }
@@ -3848,6 +3957,18 @@ raw_payload=11"#
                 continue;
             };
             if m.range_label.is_empty() || SYMBOL_LABELS.contains(&row.label) {
+                continue;
+            }
+            // The VC920's 750V label goes by AC V's code (`Model::range_label`),
+            // the table by the coupling, so on range 4 a volts code that
+            // disagrees with its coupling has the other table's full scale.
+            // The meters seen send code 1 for DC V, 2 for AC V (ut71 spec
+            // §3.2, §3.3).
+            let f = Ut804Fields::decode(&p).unwrap();
+            let code_is_ac = f.mode == 0x2;
+            let coupling_is_ac = f.coupling() != Some(Coupling::Dc);
+            let volts = matches!(f.mode, 0x1 | 0x2);
+            if model == Model::Vc920 && volts && f.range == 4 && code_is_ac != coupling_is_ac {
                 continue;
             }
             assert_eq!(row.label, m.range_label, "{} {p:02X?}", m.mode);
@@ -3969,6 +4090,238 @@ raw_payload=11"#
         let table = |m| proto.spec_table(m).map(|(t, _)| t.name);
         assert_eq!(table(&count4000), Some("A. DC Voltage"));
         assert_eq!(table(&full), table(&count4000));
+    }
+
+    #[test]
+    fn vc920_every_reading_has_a_spec_or_is_listed() {
+        assert_handheld_coverage(&VC920_SPECS);
+    }
+
+    #[test]
+    fn vc920_rows_carry_the_readings_range_label() {
+        assert_handheld_rows_carry_range_labels(Model::Vc920);
+    }
+
+    #[test]
+    fn vc920_tables_match_the_readings_coupling() {
+        assert_handheld_tables_match_coupling(Model::Vc920);
+    }
+
+    #[test]
+    fn vc920_rows_resolve_in_the_readings_unit() {
+        assert_handheld_rows_resolve_in_the_readings_unit(Model::Vc920);
+    }
+
+    /// The VC920's spec for `digits` on mode `mode`, range `range` and
+    /// coupling `acdc`, with its row.
+    fn vc920_spec(
+        digits: &[u8; 5],
+        range: u8,
+        mode: u8,
+        acdc: u8,
+    ) -> (Option<&'static SpecInfo>, Option<&'static RangeSpec>) {
+        let p = ut804_payload(digits, range, mode, acdc, 0x1);
+        let m = parse_ut804_layout(Model::Vc920, &p).unwrap();
+        let proto = Ut80xProtocol::new_vc920();
+        (proto.spec_info(&m), proto.spec_row(&m))
+    }
+
+    const FULL: [u8; 5] = [0, 1, 2, 3, 4];
+    const COUNT4000: [u8; 5] = [0, 1, 2, 3, 0xA];
+
+    /// A spec's bands as the panel lists them, label and figure.
+    fn bands(spec: &SpecInfo) -> Vec<(Option<&str>, &str)> {
+        (spec.accuracy.iter())
+            .map(|b| (b.freq_range, b.accuracy))
+            .collect()
+    }
+
+    /// AC V's 4V row prints eight sub-rows in each column: the full display
+    /// lists the "40.000" ones with the resolution, the 4000-count display
+    /// the "4.000" ones without it, its three cells that span two sub-rows
+    /// each one band; neither keeps the column heading. DC V's 4V row is one
+    /// band a display.
+    #[test]
+    fn a_vc920_reading_shows_its_own_displays_bands() {
+        let (full, row) = vc920_spec(&FULL, 1, 0x2, 1);
+        let (full, row) = (full.unwrap(), row.unwrap());
+        let count4000 = vc920_spec(&COUNT4000, 1, 0x2, 1).0.unwrap();
+        assert_eq!(row.label, "4V");
+        assert_eq!(full.resolution, "0.0001V");
+        assert_eq!(
+            bands(full),
+            [
+                (Some("45Hz~1kHz"), "0.5%+40"),
+                (Some("1kHz~10kHz"), "2%+40"),
+                (Some("10kHz~120kHz, 10 - 15% of MR"), "6%+40"),
+                (Some("10kHz~120kHz, 15 - 100% of MR"), "3%+40"),
+                (Some("120kHz~250kHz, 10 - 30% of MR"), "10%+40"),
+                (Some("120kHz~250kHz, 30 - 100% of MR"), "7%+50"),
+                (Some("250kHz~400kHz, 10 - 30% of MR"), "15%+40"),
+                (Some("30 - 100% of MR"), "12%+50"),
+            ]
+        );
+        assert_eq!(count4000.resolution, "");
+        assert_eq!(
+            bands(count4000),
+            [
+                (Some("45Hz~1kHz (4000 counts)"), "0.5%+10"),
+                (Some("1kHz~10kHz (4000 counts)"), "1.5%+10"),
+                (Some("10kHz~120kHz (4000 counts)"), "4%+8"),
+                (Some("120kHz~250kHz (4000 counts)"), "5%+10"),
+                // The last sub-row's frequency cell is printed empty.
+                (
+                    Some("250kHz~400kHz, 10 - 30% of MR (4000 counts)"),
+                    "12%+20"
+                ),
+                (Some("30 - 100% of MR (4000 counts)"), "12%+20"),
+            ]
+        );
+        let (full, _) = vc920_spec(&FULL, 1, 0x2, 0);
+        assert_eq!(full.map(bands), Some(vec![(None, "0.08%+10")]));
+        let (count4000, _) = vc920_spec(&COUNT4000, 1, 0x2, 0);
+        let count4000 = count4000.unwrap();
+        assert_eq!(bands(count4000), [(Some("(4000 counts)"), "0.2%+5")]);
+        assert_eq!(count4000.resolution, "");
+    }
+
+    /// Every view lists only figures of its own column, the 4000-count
+    /// column's marked as such, none under a column heading, and "Not
+    /// specified" after every figure; it has the row's resolution, but for
+    /// the 4000-count column of a row that prints both.
+    #[test]
+    fn vc920_views_list_their_own_column_relabelled() {
+        for table in specs_vc920::ALL {
+            for row in table.ranges {
+                let printed = |heading: &str| -> Vec<&str> {
+                    (row.spec.accuracy.iter())
+                        .filter(|b| b.freq_range.unwrap().starts_with(heading))
+                        .map(|b| b.accuracy)
+                        .collect()
+                };
+                let full_printed = !printed("40.000").is_empty();
+                for counts in [CountMode::Full, CountMode::Count4000] {
+                    let what = format!("{} / {}: {counts:?}", table.name, row.label);
+                    let Some(spec) = specs_vc920::count_mode_spec(row, counts) else {
+                        continue;
+                    };
+                    if std::ptr::eq(spec, &row.spec) {
+                        assert!(row.spec.accuracy.is_empty(), "{what}");
+                        continue;
+                    }
+                    // Ω prints the 4000-count column alone.
+                    let column = if full_printed {
+                        counts
+                    } else {
+                        CountMode::Count4000
+                    };
+                    let (heading, marked, resolution) = match column {
+                        CountMode::Full => ("40.000", false, row.spec.resolution),
+                        CountMode::Count4000 if full_printed => ("4.000", true, ""),
+                        CountMode::Count4000 => ("4.000", true, row.spec.resolution),
+                    };
+                    assert_eq!(spec.resolution, resolution, "{what}");
+                    let figures = printed(heading);
+                    for (label, figure) in bands(spec) {
+                        let label = label.unwrap_or_default();
+                        assert!(
+                            !label.starts_with("40.000") && !label.starts_with("4.000"),
+                            "{what}: {label:?}"
+                        );
+                        assert_eq!(
+                            label.ends_with("(4000 counts)"),
+                            marked,
+                            "{what}: {label:?}"
+                        );
+                        assert!(
+                            figures.contains(&figure),
+                            "{what}: {figure} is not its column's"
+                        );
+                    }
+                    let specified = (spec.accuracy.iter())
+                        .take_while(|b| b.accuracy != "Not specified")
+                        .count();
+                    assert!(specified > 0, "{what}: no figure first");
+                    let rest = &spec.accuracy[specified..];
+                    assert!(rest.iter().all(|b| b.accuracy == "Not specified"), "{what}");
+                }
+            }
+        }
+    }
+
+    /// "Not specified" goes after the figures, and a display whose bands are
+    /// all "Not specified" takes the table's mode data only, as one that
+    /// prints nothing does (AC V 400V at 4000 counts).
+    #[test]
+    fn vc920_not_specified_goes_last_or_takes_mode_data_only() {
+        let (full, _) = vc920_spec(&FULL, 4, 0x2, 1);
+        assert_eq!(
+            full.map(bands),
+            Some(vec![
+                (Some("45Hz~1kHz"), "2%+40"),
+                (Some("1kHz~5kHz"), "6%+40"),
+                (Some("5kHz~10kHz"), "12%+40"),
+                (Some("10kHz~250kHz"), "Not specified"),
+            ])
+        );
+        let proto = Ut80xProtocol::new_vc920();
+        for (digits, range, mode, acdc, table) in [
+            (COUNT4000, 2, 0x2, 1, "AC / V"),
+            (COUNT4000, 3, 0x2, 1, "AC / V"),
+            (COUNT4000, 4, 0x2, 1, "AC / V"),
+            (FULL, 7, 0x5, 0, "Capacity"),
+            (COUNT4000, 7, 0x5, 0, "Capacity"),
+        ] {
+            let p = ut804_payload(&digits, range, mode, acdc, 0x1);
+            let m = parse_ut804_layout(Model::Vc920, &p).unwrap();
+            assert!(proto.spec_info(&m).is_none(), "{p:02X?}");
+            assert_eq!(proto.spec_table(&m).map(|(t, _)| t.name), Some(table));
+        }
+    }
+
+    /// Resistance is fixed at 4000 counts, its one column and resolution
+    /// that display's: on either display, the 4000-count view with the
+    /// printed resolution.
+    #[test]
+    fn vc920_ohms_show_the_4000_count_column_with_its_resolution() {
+        for digits in [FULL, COUNT4000] {
+            let (spec, row) = vc920_spec(&digits, 1, 0x4, 0);
+            let (spec, row) = (spec.unwrap(), row.unwrap());
+            assert!(!std::ptr::eq(spec, &row.spec));
+            assert_eq!(spec.resolution, "0.1Ω");
+            assert_eq!(bands(spec), [(Some("(4000 counts)"), "0.8%+20")]);
+        }
+    }
+
+    /// Frequency on ranges 0 and 1 (the table starts at 4kHz) and °F (the
+    /// table is °C) take their table's mode data only.
+    #[test]
+    fn vc920_unlisted_frequency_ranges_and_fahrenheit_take_mode_data_only() {
+        let proto = Ut80xProtocol::new_vc920();
+        for (range, mode, table) in [
+            (0, 0xC, "Frequency"),
+            (1, 0xC, "Frequency"),
+            (0, 0xD, "Temperature"),
+        ] {
+            let p = ut804_payload(&FULL, range, mode, 0, 0x1);
+            let m = parse_ut804_layout(Model::Vc920, &p).unwrap();
+            assert!(proto.spec_info(&m).is_none(), "{p:02X?}");
+            assert_eq!(proto.spec_table(&m).map(|(t, _)| t.name), Some(table));
+        }
+    }
+
+    /// Every VC920 reading passes the check the golden readings go through
+    /// (`protocol::assert_spec_on_sheet`), its views included: the VC920 has
+    /// no golden fixture yet.
+    #[test]
+    fn vc920_readings_pass_the_golden_spec_check() {
+        let proto = handheld_protocol(Model::Vc920);
+        let mut reached = false;
+        for (p, m) in handheld_accepted_readings(Model::Vc920) {
+            let by = format!("vc920 {p:02X?}");
+            reached |= crate::protocol::assert_spec_on_sheet(&proto, &m, &by);
+        }
+        assert!(reached);
     }
 
     /// The UT71E's W position takes table L's power row, the one the packet's

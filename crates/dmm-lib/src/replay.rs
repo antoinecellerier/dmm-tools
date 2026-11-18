@@ -997,6 +997,25 @@ mod tests {
         }
     }
 
+    /// A VC920 reading shows only its own display's accuracy, which only the
+    /// replayed payload says.
+    #[test]
+    fn a_replayed_vc920_reading_carries_its_own_displays_specs() {
+        // DC V 0.1234 on the 4V range, then 0.123 with the fifth digit blank.
+        let full = replayed("vc920", "B0 31 32 B3 34 31 31 B0 31 0D 8A");
+        let spec = full.spec.expect("a full-display row");
+        assert_eq!(spec.resolution, "0.0001V");
+        assert_eq!(spec.accuracy.len(), 1);
+        assert_eq!(spec.accuracy[0].freq_range, None);
+        assert_eq!(spec.accuracy[0].accuracy, "0.08%+10");
+        let count4000 = replayed("vc920", "B0 31 32 B3 BA 31 31 B0 31 0D 8A");
+        let spec = count4000.spec.expect("a 4000-count row");
+        assert_eq!(spec.resolution, "");
+        assert_eq!(spec.accuracy.len(), 1);
+        assert_eq!(spec.accuracy[0].freq_range, Some("(4000 counts)"));
+        assert_eq!(spec.accuracy[0].accuracy, "0.2%+5");
+    }
+
     #[test]
     fn the_first_sample_is_ready_at_session_zero() {
         let (mut dmm, _clock, start) = open_manual();
