@@ -91,6 +91,9 @@ def check(t, path="<transcription>", split_rows=False):
                     errs.append(f"{w}: unknown key {k!r}")
             if "range" not in r:
                 errs.append(f"{w}: range missing")
+            elif not isinstance(r["range"], str) or not r["range"]:
+                # `diff` and `merge` key rows on it, and a null crashes them.
+                errs.append(f"{w}: range must be the row's printed label, not empty or null")
             if not isinstance(r.get("accuracy"), list):
                 errs.append(f"{w}: accuracy must be a list")
             for bi, b in enumerate(r.get("accuracy") or []):
