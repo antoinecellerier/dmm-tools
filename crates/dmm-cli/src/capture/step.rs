@@ -1154,7 +1154,7 @@ mod tests {
     /// words the answer as the UT804's does.
     #[test]
     fn the_handheld_hold_steps_say_no_response_is_an_answer() {
-        for id in ["ut71ab", "ut71cde", "vc920"] {
+        for id in ["ut71a", "ut71b", "ut71cde", "vc920"] {
             let device = dmm_lib::protocol::registry::find_device(id).unwrap();
             let steps = (device.new_protocol)().capture_steps();
             let hold = steps.iter().find(|s| s.id == "hold").unwrap();
@@ -1539,12 +1539,12 @@ mod tests {
     ///   lose coverage. Each fix needs that family's own dial order and a
     ///   hardware run — tracked in `docs/verification-backlog.md`, "Capture
     ///   tool".
-    /// - `ut8802`, `ut8803`, `ut803`, `ut804`, `ut71ab`, `ut71cde`, `vc920`
-    ///   declare no `choices`, so nothing is swept whatever the order and
-    ///   they cost nothing.
+    /// - `ut8802`, `ut8803`, `ut803`, `ut804`, `ut71a`, `ut71b`, `ut71cde`,
+    ///   `vc920` declare no `choices`, so nothing is swept whatever the
+    ///   order and they cost nothing.
     const SPLIT_GATE: &[&str] = &[
-        "ut8802", "ut8803", "ut803", "ut804", "ut71ab", "ut71cde", "vc920", "vc880", "vc650bt",
-        "vc890",
+        "ut8802", "ut8803", "ut803", "ut804", "ut71a", "ut71b", "ut71cde", "vc920", "vc880",
+        "vc650bt", "vc890",
     ];
 
     /// Every meter's steps open with its gate, however many steps that is.

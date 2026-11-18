@@ -5,6 +5,7 @@
 ### Devices
 
 - **The UNI-T UT71D is partly verified** — thanks to [@wanthalf](https://github.com/wanthalf) for the capture ([#22](https://github.com/antoinecellerier/dmm-tools/issues/22)).
+- **The UNI-T UT71A and UT71B are separate devices** — pick `ut71a` or `ut71b` where you used `ut71ab`.
 
 ### GUI
 

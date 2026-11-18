@@ -1,7 +1,7 @@
 //! The capture steps of the meters on this packet stream, one list with a
 //! wording per model.
 
-use super::Model::{self, Ut71Ab, Ut71Cde, Ut803, Ut804, Vc920};
+use super::Model::{self, Ut71A, Ut71B, Ut71Cde, Ut803, Ut804, Vc920};
 use crate::protocol::steps::{self, Ohms, Volts};
 use crate::protocol::{CaptureStep, Expect, Need, RangeExpect};
 
@@ -29,7 +29,7 @@ pub(super) fn steps(model: Model) -> Vec<CaptureStep> {
     // picks their wording of a step the bench meters word otherwise.
     let handheld = match model {
         Ut803 | Ut804 => false,
-        Ut71Ab | Ut71Cde | Vc920 => true,
+        Ut71A | Ut71B | Ut71Cde | Vc920 => true,
     };
     let say = |bench: &'static str, handheld_text: &'static str| {
         if handheld { handheld_text } else { bench }
@@ -71,16 +71,16 @@ pub(super) fn steps(model: Model) -> Vec<CaptureStep> {
         // REL was still on when the output stopped: HOLD or EXIT.
         "hold",
     ];
-    const ALL: &[Model] = &[Ut803, Ut804, Ut71Ab, Ut71Cde, Vc920];
+    const ALL: &[Model] = &[Ut803, Ut804, Ut71A, Ut71B, Ut71Cde, Vc920];
     const BENCH: &[Model] = &[Ut803, Ut804];
-    const HANDHELD: &[Model] = &[Ut71Ab, Ut71Cde, Vc920];
-    const BUTTONS: &[Model] = &[Ut804, Ut71Ab, Ut71Cde, Vc920];
+    const HANDHELD: &[Model] = &[Ut71A, Ut71B, Ut71Cde, Vc920];
+    const BUTTONS: &[Model] = &[Ut804, Ut71A, Ut71B, Ut71Cde, Vc920];
     let on = |models: &[Model], step: CaptureStep| {
         models.contains(&model).then(|| {
             let verified = match model {
                 Ut804 => true,
                 Ut71Cde => !UT71CDE_OPEN.contains(&step.id),
-                Ut803 | Ut71Ab | Vc920 => false,
+                Ut803 | Ut71A | Ut71B | Vc920 => false,
             };
             step.verified_if(verified)
         })
@@ -113,7 +113,7 @@ pub(super) fn steps(model: Model) -> Vec<CaptureStep> {
                     match model {
                         Ut803 => "Set meter to AC+DC V (if the meter has it)",
                         Ut804 => "AC V: press the AC/AC+DC button so the display shows AC+DC",
-                        Ut71Ab | Ut71Cde | Vc920 => {
+                        Ut71A | Ut71B | Ut71Cde | Vc920 => {
                             "AC V: press the yellow AC+DC button so the display shows AC+DC"
                         }
                     },
@@ -412,7 +412,7 @@ pub(super) fn steps(model: Model) -> Vec<CaptureStep> {
                      result. Press EXIT, then SEND, on the meter afterwards.",
                 )
                 .wait_for_enter(),
-                Ut71Ab | Ut71Cde | Vc920 => CaptureStep::basic(
+                Ut71A | Ut71B | Ut71Cde | Vc920 => CaptureStep::basic(
                     "hold",
                     "Press HOLD on the meter, then Enter. If the meter stops sending, \
                      the tool reports no response within a minute: that is a valid \

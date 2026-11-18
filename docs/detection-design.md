@@ -189,9 +189,9 @@ seen on a new cable joins detection there by being listed on it.
   VC920/VC940/VC960, which send the UT804's packets. It is receive-only past its init, which
   already sends `0x5A`, so detection there is a single listen window that takes any whole CR LF
   packet as a UT804. A packet does not name its model, so a UT71 or VC9x0 is claimed as a UT804
-  and has to be named (the GUI's **Device** list, saved once, or `--device ut71ab` / `ut71cde` /
-  `vc920`). The CH9325 starts at 2400 baud, where only the UT804 is heard: a UT803 talks at
-  19200, so it is not detected and has to be named (`--device ut803`).
+  and has to be named (the GUI's **Device** list, saved once, or `--device ut71a` / `ut71b` /
+  `ut71cde` / `vc920`). The CH9325 starts at 2400 baud, where only the UT804 is heard: a UT803
+  talks at 19200, so it is not detected and has to be named (`--device ut803`).
 - **UT-D07B** is a transparent UART bridge like the cables, so the UT61+, UT171 and UT181A
   fingerprints listed on it run unchanged. It is opened after the USB bus, so a cable with a
   silent meter on it wins over a live meter on the adapter.

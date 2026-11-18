@@ -118,12 +118,13 @@ auto-detection; HOLD, manual ranging, MAX MIN and a shorted-leads
 resistance reading are still to confirm, and no other model has been run
 yet
 ([open checks](research/ut71/verification.md)). Auto-detection
-reports these meters as a UT804: pick UT71A/B, UT71C/D/E or Voltcraft VC920
-as the device once (`--device ut71ab`, `ut71cde` or `vc920`).
+reports these meters as a UT804: pick UT71A, UT71B, UT71C/D/E or Voltcraft
+VC920 as the device once (`--device ut71a`, `ut71b`, `ut71cde` or `vc920`).
 
 A UT71 on a UT-D07A Bluetooth adapter is untested and not found by
 auto-detection: name both the model and the adapter
-(`--device ut71ab --adapter <address>`) and report the result on
+(`--device ut71a`, `ut71b` or `ut71cde` with `--adapter <address>`) and
+report the result on
 [#25](https://github.com/antoinecellerier/dmm-tools/issues/25).
 
 ## UT171 / UT181A

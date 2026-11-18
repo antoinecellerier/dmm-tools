@@ -35,7 +35,7 @@ Note: HOLD pauses the data, and EXIT turns SEND off.";
 /// The UT71 and the Voltcraft VC920/VC940/VC960 send nothing until MAX MIN
 /// is held for over a second, or the UT71A's SEND key is pressed, and the
 /// display shows SEND; EXIT turns it off (UT71 manual Table 2-2,
-/// VC920/940/960 manual §7). One text for all three entries, so the "no
+/// VC920/940/960 manual §7). One text for all four entries, so the "no
 /// meter answered" help lists them once.
 const ACTIVATION_UT71: &str = "\
 1. Connect the USB cable to the meter
@@ -78,16 +78,35 @@ pub(crate) static UT804: SelectableDevice = SelectableDevice {
     bluetooth_names: &[],
 };
 
-pub(crate) static UT71AB: SelectableDevice = SelectableDevice {
-    id: "ut71ab",
-    model: "UT71A/B",
+// The UT71A and UT71B send the same packets, so the user names the model;
+// they are two entries because the UT71 manual gives each its own accuracy.
+pub(crate) static UT71A: SelectableDevice = SelectableDevice {
+    id: "ut71a",
+    model: "UT71A",
     brand: Brand::UniT,
     sold_as: &[],
-    aliases: &["ut71a", "ut71b"],
+    aliases: &[],
     requires_hardware: true,
     activation_instructions: ACTIVATION_UT71,
     family: DeviceFamily::Ut80x,
-    new_protocol: || Box::new(Ut80xProtocol::new_ut71ab()),
+    new_protocol: || Box::new(Ut80xProtocol::new_ut71a()),
+    fingerprint: Some(&FINGERPRINT),
+    manual_url: Some("https://meters.uni-trend.com/product/ut71-series/"),
+    links: LINKS,
+    detection_verified: &[],
+    bluetooth_names: &[],
+};
+
+pub(crate) static UT71B: SelectableDevice = SelectableDevice {
+    id: "ut71b",
+    model: "UT71B",
+    brand: Brand::UniT,
+    sold_as: &[],
+    aliases: &[],
+    requires_hardware: true,
+    activation_instructions: ACTIVATION_UT71,
+    family: DeviceFamily::Ut80x,
+    new_protocol: || Box::new(Ut80xProtocol::new_ut71b()),
     fingerprint: Some(&FINGERPRINT),
     manual_url: Some("https://meters.uni-trend.com/product/ut71-series/"),
     links: LINKS,

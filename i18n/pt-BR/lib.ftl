@@ -35,17 +35,17 @@ mode-a-dc = A DC
 mode-a-dc-ac-plus-dc = A DC AC+DC
 # Used by: UT181A
 mode-a-dc-peak = A DC pico
-# Used by: 42 meters
+# Used by: 43 meters
 mode-ac-a = AC A
-# Used by: 44 meters
+# Used by: 45 meters
 mode-ac-v = AC V
 # Used by: Mock UT61E+
 mode-ac-v-hz = AC V Hz
 # Used by: 121GW
 mode-ac-va = AC VA
-# Used by: 27 meters
+# Used by: 28 meters
 mode-ac-ma = AC mA
-# Used by: 23 meters
+# Used by: 24 meters
 mode-ac-mv = AC mV
 # Used by: 121GW
 mode-ac-mva = AC mVA
@@ -61,19 +61,19 @@ mode-ac-power-va = Potência AC VA
 mode-ac-power-w = Potência AC W
 # Used by: 9 meters
 mode-ac-power-wh = Potência AC Wh
-# Used by: 26 meters
+# Used by: 27 meters
 mode-ac-ua = AC µA
 # Used by: 121GW
 mode-ac-uva = AC µVA
-# Used by: 16 meters
+# Used by: 17 meters
 mode-ac-plus-dc-a = AC+DC A
-# Used by: 29 meters
+# Used by: 30 meters
 mode-ac-plus-dc-v = AC+DC V
-# Used by: 8 meters
+# Used by: 9 meters
 mode-ac-plus-dc-ma = AC+DC mA
-# Used by: 8 meters
+# Used by: 9 meters
 mode-ac-plus-dc-mv = AC+DC mV
-# Used by: 8 meters
+# Used by: 9 meters
 mode-ac-plus-dc-ua = AC+DC µA
 # Used by: VC-880, VC-890, VC650BT
 mode-acv-lpf = ACV LPF
@@ -83,7 +83,7 @@ mode-angle = Ângulo
 mode-auto = Auto
 # Used by: BM525s/BM521s, BM788BT/BM787BT, BM829s/BM827s/BM822s/BM821s
 mode-auto-v = Auto V
-# Used by: 46 meters
+# Used by: 47 meters
 mode-capacitance = Capacitância
 # Used by: UT8803
 mode-capacitance-d = Capacitância D
@@ -99,19 +99,19 @@ mode-clamp-dc-a = Alicate DC A
 mode-clamp-lpf-a = Alicate LPF A
 # Used by: 9 meters
 mode-compass = Bússola
-# Used by: 45 meters
+# Used by: 46 meters
 mode-continuity = Continuidade
 # Used by: UT181A
 mode-continuity-open = Continuidade (circuito aberto)
-# Used by: 42 meters
+# Used by: 43 meters
 mode-dc-a = DC A
-# Used by: 44 meters
+# Used by: 45 meters
 mode-dc-v = DC V
 # Used by: 121GW
 mode-dc-va = DC VA
-# Used by: 28 meters
+# Used by: 29 meters
 mode-dc-ma = DC mA
-# Used by: 27 meters
+# Used by: 28 meters
 mode-dc-mv = DC mV
 # Used by: 121GW
 mode-dc-mva = DC mVA
@@ -127,11 +127,11 @@ mode-dc-power-va = Potência DC VA
 mode-dc-power-w = Potência DC W
 # Used by: 9 meters
 mode-dc-power-wh = Potência DC Wh
-# Used by: 27 meters
+# Used by: 28 meters
 mode-dc-ua = DC µA
 # Used by: 121GW
 mode-dc-uva = DC µVA
-# Used by: 45 meters
+# Used by: 46 meters
 mode-diode = Diodo
 # Used by: UT181A
 mode-diode-alarm = Alarme de diodo
@@ -143,7 +143,7 @@ mode-ef = EF
 mode-ef-h = EF-H
 # Used by: BM788BT/BM787BT
 mode-ef-l = EF-L
-# Used by: 8 meters
+# Used by: 9 meters
 mode-frequency = Frequência
 # Used by: 9 meters
 mode-hv-ac-v = HV AC V
@@ -181,7 +181,7 @@ mode-motor-1-2-3 = Motor 1-2-3
 mode-motor-3-2-1 = Motor 3-2-1
 # Used by: 20 meters
 mode-ncv = NCV
-# Used by: UT71A/B, UT71C/D/E, UT804, VC920/VC940/VC960
+# Used by: UT71A, UT71B, UT71C/D/E, UT804, VC920/VC940/VC960
 mode-power = Potência
 # Used by: 9 meters
 mode-power-a = Potência A
@@ -223,7 +223,7 @@ mode-temp-degc-t1-t2 = Temp °C T1 (T2)
 mode-temp-degc-t1-t2-2 = Temp °C T1-T2
 # Used by: Mock UT61E+
 mode-temp-degc-t2-t1 = Temp °C T2-T1
-# Used by: UT71A/B, UT71C/D/E, UT803, UT804, VC920/VC940/VC960
+# Used by: UT71A, UT71B, UT71C/D/E, UT803, UT804, VC920/VC940/VC960
 mode-temperature = Temperatura
 # Used by: 9 meters
 mode-time = Tempo
@@ -567,7 +567,7 @@ activation-ut181a =
     2. Ligue o multímetro
     3. Acesse SETUP -> Communication -> ON
     Observação: esta configuração é redefinida sempre que o multímetro é desligado.
-# Used by: UT71A/B, UT71C/D/E, VC920/VC940/VC960
+# Used by: UT71A, UT71B, UT71C/D/E, VC920/VC940/VC960
 activation-ut71ab =
     1. Conecte o cabo USB ao multímetro
     2. Ligue o multímetro

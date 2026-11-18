@@ -69,9 +69,12 @@ mod specs_ut804;
 pub(crate) enum Model {
     Ut803,
     Ut804,
-    /// UT71A/B: the UT804's packets, on a 20000-count display
+    /// UT71A: the UT804's packets, on a 20000-count display
     /// (docs/research/ut71/reverse-engineered-protocol.md §3.5, §4).
-    Ut71Ab,
+    Ut71A,
+    /// UT71B: the UT71A's packets and range labels; nothing on the wire
+    /// tells the two apart (ut71 spec §3.5, §4).
+    Ut71B,
     /// UT71C/D/E: the UT804's packets and range labels (ut71 spec §3.5, §4).
     Ut71Cde,
     /// Voltcraft VC920/VC940/VC960: the UT71C/D/E's packets, with a 750V
@@ -84,7 +87,7 @@ impl Model {
     fn ut804_layout(self) -> bool {
         match self {
             Model::Ut803 => false,
-            Model::Ut804 | Model::Ut71Ab | Model::Ut71Cde | Model::Vc920 => true,
+            Model::Ut804 | Model::Ut71A | Model::Ut71B | Model::Ut71Cde | Model::Vc920 => true,
         }
     }
 
@@ -94,7 +97,8 @@ impl Model {
         match self {
             Model::Ut803 => devices::UT803.id,
             Model::Ut804 => devices::UT804.id,
-            Model::Ut71Ab => devices::UT71AB.id,
+            Model::Ut71A => devices::UT71A.id,
+            Model::Ut71B => devices::UT71B.id,
             Model::Ut71Cde => devices::UT71CDE.id,
             Model::Vc920 => devices::VC920.id,
         }
@@ -107,7 +111,7 @@ impl Model {
     fn range_label(self, mode: u8, range: u8, ut804: &'static str) -> &'static str {
         match self {
             Model::Ut803 | Model::Ut804 | Model::Ut71Cde => ut804,
-            Model::Ut71Ab => ut71ab_range_label(mode, range),
+            Model::Ut71A | Model::Ut71B => ut71ab_range_label(mode, range),
             // The Voltcraft manuals stop AC V at 750V; DC V keeps 1000V.
             Model::Vc920 if (mode, range) == (0x2, 4) => "750V",
             Model::Vc920 => ut804,
@@ -816,7 +820,8 @@ pub(crate) fn all_labels(out: &mut crate::text::Labels) {
     let models = [
         Model::Ut803,
         Model::Ut804,
-        Model::Ut71Ab,
+        Model::Ut71A,
+        Model::Ut71B,
         Model::Ut71Cde,
         Model::Vc920,
     ];
@@ -968,8 +973,12 @@ impl Ut80xProtocol {
         Self::new(Model::Ut804, Stability::Verified, 16)
     }
 
-    pub(crate) fn new_ut71ab() -> Self {
-        Self::new(Model::Ut71Ab, Stability::Experimental, 22)
+    pub(crate) fn new_ut71a() -> Self {
+        Self::new(Model::Ut71A, Stability::Experimental, 22)
+    }
+
+    pub(crate) fn new_ut71b() -> Self {
+        Self::new(Model::Ut71B, Stability::Experimental, 22)
     }
 
     /// A UT71D has run every function it has (issue #22, 2026-11-18); the
@@ -1005,7 +1014,7 @@ impl Ut80xProtocol {
                 Some((table, row))
             }
             // No spec tables transcribed from their manuals yet.
-            Model::Ut71Ab | Model::Ut71Cde | Model::Vc920 => None,
+            Model::Ut71A | Model::Ut71B | Model::Ut71Cde | Model::Vc920 => None,
         }
     }
 
@@ -1040,7 +1049,7 @@ impl Protocol for Ut80xProtocol {
             // and a UT804 streams there (#16). The UT71 and VC9x0 vendor apps
             // set the same 2400 baud (docs/research/ut71/
             // reverse-engineered-protocol.md §1).
-            Model::Ut804 | Model::Ut71Ab | Model::Ut71Cde | Model::Vc920 => {
+            Model::Ut804 | Model::Ut71A | Model::Ut71B | Model::Ut71Cde | Model::Vc920 => {
                 debug!(
                     "ut80x: init ({}, the transport's 2400 baud)",
                     self.profile.id
@@ -1076,7 +1085,7 @@ impl Protocol for Ut80xProtocol {
     fn parse_payload(&self, payload: &[u8]) -> Result<Measurement> {
         match self.model {
             Model::Ut803 => parse_measurement_ut803(payload),
-            Model::Ut804 | Model::Ut71Ab | Model::Ut71Cde | Model::Vc920 => {
+            Model::Ut804 | Model::Ut71A | Model::Ut71B | Model::Ut71Cde | Model::Vc920 => {
                 parse_ut804_layout(self.model, payload)
             }
         }
@@ -1098,7 +1107,7 @@ impl Protocol for Ut80xProtocol {
         match self.model {
             Model::Ut803 => specs_ut803::ALL.iter().map(|t| t.sheet_table()).collect(),
             Model::Ut804 => specs_ut804::ALL.iter().map(|t| t.sheet_table()).collect(),
-            Model::Ut71Ab | Model::Ut71Cde | Model::Vc920 => Vec::new(),
+            Model::Ut71A | Model::Ut71B | Model::Ut71Cde | Model::Vc920 => Vec::new(),
         }
     }
 
@@ -1291,7 +1300,8 @@ mod tests {
         for proto in [
             Box::new(Ut80xProtocol::new_ut803()) as Box<dyn Protocol>,
             Box::new(Ut80xProtocol::new_ut804()),
-            Box::new(Ut80xProtocol::new_ut71ab()),
+            Box::new(Ut80xProtocol::new_ut71a()),
+            Box::new(Ut80xProtocol::new_ut71b()),
             Box::new(Ut80xProtocol::new_ut71cde()),
             Box::new(Ut80xProtocol::new_vc920()),
         ] {
@@ -1336,7 +1346,8 @@ mod tests {
         let mock = MockTransport::new(Vec::new());
         for mut proto in [
             Ut80xProtocol::new_ut804(),
-            Ut80xProtocol::new_ut71ab(),
+            Ut80xProtocol::new_ut71a(),
+            Ut80xProtocol::new_ut71b(),
             Ut80xProtocol::new_ut71cde(),
             Ut80xProtocol::new_vc920(),
         ] {
@@ -1469,12 +1480,13 @@ mod tests {
     // --- UT71 and VC9x0 --------------------------------------------------
 
     /// The UT804-layout models that are not the UT804.
-    const HANDHELDS: [Model; 3] = [Model::Ut71Ab, Model::Ut71Cde, Model::Vc920];
+    const HANDHELDS: [Model; 4] = [Model::Ut71A, Model::Ut71B, Model::Ut71Cde, Model::Vc920];
 
     /// The handhelds' protocols, in [`HANDHELDS`] order.
-    fn handheld_protocols() -> [Ut80xProtocol; 3] {
+    fn handheld_protocols() -> [Ut80xProtocol; 4] {
         [
-            Ut80xProtocol::new_ut71ab(),
+            Ut80xProtocol::new_ut71a(),
+            Ut80xProtocol::new_ut71b(),
             Ut80xProtocol::new_ut71cde(),
             Ut80xProtocol::new_vc920(),
         ]
@@ -1606,7 +1618,7 @@ mod tests {
                 let label = match model {
                     Model::Vc920 if (f.mode, f.range) == (0x2, 4) => Some("750V"),
                     Model::Ut71Cde | Model::Vc920 => Some(ut804.range_label.as_ref()),
-                    Model::Ut71Ab | Model::Ut803 | Model::Ut804 => None,
+                    Model::Ut71A | Model::Ut71B | Model::Ut803 | Model::Ut804 => None,
                 };
                 if let Some(label) = label {
                     assert_eq!(m.range_label, label, "{model:?} {p:02X?}");
@@ -1630,49 +1642,58 @@ mod tests {
     /// the A/B vendor app nor the UT71 manual gives a range.
     #[test]
     fn ut71ab_range_labels_are_half_the_ut804s() {
-        for (p, ut804) in ut804_accepted_readings() {
-            let f = Ut804Fields::decode(&p).unwrap();
-            let ab = parse_ut804_layout(Model::Ut71Ab, &p).unwrap();
-            let label = ab.range_label.as_ref();
-            let context = format!(
-                "{} {p:02X?}: {label:?} for {:?}",
-                ut804.mode, ut804.range_label
-            );
-            match (f.mode, f.range) {
-                _ if ut804.range_label.is_empty() => assert_eq!(label, "", "{context}"),
-                (0xA | 0xB, _) => assert_eq!(label, "", "{context}"),
-                (0x1 | 0x2, 4) | (0x9, _) => assert_eq!(label, ut804.range_label, "{context}"),
-                _ => {
-                    let (full, unit) = si_quantity(&ut804.range_label).unwrap();
-                    let (half, ab_unit) = si_quantity(label).expect(&context);
-                    assert_eq!(ab_unit, unit, "{context}");
-                    assert!((half - full / 2.0).abs() <= 1e-9 * full, "{context}");
+        for model in [Model::Ut71A, Model::Ut71B] {
+            for (p, ut804) in ut804_accepted_readings() {
+                let f = Ut804Fields::decode(&p).unwrap();
+                let ab = parse_ut804_layout(model, &p).unwrap();
+                let label = ab.range_label.as_ref();
+                let context = format!(
+                    "{model:?} {} {p:02X?}: {label:?} for {:?}",
+                    ut804.mode, ut804.range_label
+                );
+                match (f.mode, f.range) {
+                    _ if ut804.range_label.is_empty() => {
+                        assert_eq!(label, "", "{context}")
+                    }
+                    (0xA | 0xB, _) => assert_eq!(label, "", "{context}"),
+                    (0x1 | 0x2, 4) | (0x9, _) => {
+                        assert_eq!(label, ut804.range_label, "{context}")
+                    }
+                    _ => {
+                        let (full, unit) = si_quantity(&ut804.range_label).unwrap();
+                        let (half, ab_unit) = si_quantity(label).expect(&context);
+                        assert_eq!(ab_unit, unit, "{context}");
+                        assert!((half - full / 2.0).abs() <= 1e-9 * full, "{context}");
+                    }
                 }
             }
-        }
-        // As the A/B app's chart and the manual's A/B tables give them.
-        for (mode, range, acdc, label) in [
-            (0x1, 1, 2, "2V"),
-            (0x2, 4, 1, "1000V"),
-            (0x3, 0, 0, "200mV"),
-            (0x4, 1, 0, "200Ω"),
-            (0x4, 6, 0, "20MΩ"),
-            (0x5, 1, 0, "20nF"),
-            (0x5, 7, 0, "20mF"),
-            (0x7, 1, 0, "2000µA"),
-            (0x8, 0, 1, "20mA"),
-            (0x9, 0, 0, "10A"),
-            (0xC, 0, 0, "20Hz"),
-            (0xC, 7, 0, "200MHz"),
-            (0xA, 0, 0, ""),
-            (0xB, 0, 0, ""),
-            (0x6, 0, 0, ""),
-            (0xE, 0, 0, ""),
-            (0xF, 0, 0, ""),
-        ] {
-            let p = ut804_payload(&[0, 1, 2, 3, 0xA], range, mode, acdc, 0x0);
-            let m = parse_ut804_layout(Model::Ut71Ab, &p).unwrap();
-            assert_eq!(m.range_label, label, "mode {mode:#x} range {range}");
+            // As the A/B app's chart and the manual's A/B tables give them.
+            for (mode, range, acdc, label) in [
+                (0x1, 1, 2, "2V"),
+                (0x2, 4, 1, "1000V"),
+                (0x3, 0, 0, "200mV"),
+                (0x4, 1, 0, "200Ω"),
+                (0x4, 6, 0, "20MΩ"),
+                (0x5, 1, 0, "20nF"),
+                (0x5, 7, 0, "20mF"),
+                (0x7, 1, 0, "2000µA"),
+                (0x8, 0, 1, "20mA"),
+                (0x9, 0, 0, "10A"),
+                (0xC, 0, 0, "20Hz"),
+                (0xC, 7, 0, "200MHz"),
+                (0xA, 0, 0, ""),
+                (0xB, 0, 0, ""),
+                (0x6, 0, 0, ""),
+                (0xE, 0, 0, ""),
+                (0xF, 0, 0, ""),
+            ] {
+                let p = ut804_payload(&[0, 1, 2, 3, 0xA], range, mode, acdc, 0x0);
+                let m = parse_ut804_layout(model, &p).unwrap();
+                assert_eq!(
+                    m.range_label, label,
+                    "{model:?} mode {mode:#x} range {range}"
+                );
+            }
         }
     }
 
@@ -1688,7 +1709,7 @@ mod tests {
         assert_eq!(label(Model::Vc920, 4, 0x2, 3), "750V");
         assert_eq!(label(Model::Vc920, 3, 0x2, 1), "400V");
         assert_eq!(label(Model::Vc920, 4, 0x1, 2), "1000V");
-        for model in [Model::Ut71Ab, Model::Ut71Cde] {
+        for model in [Model::Ut71A, Model::Ut71B, Model::Ut71Cde] {
             assert_eq!(label(model, 4, 0x2, 1), "1000V", "{model:?}");
         }
     }
@@ -1704,7 +1725,8 @@ mod tests {
         let code_0 = ut804_payload(&[1, 2, 3, 4, 0xA], 0, 0x0, 0, 0x0);
         for proto in [
             Ut80xProtocol::new_ut804(),
-            Ut80xProtocol::new_ut71ab(),
+            Ut80xProtocol::new_ut71a(),
+            Ut80xProtocol::new_ut71b(),
             Ut80xProtocol::new_ut71cde(),
             Ut80xProtocol::new_vc920(),
         ] {
@@ -1742,7 +1764,7 @@ mod tests {
             .iter()
             .filter(|d| d.family == DeviceFamily::Ut80x)
             .collect();
-        assert_eq!(devices.len(), 5);
+        assert_eq!(devices.len(), 6);
         for device in devices {
             let proto = (device.new_protocol)();
             let (_, reports) = crate::protocol::capture_reports(|| proto.parse_payload(&p));
@@ -3621,7 +3643,8 @@ raw_payload=11"#
         let models = [
             Model::Ut803,
             Model::Ut804,
-            Model::Ut71Ab,
+            Model::Ut71A,
+            Model::Ut71B,
             Model::Ut71Cde,
             Model::Vc920,
         ];

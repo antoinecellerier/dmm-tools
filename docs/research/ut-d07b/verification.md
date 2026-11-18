@@ -21,9 +21,9 @@ built in: the UT60BT and UT202BT, in [ut61-family](../ut61-family/verification.m
 
 ## Meters behind the adapter
 
-- The UT71 over a UT-D07A: `--device ut71ab --adapter <address>` opens it
-  there — a reading decides whether the ut80x `LINKS` gains Bluetooth. Needs a
-  UT71 and a UT-D07A. (#25, #22)
+- The UT71 over a UT-D07A: `--device ut71a` (`ut71b`, `ut71cde`) with
+  `--adapter <address>` opens it there — a reading decides whether the ut80x
+  `LINKS` gains Bluetooth. Needs a UT71 and a UT-D07A. (#25, #22)
 - The UT61B+, UT61D+, UT161 series, UT171 and UT181A behind either adapter
   ([§6](reverse-engineered-protocol.md#6-which-meters-sit-behind-it)) — a
   reading and its `dmm-cli list` line confirm each. Needs the meter. (#25)
