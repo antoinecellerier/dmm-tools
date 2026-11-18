@@ -5,4 +5,5 @@ mode: "AC A"
 value: "0"
 unit: "A"
 range_label: "10A"
+resolution: "0.001A"
 flags: {}

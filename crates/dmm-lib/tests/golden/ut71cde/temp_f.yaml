@@ -5,4 +5,5 @@ mode: "Temperature"
 value: "79.5"
 unit: "°F"
 range_label: ""
+resolution: "0.1°F"
 flags: {}

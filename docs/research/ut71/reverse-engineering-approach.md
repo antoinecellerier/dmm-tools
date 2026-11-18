@@ -34,6 +34,9 @@ source carry URLs, sizes and MD5s.
    datasheet, the CN product sheets for A/B and C/D/E, and the UT71A/B and
    UT71C/D/E Interface Software Manuals (2011), all from UNI-T's global
    and Chinese sites. Dial tables, buttons, SEND, RECALL, counts, ranges.
+   The UT71C/D/E spec data is the English manual's "Accuracy
+   Specifications" A-L (PDF pp. 63-72), cross-checked against the Chinese
+   manual.
    UNI-T's UT-D04 accessory page
    (https://meters.uni-trend.com.cn/content/4381.html) lists exactly
    `UT71A、UT71B、UT71C、UT71D、UT71E` for the cable. Tagged [KNOWN]. `references/ut71/manual/`, notes in

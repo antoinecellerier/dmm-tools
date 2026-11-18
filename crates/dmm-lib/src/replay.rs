@@ -965,6 +965,33 @@ mod tests {
         assert!(m.mode_spec.is_some_and(|ms| ms.notes.contains(&"Max 600V")));
     }
 
+    /// The first reading a one-frame replay of device `id` gives.
+    fn replayed(id: &str, hex: &str) -> crate::measurement::Measurement {
+        let mut text = header(id, RECORDED, None, None);
+        text.push_str(&sample_line(Duration::ZERO, &payload(hex)));
+        let mut dmm = parsed(&text)
+            .open(Clock::manual())
+            .expect("the replay opens");
+        dmm.request_measurement().expect("the first frame is due")
+    }
+
+    /// A UT71's row needs the display's count mode, which only the replayed
+    /// payload carries.
+    #[test]
+    fn a_replayed_ut71cde_reading_carries_its_specs() {
+        // DC V on the 4V range, from `tests/golden/ut71cde/dcv_4v.yaml`, and
+        // on the 4000-count display, from `dcv_4000_count.yaml`.
+        let full = replayed("ut71cde", "B0 B0 B0 B0 31 31 31 B0 31 0D 8A");
+        assert_eq!(full.spec.map(|s| s.resolution), Some("0.0001V"));
+        let count4000 = replayed("ut71cde", "B0 B0 B0 B0 BA 31 31 B0 31 0D 8A");
+        assert!(count4000.spec.is_none());
+        assert!(
+            count4000
+                .mode_spec
+                .is_some_and(|ms| ms.input_impedance.is_some())
+        );
+    }
+
     #[test]
     fn the_first_sample_is_ready_at_session_zero() {
         let (mut dmm, _clock, start) = open_manual();

@@ -60,6 +60,8 @@ use std::fmt;
 
 mod capture;
 pub(crate) mod devices;
+mod specs_ut71;
+mod specs_ut71cde;
 mod specs_ut803;
 mod specs_ut804;
 
@@ -101,6 +103,14 @@ impl Model {
             Model::Ut71B => devices::UT71B.id,
             Model::Ut71Cde => devices::UT71CDE.id,
             Model::Vc920 => devices::VC920.id,
+        }
+    }
+
+    /// The UT71 model's column of the manual's spec tables.
+    fn ut71_tables(self) -> Option<&'static specs_ut71::Ut71Tables> {
+        match self {
+            Model::Ut71Cde => Some(&specs_ut71cde::TABLES),
+            Model::Ut803 | Model::Ut804 | Model::Ut71A | Model::Ut71B | Model::Vc920 => None,
         }
     }
 
@@ -465,6 +475,17 @@ enum Coupling {
     AcDc,
 }
 
+/// Which display a UT71 or VC9x0 packet's reading came from (ut71 spec
+/// §3.1).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum CountMode {
+    /// The display's full count: 40000, or 20000 on the UT71A/B.
+    Full,
+    /// The 4000-count display: the blue key held at power-on, or the
+    /// VC9x0's resistance, whose fifth digit is blank.
+    Count4000,
+}
+
 /// A UT804 packet's positions (spec §2.1), read here once for everything
 /// that decodes a UT804 payload.
 struct Ut804Fields {
@@ -511,6 +532,18 @@ impl Ut804Fields {
     /// there, or a value past 3.
     fn coupling(&self) -> Option<Coupling> {
         ut804_coupling(self.mode, self.acdc)
+    }
+
+    /// The display the reading came from: byte 4 (the fifth digit) is `A`,
+    /// blank, on the 4000-count display (ut71 spec §3.1). `None` for an
+    /// overload or LO packet, whose bytes 2-4 carry no digits: a UT71D sent
+    /// `A` there on its full display too (#22).
+    fn count_mode(&self) -> Option<CountMode> {
+        match self.nibbles {
+            [0xA, ..] => None,
+            [_, _, _, _, 0xA, ..] => Some(CountMode::Count4000),
+            _ => Some(CountMode::Full),
+        }
     }
 }
 
@@ -1013,8 +1046,16 @@ impl Ut80xProtocol {
                 let row = specs_ut804::has_rows(f.coupling()).then_some(f.range);
                 Some((table, row))
             }
+            Model::Ut71Cde => {
+                let f = Ut804Fields::decode(&m.raw_payload).ok()?;
+                ut804_mode_info(f.mode, f.range)?;
+                let tables = self.model.ut71_tables()?;
+                let table = specs_ut71::table(tables, f.mode, f.coupling(), f.duty())?;
+                let row = specs_ut71::has_rows(f.coupling(), f.count_mode()).then_some(f.range);
+                Some((table, row))
+            }
             // No spec tables transcribed from their manuals yet.
-            Model::Ut71A | Model::Ut71B | Model::Ut71Cde | Model::Vc920 => None,
+            Model::Ut71A | Model::Ut71B | Model::Vc920 => None,
         }
     }
 
@@ -1107,7 +1148,11 @@ impl Protocol for Ut80xProtocol {
         match self.model {
             Model::Ut803 => specs_ut803::ALL.iter().map(|t| t.sheet_table()).collect(),
             Model::Ut804 => specs_ut804::ALL.iter().map(|t| t.sheet_table()).collect(),
-            Model::Ut71A | Model::Ut71B | Model::Ut71Cde | Model::Vc920 => Vec::new(),
+            Model::Ut71Cde => (self.model.ut71_tables().into_iter())
+                .flat_map(|tables| tables.all)
+                .map(|t| t.sheet_table())
+                .collect(),
+            Model::Ut71A | Model::Ut71B | Model::Vc920 => Vec::new(),
         }
     }
 
@@ -3591,6 +3636,296 @@ raw_payload=11"#
             assert!(proto.spec_info(&m).is_none());
             assert!(proto.mode_spec_info(&m).is_none());
         }
+    }
+
+    // --- UT71 and VC9x0 specs ----------------------------------------------
+
+    /// Why a UT71 or VC9x0 reading has no row or no spec, and which readings
+    /// that is.
+    type HandheldNoSpec = (&'static str, fn(&Ut804Fields) -> bool);
+
+    /// What a handheld model's spec coverage is expected to be.
+    struct HandheldSpecs {
+        model: Model,
+        /// Readings with no spec at all, tried before `mode_spec_only`.
+        no_spec: &'static [HandheldNoSpec],
+        /// Readings that take their table's mode data but no row.
+        mode_spec_only: &'static [HandheldNoSpec],
+        /// Rows no reading reaches, as (table, row label, why).
+        unreached: &'static [(&'static str, &'static str, &'static str)],
+    }
+
+    /// The UT71 readings that take their table's mode data but no row, on
+    /// every UT71 entry.
+    const UT71_MODE_SPEC_ONLY: &[HandheldNoSpec] = &[
+        (
+            "AC+DC V and current: the remarks add (1%+35 digits) to the AC table, a sum the manual does not print",
+            |f| f.coupling() == Some(Coupling::AcDc),
+        ),
+        (
+            "the 4000-count display: the manual prints the full display's figures only",
+            |f| f.count_mode() == Some(CountMode::Count4000),
+        ),
+        (
+            "an overload or LO: the packet does not say which display it came from",
+            |f| f.count_mode().is_none(),
+        ),
+    ];
+
+    /// UT71 readings with no table, on every UT71 entry.
+    const UT71_NO_SPEC: &[HandheldNoSpec] = &[
+        ("duty cycle: the frequency table prints none", |f| f.duty()),
+        (
+            "AC or AC+DC mV: no UT71 document has an AC mV function",
+            |f| f.mode == 0x3 && matches!(f.coupling(), Some(Coupling::Ac | Coupling::AcDc)),
+        ),
+    ];
+
+    const UT71CDE_SPECS: HandheldSpecs = HandheldSpecs {
+        model: Model::Ut71Cde,
+        no_spec: UT71_NO_SPEC,
+        mode_spec_only: UT71_MODE_SPEC_ONLY,
+        unreached: &[
+            (
+                "L. Power Measurement (UT71E only)",
+                "VA POWER 2500W",
+                "the VA display is a secondary one, which no packet carries",
+            ),
+            (
+                "L. Power Measurement (UT71E only)",
+                "Cosφ POWER 0 ~ 1",
+                "the cos φ display is a secondary one, which no packet carries",
+            ),
+        ],
+    };
+
+    /// The protocol for handheld `model`.
+    fn handheld_protocol(model: Model) -> Ut80xProtocol {
+        let i = HANDHELDS.iter().position(|&m| m == model).unwrap();
+        handheld_protocols().into_iter().nth(i).unwrap()
+    }
+
+    /// Every mode, range, coupling, sign and AUTO bit `model`'s parser
+    /// accepts without a report, on the full display, on the 4000-count one
+    /// and as an overload, as a packet and its reading.
+    fn handheld_accepted_readings(model: Model) -> Vec<(Vec<u8>, Measurement)> {
+        let digits = [[1, 2, 3, 4, 5], [1, 2, 3, 4, 0xA], [0xA, 0xA, 0, 0xC, 0xA]];
+        let mut readings = Vec::new();
+        for digits in &digits {
+            for mode in 0..=0xF {
+                for range in 0..=0xF {
+                    for acdc in 0..=0x4 {
+                        for status in [0x0, 0x1, 0x4, 0x5] {
+                            let p = ut804_payload(digits, range, mode, acdc, status);
+                            if let (Ok(m), reports) =
+                                crate::protocol::capture_reports(|| parse_ut804_layout(model, &p))
+                                && reports.is_empty()
+                            {
+                                readings.push((p, m));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        readings
+    }
+
+    /// The coupling the parser reads a packet with: none for the UT71D's
+    /// 4-20 mA % packet that keeps AC mA's.
+    fn handheld_coupling(model: Model, f: &Ut804Fields) -> Option<Coupling> {
+        if loop_percent_keeps_ac(model, f.mode, f.acdc) {
+            None
+        } else {
+            f.coupling()
+        }
+    }
+
+    /// Each reading resolves a row, is listed as taking its table's mode data
+    /// only, or is listed as having no spec; the table it gets is on the
+    /// sheet; every row of the sheet is some reading's, but the ones listed
+    /// as unreached, which none is.
+    fn assert_handheld_coverage(case: &HandheldSpecs) {
+        let proto = handheld_protocol(case.model);
+        let sheet = proto.spec_sheet();
+        let lists = [case.no_spec, case.mode_spec_only];
+        let mut rows_reached = std::collections::HashSet::new();
+        let mut listed_reached = std::collections::HashSet::new();
+        for (p, m) in handheld_accepted_readings(case.model) {
+            let f = Ut804Fields::decode(&p).unwrap();
+            // The first entry that names the reading, no-spec entries first.
+            let listed = lists.iter().enumerate().find_map(|(l, list)| {
+                list.iter()
+                    .find(|(_, hit)| hit(&f))
+                    .map(|(why, _)| (l, *why))
+            });
+            let mode_spec = proto.mode_spec_info(&m);
+            if let Some(mode) = mode_spec {
+                assert!(
+                    sheet.iter().any(|t| std::ptr::eq(t.mode, mode)),
+                    "{} {p:02X?}: its table is not on the sheet",
+                    m.mode
+                );
+            }
+            match (proto.spec_row(&m), listed) {
+                (Some(row), None) => {
+                    let spec = proto.spec_info(&m);
+                    assert!(spec.is_some(), "{} {p:02X?}: a row, no spec", m.mode);
+                    if case.model != Model::Vc920 {
+                        assert!(std::ptr::eq(spec.unwrap(), &row.spec));
+                    }
+                    assert!(mode_spec.is_some());
+                    rows_reached.insert(std::ptr::from_ref(&row.spec));
+                }
+                (None, Some((l, why))) => {
+                    assert!(proto.spec_info(&m).is_none(), "{} {p:02X?}: {why}", m.mode);
+                    // The second list keeps the mode data, the first has none.
+                    assert_eq!(mode_spec.is_some(), l == 1, "{} {p:02X?}: {why}", m.mode);
+                    listed_reached.insert(why);
+                }
+                (Some(row), Some((_, why))) => {
+                    panic!("{} {p:02X?}: row {}, yet listed: {why}", m.mode, row.label)
+                }
+                (None, None) => panic!("{} {p:02X?}: no row, and not listed", m.mode),
+            }
+        }
+        for (why, _) in lists.iter().flat_map(|list| list.iter()) {
+            assert!(listed_reached.contains(why), "no reading is {why}");
+        }
+        for table in &sheet {
+            for row in &table.rows {
+                let unreached = case
+                    .unreached
+                    .iter()
+                    .find(|(name, label, _)| (*name, *label) == (table.name, row.label));
+                let reached = rows_reached.contains(&std::ptr::from_ref(row.spec));
+                match unreached {
+                    Some((.., why)) => assert!(!reached, "{} / {}: {why}", table.name, row.label),
+                    None => assert!(reached, "{} / {} is no reading's", table.name, row.label),
+                }
+            }
+        }
+    }
+
+    /// Row labels that name no range: the manuals' continuity and diode
+    /// symbols, and the VC920's diode row.
+    const SYMBOL_LABELS: &[&str] = &["•)))", "▶|", "Diode test"];
+
+    /// A row carries the range label the parser gives the reading.
+    fn assert_handheld_rows_carry_range_labels(model: Model) {
+        let proto = handheld_protocol(model);
+        for (p, m) in handheld_accepted_readings(model) {
+            let Some(row) = proto.spec_row(&m) else {
+                continue;
+            };
+            if m.range_label.is_empty() || SYMBOL_LABELS.contains(&row.label) {
+                continue;
+            }
+            assert_eq!(row.label, m.range_label, "{} {p:02X?}", m.mode);
+        }
+    }
+
+    /// A DC table answers only DC readings, and an AC table AC and AC+DC
+    /// ones; the other tables answer readings with no coupling.
+    fn assert_handheld_tables_match_coupling(model: Model) {
+        let proto = handheld_protocol(model);
+        for (p, m) in handheld_accepted_readings(model) {
+            let Some((table, _)) = proto.spec_table(&m) else {
+                continue;
+            };
+            let coupling = handheld_coupling(model, &Ut804Fields::decode(&p).unwrap());
+            let fits = match table.name {
+                "A. DC Voltage" | "C. DC Current" | "DC / V" | "DC / A" => {
+                    coupling == Some(Coupling::Dc)
+                }
+                "B. AC Voltage (AC+DC measurement is available)"
+                | "D. AC Current (AC+DC measurement is available)"
+                | "AC / V"
+                | "AC / A" => matches!(coupling, Some(Coupling::Ac | Coupling::AcDc)),
+                _ => coupling.is_none(),
+            };
+            assert!(fits, "{} {p:02X?}: {} for {coupling:?}", m.mode, table.name);
+        }
+    }
+
+    /// The resolution a reading is given is in its unit, prefix aside: a row
+    /// of another quantity (continuity for diode, °F for °C) resolves in
+    /// another unit.
+    fn assert_handheld_rows_resolve_in_the_readings_unit(model: Model) {
+        use crate::transform::si_prefix;
+        let proto = handheld_protocol(model);
+        for (p, m) in handheld_accepted_readings(model) {
+            let Some(spec) = proto.spec_info(&m).filter(|s| !s.resolution.is_empty()) else {
+                continue;
+            };
+            let unit = spec
+                .resolution
+                .trim_start_matches(|c: char| c.is_ascii_digit() || c == '.');
+            assert_eq!(
+                si_prefix(unit).0,
+                si_prefix(&m.unit).0,
+                "{} {p:02X?}: resolves in {}",
+                m.mode,
+                spec.resolution
+            );
+        }
+    }
+
+    #[test]
+    fn ut71cde_every_reading_has_a_spec_or_is_listed() {
+        assert_handheld_coverage(&UT71CDE_SPECS);
+    }
+
+    #[test]
+    fn ut71cde_rows_carry_the_readings_range_label() {
+        assert_handheld_rows_carry_range_labels(Model::Ut71Cde);
+    }
+
+    #[test]
+    fn ut71cde_tables_match_the_readings_coupling() {
+        assert_handheld_tables_match_coupling(Model::Ut71Cde);
+    }
+
+    #[test]
+    fn ut71cde_rows_resolve_in_the_readings_unit() {
+        assert_handheld_rows_resolve_in_the_readings_unit(Model::Ut71Cde);
+    }
+
+    /// The UT71D's DC V on the 4V range (#22, `tests/golden/ut71cde/`): on
+    /// the full display it takes table A's 4V row; with the fifth digit
+    /// blank, the 4000-count display, table A's mode data only.
+    #[test]
+    fn a_ut71_reading_on_the_4000_count_display_takes_no_row() {
+        let full = [
+            0xB0, 0xB0, 0xB0, 0xB0, 0x31, 0x31, 0x31, 0xB0, 0x31, 0x0D, 0x8A,
+        ];
+        let count4000 = [
+            0xB0, 0xB0, 0xB0, 0xB0, 0xBA, 0x31, 0x31, 0xB0, 0x31, 0x0D, 0x8A,
+        ];
+        let proto = Ut80xProtocol::new_ut71cde();
+        let full = proto.parse_payload(&full).unwrap();
+        let count4000 = proto.parse_payload(&count4000).unwrap();
+        assert_eq!(full.range_label, count4000.range_label);
+        assert_eq!(
+            proto.spec_info(&full).map(|s| s.resolution),
+            Some("0.0001V")
+        );
+        assert!(proto.spec_info(&count4000).is_none());
+        let table = |m| proto.spec_table(m).map(|(t, _)| t.name);
+        assert_eq!(table(&count4000), Some("A. DC Voltage"));
+        assert_eq!(table(&full), table(&count4000));
+    }
+
+    /// The UT71E's W position takes table L's power row, the one the packet's
+    /// watts are.
+    #[test]
+    fn ut71e_power_takes_the_power_row() {
+        let p = ut804_payload(&[0, 1, 2, 3, 4], 0, 0xE, 0, 0x0);
+        let m = parse_ut804_layout(Model::Ut71Cde, &p).unwrap();
+        let proto = Ut80xProtocol::new_ut71cde();
+        let row = proto.spec_row(&m).unwrap();
+        assert_eq!(row.label, "POWER 2500W");
+        assert_eq!(row.spec.resolution, "0.1W");
     }
 
     // --- Detection (crate::detect) ---------------------------------------

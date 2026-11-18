@@ -110,3 +110,21 @@ impl ModeSpecs {
         }
     }
 }
+
+/// Panic unless `tables`, in order, are the tables `pins` names, each by
+/// its name, its first row's label and that row's first accuracy figure
+/// (`None` where the row prints none). The figures are read from the
+/// verified transcription, so a table swapped for another's, or for another
+/// model's column, fails.
+#[cfg(test)]
+pub(crate) fn assert_first_figures(tables: &[&ModeSpecs], pins: &[(&str, &str, Option<&str>)]) {
+    let got: Vec<_> = tables
+        .iter()
+        .map(|t| {
+            let row = &t.ranges[0];
+            let figure = row.spec.accuracy.first().map(|b| b.accuracy);
+            (t.name, row.label, figure)
+        })
+        .collect();
+    assert_eq!(got, pins);
+}
