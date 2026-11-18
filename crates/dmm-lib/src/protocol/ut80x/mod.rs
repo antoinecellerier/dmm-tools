@@ -527,6 +527,13 @@ fn ut804_acdc_documented(mode: u8, acdc: u8) -> bool {
     acdc <= 3 && (acdc == 0 || ut804_default_dc(mode))
 }
 
+/// The 4-20 mA % packet a UT71D sends on turning from AC mA, its coupling
+/// still AC (#22, ut71 spec §3.3): seen, so not reported, and read with no
+/// coupling. Only the UT71C/D/E entry has sent it.
+fn loop_percent_keeps_ac(model: Model, mode: u8, acdc: u8) -> bool {
+    model == Model::Ut71Cde && (mode, acdc) == (0xF, 1)
+}
+
 /// A UT803 packet's positions (spec §2.1), read here once for everything
 /// that decodes a UT803 payload.
 struct Ut803Fields {
@@ -704,11 +711,12 @@ fn parse_ut804_layout(model: Model, packet: &[u8]) -> Result<Measurement> {
     if f.status & 0x8 != 0 || f.status & 0x3 == 0x3 {
         unrecognised.report("status bits");
     }
-    if !ut804_acdc_documented(f.mode, f.acdc) {
+    let stale_ac = loop_percent_keeps_ac(model, f.mode, f.acdc);
+    if !stale_ac && !ut804_acdc_documented(f.mode, f.acdc) {
         unrecognised.report("ac/dc nibble");
     }
 
-    let coupling = f.coupling();
+    let coupling = if stale_ac { None } else { f.coupling() };
     let info = ut804_mode_info(f.mode, f.range);
     let (mode_name, unit, dp_pos) = mode_info_or_unknown(
         unrecognised,
@@ -2869,6 +2877,27 @@ raw_payload=11"#
             let (_, reports) = parse_reported(parse_measurement_ut804, &p);
             assert!(reports.is_empty(), "mode {mode:#x}: {reports:?}");
         }
+    }
+
+    /// #22's UT71D, turning from AC mA to the 4-20 mA %: one LO packet still
+    /// carrying AC. It reads as the mode it names, and reports nothing; from
+    /// a model no one has seen send it, it is still reported.
+    #[test]
+    fn the_loop_percent_after_ac_ma_is_not_reported() {
+        let p = crate::protocol::test_support::hex("BA BC B0 BA BA B0 BF 31 B0 0D 8A");
+        let (m, reports) = parse_reported(|p| parse_ut804_layout(Model::Ut71Cde, p), &p);
+        let m = m.unwrap();
+        assert_eq!(m.mode, "mA%");
+        assert!(
+            matches!(m.value, MeasuredValue::NoReading("LO")),
+            "{:?}",
+            m.value
+        );
+        assert!(!m.flags.dc);
+        assert!(reports.is_empty(), "{reports:?}");
+
+        let (_, reports) = parse_reported(parse_measurement_ut804, &p);
+        assert_eq!(reports.len(), 1, "{reports:?}");
     }
 
     #[test]

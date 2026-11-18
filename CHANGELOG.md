@@ -74,6 +74,7 @@
 - **Markers start at 1 when dmm-gui connects after an import** — the first one took the number after the imported file's last marker.
 - **A capture plan's `at_least` is always in the mode's base unit** — lead noise shown in mV passed a floor of 1.
 - **A cable pulled at `capture`'s meter check asks for no report** — it saved a no-response report and asked you to attach it.
+- **Turning a UT71C/D/E from AC mA to 4-20 mA % asks for no report** — dmm-cli took it for unknown meter data.
 - **`dmm-cli debug` stops when the link to the meter is lost** — it filled the terminal with errors until Ctrl+C.
 - **`dmm-cli read` and `debug` piped into `head` end cleanly** — `read` ended with "Broken pipe" and no summary, and `debug` crashed.
 - **The mock ignores HOLD, REL, MIN/MAX and Peak where a UT61E+ does**
