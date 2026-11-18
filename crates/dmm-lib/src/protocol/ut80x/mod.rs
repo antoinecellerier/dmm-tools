@@ -62,6 +62,7 @@ mod capture;
 pub(crate) mod devices;
 mod specs_ut71;
 mod specs_ut71a;
+mod specs_ut71b;
 mod specs_ut71cde;
 mod specs_ut803;
 mod specs_ut804;
@@ -111,8 +112,9 @@ impl Model {
     fn ut71_tables(self) -> Option<&'static specs_ut71::Ut71Tables> {
         match self {
             Model::Ut71A => Some(&specs_ut71a::TABLES),
+            Model::Ut71B => Some(&specs_ut71b::TABLES),
             Model::Ut71Cde => Some(&specs_ut71cde::TABLES),
-            Model::Ut803 | Model::Ut804 | Model::Ut71B | Model::Vc920 => None,
+            Model::Ut803 | Model::Ut804 | Model::Vc920 => None,
         }
     }
 
@@ -1048,7 +1050,7 @@ impl Ut80xProtocol {
                 let row = specs_ut804::has_rows(f.coupling()).then_some(f.range);
                 Some((table, row))
             }
-            Model::Ut71A | Model::Ut71Cde => {
+            Model::Ut71A | Model::Ut71B | Model::Ut71Cde => {
                 let f = Ut804Fields::decode(&m.raw_payload).ok()?;
                 ut804_mode_info(f.mode, f.range)?;
                 let tables = self.model.ut71_tables()?;
@@ -1057,7 +1059,7 @@ impl Ut80xProtocol {
                 Some((table, row))
             }
             // No spec tables transcribed from their manuals yet.
-            Model::Ut71B | Model::Vc920 => None,
+            Model::Vc920 => None,
         }
     }
 
@@ -1150,11 +1152,11 @@ impl Protocol for Ut80xProtocol {
         match self.model {
             Model::Ut803 => specs_ut803::ALL.iter().map(|t| t.sheet_table()).collect(),
             Model::Ut804 => specs_ut804::ALL.iter().map(|t| t.sheet_table()).collect(),
-            Model::Ut71A | Model::Ut71Cde => (self.model.ut71_tables().into_iter())
+            Model::Ut71A | Model::Ut71B | Model::Ut71Cde => (self.model.ut71_tables().into_iter())
                 .flat_map(|tables| tables.all)
                 .map(|t| t.sheet_table())
                 .collect(),
-            Model::Ut71B | Model::Vc920 => Vec::new(),
+            Model::Vc920 => Vec::new(),
         }
     }
 
@@ -3715,6 +3717,17 @@ raw_payload=11"#
         unreached: &[],
     };
 
+    const UT71B_SPECS: HandheldSpecs = HandheldSpecs {
+        model: Model::Ut71B,
+        no_spec: &[
+            UT71_NO_SPEC[0],
+            UT71_NO_SPEC[1],
+            ("power: table L is the UT71E's", |f| f.mode == 0xE),
+        ],
+        mode_spec_only: UT71_MODE_SPEC_ONLY,
+        unreached: &[],
+    };
+
     /// The protocol for handheld `model`.
     fn handheld_protocol(model: Model) -> Ut80xProtocol {
         let i = HANDHELDS.iter().position(|&m| m == model).unwrap();
@@ -3890,34 +3903,40 @@ raw_payload=11"#
     #[test]
     fn ut71_every_reading_has_a_spec_or_is_listed() {
         assert_handheld_coverage(&UT71A_SPECS);
+        assert_handheld_coverage(&UT71B_SPECS);
         assert_handheld_coverage(&UT71CDE_SPECS);
     }
 
     #[test]
     fn ut71_rows_carry_the_readings_range_label() {
         assert_handheld_rows_carry_range_labels(Model::Ut71A);
+        assert_handheld_rows_carry_range_labels(Model::Ut71B);
         assert_handheld_rows_carry_range_labels(Model::Ut71Cde);
     }
 
     #[test]
     fn ut71_tables_match_the_readings_coupling() {
         assert_handheld_tables_match_coupling(Model::Ut71A);
+        assert_handheld_tables_match_coupling(Model::Ut71B);
         assert_handheld_tables_match_coupling(Model::Ut71Cde);
     }
 
     #[test]
     fn ut71_rows_resolve_in_the_readings_unit() {
         assert_handheld_rows_resolve_in_the_readings_unit(Model::Ut71A);
+        assert_handheld_rows_resolve_in_the_readings_unit(Model::Ut71B);
         assert_handheld_rows_resolve_in_the_readings_unit(Model::Ut71Cde);
     }
 
     /// The same bytes take each model's own column: DC V range 1 is the
-    /// UT71A's 2V row and the UT71C/D/E's 4V row, at their own accuracies.
+    /// UT71A's and UT71B's 2V row and the UT71C/D/E's 4V row, at their own
+    /// accuracies.
     #[test]
     fn each_ut71_reads_its_own_column() {
         let p = ut804_payload(&[0, 1, 2, 3, 4], 1, 0x1, 0, 0x1);
         for (model, label, accuracy) in [
             (Model::Ut71A, "2V", "0.1%+8"),
+            (Model::Ut71B, "2V", "0.08%+5"),
             (Model::Ut71Cde, "4V", "0.05%+5"),
         ] {
             let m = parse_ut804_layout(model, &p).unwrap();

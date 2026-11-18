@@ -990,9 +990,11 @@ mod tests {
                 .mode_spec
                 .is_some_and(|ms| ms.input_impedance.is_some())
         );
-        // The same bytes on a UT71A: its 2V row.
-        let ut71a = replayed("ut71a", "B0 B0 B0 B0 31 31 31 B0 31 0D 8A");
-        assert_eq!(ut71a.spec.map(|s| s.accuracy[0].accuracy), Some("0.1%+8"));
+        // The same bytes on a UT71A and a UT71B: each one's 2V row.
+        for (id, accuracy) in [("ut71a", "0.1%+8"), ("ut71b", "0.08%+5")] {
+            let m = replayed(id, "B0 B0 B0 B0 31 31 31 B0 31 0D 8A");
+            assert_eq!(m.spec.map(|s| s.accuracy[0].accuracy), Some(accuracy));
+        }
     }
 
     #[test]

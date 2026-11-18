@@ -17,7 +17,7 @@
 - **An imported file that starts past an alarm limit says so** — as a meter's first reading does.
 - **Statistics is one table shaped to the panel, the cursors' figures included** — a narrow window put the session's ∫ after the visible window's line.
 - **The Specifications panel covers the OWON CMS061 and CMS101** — the UNI-T UT217A and UT217B too.
-- **The Specifications panel covers the UNI-T UT71A, UT71C, UT71D and UT71E**
+- **The Specifications panel covers the UNI-T UT71**
 - **The ⊞ button steps through big meter and minimal mode** — minimal mode needed `Ctrl+B`.
 - **A Mark button marks the reading on screen** — only the `N` key and the plot's right-click menu did.
 - **Graph and histogram readouts work under a finger** — the histogram showed none, and the hand covered the graph's.
