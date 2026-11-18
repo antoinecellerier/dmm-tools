@@ -342,10 +342,16 @@ pub(super) fn steps(model: Model) -> Vec<CaptureStep> {
         // asks for SEND after it. Each step waits for Enter: every press,
         // and the previous step's EXIT and SEND, leaves a state the meter
         // reports, and the watcher would capture the first of them. The
-        // handhelds get a step of their own to return to AUTO.
+        // handhelds get a step of their own to return to AUTO. The step
+        // before leaves the dial on a current position, so this one turns
+        // it first: #22's reporter pressed RANGE on A, which has one range.
         on(
             BUTTONS,
-            CaptureStep::basic("manual_range", "DC V: press RANGE, then Enter.").wait_for_enter(),
+            CaptureStep::basic(
+                "manual_range",
+                "Set meter to DC V, then press RANGE, then Enter.",
+            )
+            .wait_for_enter(),
         ),
         on(
             BUTTONS,
