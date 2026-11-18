@@ -111,7 +111,7 @@ Link `CONTRIBUTING.md` for generic instructions; ask only for what the thread la
 - OS, version and architecture; prebuilt archive (which one) or source build.
 - Cable and VID:PID — CP2110 `10C4:EA80`, CH9329 `1A86:E429`, CH9325 `1A86:E008` (RX-only, no `command` support), BU-86X `0820:0001`.
 - Cable bundled or bought separately, and where/when — this is how production changes (CP2110 → CH9329 on the UT181A) get tracked.
-- Per-step pass/fail with error output pasted; `capture-<device>.yaml` attached (auto-saves per step, resumable); an LCD photo beside the tool's output for any display-vs-parsed question. GitHub rejects `.yaml` uploads, so ask for files renamed to `.txt`.
+- Per-step pass/fail with error output pasted; `capture-<device>.yaml` attached (auto-saves per step, resumable); an LCD photo beside the tool's output for any display-vs-parsed question. GitHub doesn't always accept a `.yaml` upload: ask for the file as saved, and for it renamed to `.txt` if the upload fails.
 - Match the artefact to the symptom: a `capture` report for readings, parsing or a mode; a `.replay` file — GUI Export… → Replay…, or `dmm-cli read --format replay -o bench.replay` — for behaviour over time (graph, triggers, gaps, a button sequence), which replays their session on our bench.
 - Name the highest-value captures when they matter: negative reading, overload, one frame per dial position, MIN/MAX/REL toggled in turn.
 - An edge case the shipped steps don't cover: paste a plan YAML in a `<details>` block and ask for `./dmm-cli --device <id> capture --plan edge.yaml` — steps are `id` + `instruction` plus optional `command`, `samples`, `needs` and `expect` (see `docs/cli-reference.md`), and the report attaches like any other.
