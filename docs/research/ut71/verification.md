@@ -68,8 +68,8 @@ every function it has (#22); no UT71A/B/C/E or VC9x0 has been read.
 
 ## Spec data
 
-- Spec tables for `ut71a`, `ut71b` and `vc920`, from the UT71 and Voltcraft
-  manuals. (#22, #23)
+- Spec tables for `ut71b` and `vc920`, from the UT71 and Voltcraft manuals.
+  (#22, #23)
 
 ## Detection
 

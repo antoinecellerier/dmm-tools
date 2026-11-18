@@ -426,9 +426,9 @@ notes in the full panel. When no spec data is available (unsupported device or
 unrecognized mode), only the Manual link is shown (if configured).
 
 **Coverage:** UT61E+, UT61B+, UT61D+, UT161B/D/E, UT181A, UT803, UT804,
-UT71C/D/E, ZT-5B (ANENG V05B), the Brymen BM820s and BM520s series (Minipa
-ET-2517A, ET-2615A), the OWON CMS061 and CMS101 (UNI-T UT217A, UT217B), and
-Mock (the UT61E+'s figures; none in its temperature modes).
+UT71A, UT71C/D/E, ZT-5B (ANENG V05B), the Brymen BM820s and BM520s series
+(Minipa ET-2517A, ET-2615A), the OWON CMS061 and CMS101 (UNI-T UT217A,
+UT217B), and Mock (the UT61E+'s figures; none in its temperature modes).
 
 ## Alarm
 

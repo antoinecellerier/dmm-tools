@@ -978,7 +978,7 @@ mod tests {
     /// A UT71's row needs the display's count mode, which only the replayed
     /// payload carries.
     #[test]
-    fn a_replayed_ut71cde_reading_carries_its_specs() {
+    fn a_replayed_ut71_reading_carries_its_specs() {
         // DC V on the 4V range, from `tests/golden/ut71cde/dcv_4v.yaml`, and
         // on the 4000-count display, from `dcv_4000_count.yaml`.
         let full = replayed("ut71cde", "B0 B0 B0 B0 31 31 31 B0 31 0D 8A");
@@ -990,6 +990,9 @@ mod tests {
                 .mode_spec
                 .is_some_and(|ms| ms.input_impedance.is_some())
         );
+        // The same bytes on a UT71A: its 2V row.
+        let ut71a = replayed("ut71a", "B0 B0 B0 B0 31 31 31 B0 31 0D 8A");
+        assert_eq!(ut71a.spec.map(|s| s.accuracy[0].accuracy), Some("0.1%+8"));
     }
 
     #[test]
