@@ -1,0 +1,9 @@
+# Resistance through the body, 4MΩ range: 2.7015 MΩ, matched on the LCD.
+# Captured 2026-11-18 from a UT71D over CH9325 (issue #22, @wanthalf, 0.10.0 61db398 report, step ohm_body).
+raw_hex: "32 37 B0 31 B5 B5 34 B0 31 0D 8A"
+mode: "Ω"
+value: "2.7015"
+unit: "MΩ"
+range_label: "4MΩ"
+flags:
+  auto_range: true

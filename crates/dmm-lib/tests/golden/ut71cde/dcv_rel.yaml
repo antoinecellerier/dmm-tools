@@ -1,0 +1,9 @@
+# DC V with REL on - the relative reading, AUTO off: -0.0020 V, matched on the LCD.
+# Captured 2026-11-18 from a UT71D over CH9325 (issue #22, @wanthalf, 0.10.0 61db398 report, step rel).
+raw_hex: "B0 B0 B0 32 B0 31 31 B0 B6 0D 8A"
+mode: "DC V"
+value: "-0.002"
+unit: "V"
+range_label: "4V"
+flags:
+  dc: true

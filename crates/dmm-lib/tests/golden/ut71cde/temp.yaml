@@ -1,0 +1,8 @@
+# Temperature °C: 0026.4 °C, matched on the LCD.
+# Captured 2026-11-18 from a UT71D over CH9325 (issue #22, @wanthalf, 0.10.0 61db398 report, step temp).
+raw_hex: "B0 B0 32 B6 34 B0 B6 B0 B0 0D 8A"
+mode: "Temperature"
+value: "26.4"
+unit: "°C"
+range_label: ""
+flags: {}

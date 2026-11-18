@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Devices
+
+- **The UNI-T UT71D is partly verified** — thanks to [@wanthalf](https://github.com/wanthalf) for the capture ([#22](https://github.com/antoinecellerier/dmm-tools/issues/22)).
+
 ### GUI
 
 - **dmm-gui runs on Android, as an experimental APK** — over Bluetooth and USB cables; `docs/setup.md` says how to install it.

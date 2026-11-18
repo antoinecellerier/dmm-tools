@@ -70,6 +70,11 @@ source carry URLs, sizes and MD5s.
    (spec §4.3). The 2012 V3.00 app (`vc920-940-960-software-123296DL01.zip`)
    was not read: its InstallShield stub yields no MSI without running it.
 
+9. **A UT71D capture report** — @wanthalf's `dmm-cli capture` run of
+   2026-11-18 (#22; v0.10.0, CH9325 cable, every reading checked against
+   the LCD), compared field by field with the UT804 reports of #16. Tagged
+   [HARDWARE]. `references/ut71/issue22-wanthalf-ut71d/`.
+
 ### Avoided (clean-room boundary)
 
 - **No community source was read for this analysis:** not sigrok's
@@ -183,19 +188,20 @@ and status logic and the duty override are the UT804's (spec §2, §3).
   HIGH — the UT71 sheet, the Conrad sheets, both apps' receive paths, and
   the same layout seen on a UT804.
 - **Field positions, function codes 1-D and F, range-to-point tables:**
-  HIGH — sheet, apps and manuals agree; the same codes, D excepted, and
-  points came from a real UT804.
+  HIGH — sheet, apps and manuals agree, and a UT71D sent every code its
+  dial reaches, matching the LCD.
 - **Code E = power:** MEDIUM — app unit and the UT71E/VC940 dial; no
   packet seen.
 - **UT71A/B full scales:** MEDIUM — manual and app chart scales; no
   UT71A/B packet seen, and the sheet gives only the 40000-count figures.
-- **Line format, high nibble, bit-7 parity:** LOW — the sheets contradict
-  each other; the apps ignore all three; only a UT804 has been measured.
-- **Status byte:** MEDIUM — sign in bit 2 and AUTO in bit 0 agree across
-  the UT71 sheet, the apps and the UT804; bit 3 unseen, Manual seen on
-  the UT804 only.
-- **Coupling on DC readings, 10 A range code, AC V range 4's full scale:**
-  LOW — sources disagree or are silent; hardware decides.
+- **Line format, high nibble, bit-7 parity:** HIGH — 7O1 on a UT71D, as
+  on the UT804.
+- **Status byte:** HIGH — sign in bit 2, AUTO and Manual in bits 1:0 and
+  bit 3 unset, on a UT71D.
+- **Coupling on DC readings, 10 A range code:** HIGH — 0 and 1 on a
+  UT71D, as on the UT804.
+- **AC V range 4's full scale:** LOW — sources disagree; the code was seen
+  on a UT71D, its full scale not.
 - **Voltcraft correspondence:** MEDIUM — feature matching only; no
   document states it.
 

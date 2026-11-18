@@ -964,8 +964,11 @@ impl Ut80xProtocol {
         Self::new(Model::Ut71Ab, Stability::Experimental, 22)
     }
 
+    /// A UT71D has run every function it has (issue #22, 2026-11-18); the
+    /// UT71E's power position, HOLD, RANGE and MAX MIN on DC V and a shorted
+    /// Ω reading are unrun, so PartlyVerified.
     pub(crate) fn new_ut71cde() -> Self {
-        Self::new(Model::Ut71Cde, Stability::Experimental, 22)
+        Self::new(Model::Ut71Cde, Stability::PartlyVerified, 22)
     }
 
     pub(crate) fn new_vc920() -> Self {
@@ -1471,8 +1474,9 @@ mod tests {
 
     /// The UT71 and VC9x0 walk their own dials: the gate, the UT804's list
     /// reworded for their blue and yellow buttons, W and °F, and a step back
-    /// to AUTO after MAX MIN, which works on a manual range only. Nobody has
-    /// run one, so nothing is verified.
+    /// to AUTO after MAX MIN, which works on a manual range only. Issue
+    /// #22's UT71D confirmed all but six UT71C/D/E steps; no UT71A/B or
+    /// VC9x0 has run.
     #[test]
     fn the_handhelds_walk_their_own_list() {
         let expected = [
@@ -1513,7 +1517,23 @@ mod tests {
             let steps = proto.capture_steps();
             let ids: Vec<&str> = steps.iter().map(|s| s.id).collect();
             assert_eq!(ids, expected, "{name}");
-            assert!(steps.iter().all(|s| !s.verified), "{name}");
+            let open: Vec<&str> = steps.iter().filter(|s| !s.verified).map(|s| s.id).collect();
+            if name == "ut71cde" {
+                assert_eq!(
+                    open,
+                    [
+                        "ohm_short",
+                        "power",
+                        "manual_range",
+                        "max_min",
+                        "auto_range",
+                        "hold"
+                    ],
+                    "{name}"
+                );
+            } else {
+                assert_eq!(open, expected, "{name}");
+            }
             let waits: Vec<&str> = steps
                 .iter()
                 .filter(|s| s.wait_for_enter)

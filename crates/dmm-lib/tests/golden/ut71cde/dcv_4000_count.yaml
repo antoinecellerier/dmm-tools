@@ -1,0 +1,10 @@
+# DC V at 4000 counts, the blue key held at power-on - fifth digit blank: 0.000 V, matched on the LCD.
+# Captured 2026-11-18 from a UT71D over CH9325 (issue #22, @wanthalf, 0.10.0 61db398 report, step fast_mode).
+raw_hex: "B0 B0 B0 B0 BA 31 31 B0 31 0D 8A"
+mode: "DC V"
+value: "0"
+unit: "V"
+range_label: "4V"
+flags:
+  auto_range: true
+  dc: true

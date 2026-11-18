@@ -1,0 +1,9 @@
+# Resistance overload on open leads, 40MΩ range: .0L MΩ, matched on the LCD.
+# Captured 2026-11-18 from a UT71D over CH9325 (issue #22, @wanthalf, 0.10.0 61db398 report, step ohm_ol).
+raw_hex: "BA BA B0 BC BA B6 34 B0 31 0D 8A"
+mode: "Ω"
+value: "OL"
+unit: "MΩ"
+range_label: "40MΩ"
+flags:
+  auto_range: true

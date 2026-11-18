@@ -108,7 +108,8 @@ pub(crate) static UT71CDE: SelectableDevice = SelectableDevice {
     fingerprint: Some(&FINGERPRINT),
     manual_url: Some("https://meters.uni-trend.com/product/ut71-series/"),
     links: LINKS,
-    detection_verified: &[],
+    // Found as a UT804 after a restart, as the shared packet allows (#22).
+    detection_verified: &[ch9325::NAME],
     bluetooth_names: &[],
 };
 

@@ -56,15 +56,34 @@ pub(super) fn steps(model: Model) -> Vec<CaptureStep> {
     // VC920/VC960 share it with; a UT71E or VC940 turns ahead to its
     // °C/°F position for Hz and back. W sits between Ω and capacitance,
     // as on those two dials. Issue #16's reporter walked every UT804 step
-    // by 2026-09-19; no other model has answered.
+    // by 2026-09-19; issue #22's UT71D every UT71C/D/E step but those
+    // `UT71CDE_OPEN` names, on 2026-11-18.
+    const UT71CDE_OPEN: &[&str] = &[
+        // No W position on a UT71D.
+        "power",
+        // The tips never touched: 1.88 MΩ on the LCD.
+        "ohm_short",
+        // Taken on the A position, which has one range, not on DC V; the
+        // way back to AUTO from them stays with them.
+        "manual_range",
+        "max_min",
+        "auto_range",
+        // REL was still on when the output stopped: HOLD or EXIT.
+        "hold",
+    ];
     const ALL: &[Model] = &[Ut803, Ut804, Ut71Ab, Ut71Cde, Vc920];
     const BENCH: &[Model] = &[Ut803, Ut804];
     const HANDHELD: &[Model] = &[Ut71Ab, Ut71Cde, Vc920];
     const BUTTONS: &[Model] = &[Ut804, Ut71Ab, Ut71Cde, Vc920];
     let on = |models: &[Model], step: CaptureStep| {
-        models
-            .contains(&model)
-            .then(|| step.verified_if(model == Ut804))
+        models.contains(&model).then(|| {
+            let verified = match model {
+                Ut804 => true,
+                Ut71Cde => !UT71CDE_OPEN.contains(&step.id),
+                Ut803 | Ut71Ab | Vc920 => false,
+            };
+            step.verified_if(verified)
+        })
     };
 
     [

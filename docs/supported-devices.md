@@ -26,7 +26,7 @@ backlog](verification-backlog.md).
 |---|---|---|---|---|---|
 | UT-D09 | CP2110 | `10C4:EA80` | both ways | UT61+/UT161, UT171, UT8802/UT8803, Voltcraft VC-880/VC650BT/VC-890, older UT181A units | UT61E+ |
 | UT-D09 | CH9329 | `1A86:E429` | both ways | UT181A, UT171, UT243 per [UNI-T's page](https://meters.uni-trend.com/product/ut-d-series-2/) | UT181A (two units, [#5](https://github.com/antoinecellerier/dmm-tools/issues/5)), UT61B+ ([#19](https://github.com/antoinecellerier/dmm-tools/issues/19)), UT161E ([#7](https://github.com/antoinecellerier/dmm-tools/issues/7)) |
-| UT-D04 | CH9325 / HE2325U | `1A86:E008` | meter to PC (these meters take no commands) | UT803, UT804, and the UT71A–E per [UNI-T's accessory page](https://meters.uni-trend.com.cn/content/4381.html) | UT804 on Linux and Windows ([#16](https://github.com/antoinecellerier/dmm-tools/issues/16)) |
+| UT-D04 | CH9325 / HE2325U | `1A86:E008` | meter to PC (these meters take no commands) | UT803, UT804, and the UT71A–E per [UNI-T's accessory page](https://meters.uni-trend.com.cn/content/4381.html) | UT804 on Linux and Windows ([#16](https://github.com/antoinecellerier/dmm-tools/issues/16)), UT71D on Linux ([#22](https://github.com/antoinecellerier/dmm-tools/issues/22)) |
 | BU-86X kit (BC-86X cable) | — | `0820:0001` | both ways | Brymen BM869s, BM867s, BM829s, BM827s, BM822s, BM821s, BM525s, BM521s per Brymen's manuals; Minipa ET-2517A and ET-2615A per Minipa's manual | BM827s (Minipa ET-2517A) and BM525s (Minipa ET-2615A) on Windows ([#35](https://github.com/antoinecellerier/dmm-tools/issues/35), [#36](https://github.com/antoinecellerier/dmm-tools/issues/36)) |
 | UT-D02 | RS232 level converter | — | both ways | serial port, not USB; not supported | — |
 | UT-D07B | Bluetooth LE | — | both ways | UT61+/UT161, UT171, UT181 series per [UNI-T's page](https://meters.uni-trend.com/product/ut-d-series/) | UT61E+ ([#25](https://github.com/antoinecellerier/dmm-tools/issues/25)) |
@@ -107,12 +107,16 @@ turns it off.
 |---|---|---|---|
 | UT71A | 20000 | 🧪 Experimental ([#22](https://github.com/antoinecellerier/dmm-tools/issues/22)) | no temperature or 4-20 mA %; SEND key |
 | UT71B | 20000 | 🧪 Experimental ([#22](https://github.com/antoinecellerier/dmm-tools/issues/22)) | adds °C/°F and 4-20 mA %; also sold as [Tenma 72-7730A](https://www.farnell.com/datasheets/1653479.pdf) |
-| UT71C / UT71D | 40000 | 🧪 Experimental ([#22](https://github.com/antoinecellerier/dmm-tools/issues/22)) | UT71D also sold as [Tenma 72-7732A](https://www.farnell.com/datasheets/1653479.pdf) |
+| UT71C | 40000 | 🧪 Experimental ([#22](https://github.com/antoinecellerier/dmm-tools/issues/22)) | |
+| UT71D | 40000 | 🟡 Partly verified ([#22](https://github.com/antoinecellerier/dmm-tools/issues/22)) | 9999 stored readings; also sold as [Tenma 72-7732A](https://www.farnell.com/datasheets/1653479.pdf) |
 | UT71E | 40000 | 🧪 Experimental ([#22](https://github.com/antoinecellerier/dmm-tools/issues/22)) | adds power (W); one V≂ position |
 | VC920 / VC960 | 40000 | 🧪 Experimental ([#23](https://github.com/antoinecellerier/dmm-tools/issues/23)) | resistance 4000 counts; AC V to 750 V |
 | VC940 | 40000 | 🧪 Experimental ([#23](https://github.com/antoinecellerier/dmm-tools/issues/23)) | as VC920, adds power (W) |
 
-None has been run on a meter yet
+A reporter's UT71D has confirmed every function on its dial and
+auto-detection; HOLD, manual ranging, MAX MIN and a shorted-leads
+resistance reading are still to confirm, and no other model has been run
+yet
 ([open checks](research/ut71/verification.md)). Auto-detection
 reports these meters as a UT804: pick UT71A/B, UT71C/D/E or Voltcraft VC920
 as the device once (`--device ut71ab`, `ut71cde` or `vc920`).

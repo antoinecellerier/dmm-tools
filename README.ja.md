@@ -79,7 +79,8 @@ $ dmm-cli read --interval-ms 2500 --count 5
 | UNI-T UT171A/B/C | 🧪 試験的 | 🧪 試験的 (アダプター) | [#4](https://github.com/antoinecellerier/dmm-tools/issues/4) |
 | UNI-T UT60BT | — | 🧪 試験的 (内蔵) | [#26](https://github.com/antoinecellerier/dmm-tools/issues/26) |
 | UNI-T UT202BT | — | 🧪 試験的 (内蔵) | [#27](https://github.com/antoinecellerier/dmm-tools/issues/27) |
-| UNI-T UT71A/B, UT71C/D/E | 🧪 試験的 | 🧪 試験的 (アダプター) | [#22](https://github.com/antoinecellerier/dmm-tools/issues/22) |
+| UNI-T UT71D | 🟡 一部検証済み | 🧪 試験的 (アダプター) | [#22](https://github.com/antoinecellerier/dmm-tools/issues/22) |
+| UNI-T UT71A/B, UT71C/E | 🧪 試験的 | 🧪 試験的 (アダプター) | [#22](https://github.com/antoinecellerier/dmm-tools/issues/22) |
 | UNI-T UT8802, UT8802N | 🧪 試験的 | — | [#12](https://github.com/antoinecellerier/dmm-tools/issues/12) |
 | UNI-T UT8803, UT8803E | 🧪 試験的 | — | [#3](https://github.com/antoinecellerier/dmm-tools/issues/3) |
 | OWON CMS061 (UNI-T UT217A) | — | ✅ 検証済み (内蔵) | [#45](https://github.com/antoinecellerier/dmm-tools/issues/45) |

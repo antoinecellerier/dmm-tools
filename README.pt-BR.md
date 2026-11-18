@@ -79,7 +79,8 @@ $ dmm-cli read --interval-ms 2500 --count 5
 | UNI-T UT171A/B/C | 🧪 Experimental | 🧪 Experimental (adaptador) | [#4](https://github.com/antoinecellerier/dmm-tools/issues/4) |
 | UNI-T UT60BT | — | 🧪 Experimental (integrado) | [#26](https://github.com/antoinecellerier/dmm-tools/issues/26) |
 | UNI-T UT202BT | — | 🧪 Experimental (integrado) | [#27](https://github.com/antoinecellerier/dmm-tools/issues/27) |
-| UNI-T UT71A/B, UT71C/D/E | 🧪 Experimental | 🧪 Experimental (adaptador) | [#22](https://github.com/antoinecellerier/dmm-tools/issues/22) |
+| UNI-T UT71D | 🟡 Parcialmente verificado | 🧪 Experimental (adaptador) | [#22](https://github.com/antoinecellerier/dmm-tools/issues/22) |
+| UNI-T UT71A/B, UT71C/E | 🧪 Experimental | 🧪 Experimental (adaptador) | [#22](https://github.com/antoinecellerier/dmm-tools/issues/22) |
 | UNI-T UT8802, UT8802N | 🧪 Experimental | — | [#12](https://github.com/antoinecellerier/dmm-tools/issues/12) |
 | UNI-T UT8803, UT8803E | 🧪 Experimental | — | [#3](https://github.com/antoinecellerier/dmm-tools/issues/3) |
 | OWON CMS061 (UNI-T UT217A) | — | ✅ Verificado (integrado) | [#45](https://github.com/antoinecellerier/dmm-tools/issues/45) |

@@ -1,0 +1,8 @@
+# Diode overload: .0L V, matched on the LCD.
+# Captured 2026-11-18 from a UT71D over CH9325 (issue #22, @wanthalf, 0.10.0 61db398 report, step diode).
+raw_hex: "BA BA B0 BC BA B0 3B B0 B0 0D 8A"
+mode: "Diode"
+value: "OL"
+unit: "V"
+range_label: "4V"
+flags: {}

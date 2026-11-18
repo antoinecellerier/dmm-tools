@@ -1,0 +1,10 @@
+# DC mA, 40mA range: 00.000 mA, matched on the LCD.
+# Captured 2026-11-18 from a UT71D over CH9325 (issue #22, @wanthalf, 0.10.0 61db398 report, step dcma).
+raw_hex: "B0 B0 B0 B0 B0 B0 38 B0 31 0D 8A"
+mode: "DC mA"
+value: "0"
+unit: "mA"
+range_label: "40mA"
+flags:
+  auto_range: true
+  dc: true

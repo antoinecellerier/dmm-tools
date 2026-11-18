@@ -1,0 +1,9 @@
+# DC mV: 364.99 mV, matched on the LCD.
+# Captured 2026-11-18 from a UT71D over CH9325 (issue #22, @wanthalf, 0.10.0 61db398 report, step dcmv).
+raw_hex: "B3 B6 34 B9 B9 B0 B3 B0 B0 0D 8A"
+mode: "DC mV"
+value: "364.99"
+unit: "mV"
+range_label: "400mV"
+flags:
+  dc: true

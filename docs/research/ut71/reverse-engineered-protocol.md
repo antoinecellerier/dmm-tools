@@ -39,7 +39,9 @@ Confidence levels:
 - **[DEDUCED]** — logical inferences from available evidence
 - **[UNVERIFIED]** — requires real device testing to confirm
   ([verification.md](verification.md) lists the checks)
-- **[HARDWARE]** — seen on a real meter: none yet for this family
+- **[HARDWARE]** — seen on a real meter: the UT71D of issue #22, reported by
+  @wanthalf over its USB cable (CH9325) at 2400 baud, every reading checked
+  against the LCD. No UT71A/B/C/E or VC9x0 has been read.
 
 Citations: "EN p.N" and "CN p.N" are the UT71 English and Chinese manuals'
 printed pages, "VC09 p.N" the 2009 Voltcraft manual's English printed
@@ -59,7 +61,8 @@ The apps filter on no VID or PID: they list every HID device by product
 string and preselect the last one named `USB to Serial` without a serial
 string; they configure it with the CH9325 feature-report layout of §1.2
 [VENDOR]. Which bridge the cable carries — CH9325 (1A86:E008) or HE2325U
-(04FA:2490) — is [UNVERIFIED].
+(04FA:2490) — was [UNVERIFIED]: a UT71D's cable is a CH9325, `1A86:E008`,
+"QinHeng Electronics HID-based serial adapter" (#22) [HARDWARE].
 
 **Voltcraft.** The supplied cable is an "RS232 optical interface cable"
 to a free COM port; an optical USB adapter is optional (VC09 p.35, p.53;
@@ -77,13 +80,14 @@ PID is named. The VC9x0 interface-software manual has the same
 | Conrad 2005-2006 sheets [VENDOR-DOC] | "8-bit character enable odd verify", 2400 |
 | Conrad 2010 VC960 sheet, UT804 sheet [VENDOR-DOC] | "7-bit character enable odd verify", 2400 |
 | UT71 apps [VENDOR] | COM port opened at 2400 8N1; HID feature report `xx 60 09 00 00 03 00 00 00 00` = 2400 baud, as UT804.exe sends it (UT804 spec §1.2) |
-| A UT804 (UT804 spec §1.2) [HARDWARE, UT804 only] | 7O1: bit 7 of every byte is odd parity |
+| A UT804 (UT804 spec §1.2) [HARDWARE] | 7O1: bit 7 of every byte is odd parity |
+| A UT71D (#22) [HARDWARE] | 7O1, as the UT804: bit 7 is odd parity on all 11,220 bytes of 1020 packets |
 
 The apps read only low nibbles, except that the RS232 handler matches CR
 as the whole byte 0x0D (§2); at 8N1 that rules out even and mark parity
 and admits none or odd (0x0D has three set bits, so its odd-parity bit is
-0) [DEDUCED]. Whether a UT71 sends parity in bit 7, as the UT804 does, is
-[UNVERIFIED]; the sheets disagree among themselves.
+0) [DEDUCED]. A UT71D sends parity in bit 7, as the UT804 does, so LF
+arrives as `8A` [HARDWARE]; the UT71 sheet's "none parity" is wrong for it.
 
 ---
 
@@ -108,8 +112,8 @@ nibble n is byte n−1 here.
 
 **High nibble.** The UT71 sheet leaves it `xxxx` on every data byte; the
 UT804 sheet and all three Conrad sheets fix it at `0011` [VENDOR-DOC].
-The apps never test it (below), so for a UT71 it is [UNVERIFIED]; with
-bit-7 parity (§1.2) it would read `0011` or `1011`.
+The apps never test it (below). A UT71D sends `0011` under the parity bit
+(§1.2), so `3` or `B` [HARDWARE].
 
 **What the apps check** — the same handlers as UT804.exe, instruction for
 instruction (UT804 spec §2.2, §2.3) [VENDOR]:
@@ -157,6 +161,14 @@ app], come from:
 - the Voltcraft VC920/940/960, whose resistance is fixed at 4000 counts
   (VC09 p.46, p.59; VC06 p.18) [KNOWN].
 
+**[HARDWARE]** A UT71D (#22) sent two of these patterns, each matched
+against its LCD: `A A 0 C A`, an overload, on open-lead resistance
+(`.0L MΩ` at 40 MΩ), continuity (`0.L Ω`) and diode (`.0L V`); and
+`A C 0 A A`, LO, on 4-20 mA % with nothing connected (`L0. %`). The UT804
+sends the same bytes in the same states (UT804 spec §3.3). The blue key
+held at power-on blanked the fifth digit: byte 4 = `A`, DC V range code 1,
+`0.000 V`. No `B`, `D`-`F` or HI pattern was sent.
+
 The decimal point is not sent: the function and range codes place it
 (§3.5). The UT71E's power position also shows VA and cos φ on the
 secondary displays (EN p.22, p.45); the apps read no second value, and what,
@@ -189,6 +201,9 @@ p.42) [KNOWN].
 | E | blank | W; after digit 4 | W | UT71E, VC940 |
 | F | `%(4-20mA)` | `mA%`; after digit 3 | mA, blue key | B-E; VC9x0 |
 
+- **[HARDWARE]** A UT71D (#22) sent codes 1-9, A-D and F, each at the dial
+  position and key the table gives; every function it has was swept, and
+  it never sent code 0. Duty cycle came as code C with the sign bit (§3.4).
 - Code 0 (AC mV) is on the sheet only: no UT71 or Voltcraft document has
   an AC mV function (EN p.59-69; VC09 p.58-60), and the app's case for it
   is empty. Every sheet gives it `Range 0: 400mV` and no point; no vendor
@@ -219,8 +234,15 @@ p.42) [KNOWN].
 
 Values 4-9 set nothing; `A`-`F` make the app's integer parse fail. Value 3
 comes from the yellow AC+DC key in AC V and AC A (EN p.20, p.31, p.33;
-VC09 p.44) [KNOWN]. Whether a UT71 sends 0 or 2 on DC readings is
-[UNVERIFIED]; the UT804 sends 0 (UT804 spec §3.5).
+VC09 p.44) [KNOWN]. A UT71D sends 0 on every DC reading (V, mV, µA, mA,
+A), as the UT804 does (UT804 spec §3.5), 1 on AC and 3 on AC+DC V and
+µA [HARDWARE, #22].
+
+**[HARDWARE]** On a change of function a UT71D can send one packet that
+carries the new function code with the old coupling: turning from AC mA to
+4-20 mA % gave one `F` packet with coupling 1, then coupling 0 (#22). The
+UT804 of #16 sent one-packet transients of its own, among them coupling 4
+on DC V.
 
 ### 3.4 Status (Byte 8)
 
@@ -231,17 +253,25 @@ VC09 p.44) [KNOWN]. Whether a UT71 sends 0 or 2 on DC readings is
 | 1:0 | `xx01` AUTO, `xx10` Manual | `x000` OFF, `x001` AUTO, `x010` Manual | `01` shows AUTO; `10`, `00`, `11` show nothing |
 
 The UT71 sheet and the apps agree on the sign in bit 2; the UT804, whose
-sheet puts it in bit 3, also sends it in bit 2 (UT804 spec §3.6). Bit 3
-on a UT71 is [UNVERIFIED]. The app parses this byte as a decimal digit, so
-a value `A`-`F` (bit 3 with bit 1 or 2) would fail; if the app works, the
-meter keeps byte 8 within `0`-`9` [DEDUCED].
+sheet puts it in bit 3, also sends it in bit 2 (UT804 spec §3.6).
+
+**[HARDWARE]** A UT71D (#22), over 1020 packets: bit 3 never set; bit 2 the
+sign; bits 1:0 `01` on auto-ranging functions, `10` once MAX MIN or REL
+turned AUTO off, `00` on functions with one range (mV, °C, °F, A,
+continuity, diode, 4-20 mA %), never `11`; byte 8 stayed within `0`-`6`.
+
+The app parses this byte as a decimal digit, so a value `A`-`F` (bit 3
+with bit 1 or 2) would fail; if the app works, the meter keeps byte 8
+within `0`-`9` [DEDUCED].
 
 Duty cycle: code C with the sign bit set is duty in %, point after
 digit 3 [VENDOR]; Voltcraft's 2005 VC920/960 app has no duty case, and
 shows AUTO for any non-zero bits 1:0 (§4.3). HOLD, REL, MAX MIN, PEAK and low battery have no bit
-the app reads; the manuals do not say whether they change what is sent
-[UNVERIFIED]. On the UT804, HOLD stops the output and REL sends the
-relative reading with Manual set (UT804 spec §3.6, §4.2).
+the app reads; the manuals do not say whether they change what is sent.
+On the UT804, HOLD stops the output and REL sends the relative reading with
+Manual set (UT804 spec §3.6, §4.2). A UT71D does the same on REL, and on
+MAX MIN sends Manual with no other mark [HARDWARE, #22]; HOLD and PEAK
+HOLD are [UNVERIFIED].
 
 ### 3.5 Range Codes and Full Scales (Byte 5)
 
@@ -284,9 +314,14 @@ model; what differs is the full scale a code stands for.
   as 400 and 4000, the µA figures; its AC current table (EN p.64) gives
   40 mA and 400 mA, as the sheet does. The UT804 manual has the same
   misprint (UT804 spec §3.7).
-- **10 A** is range 0 on the sheet; the UT804 sends 1 (UT804 spec §3.7).
-  The point is after digit 2 for any code.
-- The codes a UT71 sends in its 4000-count modes are [UNVERIFIED].
+- **10 A** is range 0 on the sheet; the UT804 sends 1 (UT804 spec §3.7),
+  and so does a UT71D on DC and AC A [HARDWARE, #22]. The point is after
+  digit 2 for any code.
+- **[HARDWARE]** A UT71D (#22) sent these C/D/E codes: AC V 1, AC+DC V 1-4,
+  DC V 1, DC mV 0, Ω 2, 5 and 6, capacitance 1, µA 0 and 1, mA 0 and 1,
+  Hz 0, and 0 on °C, °F, continuity, diode and 4-20 mA %. In the
+  blue-key 4000-count mode DC V kept range code 1 (§3.1); RANGE held at
+  power-on has not been tried.
 
 ### 3.6 Unlisted Functions and Ranges — [VENDOR]
 
@@ -331,7 +366,9 @@ Data output:
   VC09 p.54). The app parses only the 11-byte packet of §2, so what
   carries the time is [UNVERIFIED].
 - The primary display updates 2-3 times/s (EN p.56); the Voltcraft manual
-  gives 3 measurements/s (VC09 p.57).
+  gives 3 measurements/s (VC09 p.57). A UT71D sends a packet every 652-688
+  ms (median 656 ms, the UT804's rate, UT804 spec §4.2), and every 215 ms
+  or so in the blue-key 4000-count mode [HARDWARE, #22].
 - Not stated in any manual: whether HOLD, REL or MAX MIN change what is
   sent.
 
@@ -340,6 +377,12 @@ the count mode (A/B: 20000, limits ±20001; C/D/E: 40000), the A/B chart
 scales of §3.5 and two display details; the receive paths and the parser
 are the same code. Nothing on the wire tells the two families apart
 [DEDUCED]: the user picks the app.
+
+Nor does anything tell a UT71 from a UT804 [HARDWARE]: the UT71D of #22
+and the UT804 of #16, 1020 and 1623 packets, send the same line, the same
+packet rate and, for every function, range, coupling and status both
+reached, the same bytes. A model shows itself only on a function the other
+lacks: code 0 (AC mV) from a UT804, code E (W) from a UT71E or VC940.
 
 ### 4.2 Voltcraft VC920, VC940, VC960
 
@@ -391,10 +434,8 @@ on the blue key, and Conrad's 2006 sheet names code 13 "Duty Cycle"
 
 Wire facts a decoder meets:
 
-- Packets are 11 bytes ending `0D 0A`, data in the low nibbles, no
-  checksum (§2). The UT71 sheet fixes no high nibble; a UT71 may add odd
-  parity in bit 7, as the UT804 does, in which case LF arrives as `8A`
-  (§1.2).
+- Packets are 11 bytes ending CR LF, data in the low nibbles, no
+  checksum (§2). Bit 7 is odd parity, so LF arrives as `8A` (§1.2).
 - The meter sends nothing until SEND is on and needs nothing sent: the
   apps' only output is the CH9325 rate report (§1.2, UT804 spec §4.2).
 - The decimal point is not sent; function and range codes place it, and
@@ -407,14 +448,16 @@ Wire facts a decoder meets:
   overload or LO packet (§3.1).
 - The sign is bit 2 of byte 8; in Hz mode it marks duty cycle (§3.4).
 - Code E carries power in W from a UT71E or VC940 [DEDUCED] (§3.2).
-- The display updates 2-3 times a second (§4.1); whether packets follow
-  it is [UNVERIFIED].
+- Packets come every 656 ms at 40000 counts, every ~215 ms at 4000
+  (§4.1), not at the display's 2-3 updates a second.
+- The first packet after a change of function can carry the previous
+  function's coupling (§3.3).
 
 ---
 
 ## 6. What Needs Hardware Verification
 
-No UT71 or VC9x0 packet has been seen; the open checks are in
+A UT71D has been read (#22); the open checks are in
 [verification.md](verification.md).
 
 ---
@@ -425,13 +468,14 @@ Added after the independent analysis above; see the approach doc for the
 boundary. The sigrok column is libsigrok's `ut71x` parser and its device
 entries (read 2026-09-21, commit below). Nothing in §1-6 was changed
 because of it: every ✗, "new" and open question is for hardware to
-settle.
+settle. A UT71D (#22) has since settled the line, the high nibble and the
+10 A code, and the rows say so.
 
 | Aspect | Our spec | sigrok | Agree? |
 |---|---|---|---|
-| Line | 2400; UT71 sheet 8N1, the other sheets odd parity with 7 or 8 bits; the apps open 8N1; 7O1 seen on a UT804 only (§1.2) | 2400 7O1 (`ut71x.c` header; serial entries `2400/7o1/rts=0/dtr=1`) | ✓ rate; ✗ parity against the UT71 sheet |
+| Line | 2400; UT71 sheet 8N1, the other sheets odd parity with 7 or 8 bits; the apps open 8N1; 7O1 seen on a UT804 and a UT71D (§1.2) | 2400 7O1 (`ut71x.c` header; serial entries `2400/7o1/rts=0/dtr=1`) | ✓, by the UT71D |
 | Framing | 11 bytes, 9 data then CR LF, no checksum; the apps read low nibbles, the RS232 path matches CR as a whole byte (§2) | 11 bytes, valid only if bytes 9-10 are exactly `\r` `\n`; no checksum | ✓ |
-| High nibble, bit 7 | UT71 sheet `xxxx`, UT804 and Conrad sheets `0011`; the apps never test it (§2) | Bytes 0-6 read as ASCII (`0`-`9`, `:`, `<`, `'0'` + code), so `0011`; bit 7 dropped by the 7-bit UART, or masked off from UT-D04 reports (`protocol.c`) | ✓ UT804/Conrad sheets; UT71 open |
+| High nibble, bit 7 | UT71 sheet `xxxx`, UT804 and Conrad sheets `0011`; the apps never test it (§2) | Bytes 0-6 read as ASCII (`0`-`9`, `:`, `<`, `'0'` + code), so `0011`; bit 7 dropped by the 7-bit UART, or masked off from UT-D04 reports (`protocol.c`) | ✓, by the UT71D |
 | Digits, 4000 counts | `0`-`9`; byte 4 = `A` is the blank fifth digit of a 4000-count display (§3.1) | Bytes 0-4 must be digits; byte 4 = `:` is "4000 count mode", value × 10 | ✓ |
 | Overload, LO | Byte 0 = `A`: byte 1 = `C` is LO, anything else an overload; the apps ignore bytes 2-4 (§3.1) | Only `::0<:` (A A 0 C A, over limit) and `:<0::` (A C 0 A A, under limit); other non-digits rejected | ✓ on those two; other byte-0 `A` packets unknown |
 | Functions 1-9, B-D, F | §3.2 | Same meanings; F is loop current in % | ✓ |
@@ -443,7 +487,7 @@ settle.
 | Duty cycle | Hz with the sign bit; point after digit 3 (§3.4) | Hz with the sign bit; point from the Hz range code | ✓ flag; ✗ point except on range code 1 |
 | Range codes, points | One code-to-point table for every model (§3.5) | One exponent table for every model, matching ours for V, mV, Ω, C, °C, °F, µA, mA, diode, Hz, loop % | ✓ |
 | AC V range 4 | Point after digit 4; 1000 V in the UT71 documents, 750 V on the sheet and in the Voltcraft manuals (§3.5) | Exponent −1: point after digit 4; no full scale | ✓ point |
-| 10 A range | Sheet: 0; the UT804 sends 1; the apps put the point after digit 2 for any code (§3.5) | Range 1 only (point after digit 2); calls the Conrad sheets' 0 a typo; range 0 gets no point | ✗ code 0 |
+| 10 A range | Sheet: 0; the UT804 and a UT71D send 1; the apps put the point after digit 2 for any code (§3.5) | Range 1 only (point after digit 2); calls the Conrad sheets' 0 a typo; range 0 gets no point | ✓ code 1, by the UT71D |
 | UT71A/B | 20000 counts; the C/D/E codes and points at half the full scale (§3.5) | UT71A-E share one parser and table | ✓ |
 | Models | UT71A-E; VC920, VC960, VC940 ≈ UT71C, D, E [DEDUCED] (§4) | UT71A-E, UT804, Voltcraft VC-920/940/960, Tenma 72-7730, 72-7732, 72-9380A | ✓; Tenma new |
 | 4000-count Ω | Fixed on the VC9x0 (§3.1) | VC920 and VC940 4000 counts for resistance, the three Tenma 40000 (comment) | ✓; Tenma new |

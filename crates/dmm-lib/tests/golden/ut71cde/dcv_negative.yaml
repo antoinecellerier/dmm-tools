@@ -1,0 +1,10 @@
+# DC V, leads reversed on a battery: -1.2928 V, matched on the LCD.
+# Captured 2026-11-18 from a UT71D over CH9325 (issue #22, @wanthalf, 0.10.0 61db398 report, step dcv_negative).
+raw_hex: "31 32 B9 32 38 31 31 B0 B5 0D 8A"
+mode: "DC V"
+value: "-1.2928"
+unit: "V"
+range_label: "4V"
+flags:
+  auto_range: true
+  dc: true

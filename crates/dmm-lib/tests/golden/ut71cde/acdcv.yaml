@@ -1,0 +1,10 @@
+# AC+DC V on the yellow key, 4V range: 0.0436 V, matched on the LCD.
+# Captured 2026-11-18 from a UT71D over CH9325 (issue #22, @wanthalf, 0.10.0 61db398 report, step acdcv).
+raw_hex: "B0 B0 34 B3 B6 31 32 B3 31 0D 8A"
+mode: "AC+DC V"
+value: "0.0436"
+unit: "V"
+range_label: "4V"
+flags:
+  auto_range: true
+  dc: true

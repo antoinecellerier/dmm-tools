@@ -1,0 +1,8 @@
+# Continuity overload: 0.L Ω, matched on the LCD.
+# Captured 2026-11-18 from a UT71D over CH9325 (issue #22, @wanthalf, 0.10.0 61db398 report, step cont).
+raw_hex: "BA BA B0 BC BA B0 BA B0 B0 0D 8A"
+mode: "Continuity"
+value: "OL"
+unit: "Ω"
+range_label: "400Ω"
+flags: {}
