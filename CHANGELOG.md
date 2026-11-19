@@ -27,6 +27,7 @@
 - **"No USB cable found" says when Bluetooth wasn't searched** — and how to switch the search on.
 - **A refused mode or range switch says to check the dial**
 - **Meter data this tool doesn't know asks for a report** — the request only reached the log.
+- **Bluetooth readings arriving in pairs ask for a report** — on any meter
 - **A ZOTEK meter sending another model's data names the model to pick** — the notice only reached the log.
 - **dmm-gui says when it took the first of several Bluetooth devices** — unless `--adapter` named it.
 - **dmm-gui says when the settings file names a device it doesn't know** — it detected the meter without saying why.
@@ -41,6 +42,7 @@
 - **`read` ends with an error after ten minutes without its meter** — it waited for a lost link until Ctrl+C.
 - **dmm-cli's connection warnings come in the chosen language** — several USB cables or Bluetooth adapters, a meter naming or sending another model, unknown data, late Bluetooth readings.
 - **dmm-cli says which meter is picked when its data won't read**
+- **Bluetooth readings arriving in pairs ask for a report** — on any meter
 - **"No USB cable found" says when Bluetooth wasn't searched** — and how to switch the search on.
 - **`--mock-mode` with a real meter or Auto-detect is refused** — it was ignored.
 

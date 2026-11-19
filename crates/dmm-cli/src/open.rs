@@ -242,7 +242,7 @@ fn not_identified_self_help(l: &Localizer) -> Cow<'_, str> {
         command = "dmm-cli --device <id> ...",
         help = "dmm-cli --help",
         logging = "RUST_LOG=dmm_lib=debug",
-        url = format!("{}/issues", dmm_shared::help::PROJECT_URL),
+        url = dmm_shared::help::issues_url(),
     )
 }
 
@@ -426,6 +426,16 @@ fn late_readings_text(notice: &dmm_lib::transport::LateReadings) -> String {
     if let Some(command) = &notice.command {
         text.push_str(&format!("\n  {}", style(command).dim()));
     }
+    if notice.report {
+        text.push_str(&format!(
+            "\n  {}",
+            tr!(
+                l,
+                "connect-late-readings-report",
+                url = dmm_shared::help::issues_url()
+            )
+        ));
+    }
     text
 }
 
@@ -443,7 +453,7 @@ pub(crate) fn warn_unrecognised() {
         return;
     }
     let l = crate::l10n::get();
-    let url = format!("{}/issues", dmm_shared::help::PROJECT_URL);
+    let url = dmm_shared::help::issues_url();
     // A recording has no meter to run the command on: the file is the
     // report.
     if matches!(PICKED.get(), Some((_, PickedBy::Recording))) {
@@ -886,6 +896,7 @@ mod tests {
         let command = "hcitool lecup --handle 64 --min 6 --max 6";
         let with = LateReadings {
             command: Some(command.to_string()),
+            ..LateReadings::plain()
         };
         let text = console::strip_ansi_codes(&late_readings_text(&with)).into_owned();
         let lines: Vec<&str> = text.lines().map(str::trim).collect();
@@ -893,10 +904,25 @@ mod tests {
         assert!(lines[0].ends_with(LateReadings::TITLE), "{text}");
         assert_eq!(lines[1], with.advice());
         assert_eq!(lines[2], command);
-        let without = LateReadings { command: None };
+        let without = LateReadings::plain();
         let text = console::strip_ansi_codes(&late_readings_text(&without)).into_owned();
         assert_eq!(text.lines().nth(1).map(str::trim), Some(without.advice()));
         assert_eq!(text.lines().count(), 2);
+    }
+
+    /// A link the tool has no fix for ends with where to report it.
+    #[test]
+    fn the_late_readings_notice_ends_with_the_report_line() {
+        use dmm_lib::transport::LateReadings;
+        let notice = LateReadings {
+            adapter: false,
+            report: true,
+            ..LateReadings::plain()
+        };
+        let text = late_readings_text(&notice);
+        let last = text.lines().last().unwrap_or_default().trim();
+        assert!(last.starts_with("Please report it at https://"), "{text}");
+        assert_eq!(text.lines().count(), 3, "{text}");
     }
 
     /// A raised flag settles any open: one that got through, and one that

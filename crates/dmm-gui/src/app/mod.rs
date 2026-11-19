@@ -2009,6 +2009,37 @@ mod tests {
         std::sync::Arc::new(Localizer::new(&FRENCH, &resources, &Options::default()))
     }
 
+    /// The late-readings notice ends with where to report it on a link the
+    /// tool has no fix for, and leaves that line out where it has one.
+    #[test]
+    fn the_late_readings_notice_asks_for_a_report_only_when_it_should() {
+        let report_line = "Please report it through Help & Feedback in the top bar, \
+                           naming the meter and the operating system.";
+        for report in [true, false] {
+            let mut app = App::from_settings(
+                Settings {
+                    auto_connect: false,
+                    ..Settings::default()
+                },
+                dmm_lib::Clock::real(),
+            );
+            with_readings(&mut app);
+            app.connection.late_readings = Some(dmm_lib::transport::LateReadings {
+                adapter: false,
+                report,
+                ..dmm_lib::transport::LateReadings::plain()
+            });
+            let texts = drawn_texts(&last_frame(&mut app));
+            assert!(
+                texts
+                    .iter()
+                    .any(|t| t.starts_with("A reading sometimes arrives")),
+                "no advice in {texts:#?}"
+            );
+            assert_eq!(texts.contains(report_line), report, "{texts:#?}");
+        }
+    }
+
     /// An overload in another decade ("OL MΩ" after kΩ readings) leaves the
     /// statistics in kΩ, and the panel says so: their caption is the unit
     /// they are held in, not the one the latest frame names.

@@ -1068,7 +1068,7 @@ mod tests {
             Some(crate::transport::Link::Bluetooth)
         }
         fn late_readings(&self) -> Option<LateReadings> {
-            Some(LateReadings { command: None })
+            Some(LateReadings::plain())
         }
     }
 

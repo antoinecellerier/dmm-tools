@@ -49,6 +49,11 @@ pub fn version_label(version: &str, git_hash: &str) -> String {
 /// The project page, where the docs and the issue tracker are.
 pub const PROJECT_URL: &str = "https://github.com/antoinecellerier/dmm-tools";
 
+/// Where both binaries ask for a report: [`PROJECT_URL`]'s issue tracker.
+pub fn issues_url() -> String {
+    format!("{PROJECT_URL}/issues")
+}
+
 /// The setup guide, which the Linux cable help points a headless machine to.
 #[cfg(target_os = "linux")]
 const SETUP_GUIDE_URL: &str =

@@ -530,7 +530,11 @@ impl Localizer {
         } else {
             "none"
         };
-        tr!(self, "late-readings-advice", fix = fix)
+        if notice.adapter {
+            tr!(self, "late-readings-advice", fix = fix)
+        } else {
+            tr!(self, "late-readings-advice-link", fix = fix)
+        }
     }
 }
 
@@ -924,14 +928,20 @@ mod tests {
     }
 
     /// The late-readings notice reads as the library's, with and without
-    /// a command.
+    /// a command, on an adapter and on another meter.
     #[test]
     fn english_late_readings_read_as_the_librarys() {
         let l = Localizer::en_us(LIB_RESOURCES);
         assert_eq!(l.late_readings_title(), LateReadings::TITLE);
         for command in [None, Some("sudo fix".to_string())] {
-            let notice = LateReadings { command };
-            assert_eq!(l.late_readings_advice(&notice), notice.advice());
+            for adapter in [true, false] {
+                let notice = LateReadings {
+                    command: command.clone(),
+                    adapter,
+                    report: false,
+                };
+                assert_eq!(l.late_readings_advice(&notice), notice.advice());
+            }
         }
     }
 

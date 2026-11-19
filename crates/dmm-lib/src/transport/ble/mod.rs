@@ -1230,13 +1230,28 @@ impl Transport for Ble {
         self.info_characteristic.as_deref()
     }
 
-    /// The adapters, which set a long interval: where the transport could
-    /// not get a short one, their readings arrive in pairs. Linux gets the
-    /// command that shortens it by hand.
+    /// Any peer's: an adapter sets a long interval, and where the transport
+    /// could not get a short one its readings arrive in pairs; another meter
+    /// in pairs is one the transport does not know to shorten. Linux gets
+    /// the command that shortens it by hand ([`late_readings_notice`]).
     fn late_readings(&self) -> Option<LateReadings> {
-        issc::is_adapter(self.advertised_name.as_deref()).then(|| LateReadings {
-            command: self.interval_command.clone(),
-        })
+        Some(late_readings_notice(
+            issc::is_adapter(self.advertised_name.as_deref()),
+            self.interval_command.clone(),
+        ))
+    }
+}
+
+/// The notice for a link whose readings came in pairs, asking for a report
+/// everywhere but an adapter on Linux: there the cause is known, and the
+/// command is the fix. Elsewhere an adapter in pairs is one whose request
+/// failed or did not hold, and any other meter one the transport does not
+/// know to shorten.
+fn late_readings_notice(adapter: bool, command: Option<String>) -> LateReadings {
+    LateReadings {
+        command,
+        adapter,
+        report: !(adapter && cfg!(target_os = "linux")),
     }
 }
 
@@ -1338,6 +1353,15 @@ mod tests {
         assert!(matches!(retry, IntervalRequest::Retry { .. }), "{retry:?}");
         assert_eq!(retry.before(open, Reported::Nothing), None);
         assert_eq!(retry.after(false, false), IntervalRequest::Done);
+    }
+
+    #[test]
+    fn a_meter_in_pairs_asks_for_a_report_an_adapter_on_linux_does_not() {
+        let meter = late_readings_notice(false, None);
+        assert!(meter.report && !meter.adapter);
+        let adapter = late_readings_notice(true, Some("sudo fix".to_string()));
+        assert!(adapter.adapter);
+        assert_eq!(adapter.report, !cfg!(target_os = "linux"));
     }
 
     #[test]

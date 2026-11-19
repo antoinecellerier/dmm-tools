@@ -268,14 +268,17 @@ the output of `bluetoothctl info <address>`.
 
 ### "Some Bluetooth readings arrive late"
 
-Over the UT-D07B, a reading sometimes arrives late, grouped with the next
+Over Bluetooth, a reading sometimes arrives late, grouped with the next
 one. None are lost; only their timestamps are off.
 
-- **Linux:** the message ends with a command. Run it as printed while the
-  meter is connected; it lasts until the meter disconnects. It comes from
-  BlueZ's `hcitool`, in the `bluez` package on Debian and Ubuntu; without it
-  the message has none.
-- **Windows 11 and Android:** the tool shortens the link itself.
+- **The UT-D07B on Linux:** the message ends with a command. Run it as
+  printed while the meter is connected; it lasts until the meter
+  disconnects. It comes from BlueZ's `hcitool`, in the `bluez` package on
+  Debian and Ubuntu; without it the message has none.
+- **The UT-D07B on Windows 11 and Android:** the tool shortens the link
+  itself.
+- **Any other case:** the message asks for a report. Name the meter and the
+  operating system.
 - **Any system:** a USB cable gives on-time readings.
 
 ### "No font for Chinese characters was found"

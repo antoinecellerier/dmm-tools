@@ -1028,6 +1028,13 @@ impl App {
                 ui.ctx().copy_text(command.clone());
             }
         }
+        if notice.report {
+            ui.add_space(4.0);
+            ui.add(
+                egui::Label::new(RichText::new(tr!(self.l10n, "connection-late-report")).small())
+                    .wrap(),
+            );
+        }
         if dismissed {
             self.connection.late_readings = None;
         }
@@ -1302,6 +1309,7 @@ mod tests {
     fn the_late_readings_notice_lasts_as_long_as_its_link() {
         let notice = || dmm_lib::transport::LateReadings {
             command: Some("sudo hcitool lecup --handle 2048".to_string()),
+            ..dmm_lib::transport::LateReadings::plain()
         };
         let mut app = app("ut61eplus", false);
         app.deliver(DmmMessage::LateReadings(notice()));

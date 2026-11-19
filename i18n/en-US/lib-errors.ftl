@@ -280,3 +280,10 @@ late-readings-advice =
         [command] On this adapter, a reading sometimes arrives grouped with the next one. None are lost. For accurate timestamps until the meter disconnects, run:
        *[none] On this adapter, a reading sometimes arrives grouped with the next one. None are lost.
     }
+# The same for a Bluetooth meter that is not one of UNI-T's adapters; $fix as
+# above.
+late-readings-advice-link =
+    { $fix ->
+        [command] A reading sometimes arrives grouped with the next one. None are lost. For accurate timestamps until the meter disconnects, run:
+       *[none] A reading sometimes arrives grouped with the next one. None are lost.
+    }

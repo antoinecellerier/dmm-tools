@@ -146,6 +146,9 @@ connection-feedback = { $warning } Report feedback.
 connection-late-copy = Copy
 # A toast, once the command is copied.
 connection-late-copied = Command copied
+# The notice's last line, on a link the tool has no fix for yet.
+# { project-link } is the top bar's Help & Feedback link.
+connection-late-report = Please report it through { project-link } in the top bar, naming the meter and the operating system.
 
 ## Toasts.
 

@@ -145,6 +145,12 @@ pub struct LateReadings {
     /// A command that shortens the link's interval for this connection,
     /// where there is one to run (Linux; `hcitool`, as root).
     pub command: Option<String>,
+    /// Whether the link is one of UNI-T's adapters, which [`Self::advice`]
+    /// names; any other Bluetooth meter's is just a link.
+    pub adapter: bool,
+    /// Whether to ask the user to report it: a link the tool has no answer
+    /// for yet. Each app words the request.
+    pub report: bool,
 }
 
 impl LateReadings {
@@ -152,13 +158,35 @@ impl LateReadings {
 
     /// What happens and, with a [`Self::command`], what to do about it.
     pub fn advice(&self) -> &'static str {
-        if self.command.is_some() {
-            "On this adapter, a reading sometimes arrives grouped with the next \
-             one. None are lost. For accurate timestamps until the meter \
-             disconnects, run:"
-        } else {
-            "On this adapter, a reading sometimes arrives grouped with the next \
-             one. None are lost."
+        match (self.adapter, self.command.is_some()) {
+            (true, true) => {
+                "On this adapter, a reading sometimes arrives grouped with the next \
+                 one. None are lost. For accurate timestamps until the meter \
+                 disconnects, run:"
+            }
+            (true, false) => {
+                "On this adapter, a reading sometimes arrives grouped with the next \
+                 one. None are lost."
+            }
+            (false, true) => {
+                "A reading sometimes arrives grouped with the next one. None are \
+                 lost. For accurate timestamps until the meter disconnects, run:"
+            }
+            (false, false) => {
+                "A reading sometimes arrives grouped with the next one. None are lost."
+            }
+        }
+    }
+}
+
+#[cfg(any(test, feature = "test-support"))]
+impl LateReadings {
+    /// An adapter's notice with no command and no report, for tests.
+    pub fn plain() -> Self {
+        Self {
+            command: None,
+            adapter: true,
+            report: false,
         }
     }
 }
@@ -475,14 +503,14 @@ mod tests {
                 Some(Link::Bluetooth)
             }
             fn late_readings(&self) -> Option<LateReadings> {
-                Some(LateReadings { command: None })
+                Some(LateReadings::plain())
             }
             fn tied_peers(&self) -> Option<usize> {
                 Some(2)
             }
         }
         let t: Box<dyn Transport> = Box::new(Radio);
-        assert_eq!(t.late_readings(), Some(LateReadings { command: None }));
+        assert_eq!(t.late_readings(), Some(LateReadings::plain()));
         // And how many peers tied, for the apps to say so.
         assert_eq!(t.tied_peers(), Some(2));
     }
@@ -515,6 +543,7 @@ mod tests {
     fn the_late_readings_command_ends_the_line() {
         let notice = LateReadings {
             command: Some("sudo fix".to_string()),
+            ..LateReadings::plain()
         };
         let text = notice.to_string();
         assert!(
@@ -526,9 +555,14 @@ mod tests {
             "{text}"
         );
         assert!(!text.contains('\n'), "{text}");
-        let plain = LateReadings { command: None }.to_string();
+        let plain = LateReadings::plain().to_string();
         assert!(!plain.contains('\n'));
         assert!(plain.ends_with("None are lost."));
+        let link = LateReadings {
+            adapter: false,
+            ..LateReadings::plain()
+        };
+        assert!(!link.advice().contains("adapter"), "{}", link.advice());
     }
 }
 

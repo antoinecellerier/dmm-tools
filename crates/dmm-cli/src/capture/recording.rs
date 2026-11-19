@@ -283,7 +283,7 @@ mod tests {
         }
 
         fn late_readings(&self) -> Option<LateReadings> {
-            Some(LateReadings { command: None })
+            Some(LateReadings::plain())
         }
         fn tied_peers(&self) -> Option<usize> {
             Some(2)
@@ -304,7 +304,7 @@ mod tests {
         assert_eq!(t.cable_serial(), Some("SERIAL01"));
         assert_eq!(t.advertised_name(), Some("UT60BT"));
         assert_eq!(t.info_characteristic(), Some(&[0x29, 0xFF][..]));
-        assert_eq!(t.late_readings(), Some(LateReadings { command: None }));
+        assert_eq!(t.late_readings(), Some(LateReadings::plain()));
         assert_eq!(t.tied_peers(), Some(2));
     }
 
