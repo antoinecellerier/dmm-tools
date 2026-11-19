@@ -662,6 +662,12 @@ pub use file_dialog::FilePicker;
 pub struct AndroidStart {
     /// Open on the simulated meter, for a run with no meter at hand.
     pub mock: bool,
+    /// A replay file to play back as `--replay` does, in place of the
+    /// simulated meter or Settings' device.
+    pub replay: Option<PathBuf>,
+    /// `--replay-draws-keys`: the replay's meter keeps its buttons and
+    /// dropdowns on screen. Nothing without `replay`.
+    pub replay_draws_keys: bool,
     /// Whether Bluetooth may be used this session.
     pub bluetooth: bool,
     /// What Import… asks for its file: the system's picker, which only the
@@ -850,8 +856,22 @@ pub fn run_android(app: AndroidApp, start: AndroidStart) -> eframe::Result<()> {
     if settings.full_screen {
         set_full_screen(true);
     }
+    // No command line to refuse a bad file at: the log says why, in
+    // English as every log line is, and the session starts as it would
+    // without one.
+    let replay = start.replay.and_then(|path| {
+        load_replay(path, start.replay_draws_keys, &crate::l10n::english())
+            .inspect_err(|reason| log::error!("debug.dmm.replay: {reason}"))
+            .ok()
+    });
+    // A replay names its meter, as `resolve_device_and_clock` has it.
+    let device = match &replay {
+        Some(source) => Some(source.replay.listing.id().to_string()),
+        None => start.mock.then(|| "mock".to_string()),
+    };
     let overrides = CliOverrides {
-        device: start.mock.then(|| "mock".to_string()),
+        device,
+        replay,
         no_bluetooth: !start.bluetooth,
         screen_corner_px: start.screen_corner_px,
         ..CliOverrides::none()

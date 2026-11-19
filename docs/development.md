@@ -356,13 +356,21 @@ copy offline. A key that is lost or leaked cannot be revoked: a new one
 takes its place, with its fingerprint in that file, and everyone installs
 the application afresh.
 
-On the phone, `adb shell setprop debug.dmm.mock 1` opens the simulated
-meter on the next launch, `adb shell setprop debug.dmm.log dmm_lib=debug`
-takes what `RUST_LOG` takes, and `adb logcat -s dmm` shows the log.
-`debug.dmm.corner_px` gives the radius of the screen's rounded corners, in
-pixels, on a phone whose system reports none, and
-`debug.dmm.ble_short_interval 1` does what `DMM_BLE_SHORT_INTERVAL=1` does on
-a desktop.
+On the phone, system properties set with `adb shell setprop` stand in for
+the command line, read at each launch and cleared by a reboot: restart the
+application with
+`adb shell am start -S -n io.github.antoinecellerier.dmmtools/.PermissionActivity`
+after setting one. `debug.dmm.mock 1` opens the simulated meter,
+`debug.dmm.log dmm_lib=debug` takes what `RUST_LOG` takes, and
+`adb logcat -s dmm` shows the log. `debug.dmm.corner_px` gives the radius of
+the screen's rounded corners, in pixels, on a phone whose system reports
+none, and `debug.dmm.ble_short_interval 1` does what
+`DMM_BLE_SHORT_INTERVAL=1` does on a desktop. `debug.dmm.replay <name>` plays
+a replay file back as `--replay` does, to reproduce a session on a phone: the
+name is the file's in the application's own folder, where
+`adb push <file> /sdcard/Android/data/io.github.antoinecellerier.dmmtools/files/`
+puts it; a file that won't load is logged and the application starts
+without it. `adb shell "setprop debug.dmm.replay ''"` clears it.
 
 ## Translations
 

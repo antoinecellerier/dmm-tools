@@ -8,9 +8,11 @@
 //! while the port is brought up, set with `adb shell setprop` before a
 //! launch: `debug.dmm.log` takes what `RUST_LOG` takes, `debug.dmm.mock=1`
 //! opens the simulated meter, `debug.dmm.corner_px` gives the radius of the
-//! screen's rounded corners where the system does not report it, and
+//! screen's rounded corners where the system does not report it,
 //! `debug.dmm.ble_short_interval=1` does what `DMM_BLE_SHORT_INTERVAL=1`
-//! does.
+//! does, `debug.dmm.replay` names a replay file in the application's
+//! external files folder to play back as `--replay` does, and
+//! `debug.dmm.replay_draws_keys=1` does what `--replay-draws-keys` does.
 #![cfg(target_os = "android")]
 
 use android_system_properties::AndroidSystemProperties;
@@ -72,11 +74,24 @@ fn android_main(app: AndroidApp) {
         set("debug.dmm.ble_short_interval").as_deref() == Some("1"),
     );
 
+    // A name, not a path: a property holds 91 characters, and this is the
+    // one folder the application reads without a permission that adb can
+    // push into.
+    let replay = set("debug.dmm.replay").and_then(|name| match app.external_data_path() {
+        Some(dir) => Some(dir.join(name)),
+        None => {
+            log::error!("no external files folder: debug.dmm.replay is not played");
+            None
+        }
+    });
+
     let activity = app.clone();
     let offers = app.clone();
     let bars = app.clone();
     let start = AndroidStart {
         mock: set("debug.dmm.mock").as_deref() == Some("1"),
+        replay,
+        replay_draws_keys: set("debug.dmm.replay_draws_keys").as_deref() == Some("1"),
         bluetooth,
         // The property is for a system that reports square corners on a
         // screen that has round ones.
