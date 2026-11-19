@@ -39,12 +39,21 @@ built in: the UT60BT and UT202BT, in [ut61-family](../ut61-family/verification.m
 - Windows 10, which takes no Balanced request (`winrt.rs`): whether readings
   come in pairs and both reach the host — decides the late-readings notice
   there. Needs `RUST_LOG=dmm_lib=trace dmm-cli read --count 60 --interval-ms 0`. (#25)
-- The adapter's battery life with the link held at 60 ms against its own
-  315 ms ([§5](reverse-engineered-protocol.md#5-link-parameters)) — decides
-  whether the open keeps holding it. Needs two battery runs on Windows 11. (#25)
+- The adapter's battery life with the link held at 60 ms (48.75 ms on Android)
+  against its own 315 ms ([§5](reverse-engineered-protocol.md#5-link-parameters)) — decides
+  whether the transport keeps asking. Needs two battery runs on Windows 11. (#25)
 - A Windows PC whose `list` finds nothing while Bluetooth LE Explorer sees the
   adapter: `RUST_LOG=dmm_lib=debug dmm-cli list`'s `saw …` lines say missing,
   unnamed or unmatched — decides the fix in `search.rs`. Needs that PC. (#25)
+
+## Android
+
+- Android 13 and later, and other phones' stacks: the adapter's update granted,
+  then the Balanced request moving the link ([§5](reverse-engineered-protocol.md#5-link-parameters)) — decides the request in
+  `ble/mod.rs`. Needs a phone, `debug.dmm.log dmm_lib=debug`, and no pairs notice. (#25)
+- Android 7 (API 24-25), older than the `onConnectionUpdated` btleplug reads the
+  interval from: the request sent at `ADAPTER_INTERVAL_WAIT` holding — decides
+  that fallback. Needs such a phone. (#25)
 
 ## macOS
 

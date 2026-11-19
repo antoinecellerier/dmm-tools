@@ -62,7 +62,9 @@ use std::time::Duration;
 use winrt::ShortInterval;
 
 /// What a short-interval request leaves to keep alive: nothing where the
-/// platform takes no request ([`request_short_interval`]).
+/// platform takes no request ([`request_short_interval`]), and nothing on
+/// Android, which keeps one for the rest of the link
+/// ([`Ble::request_short_interval_once`]).
 #[cfg(not(target_os = "windows"))]
 type ShortInterval = std::convert::Infallible;
 
@@ -99,6 +101,20 @@ const DISCOVERY_POLL: Duration = Duration::from_millis(500);
 /// ([`request_short_interval`]); past it the link keeps what the peer set.
 #[cfg(target_os = "windows")]
 const INTERVAL_REQUEST_TIMEOUT: Duration = Duration::from_secs(3);
+/// An interval longer than any a host asks for: past it, the link is on
+/// the one the adapter asked for, 280–318.75 ms (research doc §5).
+#[cfg(target_os = "android")]
+const SLOW_INTERVAL_US: u32 = 100_000;
+/// How long after the open the Android request waits to see the peer's own
+/// interval reported ([`IntervalRequest`]). Past it the request goes all
+/// the same where the link reports none: a system that reports no updates.
+#[cfg(any(target_os = "android", test))]
+const ADAPTER_INTERVAL_WAIT: Duration = Duration::from_secs(5);
+/// How long after the open a long interval reported late still gets the
+/// Android request ([`IntervalRequest`]); past it the link is no longer
+/// looked at.
+#[cfg(any(target_os = "android", test))]
+const ADAPTER_INTERVAL_WATCH: Duration = Duration::from_secs(30);
 /// How long `hcitool con` may take to list the links ([`connection_handle`]).
 #[cfg(target_os = "linux")]
 const HANDLE_LOOKUP_TIMEOUT: Duration = Duration::from_secs(1);
@@ -107,6 +123,89 @@ const HANDLE_LOOKUP_TIMEOUT: Duration = Duration::from_secs(1);
 /// out without us. BlueZ takes longer than this to confirm one on the
 /// UT-D07B, and finishes it after the program has exited (research doc §3).
 const DISCONNECT_TIMEOUT: Duration = Duration::from_millis(500);
+
+/// Where the short-interval request stands on Android
+/// ([`Ble::request_short_interval_once`]).
+///
+/// A request made before the peer's own update is overridden by it, and
+/// that update can land after the open (research doc §5). So the request
+/// waits for the peer's long interval to be reported, up to
+/// [`ADAPTER_INTERVAL_WAIT`]; one made without it seen is made again if it
+/// shows later, until [`ADAPTER_INTERVAL_WATCH`]; one that fails is made
+/// once more.
+#[cfg(any(target_os = "android", test))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum IntervalRequest {
+    /// Not made yet: due when the peer's long interval is reported, or at
+    /// `due` if the link reports none.
+    Due {
+        due: std::time::Instant,
+        until: std::time::Instant,
+    },
+    /// Made, or left out with a short interval reported, before the peer's
+    /// long interval was seen: made if that shows before `until`.
+    Watching { until: std::time::Instant },
+    /// Failed: made once more at the next notification.
+    Retry { until: std::time::Instant },
+    /// Made with the long interval in force, given up on, or not this
+    /// peer's to make.
+    Done,
+}
+
+/// What the link reported of its interval, for [`IntervalRequest`].
+#[cfg(any(target_os = "android", test))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Reported {
+    /// The peer's own, over `SLOW_INTERVAL_US`.
+    Long,
+    Short,
+    /// Nothing yet: no update has come, or the system reports none.
+    Nothing,
+    /// Reading it failed.
+    Unreadable,
+}
+
+#[cfg(any(target_os = "android", test))]
+impl IntervalRequest {
+    /// A request for a link opened at `now`.
+    fn new(now: std::time::Instant) -> Self {
+        Self::Due {
+            due: now + ADAPTER_INTERVAL_WAIT,
+            until: now + ADAPTER_INTERVAL_WATCH,
+        }
+    }
+
+    /// `None` when the request is to be made now; otherwise the state to
+    /// keep.
+    fn before(self, now: std::time::Instant, reported: Reported) -> Option<Self> {
+        match self {
+            Self::Done => Some(Self::Done),
+            Self::Retry { .. } => None,
+            Self::Due { .. } | Self::Watching { .. } if reported == Reported::Long => None,
+            Self::Due { due, .. } if now < due => Some(self),
+            Self::Due { until, .. } if reported == Reported::Short => {
+                Some(Self::Watching { until })
+            }
+            Self::Due { .. } => None,
+            Self::Watching { until } if now >= until => Some(Self::Done),
+            Self::Watching { .. } => Some(self),
+        }
+    }
+
+    /// The state after a request made from this one: `made` whether it
+    /// went through, `long` whether the peer's long interval was in force.
+    fn after(self, made: bool, long: bool) -> Self {
+        let until = match self {
+            Self::Due { until, .. } | Self::Watching { until } | Self::Retry { until } => until,
+            Self::Done => return Self::Done,
+        };
+        match (made, long, self) {
+            (true, true, _) | (false, _, Self::Retry { .. }) => Self::Done,
+            (true, false, _) => Self::Watching { until },
+            (false, _, _) => Self::Retry { until },
+        }
+    }
+}
 
 /// A peer, open and subscribed.
 pub(crate) struct Ble {
@@ -140,6 +239,10 @@ pub(crate) struct Ble {
     /// The short-interval request, kept for as long as the link is open:
     /// dropping it withdraws it ([`request_short_interval`]).
     _short_interval: Option<ShortInterval>,
+    /// Where an adapter's short-interval request stands on Android
+    /// ([`Ble::request_short_interval_once`]); `Done` for every other peer.
+    #[cfg(target_os = "android")]
+    short_interval: Cell<IntervalRequest>,
     /// For an adapter on Linux, the command that shortens this link's
     /// interval by hand ([`interval_command`]), for [`Transport::late_readings`].
     interval_command: Option<String>,
@@ -152,6 +255,65 @@ pub(crate) struct Ble {
 }
 
 impl Ble {
+    /// Ask Android for its Balanced interval on an adapter's link, when
+    /// [`IntervalRequest`] says to.
+    ///
+    /// From the reading path, not the open: the peer's own update can land
+    /// after the open. Android keeps a request for the rest of the link,
+    /// with nothing to hold. The readings of the 2–3 s it takes to come into
+    /// force still bunch, once: the stream does not wait for it, so the
+    /// connect is no slower.
+    ///
+    /// The interval read is the one btleplug caches from Android's updates,
+    /// and keeps across a disconnect. A new link never reads an old one's
+    /// only because every Android open forgets the earlier peers
+    /// (`clear_peripherals` in `connect`).
+    #[cfg(target_os = "android")]
+    fn request_short_interval_once(&self) {
+        use btleplug::api::ConnectionParameterPreset;
+
+        let state = self.short_interval.get();
+        if state == IntervalRequest::Done {
+            return;
+        }
+        let reported = match self.rt.block_on(self.peripheral.connection_parameters()) {
+            Ok(Some(p)) if p.interval_us > SLOW_INTERVAL_US => Reported::Long,
+            Ok(Some(_)) => Reported::Short,
+            Ok(None) => Reported::Nothing,
+            Err(e) => {
+                if matches!(state, IntervalRequest::Due { .. }) {
+                    debug!("Bluetooth: the link's interval could not be read: {e}");
+                }
+                Reported::Unreadable
+            }
+        };
+        if let Some(next) = state.before(std::time::Instant::now(), reported) {
+            if next != state && matches!(next, IntervalRequest::Watching { .. }) {
+                debug!("Bluetooth: the link's interval is short already; not asking yet");
+            }
+            self.short_interval.set(next);
+            return;
+        }
+        if matches!(state, IntervalRequest::Due { .. }) && reported != Reported::Long {
+            debug!("Bluetooth: the peer's interval was not reported; asking all the same");
+        }
+        let request = self
+            .peripheral
+            .request_connection_parameters(ConnectionParameterPreset::Balanced);
+        let made = match self.rt.block_on(request) {
+            Ok(()) => {
+                debug!("Bluetooth: asked for a shorter connection interval");
+                true
+            }
+            Err(e) => {
+                debug!("Bluetooth: asking for a shorter connection interval failed: {e}");
+                false
+            }
+        };
+        self.short_interval
+            .set(state.after(made, reported == Reported::Long));
+    }
+
     /// Whether the link is still up, as cheaply as the platform allows.
     ///
     /// An error here means the platform cannot say, which on every backend
@@ -293,6 +455,12 @@ fn open(target: Target<'_>, stop: Option<&AtomicBool>) -> Result<Box<dyn Transpo
     };
     #[cfg(not(target_os = "linux"))]
     let interval_command = None;
+    #[cfg(target_os = "android")]
+    let short_interval = if issc::is_adapter(opened.advertised_name.as_deref()) {
+        IntervalRequest::new(std::time::Instant::now())
+    } else {
+        IntervalRequest::Done
+    };
     Ok(Box::new(Ble {
         rt,
         _manager: opened.manager,
@@ -309,6 +477,8 @@ fn open(target: Target<'_>, stop: Option<&AtomicBool>) -> Result<Box<dyn Transpo
         advertised_name: opened.advertised_name,
         tied: opened.tied,
         _short_interval: opened.short_interval,
+        #[cfg(target_os = "android")]
+        short_interval: Cell::new(short_interval),
         interval_command,
     }))
 }
@@ -521,10 +691,11 @@ async fn read_mtu(peripheral: &Peripheral, deadline: tokio::time::Instant) -> u1
 /// a long one ([`issc::is_adapter`]), handing back what has to stay alive
 /// for the request to hold.
 ///
-/// Only WinRT takes such a request from an app (`winrt.rs`); BlueZ and
-/// CoreBluetooth have no call for it, and the link keeps the interval the
-/// peer asked for. Best-effort either way: the readings still come, only
-/// bunched.
+/// WinRT takes such a request from an app here (`winrt.rs`), and Android
+/// later, from the reading path ([`Ble::request_short_interval_once`]);
+/// BlueZ and CoreBluetooth have no call for it, and the link keeps the
+/// interval the peer asked for. Best-effort either way: the readings still
+/// come, only bunched.
 #[cfg(target_os = "windows")]
 async fn request_short_interval(peripheral: &Peripheral) -> Option<ShortInterval> {
     let request = winrt::request_short_interval(peripheral.address());
@@ -545,8 +716,15 @@ async fn request_short_interval(peripheral: &Peripheral) -> Option<ShortInterval
     }
 }
 
+/// See the Windows version: Android's request waits for the link's first
+/// readings.
+#[cfg(target_os = "android")]
+async fn request_short_interval(_peripheral: &Peripheral) -> Option<ShortInterval> {
+    None
+}
+
 /// See the Windows version: this platform takes no request.
-#[cfg(not(target_os = "windows"))]
+#[cfg(not(any(target_os = "windows", target_os = "android")))]
 async fn request_short_interval(_peripheral: &Peripheral) -> Option<ShortInterval> {
     debug!("Bluetooth: this platform cannot ask for a shorter connection interval");
     None
@@ -947,6 +1125,8 @@ impl Transport for Ble {
                     debug!("Bluetooth: ignoring a notification from {}", note.uuid);
                     return Ok(0);
                 }
+                #[cfg(target_os = "android")]
+                self.request_short_interval_once();
                 let mut pending = self.pending.borrow_mut();
                 pending.extend(note.value.iter().copied());
                 if self.profile.strips_adapter_heartbeat {
@@ -1050,8 +1230,8 @@ impl Transport for Ble {
         self.info_characteristic.as_deref()
     }
 
-    /// The adapters, which set a long interval: where the open could not
-    /// ask for a short one, their readings arrive in pairs. Linux gets the
+    /// The adapters, which set a long interval: where the transport could
+    /// not get a short one, their readings arrive in pairs. Linux gets the
     /// command that shortens it by hand.
     fn late_readings(&self) -> Option<LateReadings> {
         issc::is_adapter(self.advertised_name.as_deref()).then(|| LateReadings {
@@ -1097,6 +1277,67 @@ mod tests {
             write_error(btleplug::Error::PermissionDenied, true),
             Error::Bluetooth(_)
         ));
+    }
+
+    #[test]
+    fn the_interval_request_waits_for_the_peers_long_interval() {
+        use std::time::{Duration, Instant};
+        let open = Instant::now();
+        let soon = open + Duration::from_secs(1);
+        let start = IntervalRequest::new(open);
+        // Nothing reported yet: wait; the peer's long interval: ask, done.
+        assert_eq!(start.before(soon, Reported::Nothing), Some(start));
+        assert_eq!(start.before(soon, Reported::Short), Some(start));
+        assert_eq!(start.before(soon, Reported::Long), None);
+        assert_eq!(start.after(true, true), IntervalRequest::Done);
+    }
+
+    /// At the deadline with nothing reported the request goes, and is made
+    /// again if the long interval shows later, until the watch ends.
+    #[test]
+    fn a_request_made_blind_is_made_again_when_the_long_interval_shows() {
+        use std::time::{Duration, Instant};
+        let open = Instant::now();
+        let start = IntervalRequest::new(open);
+        let due = open + ADAPTER_INTERVAL_WAIT;
+        assert_eq!(start.before(due, Reported::Nothing), None);
+        assert_eq!(start.before(due, Reported::Unreadable), None);
+        let watching = start.after(true, false);
+        let later = due + Duration::from_secs(1);
+        assert_eq!(watching.before(later, Reported::Nothing), Some(watching));
+        assert_eq!(watching.before(later, Reported::Long), None);
+        assert_eq!(watching.after(true, true), IntervalRequest::Done);
+        let past = open + ADAPTER_INTERVAL_WATCH;
+        assert_eq!(
+            watching.before(past, Reported::Nothing),
+            Some(IntervalRequest::Done)
+        );
+    }
+
+    /// A short interval reported at the deadline is left alone, and only
+    /// watched.
+    #[test]
+    fn a_short_interval_at_the_deadline_is_not_asked_for() {
+        use std::time::Instant;
+        let open = Instant::now();
+        let start = IntervalRequest::new(open);
+        let next = start.before(open + ADAPTER_INTERVAL_WAIT, Reported::Short);
+        assert!(
+            matches!(next, Some(IntervalRequest::Watching { .. })),
+            "{next:?}"
+        );
+    }
+
+    /// A failed request is made once more, whatever the link reports, and
+    /// not a third time.
+    #[test]
+    fn a_failed_request_is_made_once_more() {
+        use std::time::Instant;
+        let open = Instant::now();
+        let retry = IntervalRequest::new(open).after(false, true);
+        assert!(matches!(retry, IntervalRequest::Retry { .. }), "{retry:?}");
+        assert_eq!(retry.before(open, Reported::Nothing), None);
+        assert_eq!(retry.after(false, false), IntervalRequest::Done);
     }
 
     #[test]

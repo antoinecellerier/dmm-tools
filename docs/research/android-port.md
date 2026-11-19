@@ -1,6 +1,6 @@
 # Android port feasibility
 
-*Last updated 2026-11-17. Options A and B below were built as an experiment
+*Last updated 2026-11-19. Options A and B below were built as an experiment
 and run on two phones: "Experimental build" has what they showed. The rooted
 variant remains untested.*
 
@@ -73,6 +73,8 @@ What worked:
 - `btleplug::platform::init`, called from `android_main`, and the
   transport's blocking calls on the acquisition thread: scan, connect,
   profile choice, detection, the readings stream and its pairs notice.
+  A short connection interval for the UT-D07B then ended the pairs
+  ("Bluetooth LE on Android").
 - The permission request, made by a small Java activity before the native
   one starts.
 - Settings, kept in the application's own folder.
@@ -303,8 +305,8 @@ owns a current-thread `tokio` runtime and runs each `btleplug` call to
 completion on the caller's thread. It has five GATT profiles, each with
 one characteristic to write and one to take notifications or indications
 from (the same one in two of them); two also read a characteristic while
-bringing the link up. It never pairs or bonds. Its Windows and Linux
-extras have fallbacks on every other platform.
+bringing the link up. It never pairs or bonds. Its Windows, Linux and
+Android extras have fallbacks on every other platform.
 
 `btleplug` lists Android as supported in its
 [README](https://github.com/deviceplug/btleplug). From the README, its
@@ -369,6 +371,18 @@ has what the phone showed of the first; the second is untested):
   exists on Windows only (`by_address` in `ble/search.rs`); elsewhere it
   is reported as not found. `btleplug`'s README lists adding a peripheral
   by address, the call `by_address` uses, as implemented on Android.
+
+The connection interval. The UT-D07B asks for a ~315 ms interval, which
+bunches its readings in pairs
+([UT-D07B spec §5](ut-d07b/reverse-engineered-protocol.md#5-link-parameters)).
+On Android, `btleplug` 0.13.5's `request_connection_parameters` calls
+`BluetoothGatt.requestConnectionPriority`, which needs no permission past
+`BLUETOOTH_CONNECT`, and its `connection_parameters` reads the interval
+its Java side keeps from the hidden `onConnectionUpdated` callback. The
+transport asks for the Balanced priority once the adapter's own interval
+is reported (`request_short_interval_once` in `ble/mod.rs`); on the
+Android 12 phone that ended the pairs. Windows takes such a request too;
+Linux needs root for it.
 
 Root does not open a second route. Derived from [AOSP's Bluetooth
 architecture](https://source.android.com/docs/core/connect/bluetooth) and

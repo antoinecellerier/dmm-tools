@@ -275,7 +275,7 @@ one. None are lost; only their timestamps are off.
   meter is connected; it lasts until the meter disconnects. It comes from
   BlueZ's `hcitool`, in the `bluez` package on Debian and Ubuntu; without it
   the message has none.
-- **Windows 11:** the tool shortens the link itself.
+- **Windows 11 and Android:** the tool shortens the link itself.
 - **Any system:** a USB cable gives on-time readings.
 
 ### "No font for Chinese characters was found"
