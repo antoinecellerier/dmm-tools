@@ -56,6 +56,15 @@ our own unit.
    for the Get Name frame used as the probe, and for the statement that the
    meter's Bluetooth and USB paths carry one protocol.
 
+7. **Sessions on an Android phone**, 2026-11-19: a Galaxy S8+ under
+   LineageOS (Android 12L), no root, so no HCI trace. A throwaway build
+   opened a second GATT client to the transport's link and logged the
+   hidden `BluetoothGattCallback.onConnectionUpdated`, which Android called
+   on that client as on the transport's, for each interval the link moved
+   to; the notification timestamps came from the transport's trace. Each
+   run moved one thing: when the host's request went, which priority, and
+   whether the client that sent it stayed open. Tagged [HARDWARE] in §5.
+
 ### Cross-referenced (clean-room boundary opened 2026-09-22)
 
 Sections 1-6 of `reverse-engineered-protocol.md` were written before any of

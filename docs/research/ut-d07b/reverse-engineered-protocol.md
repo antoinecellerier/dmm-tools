@@ -18,6 +18,10 @@ Based on:
   Intel Wireless Bluetooth radio through WinRT (btleplug 0.13.2), adapter
   never paired there, 2026-09-22: scans, connects by address, a streamed
   read and a button press (§3-5)
+- Sessions on a Galaxy S8+ under LineageOS (Android 12L, API 32) through
+  btleplug 0.13.5, adapter never paired there, 2026-11-19: the link's
+  interval as Android's `onConnectionUpdated` callback reported it, and the
+  notification timing under each (§5) (#25)
 - The archived iDMM2.0 Android app (`references/idmm2/`), read 2026-09-21,
   for the two BLE UART service sets UNI-T's own client knows
   (`../new-device-candidates.md`), and decompiled with jadx on 2026-09-22
@@ -232,6 +236,9 @@ BlueZ 5.87 on kernel HCI [HARDWARE].
 | First seconds of a fresh link | polls take up to 2 s while bluetoothd reads the Device Information characteristics (model, serial, firmware strings) | [HARDWARE] |
 | Under Windows 11 (WinRT), unpaired | MTU 247. The link starts at 60 ms, moves to 15 ms at ~1.65 s and, when the adapter's update request is answered at ~3.5 s, to 315 ms. With an app's `RequestPreferredConnectionParameters(Balanced)` in force, Windows answers that request with 60 ms instead (timeout 4 s), and the link stayed there for a 10-minute run; the adapter did not ask again. Released, the link went to 315 ms about 3 s later (Windows 11 10.0.26200, 2026-09-29) | [HARDWARE] |
 | Streamed readings under Windows 11 | the same pairs as under BlueZ: both notifications of a pair carry the same WinRT `GattValueChangedEventArgs` timestamp, and the steps between the others sit at ~315 ms, as the link runs at the adapter's 315 ms there too (row above). With the link held at 60 ms, no pairs showed up in 1950 readings over ten minutes (2026-09-29) | [HARDWARE] |
+| Under Android 12L, unpaired | MTU 247. The link starts at 7.5 ms and, when the adapter's update request is granted about 1 s after link-up, moves to 318.75 ms; the readings come in pairs as under BlueZ (Galaxy S8+, LineageOS, 2026-11-19) | [HARDWARE] |
+| A host request under Android 12L | `requestConnectionPriority` made after the adapter's update was granted: HIGH moved the link to 15 ms and BALANCED to 48.75 ms, 2.1-2.9 s after the request, and the adapter did not ask again; no pairs in 978, 520, 574, 423 and 520 readings over runs of 2-5 minutes, the last from btleplug's own client. Made at link-up, before the adapter's update, it was overridden: the link went to 318.75 ms and stayed. Readings due before the new interval took over still came two or three to an event, once | [HARDWARE] |
+| A second GATT client under Android 12L | an application's second `connectGatt` client on the same link: its priority request moves the link as the first client's does, and the interval stays after that client is closed (161 s, no pairs) | [HARDWARE] |
 
 A 19-byte UT61+ reading arrives as one notification on this MTU. The
 ~310 ms cadence is the adapter's own for this family: dropping the
