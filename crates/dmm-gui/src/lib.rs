@@ -233,10 +233,6 @@ pub(crate) struct CliOverrides {
     /// `--no-bluetooth`: no Bluetooth scanning for this session, whatever the
     /// saved setting says.
     pub no_bluetooth: bool,
-    /// The settings file's device when no entry answers to it, so the
-    /// session detects the meter instead; `None` when `--device` or a replay
-    /// names the meter.
-    pub unknown_saved_device: Option<String>,
     /// Time base for this session's readings: real unless a `--mock-clock-*`
     /// flag was given. Under `--replay` the first Connect pins its origin to
     /// the recording's own start.
@@ -266,7 +262,6 @@ impl CliOverrides {
             renderer: None,
             adapter: None,
             no_bluetooth: false,
-            unknown_saved_device: None,
             clock: dmm_lib::Clock::real(),
             replay: None,
             import: None,
@@ -376,18 +371,6 @@ fn resolve_device_and_clock(
         reason: l.help().mock_only(flag).into_owned(),
     })?;
     Ok((typed, clock))
-}
-
-/// The settings file's device no entry answers to, when a Connect in this
-/// session detects the meter in its place: not when `--device` or a replay
-/// names the session's meter. An import's session connects to the saved
-/// device on its first Connect, which says so then. `device` is the one
-/// [`resolve_device_and_clock`] settled on.
-fn unknown_saved_device(
-    pick: dmm_shared::session::DevicePick,
-    device: Option<&str>,
-) -> Option<String> {
-    pick.unknown_saved.filter(|_| device.is_none())
 }
 
 /// The command `--completions` writes a script for: the parsing one, with
@@ -503,7 +486,6 @@ fn parse_args(l: &Localizer, saved: &dmm_shared::SharedSettings) -> CliOverrides
         refuse(arg_errors::refused(&cmd, r.id, &typed, r.reason))
     });
 
-    let unknown_saved_device = unknown_saved_device(pick, device.as_deref());
     CliOverrides {
         device,
         mock_mode: args.mock_mode,
@@ -512,7 +494,6 @@ fn parse_args(l: &Localizer, saved: &dmm_shared::SharedSettings) -> CliOverrides
         renderer,
         adapter: args.adapter,
         no_bluetooth: args.no_bluetooth,
-        unknown_saved_device,
         clock,
         replay,
         import: args.import,
@@ -1009,20 +990,6 @@ pub fn run() -> eframe::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    /// The saved id is news only when the session detects in its place.
-    #[test]
-    fn an_unknown_saved_device_is_news_only_under_detection() {
-        let saved = dmm_shared::SharedSettings {
-            device_family: "ut62".to_string(),
-            ..Default::default()
-        };
-        let pick = || dmm_shared::session::resolve_device(None, Some(&saved)).unwrap();
-        assert_eq!(unknown_saved_device(pick(), None).as_deref(), Some("ut62"));
-        // `--device` or a replay names the meter instead.
-        assert_eq!(unknown_saved_device(pick(), Some("mock")), None);
-        assert_eq!(unknown_saved_device(pick(), Some("ut61eplus")), None);
-    }
 
     /// The device and clock for `typed` (`--device`) over `saved` (the
     /// settings file's `device_family`), with `--mock-mode` given or not.

@@ -607,6 +607,16 @@ impl App {
     /// what [`Settings::save`] puts back before writing: a flag changes this
     /// session, never the file.
     fn from_cli(mut settings: Settings, cli: crate::CliOverrides) -> Self {
+        // An id in the file no entry answers to is detected over, which the
+        // first Connect explains; not when `--device` or a replay names the
+        // meter. An import's session reaches the saved device at its first
+        // Connect, which says so then.
+        if cli.device.is_none() {
+            settings.unknown_saved_device =
+                dmm_shared::session::resolve_device(None, Some(&settings.shared))
+                    .ok()
+                    .and_then(|pick| pick.unknown_saved);
+        }
         if let Some(device) = cli.device {
             settings.overrides.device_family = Some(settings.shared.device_family.clone());
             settings.shared.device_family = device;
@@ -637,7 +647,6 @@ impl App {
             settings.shared.bluetooth = false;
         }
         settings.overrides.adapter = cli.adapter;
-        settings.unknown_saved_device = cli.unknown_saved_device;
         let mut app = Self::from_settings(settings, cli.clock);
         app.source.replay = cli.replay;
         app.source.cli_import = cli.import;
@@ -1622,10 +1631,7 @@ mod tests {
     /// and a run that names its own meter raises none.
     #[test]
     fn an_unknown_saved_device_is_said_once() {
-        let unknown = || crate::CliOverrides {
-            unknown_saved_device: Some("nope".to_string()),
-            ..crate::CliOverrides::none()
-        };
+        let unknown = crate::CliOverrides::none;
         let mut settings = Settings::default();
         settings.shared.device_family = "nope".to_string();
         let mut app = App::from_cli(settings.clone(), unknown());
@@ -1641,9 +1647,16 @@ mod tests {
         app.saved_device_toast();
         assert!(app.toasts.is_empty(), "raised twice");
 
-        let mut app = App::from_cli(settings, crate::CliOverrides::none());
-        app.saved_device_toast();
-        assert!(app.toasts.is_empty());
+        // `--device` or a replay names the meter.
+        for device in ["mock", "ut61eplus"] {
+            let named = crate::CliOverrides {
+                device: Some(device.to_string()),
+                ..crate::CliOverrides::none()
+            };
+            let mut app = App::from_cli(settings.clone(), named);
+            app.saved_device_toast();
+            assert!(app.toasts.is_empty(), "{device}");
+        }
 
         // A failure on screen stays, with the caution over it.
         let mut settings = Settings::default();
@@ -1656,7 +1669,10 @@ mod tests {
         assert!(app.toasts.take_latest().is_some_and(|t| t.is_error()));
 
         // Another device picked before the first Connect: nothing to say.
-        let mut app = App::from_cli(Settings::default(), unknown());
+        let mut settings = Settings::default();
+        settings.shared.device_family = "nope".to_string();
+        let mut app = App::from_cli(settings, unknown());
+        app.settings.shared.device_family = "ut61eplus".to_string();
         app.saved_device_toast();
         assert!(app.toasts.is_empty());
     }
