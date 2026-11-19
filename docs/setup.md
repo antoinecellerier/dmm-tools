@@ -278,7 +278,11 @@ one. None are lost; only their timestamps are off.
 - **The UT-D07B on Windows 11 and Android:** the tool shortens the link
   itself.
 - **Any other case:** the message asks for a report. Name the meter and the
-  operating system.
+  operating system. On Windows 11 or Android, try the UT-D07B's fix on your
+  meter first, and say in the report whether the message came back: on
+  Windows, start the tool with `DMM_BLE_SHORT_INTERVAL=1` set; on Android,
+  run `adb shell setprop debug.dmm.ble_short_interval 1`, then restart the
+  app.
 - **Any system:** a USB cable gives on-time readings.
 
 ### "No font for Chinese characters was found"

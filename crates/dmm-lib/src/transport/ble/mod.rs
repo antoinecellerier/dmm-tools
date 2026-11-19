@@ -124,6 +124,38 @@ const HANDLE_LOOKUP_TIMEOUT: Duration = Duration::from_secs(1);
 /// UT-D07B, and finishes it after the program has exited (research doc §3).
 const DISCONNECT_TIMEOUT: Duration = Duration::from_millis(500);
 
+/// The environment variable that asks for a short connection interval on
+/// every peer, not only the adapters, when set to `1`: for trying the fix
+/// on another meter before reporting it (`docs/setup.md`, "Some Bluetooth
+/// readings arrive late").
+const EVERY_PEER_VAR: &str = "DMM_BLE_SHORT_INTERVAL";
+
+/// Set by [`set_short_interval_for_every_peer`].
+#[cfg(target_os = "android")]
+static EVERY_PEER: AtomicBool = AtomicBool::new(false);
+
+/// Whether to ask for a short connection interval on every Bluetooth peer,
+/// as [`EVERY_PEER_VAR`] does where the application has an environment to
+/// read it from: Android's has none, so its application calls this at each
+/// start instead, with what its property says.
+#[cfg(target_os = "android")]
+pub fn set_short_interval_for_every_peer(on: bool) {
+    EVERY_PEER.store(on, Ordering::Relaxed);
+}
+
+/// Whether to shorten this peer's interval: an adapter's, which sets a long
+/// one ([`issc::is_adapter`]), or any peer's when [`EVERY_PEER_VAR`] asks.
+fn wants_short_interval(name: Option<&str>) -> bool {
+    if issc::is_adapter(name) {
+        return true;
+    }
+    #[cfg(target_os = "android")]
+    if EVERY_PEER.load(Ordering::Relaxed) {
+        return true;
+    }
+    std::env::var_os(EVERY_PEER_VAR).is_some_and(|v| v == "1")
+}
+
 /// Where the short-interval request stands on Android
 /// ([`Ble::request_short_interval_once`]).
 ///
@@ -239,8 +271,9 @@ pub(crate) struct Ble {
     /// The short-interval request, kept for as long as the link is open:
     /// dropping it withdraws it ([`request_short_interval`]).
     _short_interval: Option<ShortInterval>,
-    /// Where an adapter's short-interval request stands on Android
-    /// ([`Ble::request_short_interval_once`]); `Done` for every other peer.
+    /// Where the short-interval request stands on Android
+    /// ([`Ble::request_short_interval_once`]); `Done` for a peer whose
+    /// interval is left alone ([`wants_short_interval`]).
     #[cfg(target_os = "android")]
     short_interval: Cell<IntervalRequest>,
     /// For an adapter on Linux, the command that shortens this link's
@@ -255,8 +288,8 @@ pub(crate) struct Ble {
 }
 
 impl Ble {
-    /// Ask Android for its Balanced interval on an adapter's link, when
-    /// [`IntervalRequest`] says to.
+    /// Ask Android for its Balanced interval on an adapter's link, or any
+    /// peer's under [`EVERY_PEER_VAR`], when [`IntervalRequest`] says to.
     ///
     /// From the reading path, not the open: the peer's own update can land
     /// after the open. Android keeps a request for the rest of the link,
@@ -448,7 +481,7 @@ fn open(target: Target<'_>, stop: Option<&AtomicBool>) -> Result<Box<dyn Transpo
     // Looked up now, while the link is new, rather than from the reading
     // loop when the notice is due.
     #[cfg(target_os = "linux")]
-    let interval_command = if issc::is_adapter(opened.advertised_name.as_deref()) {
+    let interval_command = if wants_short_interval(opened.advertised_name.as_deref()) {
         connection_handle(&opened.selector).map(interval_command)
     } else {
         None
@@ -456,7 +489,7 @@ fn open(target: Target<'_>, stop: Option<&AtomicBool>) -> Result<Box<dyn Transpo
     #[cfg(not(target_os = "linux"))]
     let interval_command = None;
     #[cfg(target_os = "android")]
-    let short_interval = if issc::is_adapter(opened.advertised_name.as_deref()) {
+    let short_interval = if wants_short_interval(opened.advertised_name.as_deref()) {
         IntervalRequest::new(std::time::Instant::now())
     } else {
         IntervalRequest::Done
@@ -632,7 +665,10 @@ async fn connect(target: Target<'_>, begun: &RefCell<Begun>) -> Result<Opened> {
         ),
         _ => debug!("Bluetooth: MTU {mtu}"),
     }
-    let short_interval = if issc::is_adapter(candidate.taken_by.as_deref()) {
+    let short_interval = if wants_short_interval(candidate.taken_by.as_deref()) {
+        if !issc::is_adapter(candidate.taken_by.as_deref()) {
+            debug!("Bluetooth: {EVERY_PEER_VAR}: asking for a short interval on this peer too");
+        }
         request_short_interval(&peripheral).await
     } else {
         None

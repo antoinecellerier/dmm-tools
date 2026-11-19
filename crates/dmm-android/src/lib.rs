@@ -4,11 +4,13 @@
 //! live, btleplug's Java half — and then the window runs as it does
 //! everywhere (`dmm_gui::run_android`).
 //!
-//! Two system properties stand in for a command line while the port is
-//! brought up, set with `adb shell setprop` before a launch:
-//! `debug.dmm.log` takes what `RUST_LOG` takes, `debug.dmm.mock=1` opens the
-//! simulated meter, and `debug.dmm.corner_px` gives the radius of the
-//! screen's rounded corners where the system does not report it.
+//! System properties stand in for a command line and the environment
+//! while the port is brought up, set with `adb shell setprop` before a
+//! launch: `debug.dmm.log` takes what `RUST_LOG` takes, `debug.dmm.mock=1`
+//! opens the simulated meter, `debug.dmm.corner_px` gives the radius of the
+//! screen's rounded corners where the system does not report it, and
+//! `debug.dmm.ble_short_interval=1` does what `DMM_BLE_SHORT_INTERVAL=1`
+//! does.
 #![cfg(target_os = "android")]
 
 use android_system_properties::AndroidSystemProperties;
@@ -65,6 +67,10 @@ fn android_main(app: AndroidApp) {
     };
 
     dmm_lib::set_usb_host(Box::new(Usb(app.clone())));
+    // At each start: the process can outlive a launch.
+    dmm_lib::set_short_interval_for_every_peer(
+        set("debug.dmm.ble_short_interval").as_deref() == Some("1"),
+    );
 
     let activity = app.clone();
     let offers = app.clone();

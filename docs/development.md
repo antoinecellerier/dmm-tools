@@ -360,7 +360,9 @@ On the phone, `adb shell setprop debug.dmm.mock 1` opens the simulated
 meter on the next launch, `adb shell setprop debug.dmm.log dmm_lib=debug`
 takes what `RUST_LOG` takes, and `adb logcat -s dmm` shows the log.
 `debug.dmm.corner_px` gives the radius of the screen's rounded corners, in
-pixels, on a phone whose system reports none.
+pixels, on a phone whose system reports none, and
+`debug.dmm.ble_short_interval 1` does what `DMM_BLE_SHORT_INTERVAL=1` does on
+a desktop.
 
 ## Translations
 

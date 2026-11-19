@@ -18,6 +18,10 @@ pub mod transform;
 pub mod transport;
 
 pub use clock::Clock;
+/// How an Android application, which has no environment, asks for a short
+/// Bluetooth interval on every peer, as `DMM_BLE_SHORT_INTERVAL=1` does.
+#[cfg(all(target_os = "android", feature = "bluetooth"))]
+pub use transport::ble::set_short_interval_for_every_peer;
 /// How an Android application gives the library its USB cables.
 #[cfg(target_os = "android")]
 pub use transport::hid::{UsbCable, UsbHost, UsbRefusal, set_usb_host};
