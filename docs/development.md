@@ -322,10 +322,15 @@ the reasoning and what a phone has shown so far. `crates/dmm-android` is
 the shared library, empty on every other target, and `android/` the Gradle
 project that packages it with btleplug's Java classes and two small
 activities, one of which lists and opens the cables for the library.
-`scripts/android-build.sh` builds the debug APK for arm64, with `--release`
-the optimised one, a third of the size, and with `--install` puts it on the
-phone `adb` sees. Both are signed with this machine's debug key. It names
-what is missing of:
+
+```sh
+scripts/android-build.sh            # the debug APK, for arm64
+scripts/android-build.sh --release  # the optimised one, a third of the size
+scripts/android-build.sh --install  # with either: installs it on the phone adb sees and starts it
+```
+
+Either APK is signed with this machine's debug key. The script names what
+is missing of:
 
 | Needed | From |
 |---|---|
@@ -351,26 +356,37 @@ update only over a copy signed with the same key, so the script refuses a
 result whose certificate is not the one in `android/signing-cert.sha256`,
 and a copy built locally has to be uninstalled before a published one goes
 on. The key is a secret of the repository's `android-signing` environment,
-which only runs on `main` and on `v*` tags may use; the maintainer keeps a
+which only runs on `main` and on `v*` tags can use; the maintainer keeps a
 copy offline. A key that is lost or leaked cannot be revoked: a new one
 takes its place, with its fingerprint in that file, and everyone installs
 the application afresh.
 
-On the phone, system properties set with `adb shell setprop` stand in for
-the command line, read at each launch and cleared by a reboot: restart the
-application with
-`adb shell am start -S -n io.github.antoinecellerier.dmmtools/.PermissionActivity`
-after setting one. `debug.dmm.mock 1` opens the simulated meter,
-`debug.dmm.log dmm_lib=debug` takes what `RUST_LOG` takes, and
-`adb logcat -s dmm` shows the log. `debug.dmm.corner_px` gives the radius of
-the screen's rounded corners, in pixels, on a phone whose system reports
-none, and `debug.dmm.ble_short_interval 1` does what
-`DMM_BLE_SHORT_INTERVAL=1` does on a desktop. `debug.dmm.replay <name>` plays
-a replay file back as `--replay` does, to reproduce a session on a phone: the
-name is the file's in the application's own folder, where
-`adb push <file> /sdcard/Android/data/io.github.antoinecellerier.dmmtools/files/`
-puts it; a file that won't load is logged and the application starts
-without it. `adb shell "setprop debug.dmm.replay ''"` clears it.
+On the phone, system properties stand in for the command line. They are
+read at each launch and cleared by a reboot, so restart the application
+after setting one:
+
+```sh
+adb shell setprop debug.dmm.log dmm_lib=debug
+adb shell am start -S -n io.github.antoinecellerier.dmmtools/.PermissionActivity
+adb logcat -s dmm
+```
+
+- `debug.dmm.log` takes what `RUST_LOG` takes.
+- `debug.dmm.mock 1` opens the simulated meter.
+- `debug.dmm.corner_px` gives the radius of the screen's rounded corners,
+  in pixels, on a phone whose system reports none.
+- `debug.dmm.ble_short_interval 1` does what `DMM_BLE_SHORT_INTERVAL=1`
+  does on a desktop.
+- `debug.dmm.replay <name>` plays a replay file back as `--replay` does, to
+  reproduce a session on a phone. The name is the file's in the
+  application's own folder, where
+  `adb push <file> /sdcard/Android/data/io.github.antoinecellerier.dmmtools/files/`
+  puts it. A golden fixture takes its meter from its folder's name, so it
+  goes in a subfolder named after the device id: `ut61eplus/acv.yaml`. A
+  file that won't load is logged and the application starts without it;
+  `adb shell "setprop debug.dmm.replay ''"` clears the property.
+- `debug.dmm.replay_draws_keys 1` does what `--replay-draws-keys` does,
+  keeping the replayed meter's buttons and dropdowns on screen.
 
 ## Translations
 
