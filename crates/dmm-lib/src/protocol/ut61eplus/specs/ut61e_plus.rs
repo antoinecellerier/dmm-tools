@@ -413,7 +413,7 @@ static ACDC_V: ModeSpecs = ModeSpecs {
         input_impedance: Some("About 10MΩ"),
         overload_protection: Some("1000V"),
         notes: &[
-            "True RMS and accuracy valid 10%–100% of range",
+            "True RMS; accuracy valid 10%–100% of range",
             "For AC voltage, shorted leads: residual ≤200 digits",
         ],
     },

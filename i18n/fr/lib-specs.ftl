@@ -370,6 +370,12 @@ note-when-rise-time-1us-signals-center = Quand le temps de montée est <1µs, le
 # Used by: UT803
 # In: G. Diode Testst
 note-working-current-1ma = Courant de fonctionnement ≈1mA
+# Used by: VC920/VC940/VC960
+# In: AC / A; AC / V
+note-true-rms-accuracy-valid-10-pct = Précision True RMS valable sur 10%–100% de la plage
+# Used by: Mock UT61E+, UT161E, UT61E+
+# In: AC+DC Voltage
+note-true-rms-accuracy-valid-10-pct-2 = True RMS ; précision valable sur 10%–100% de la plage
 # Used by: Mock UT61E+, UT161E, UT61E+
 # In: AC Current
 note-ua-ranges-min-30ua = Plages µA : min. 30µA

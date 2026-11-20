@@ -543,7 +543,7 @@ static AC_V: ModeSpecs = ModeSpecs {
         input_impedance: Some("10MΩ"),
         overload_protection: Some("1000V"),
         notes: &[
-            "True RMS and accuracy valid 10%–100% of range",
+            "True RMS accuracy valid 10%–100% of range",
             "AC+DC: add 1%+30 digits to accuracy",
             "Crest factor ≤3",
             "Shorted leads: residual ≤70 digits",
@@ -745,7 +745,7 @@ static AC_UA: ModeSpecs = ModeSpecs {
         overload_protection: Some("Fuse 0.5A 250V"),
         notes: &[
             "10A: 0–5A continuous; >5A–10A max. 10s, then rest 15min",
-            "True RMS and accuracy valid 10%–100% of range",
+            "True RMS accuracy valid 10%–100% of range",
             "AC+DC: add 1%+30 digits to accuracy",
             "Crest factor ≤3",
         ],
@@ -815,7 +815,7 @@ static AC_MA: ModeSpecs = ModeSpecs {
         overload_protection: Some("Fuse 0.5A 250V"),
         notes: &[
             "10A: 0–5A continuous; >5A–10A max. 10s, then rest 15min",
-            "True RMS and accuracy valid 10%–100% of range",
+            "True RMS accuracy valid 10%–100% of range",
             "AC+DC: add 1%+30 digits to accuracy",
             "Crest factor ≤3",
         ],
@@ -858,7 +858,7 @@ static AC_A: ModeSpecs = ModeSpecs {
         overload_protection: Some("Fuse 10A 250V"),
         notes: &[
             "10A: 0–5A continuous; >5A–10A max. 10s, then rest 15min",
-            "True RMS and accuracy valid 10%–100% of range",
+            "True RMS accuracy valid 10%–100% of range",
             "AC+DC: add 1%+30 digits to accuracy",
             "Crest factor ≤3",
         ],

@@ -328,8 +328,8 @@ note-then-typically-18kohm-100v-125kohm-300v-2 = Then typically 18kΩ@100V, 125k
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
 # In: Non-Contact EF-Detection
 note-tolerance-10v-36v-23v-83v-59v = Tolerance: 10V~36V, 23V~83V, 59V~165V, 124V~330V, > 250V
-# Used by: Mock UT61E+, UT161E, UT61E+, UT804, VC920/VC940/VC960
-# In: 5 tables
+# Used by: UT804
+# In: B. AC Voltage (AC+DC measurement is available); D. AC Current (AC+DC measurement is available)
 note-true-rms-and-accuracy-valid-10 = True RMS and accuracy valid 10%–100% of range
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
 # In: AC & AC+DC Current; AC Voltage
@@ -370,6 +370,12 @@ note-when-rise-time-1us-signals-center = When rise time <1µs, signals center on
 # Used by: UT803
 # In: G. Diode Testst
 note-working-current-1ma = Test current ≈1mA
+# Used by: VC920/VC940/VC960
+# In: AC / A; AC / V
+note-true-rms-accuracy-valid-10-pct = True RMS accuracy valid 10%–100% of range
+# Used by: Mock UT61E+, UT161E, UT61E+
+# In: AC+DC Voltage
+note-true-rms-accuracy-valid-10-pct-2 = True RMS; accuracy valid 10%–100% of range
 # Used by: Mock UT61E+, UT161E, UT61E+
 # In: AC Current
 note-ua-ranges-min-30ua = µA ranges: min 30µA

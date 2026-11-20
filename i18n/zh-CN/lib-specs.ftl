@@ -370,6 +370,12 @@ note-when-rise-time-1us-signals-center = 上升时间 <1µs 时，信号以触�
 # Used by: UT803
 # In: G. Diode Testst
 note-working-current-1ma = 工作电流 ≈1mA
+# Used by: VC920/VC940/VC960
+# In: AC / A; AC / V
+note-true-rms-accuracy-valid-10-pct = 真有效值准确度有效范围: 量程的 10%–100%
+# Used by: Mock UT61E+, UT161E, UT61E+
+# In: AC+DC Voltage
+note-true-rms-accuracy-valid-10-pct-2 = 真有效值；准确度有效范围: 量程的 10%–100%
 # Used by: Mock UT61E+, UT161E, UT61E+
 # In: AC Current
 note-ua-ranges-min-30ua = µA 量程: 最小 30µA

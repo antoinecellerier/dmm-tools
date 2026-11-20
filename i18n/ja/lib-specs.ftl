@@ -370,6 +370,12 @@ note-when-rise-time-1us-signals-center = 立ち上がり時間が <1µs のと�
 # Used by: UT803
 # In: G. Diode Testst
 note-working-current-1ma = 動作電流 ≈1mA
+# Used by: VC920/VC940/VC960
+# In: AC / A; AC / V
+note-true-rms-accuracy-valid-10-pct = 真の実効値の確度はレンジの 10%–100% で有効
+# Used by: Mock UT61E+, UT161E, UT61E+
+# In: AC+DC Voltage
+note-true-rms-accuracy-valid-10-pct-2 = 真の実効値、確度はレンジの 10%–100% で有効
 # Used by: Mock UT61E+, UT161E, UT61E+
 # In: AC Current
 note-ua-ranges-min-30ua = µA レンジ: 最小 30µA
