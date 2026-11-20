@@ -315,6 +315,11 @@ impl Localizer {
             .find_map(|b| format_at(b, id, args.as_ref(), self.format_failure))
     }
 
+    /// Whether the language itself has message `id`, not just en-US.
+    fn has_own(&self, id: &str) -> bool {
+        self.bundles.first().is_some_and(|b| b.has_message(id))
+    }
+
     /// Whether this localizer shows the English as written: en-US without
     /// the pseudo-locale.
     pub fn plain_english(&self) -> bool {

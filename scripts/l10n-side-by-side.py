@@ -6,10 +6,10 @@
 Every file under i18n/en-US/, the GUI's first, under its group headings: each
 message and each attribute on a row of its own, with the English's comment
 under it. Messages the language lacks are marked, the optional ones (the
-specification text in lib.ftl and capture's text, which show in English
-until translated) apart from the rest. Text is shown as the file writes it,
-placeables and selectors included. For reading a language through; edits go
-in the files themselves.
+specification text in lib-specs.ftl and lib-spec-templates.ftl and capture's
+text, which show in English until translated) apart from the rest. Text is
+shown as the file writes it, placeables and selectors included. For reading
+a language through; edits go in the files themselves.
 """
 
 import csv
@@ -125,9 +125,7 @@ def text(lines):
 def optional(path, key):
     """Whether `key` of `path` may be left out of a shipped language, as the
     translations check (crates/dmm-shared/src/l10n/translations.rs) says."""
-    if path == "cli/capture.ftl":
-        return True
-    return path == "lib.ftl" and key.split("-", 1)[0] in ("note", "input", "band")
+    return path in ("cli/capture.ftl", "lib-specs.ftl", "lib-spec-templates.ftl")
 
 
 def glossary(path):

@@ -168,6 +168,10 @@ pub(super) fn is_value(text: &str) -> bool {
         && words(text).all(|w| spec_unit(w).is_some() || PREFIXES.contains(&w))
 }
 
+/// How many composed spec texts a [`Localizer`] keeps: several times what
+/// the library's tables hold.
+const COMPOSED_CAP: usize = 4096;
+
 /// The kinds of spec text a translation may only show with the English's
 /// numbers ([`Localizer::spec_text`]).
 pub(super) const GUARDED: [TextKind; 3] = [TextKind::Band, TextKind::Input, TextKind::Note];
@@ -447,13 +451,19 @@ impl Localizer {
                 .get(id)
                 .map_or(Cow::Borrowed(english), |t| Cow::Borrowed(t.as_str()));
         }
+        // Numbers and units alone are never translated, in a template or
+        // out of one.
+        if is_units_only(english) {
+            return Cow::Borrowed(english);
+        }
         self.composed(kind, english)
             .map_or(Cow::Borrowed(english), Cow::Owned)
     }
 
     /// [`Localizer::compose`]'s text for `english` where it keeps the
     /// numbers, from the cache after the first time. The cache holds the
-    /// library's spec texts at most: they are what is asked for.
+    /// library's worded spec texts, which are what is asked for, and
+    /// [`COMPOSED_CAP`] texts at most: past it a text is composed each time.
     fn composed(&self, kind: TextKind, english: &str) -> Option<String> {
         let cache = || {
             self.composed_spec_texts
@@ -475,10 +485,13 @@ impl Localizer {
             }
             None => None,
         };
-        cache()
-            .entry(kind)
-            .or_default()
-            .insert(english.to_string(), made.clone());
+        let mut cache = cache();
+        if cache.values().map(HashMap::len).sum::<usize>() < COMPOSED_CAP {
+            cache
+                .entry(kind)
+                .or_default()
+                .insert(english.to_string(), made.clone());
+        }
         made
     }
 
@@ -500,9 +513,14 @@ impl Localizer {
     }
 
     /// [`Localizer::compose`] before the pseudo-locale's brackets, which go
-    /// around the whole text once.
+    /// around the whole text once. Only through a template the language
+    /// has: with en-US's a text would show half translated, where one
+    /// without a translation shows in English.
     fn compose_raw(&self, kind: TextKind, english: &str) -> Option<String> {
-        let templates = index().templates.iter().filter(|t| t.kind == kind);
+        let templates = index()
+            .templates
+            .iter()
+            .filter(|t| t.kind == kind && self.has_own(&t.id));
         for template in templates {
             for binding in template.parses(english) {
                 let args: Option<Vec<(&str, Arg<'_>)>> = binding
@@ -838,6 +856,8 @@ mod tests {
     #[test]
     fn every_label_reads_back_through_the_messages() {
         let l = untranslated();
+        // Templates compose only in a language that has them.
+        let english = Localizer::en_us(LIB_RESOURCES);
         let all = dmm_lib::text::all_texts();
         for (kind, text, _) in all.entries() {
             if kind == TextKind::Qualifier {
@@ -850,7 +870,7 @@ mod tests {
                 let read = l
                     .listed(kind, text)
                     .map(Cow::into_owned)
-                    .or_else(|| l.compose_raw(kind, text));
+                    .or_else(|| english.compose_raw(kind, text));
                 assert_eq!(read.as_deref(), Some(text));
             }
         }
@@ -889,10 +909,13 @@ mod tests {
             band("+40 to +400 °C (4000 counts)"),
             "+40 à +400 °C (4000 points)"
         );
-        // A part without a translation stays English inside the template.
+        // A part that is a message without a translation stays English
+        // inside the template.
+        assert_eq!(band("3d/kHz+2d (4000 counts)"), "3d/kHz+2d (4000 points)");
+        // A part read by a template the language lacks: English whole.
         assert_eq!(
             band("250kHz~400kHz, 10 - 30% of MR (4000 counts)"),
-            "250kHz~400kHz, 10 - 30% of MR (4000 points)"
+            "250kHz~400kHz, 10 - 30% of MR (4000 counts)"
         );
         // Text no template reads stays English whole.
         assert_eq!(band("Sometimes: 4.000"), "Sometimes: 4.000");

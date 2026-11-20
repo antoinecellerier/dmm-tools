@@ -172,7 +172,8 @@ fn plan(
     let wanted_set: HashSet<(TextKind, &str)> = wanted.iter().copied().collect();
     let mut problems = Vec::new();
     let mut sections: BTreeMap<TextKind, Vec<Placed>> = BTreeMap::new();
-    let mut taken = HashSet::new();
+    // A template's ID is taken too: the files share one set of IDs.
+    let mut taken: HashSet<String> = spec_templates().iter().map(|t| t.id.clone()).collect();
     let mut seen: BTreeMap<(TextKind, &str), &str> = BTreeMap::new();
     for e in existing {
         let id = &e.id;
@@ -195,7 +196,8 @@ fn plan(
             problems.push(format!(
                 "`{id}` = {text:?}: not {} text the library shows any more. \
                  Edit its English to the library's new text to keep its ID and \
-                 translations, or delete it.",
+                 translations, or delete it, in every language: a text a spec \
+                 template now reads has no message of its own.",
                 kind.name()
             ));
             continue;
@@ -400,6 +402,19 @@ fn tables() -> BTreeMap<(TextKind, &'static str), BTreeSet<&'static str>> {
     out
 }
 
+/// Adds to `read` the templates that read `text`, and those that read what
+/// their text slots hold.
+fn read_by(kind: TextKind, text: &str, read: &mut HashSet<&'static str>) {
+    for template in spec_templates().iter().filter(|t| t.kind == kind) {
+        for binding in template.parses(text) {
+            read.insert(template.id.as_str());
+            for (_, held) in binding.iter().filter(|(slot, _)| *slot == TEXT_SLOT) {
+                read_by(kind, held, read);
+            }
+        }
+    }
+}
+
 /// The share of their words two texts must have in common for one to be
 /// [`near_template`] the other.
 const NEAR: f32 = 0.6;
@@ -543,13 +558,14 @@ fn lib_ftl_lists_the_library_text() {
     // A template no library text reads any more is left for the maintainer,
     // as an orphaned message is.
     let all = all_texts();
+    let mut read = HashSet::new();
+    for (kind, text, _) in all.entries() {
+        read_by(kind, text, &mut read);
+    }
     let unread: Vec<&str> = spec_templates()
         .iter()
-        .filter(|t| {
-            !all.entries()
-                .any(|(kind, text, _)| kind == t.kind && !t.parses(text).is_empty())
-        })
         .map(|t| t.id.as_str())
+        .filter(|id| !read.contains(id))
         .collect();
     assert!(
         unread.is_empty(),

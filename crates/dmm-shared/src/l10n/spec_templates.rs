@@ -46,7 +46,7 @@ pub(crate) type Binding<'t> = Vec<(&'t str, &'t str)>;
 
 /// The templates of an en-US `lib-spec-templates.ftl` `source`, or what is
 /// wrong with it: an ID that names no spec kind, a pattern of anything but
-/// text and variables, two slots with no text between them.
+/// text and variables, two slots with no text between them, no text at all.
 pub(crate) fn templates(source: &str) -> Result<Vec<Template>, Vec<String>> {
     let resource = fluent_syntax::parser::parse(source)
         .map_err(|(_, errors)| vec![format!("syntax errors: {errors:?}")])?;
@@ -80,6 +80,15 @@ pub(crate) fn templates(source: &str) -> Result<Vec<Template>, Vec<String>> {
                     .any(|w| matches!(w, [Part::Slot(_), Part::Slot(_)])) =>
             {
                 problems.push(format!("`{id}` has two slots with no text between"));
+            }
+            // Slots alone would read every text, a text slot's own content
+            // included, without end.
+            (Some(_), Some(parts))
+                if !parts
+                    .iter()
+                    .any(|p| matches!(p, Part::Literal(text) if !text.trim().is_empty())) =>
+            {
+                problems.push(format!("`{id}` has no text of its own"));
             }
             (Some(kind), Some(parts)) => out.push(Template {
                 id: id.to_string(),
@@ -221,6 +230,8 @@ mod tests {
         assert!(templates("mode-x = { $text } y\n").is_err());
         assert!(templates("band-x = { $a }{ $b }\n").is_err());
         assert!(templates("band-x = { NUMBER($a) } y\n").is_err());
+        assert!(templates("band-x = { $text }\n").is_err());
+        assert!(templates("band-x = { $text } { $a }\n").is_err());
         assert_eq!(
             templates("band-x = { $a } y\n").unwrap()[0].kind,
             TextKind::Band
