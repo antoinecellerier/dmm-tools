@@ -866,7 +866,8 @@ mod tests {
                 Resource {
                     locale: "fr",
                     path: "lib-spec-templates.ftl",
-                    source: "band-at-4000-counts = { $text } (4000 points)\n",
+                    source: "band-at-4000-counts = { $text } (4000 points)\n\
+                             band-temperature-from-to = { $from } à { $to }\n",
                 },
                 Resource {
                     locale: "fr",
@@ -883,6 +884,11 @@ mod tests {
             "30 - 100% de la plage (4000 points)"
         );
         assert_eq!(band("45Hz~1kHz (4000 counts)"), "45Hz~1kHz (4000 points)");
+        // A template's text may be another template's.
+        assert_eq!(
+            band("+40 to +400 °C (4000 counts)"),
+            "+40 à +400 °C (4000 points)"
+        );
         // A part without a translation stays English inside the template.
         assert_eq!(
             band("250kHz~400kHz, 10 - 30% of MR (4000 counts)"),
@@ -964,19 +970,19 @@ mod tests {
             TextKind::Note,
             "Lo-Z threshold: > +1.5VDC or < -1.0VDC nominal",
         );
-        let open = ids(TextKind::Note, "Open circuit ≈-1.2V");
+        let probe = ids(TextKind::Note, "Supplied wire thermocouple: max. +230°C");
         let tempco = ids(
             TextKind::Note,
             "60.00MΩ: tempco 0.6× accuracy/°C @(0°C ~ 18°C or 28°C ~ 45°C)",
         );
-        let input = ids(TextKind::Input, "About 10MΩ");
+        let input = ids(TextKind::Input, "10MΩ, 50pF nominal");
         let band = ids(TextKind::Band, "In REL mode");
         let lpf = ids(TextKind::Band, "40Hz~100Hz (LPF)");
         let source = format!(
             "{note} = Seuil Lo-Z : > 1,5 VCC ou < -1,0 VCC nominal\n\
-             {open} = Circuit ouvert ≈-1,2 V\n\
+             {probe} = Thermocouple filaire fourni : max. +230 °C\n\
              {tempco} = 60,00 MΩ : coefficient 0,6× la précision/°C @(0 °C ~ 18 °C ou 28 °C ~ 45 °C)\n\
-             {input} = Environ 10 MΩ\n\
+             {input} = 10 MΩ, 50 pF nominal\n\
              {band} = En mode REL\n\
              {lpf} = 40 Hz~1000 Hz (LPF)\n"
         );
@@ -996,8 +1002,8 @@ mod tests {
     fn spec_text_shows_a_translation_that_keeps_its_numbers() {
         let l = french_specs();
         assert_eq!(
-            l.spec_text(TextKind::Note, "Open circuit ≈-1.2V"),
-            "Circuit ouvert ≈-1,2 V"
+            l.spec_text(TextKind::Note, "Supplied wire thermocouple: max. +230°C"),
+            "Thermocouple filaire fourni : max. +230 °C"
         );
         assert_eq!(
             l.spec_text(
@@ -1006,10 +1012,11 @@ mod tests {
             ),
             "60,00 MΩ : coefficient 0,6× la précision/°C @(0 °C ~ 18 °C ou 28 °C ~ 45 °C)"
         );
-        assert_eq!(l.spec_text(TextKind::Input, "About 10MΩ"), "Environ 10 MΩ");
+        let input = "10MΩ, 50pF nominal";
+        assert_eq!(l.spec_text(TextKind::Input, input), "10 MΩ, 50 pF nominal");
         assert_eq!(l.spec_text(TextKind::Band, "In REL mode"), "En mode REL");
         // `label` takes the same guard.
-        assert_eq!(l.label(TextKind::Input, "About 10MΩ"), "Environ 10 MΩ");
+        assert_eq!(l.label(TextKind::Input, input), "10 MΩ, 50 pF nominal");
     }
 
     #[test]

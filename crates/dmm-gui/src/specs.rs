@@ -552,13 +552,17 @@ mod tests {
         let lib = Resource {
             locale: "fr",
             path: "lib-specs.ftl",
-            source: "note-shorted-leads-residual-10-digits = Cordons en court-circuit : \
-                     résidu ≤10 points\n\
-                     input-about-10mohm = Environ 100 MΩ\n\
-                     band-40hz-100hz-lpf = 40 Hz~100 Hz (filtre)\n\
+            source: "band-40hz-100hz-lpf = 40 Hz~100 Hz (filtre)\n\
                      band-only-for-reference = Pour référence\n",
         };
-        let resources = [crate::l10n::english_resources(), vec![lib]].concat();
+        let templates = Resource {
+            locale: "fr",
+            path: "lib-spec-templates.ftl",
+            source: "note-shorted-leads-residual = Cordons en court-circuit : \
+                     résidu { $count } points\n\
+                     input-impedance-about = Environ 100 MΩ\n",
+        };
+        let resources = [crate::l10n::english_resources(), vec![lib, templates]].concat();
         Localizer::new(&FRENCH, &resources, &Options::default())
     }
 

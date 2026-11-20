@@ -20,22 +20,6 @@
 # Used by: VC920/VC940/VC960
 band-4000-counts = (4000 カウント)
 # Used by: VC920/VC940/VC960
-band-plus-40-to-plus-400-degc = +40 から +400 °C
-# Used by: VC920/VC940/VC960
-band-plus-400-to-plus-1000-degc = +400 から +1000 °C
-# Used by: VC920/VC940/VC960
-band-40-to-plus-40-degc = -40 から +40 °C
-# Used by: VC920/VC940/VC960
-band-10khz-120khz-10-15-pct-of = 10kHz~120kHz、レンジの 10 - 15%
-# Used by: VC920/VC940/VC960
-band-10khz-120khz-15-100-pct-of = 10kHz~120kHz、レンジの 15 - 100%
-# Used by: VC920/VC940/VC960
-band-120khz-250khz-10-30-pct-of = 120kHz~250kHz、レンジの 10 - 30%
-# Used by: VC920/VC940/VC960
-band-120khz-250khz-30-100-pct-of = 120kHz~250kHz、レンジの 30 - 100%
-# Used by: VC920/VC940/VC960
-band-250khz-400khz-10-30-pct-of = 250kHz~400kHz、レンジの 10 - 30%
-# Used by: VC920/VC940/VC960
 band-30-100-pct-of-mr = レンジの 30 - 100%
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
 # In: Logic Level Frequency (⎍Hz) & Duty Cycle (D%)
@@ -76,57 +60,12 @@ input-1100v-dc-ac-rms = 1100V DC/AC rms
 # Used by: UT803
 # In: 6 tables
 input-250v-rms = 250V rms
-# Used by: 8 meters
-# In: 6 tables
-input-about-10mohm = 約 10MΩ
-# Used by: 7 meters
-# In: DC Voltage
-input-about-1gohm = 約 1GΩ
-# Used by: UT804
-# In: A. DC Voltage
-input-around-2-5gohm = 約 2.5GΩ
-# Used by: UT803
-# In: A. DC Voltage; B. AC Voltage
-input-around-3000mohm = 約 > 3000MΩ
 # Used by: UT71C/D/E
 # In: L. Power Measurement (UT71E only)
 input-current-fuse-10a-1000v-voltage-1000v = 電流: ヒューズ 10A 1000V、電圧: 1000V
-# Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
-# In: AC & AC+DC Current; DC Current; Line Level Frequency (~Hz)
-input-fuse-0-44a-1000v = ヒューズ 0.44A 1000V
-# Used by: UT71A, UT71B, UT71C/D/E
-# In: C. DC Current; D. AC Current (AC+DC measurement is available); K. 4~20 mA loop current (UT71B/C/D/E)
-input-fuse-0-5a-1000v = ヒューズ 0.5A 1000V
-# Used by: UT804
-# In: C. DC Current; D. AC Current (AC+DC measurement is available); L. 4~20 mA loop current
-input-fuse-0-5a-250v = ヒューズ 0.5A 250V
-# Used by: UT181A
-# In: (4) AC Current; (5) DC Current; (6) AC Current + DC Current
-input-fuse-0-8a-1000v = ヒューズ 0.8A 1000V
-# Used by: UT181A
-# In: (4) AC Current; (5) DC Current; (6) AC Current + DC Current
-input-fuse-10a-1000v = ヒューズ 10A 1000V
-# Used by: Mock UT61E+, UT61B+, UT61D+, UT61E+
-# In: AC Current; DC Current
-input-fuse-10a-240v = ヒューズ 10A 240V
-# Used by: UT803, UT804
-# In: C. DC Current; D. AC Current; D. AC Current (AC+DC measurement is available)
-input-fuse-10a-250v = ヒューズ 10A 250V
-# Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s, UT161B, UT161D, UT161E
-# In: 4 tables
-input-fuse-11a-1000v = ヒューズ 11A 1000V
-# Used by: Mock UT61E+, UT61B+, UT61D+, UT61E+
-# In: AC Current; DC Current
-input-fuse-1a-240v = ヒューズ 1A 240V
 # Used by: UT803
 # In: K. Transistor
 input-fuse-200ma-250v-fuse-500ma-125v = ヒューズ 200mA 250V、ヒューズ 500mA 125V
-# Used by: UT803
-# In: C. DC Current; D. AC Current
-input-fuse-500ma-125v = ヒューズ 500mA 125V
-# Used by: UT161B, UT161D, UT161E
-# In: AC Current; DC Current
-input-fuse-600ma-1000v = ヒューズ 600mA 1000V
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
 # In: AutoCheck™ (ACV)
 input-initially-approx-3-0kohm-150pf-nominal = 初期状態で約 3.0kΩ, 150pF (定格)
@@ -155,39 +94,21 @@ note-10a-5a-continuous-5a-10a-10s = 10A: ≤5A は連続、>5A–10A は ≤10s 
 # Used by: UT181A
 # In: (13) Pulse Width
 note-10hz-200khz-pulse-width-2us-depends = 10Hz–200kHz: パルス幅 >2µs、信号の周波数に依存
-# Used by: CMS061, CMS101
-# In: Capacitance(F)
-note-20-00mf-measuring-duration-should-be = 20.00mF: 測定時間は 30s を超えること
-# Used by: UT71A, UT71B
-# In: E. Resistance
-note-200ohm-accuracy-plus-test-lead-short = 200Ω: 確度 + テストリード短絡時の値
 # Used by: UT181A
 # In: (4) AC Current; (5) DC Current; (6) AC Current + DC Current
 note-20a-30s-on-then-10min-off = 20A: 30s 通電後 10min 休止、10A 超は規定なし
 # Used by: UT71A, UT71B
 # In: H. Capacitance
 note-20nf-accuracy-plus-open-circuit-test = 20nF: 確度 + テストリード開放時の静電容量
-# Used by: Mock UT61E+, UT161E, UT61E+
-# In: Capacitance
-note-220mf-range-measurement-takes-20s = 220mF レンジ: 測定時間 ≈20s
-# Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
-# In: Capacitance
-note-25-00mf-manual-range-not-specified = 25.00mF、マニュアルレンジ: 5.4mF 未満は規定なし
 # Used by: UT804
 # In: E. Resistance
 note-400ohm-accuracy-plus-test-lead-open = 400Ω: 確度 + テストリード開放時の値
-# Used by: UT71C/D/E
-# In: E. Resistance
-note-400ohm-accuracy-plus-test-lead-short = 400Ω: 確度 + テストリード短絡時の値
 # Used by: UT804
 # In: H. Capacitance
 note-40nf-accuracy-plus-open-circuit-test = 40nF: 確度 + テストリード開放時の静電容量
 # Used by: UT71B, UT71C/D/E
 # In: K. 4~20 mA loop current (UT71B/C/D/E)
 note-4ma-shows-0-pct-20ma-shows-2 = 4mA で 0%、20mA で 100% を表示
-# Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
-# In: Capacitance
-note-6-000mf-manual-range-not-specified = 6.000mF、マニュアルレンジ: 0.54mF 未満は規定なし
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
 # In: AutoCheck™ (Ohms)
 note-60-00mohm-tempco-0-6-accuracy = 60.00MΩ: 温度係数 0.6× 確度/°C @(0°C ~ 18°C または 28°C ~ 45°C)
@@ -198,20 +119,11 @@ note-60-00mv-600-0mv-1khz-20khz = 60.00mV, 600.0mV, 1kHz ~ 20kHz: レンジの 3
 # In: AC Voltage
 note-60-00mv-600-0mv-3khz-20khz = 60.00mV, 600.0mV, 3kHz ~ 20kHz: レンジの 30% から 100% で規定
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
-# In: Capacitance
-note-600-0uf-manual-range-not-specified = 600.0µF、マニュアルレンジ: 50.0µF 未満は規定なし
-# Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
 # In: dBm
 note-600ohm-ref-typical-acmv-42-22 = 600Ω 基準、標準: ACmV -42.22 から -02.22dBm、ACV -17.78 から 62.22dBm
-# Used by: UT803
-# In: E. Resistance
-note-600ohm-accuracy-plus-test-lead-short = 600Ω: 確度 + テストリード短絡時の抵抗
 # Used by: UT181A
 # In: (7) Resistance
 note-60mohm-humidity-50-pct = 60MΩ: 湿度 <50%
-# Used by: UT161B, UT161D, UT61B+, UT61D+
-# In: Capacitance
-note-60mf-range-measurement-takes-20s = 60mF レンジ: 測定時間 ≈20s
 # Used by: UT181A
 # In: (2) DC Voltage
 note-60mv-use-rel-to-compensate-bias = 60mV: バイアス電圧の補正には REL を使用
@@ -236,39 +148,6 @@ note-20ma-display-shows-hi = >20mA: ディスプレイに HI を表示
 # Used by: 7 meters
 # In: AC Current; DC Current
 note-5a-max-10s-rest-15-min = >5A: 最大 10s、休止 ≥15 min
-# Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
-# In: Line Level Frequency (~Hz)
-note-ac-10-00a-15-00-3 = AC 10.00A: 15.00 ~ 3.000kHz、感度 6A (正弦波の実効値)
-# Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
-# In: Line Level Frequency (~Hz)
-note-ac-6-000a-15-00-3 = AC 6.000A: 15.00 ~ 3.000kHz、感度 4A (正弦波の実効値)
-# Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
-# In: Line Level Frequency (~Hz)
-note-ac-60-00ma-15-00-3 = AC 60.00mA: 15.00 ~ 3.000kHz、感度 40mA (正弦波の実効値)
-# Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
-# In: Line Level Frequency (~Hz)
-note-ac-60-00mv-15-00-50 = AC 60.00mV: 15.00 ~ 50.00kHz、感度 40mV (正弦波の実効値)
-# Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
-# In: Line Level Frequency (~Hz)
-note-ac-600-0ma-15-00-3 = AC 600.0mA: 15.00 ~ 3.000kHz、感度 60mA (正弦波の実効値)
-# Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
-# In: Line Level Frequency (~Hz)
-note-ac-600-0mv-15-00-50 = AC 600.0mV: 15.00 ~ 50.00kHz、感度 60mV (正弦波の実効値)
-# Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
-# In: Line Level Frequency (~Hz)
-note-ac-600-0ua-15-00-3 = AC 600.0µA: 15.00 ~ 3.000kHz、感度 200µA (正弦波の実効値)
-# Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
-# In: Line Level Frequency (~Hz)
-note-ac-6000ua-15-00-3-000khz = AC 6000µA: 15.00 ~ 3.000kHz、感度 600µA (正弦波の実効値)
-# Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
-# In: Line Level Frequency (~Hz)
-note-ac-9-999v-15-00-10 = AC 9.999V: 15.00 ~ 10.00kHz、感度 2.5V (正弦波の実効値)
-# Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
-# In: Line Level Frequency (~Hz)
-note-ac-99-99v-15-00-10 = AC 99.99V: 15.00 ~ 10.00kHz、感度 25V (正弦波の実効値)
-# Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
-# In: Line Level Frequency (~Hz)
-note-ac-999-9v-15-00-10 = AC 999.9V: 15.00 ~ 10.00kHz、感度 100V (正弦波の実効値)
 # Used by: VC920/VC940/VC960
 # In: AC / A; AC / V
 note-ac-plus-dc-add-1-pct-2 = AC+DC: 確度に 1%+30 カウントを加算
@@ -284,30 +163,9 @@ note-above-230degc-use-the-rod-type = 230°C 超: 棒状プローブを使用
 # Used by: UT181A
 # In: (10) Temperature
 note-accessory-point-contact-probe-below-230degc = 付属の接触型プローブ: 230°C 未満のみ
-# Used by: 7 meters
-# In: 4 tables
-note-accuracy-valid-1-pct-100-pct = 確度はレンジの 1%–100% で有効
 # Used by: Mock UT61E+, UT161E, UT61E+
 # In: AC Current; AC Voltage
 note-accuracy-valid-1-pct-100-pct-2 = 確度はレンジの 1%–100% で有効 (1kHz–10kHz: 10%–100%)
-# Used by: CMS061, CMS101
-# In: AC Current (A); AC Voltage (V)
-note-accuracy-valid-10-pct-100-pct = 確度はレンジの 10%–100% で有効
-# Used by: UT161D, UT61D+
-# In: AC Current
-note-accuracy-valid-40hz-1khz-1-pct = 確度は 40Hz–1kHz、レンジの 1%–100% で有効 (600.0µA: 5%–100%)
-# Used by: UT161D, UT61D+
-# In: AC Voltage
-note-accuracy-valid-40hz-1khz-1-pct-2 = 確度は 40Hz–1kHz、レンジの 1%–100% で有効 (60mV: 2%–100%)
-# Used by: UT161B, UT61B+
-# In: AC Current
-note-accuracy-valid-40hz-500hz-1-pct = 確度は 40Hz–500Hz、レンジの 1%–100% で有効 (600.0µA: 5%–100%)
-# Used by: UT161B, UT61B+
-# In: AC Voltage
-note-accuracy-valid-40hz-500hz-1-pct-2 = 確度は 40Hz–500Hz、レンジの 1%–100% で有効 (60mV: 2%–100%)
-# Used by: CMS061, CMS101
-# In: Capacitance(F); DC Current (A); DC Voltage (V)
-note-accuracy-valid-5-pct-100-pct = 確度はレンジの 5%–100% で有効
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
 # In: Capacitance
 note-accuracy-with-film-capacitor-or-better = 確度はフィルムコンデンサーと同等以上のコンデンサーで規定
@@ -341,15 +199,6 @@ note-below-100khz-accuracy-guaranteed-10-pct = 100kHz 未満: 10%–100% で確�
 # Used by: UT181A
 # In: (15) Diode Test
 note-brief-beep-on-a-normal-junction = 正常な接合では短いビープ音、短絡時は連続
-# Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
-# In: AC & AC+DC Current; DC Current
-note-burden-voltage-0-02v-a = バーデン電圧 0.02V/A
-# Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
-# In: AC & AC+DC Current; DC Current
-note-burden-voltage-0-08mv-ua = バーデン電圧 0.08mV/µA
-# Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
-# In: AC & AC+DC Current; DC Current
-note-burden-voltage-2-1mv-ma = バーデン電圧 2.1mV/mA
 # Used by: 7 meters
 # In: Continuity and Diode
 note-continuity-audio-visual-alarm-50ohm-no = 導通: <50Ω で音と表示によるアラーム、≥70Ω でビープ音なし
@@ -431,21 +280,6 @@ note-included-k-type-point-contact-probe = 付属の K 型接触型プローブ:
 # Used by: UT803
 # In: J. Temperature
 note-included-point-contact-probe-below-230degc = 付属の接触型プローブ: 230°C 未満のみ
-# Used by: UT803
-# In: I. Frequency
-note-input-10hz-1mhz-150mv-30v-rms = 入力 10Hz–1MHz: 150mV–30V rms
-# Used by: UT181A
-# In: (11) Frequency
-note-input-10hz-30mhz-600mv-30v-rms = 入力 10Hz–30MHz: 600mV–30V rms
-# Used by: UT804
-# In: I. Frequency; J. Duty Cycle
-note-input-10hz-40mhz-200mv-30v-rms = 入力 10Hz–40MHz: 200mV–30V rms
-# Used by: UT803
-# In: I. Frequency
-note-input-10mhz-50mhz-600mv-30v-rms = 入力 >10MHz–50MHz: 600mV–30V rms
-# Used by: UT803
-# In: I. Frequency
-note-input-1mhz-10mhz-300mv-30v-rms = 入力 >1MHz–10MHz: 300mV–30V rms
 # Used by: UT181A
 # In: (11) Frequency
 note-input-30mhz-not-specified = 入力 >30MHz: 規定なし
@@ -470,21 +304,6 @@ note-lo-z-threshold-3vac-50-60hz = Lo-Z しきい値: 定格 > 3VAC (50/60Hz)
 # Used by: UT803
 # In: K. Transistor
 note-max-1000beta = 最大 1000β
-# Used by: Mock ZT-5B, ZT-5B
-# In: Frequency
-note-max-10mhz = 最大 10MHz
-# Used by: Mock ZT-5B, ZT-5B
-# In: Resistance
-note-max-40mohm = 最大 40MΩ
-# Used by: Mock ZT-5B, ZT-5B
-# In: Capacitance
-note-max-4mf = 最大 4mF
-# Used by: Mock ZT-5B, ZT-5B
-# In: AC Voltage (V); DC VOLTAGE (V)
-note-max-600v = 最大 600V
-# Used by: Mock ZT-5B, ZT-5B
-# In: 4 tables
-note-max-9-999a = 最大 9.999A
 # Used by: UT161D, UT61D+
 # In: Temperature
 note-measured-temperature-should-stay-below-230degc = 測定温度は 230°C/446°F 未満であること
@@ -497,33 +316,9 @@ note-non-sine-add-4-pct-crest = 非正弦波: 4% (クレストファクター 1�
 # Used by: UT181A
 # In: (14) Continuity Test
 note-open-alarm-beeps-50ohm-silent-10ohm = 開放アラーム: >50Ω でビープ音、<10Ω で鳴らない
-# Used by: CMS061, CMS101
-# In: Diode
-note-open-circuit-3-2v = 開放電圧 3.2V
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
 # In: AutoCheck™ (Ohms); Ohms
 note-open-circuit-1-2vdc-1-0vdc = 開放電圧 < 1.2VDC (60.00MΩ では < 1.0VDC)
-# Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
-# In: Diode Tester
-note-open-circuit-3-5vdc = 開放電圧 < 3.5VDC
-# Used by: UT803
-# In: F. Continuity Test
-note-open-circuit-1-2v = 開放電圧 ≈-1.2V
-# Used by: UT804
-# In: F. Continuity Test
-note-open-circuit-1-2v-2 = 開放電圧 ≈1.2V
-# Used by: 7 meters
-# In: Resistance
-note-open-circuit-1v = 開放電圧 ≈1V
-# Used by: UT803
-# In: G. Diode Testst
-note-open-circuit-2-7v = 開放電圧 ≈2.7V
-# Used by: UT804
-# In: G. Diode Test
-note-open-circuit-2-8v = 開放電圧 ≈2.8V
-# Used by: UT181A
-# In: (14) Continuity Test
-note-open-circuit-3v = 開放電圧 ≈3V
 # Used by: UT181A
 # In: (15) Diode Test
 note-open-circuit-3v-forward-drop-up = 開放電圧 ≈3V、順方向電圧降下は最大 ≈3V
@@ -587,18 +382,6 @@ note-shorted-input-residual-under-30-digits = 入力短絡時: 残留 ~30 カウ
 # Used by: UT804
 # In: B. AC Voltage (AC+DC measurement is available); D. AC Current (AC+DC measurement is available)
 note-shorted-leads-80-digit-residual-accuracy = テストリード短絡時: 残留 80 カウント、確度に影響なし
-# Used by: VC920/VC940/VC960
-# In: AC / V
-note-shorted-leads-display-70-digits = テストリード短絡時: 表示 ≤70 カウント
-# Used by: Mock UT61E+, UT161E, UT61E+
-# In: AC Voltage
-note-shorted-leads-residual-10-digits = テストリード短絡時: 残留 ≤10 カウント
-# Used by: UT161B, UT161D, UT61B+, UT61D+
-# In: AC Voltage
-note-shorted-leads-residual-3-digits = テストリード短絡時: 残留 ≤3 カウント
-# Used by: 7 meters
-# In: DC Voltage
-note-shorted-leads-residual-5-digits = テストリード短絡時: 残留 ≤5 カウント
 # Used by: CMS061, CMS101
 # In: On-Off
 note-shows-ol-above-200-0ohm = 200.0Ω を超えると OL を表示
@@ -626,27 +409,12 @@ note-tolerance-10v-36v-23v-83v-59v = 許容差: 10V~36V, 23V~83V, 59V~165V, 124V
 # Used by: UT804
 # In: B. AC Voltage (AC+DC measurement is available)
 note-true-rms-and-accuracy-valid-10 = 真の実効値と確度はレンジの 10%–100% で有効
-# Used by: UT804
-# In: D. AC Current (AC+DC measurement is available)
-note-true-rms-and-accuracy-valid-10-2 = 真の実効値と確度はレンジの 10%–100% で有効、クレストファクターは最大 3.0
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
 # In: AC & AC+DC Current; AC Voltage
 note-true-rms-from-10-pct-to = レンジの 10% から 100% で真の実効値、BM821s: 平均値方式
-# Used by: UT181A
-# In: 4 tables
-note-true-rms-valid-10-pct-100 = 真の実効値はレンジの 10%–100% で有効
-# Used by: UT71A, UT71B, UT71C/D/E
-# In: D. AC Current (AC+DC measurement is available)
-note-true-rms-valid-10-pct-100-2 = 真の実効値はレンジの 10%–100% で有効、クレストファクター ≤3.0
 # Used by: UT71A, UT71B, UT71C/D/E
 # In: B. AC Voltage (AC+DC measurement is available)
 note-true-rms-valid-10-pct-100-3 = 真の実効値はレンジの 10%–100% で有効、クレストファクター ≤3.0 (1000V: 1.5)
-# Used by: UT803
-# In: B. AC Voltage
-note-true-rms-valid-10-pct-95 = 真の実効値はレンジの 10%–95% で有効
-# Used by: UT803
-# In: D. AC Current
-note-true-rms-valid-10-pct-95-2 = 真の実効値はレンジの 10%–95% で有効、クレストファクター 3.0
 # Used by: Mock UT61E+, UT161E, UT61E+
 # In: AC Current; AC Voltage
 note-true-rms-crest-factor-2-0 = 真の実効値、クレストファクター: 10000 カウントで ≤2.0、22000 カウントで ≤1
