@@ -8,14 +8,16 @@
 //! message keeps its ID and its place, and one whose English the library
 //! no longer shows is an orphan the test names and leaves for the
 //! maintainer — edit its English to the library's new text to keep its ID
-//! and translations, or delete it. Comments are rewritten every time.
+//! and translations, or delete it. Comments are rewritten every time. A new
+//! spec text worded close to a spec template is named once
+//! ([`near_template`]): its author may have meant the template's wording.
 
 use super::ftl_text::escape;
 use super::lib_index::{
-    GUARDED, LIB, LIB_SPECS, LibEntry, is_units_only, kind_of_id, lib_entries, spec_templates,
-    split_qualifier, unqualify,
+    GUARDED, LIB, LIB_SPECS, LibEntry, is_unit, is_units_only, kind_of_id, lib_entries,
+    spec_templates, split_qualifier, unqualify,
 };
-use super::spec_templates::{Binding, TEXT_SLOT};
+use super::spec_templates::{Binding, TEXT_SLOT, Template};
 use dmm_lib::protocol::registry;
 use dmm_lib::text::{TextKind, all_texts};
 use fluent_syntax::ast::{
@@ -398,6 +400,42 @@ fn tables() -> BTreeMap<(TextKind, &'static str), BTreeSet<&'static str>> {
     out
 }
 
+/// The share of their words two texts must have in common for one to be
+/// [`near_template`] the other.
+const NEAR: f32 = 0.6;
+
+/// The words of a spec text that say something: lowercased, units aside.
+fn said(text: &str) -> BTreeSet<String> {
+    text.split(|c: char| !c.is_alphabetic())
+        .filter(|w| !w.is_empty() && !is_unit(w))
+        .map(str::to_lowercase)
+        .collect()
+}
+
+/// The spec template of `kind` that listed text `text` nearly reads: the
+/// one sharing most of its words, at least [`NEAR`] of all the words the
+/// two have. A note worded a little differently from a template ("Max.
+/// 600V" beside "Max { $value }") is one more message to translate, so the
+/// generator names the template when it adds such a text.
+fn near_template(kind: TextKind, text: &str) -> Option<&'static Template> {
+    if !GUARDED.contains(&kind) {
+        return None;
+    }
+    let words = said(text);
+    let share = |t: &Template| {
+        let fixed = said(&t.fixed_text());
+        let both = words.intersection(&fixed).count() as f32;
+        both / (words.union(&fixed).count().max(1) as f32)
+    };
+    spec_templates()
+        .iter()
+        .filter(|t| t.kind == kind)
+        .map(|t| (share(t), t))
+        .filter(|(share, _)| *share >= NEAR)
+        .max_by(|a, b| a.0.total_cmp(&b.0))
+        .map(|(_, t)| t)
+}
+
 /// A comma-separated list of the first `named` of `items`, or their count
 /// past that.
 fn listing(items: &[&str], named: usize, counted: &str, separator: &str) -> String {
@@ -518,6 +556,31 @@ fn lib_ftl_lists_the_library_text() {
         "i18n/en-US/lib-spec-templates.ftl: no library text reads {unread:?}: delete them, \
          in every language"
     );
+    // New spec text that a template nearly reads: its author may have meant
+    // the template's wording.
+    let known: HashSet<&str> = existing.iter().map(|e| e.id.as_str()).collect();
+    let near: Vec<String> = placed
+        .iter()
+        .filter(|p| !known.contains(p.id.as_str()))
+        .filter_map(|p| {
+            let t = near_template(p.kind, &p.text)?;
+            Some(format!(
+                "  {:?} is close to {} = {}",
+                p.text,
+                t.id,
+                t.english()
+            ))
+        })
+        .collect();
+    let hint = if near.is_empty() {
+        String::new()
+    } else {
+        format!(
+            "\nNew spec text close to a template:\n{}\nWhere one means the same as its \
+             template, word it that way in the spec table: it then needs no translation.",
+            near.join("\n")
+        )
+    };
     let tables = tables();
     let mut stale = Vec::new();
     for (file, current) in FILES.iter().zip(&current) {
@@ -538,8 +601,13 @@ fn lib_ftl_lists_the_library_text() {
     assert!(
         stale.is_empty(),
         "i18n/en-US is out of date: {}; \
-         run `UPDATE_L10N=1 cargo test -p dmm-shared lib_ftl` and commit it",
+         run `UPDATE_L10N=1 cargo test -p dmm-shared lib_ftl` and commit it{hint}",
         stale.join(", ")
+    );
+    // An update that added such text says so once: the next run passes.
+    assert!(
+        hint.is_empty(),
+        "i18n/en-US is updated.{hint}\nOtherwise run again: the files are current."
     );
 }
 
@@ -563,6 +631,20 @@ fn the_written_messages_read_back_as_the_library_wrote_them() {
             .collect();
         assert_eq!(read, expected, "{}", file.name);
     }
+}
+
+#[test]
+fn a_text_worded_almost_as_a_template_is_near_it() {
+    let near = |text| near_template(TextKind::Note, text).map(|t| t.id.as_str());
+    assert_eq!(near("Max. 600V"), Some("note-max-reading"));
+    assert_eq!(
+        near("10A: ≤5A continuous; >5A–10A max 10s, then pause >15min"),
+        Some("note-current-time-limit")
+    );
+    // Other words, or another kind: not near.
+    assert_eq!(near("Max 1000β"), None);
+    assert_eq!(near("K-type thermocouple only"), None);
+    assert!(near_template(TextKind::Mode, "Max").is_none());
 }
 
 #[test]

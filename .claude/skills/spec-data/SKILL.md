@@ -84,7 +84,7 @@ A delegated Opus agent drafts `references/<family>/specs-work/app-notes.json` (`
 - Keep every figure, limit and condition.
 - Drop anything a field already shows (impedance, overload), and boilerplate.
 - Fix spelling.
-- Word a note as `i18n/en-US/lib-specs.ftl` already words it for another table ("max. 10s, then rest 15min", "Shorted leads: residual ≤10 digits"), with this table's values: the same wording is translated once.
+- Give the drafter `i18n/en-US/lib-spec-templates.ftl` and `lib-specs.ftl`. Where a note means what a template says, word it as the template's example with this table's values ("Max 600V", "Open circuit ≈3V", "Shorted leads: residual ≤10 digits"): it then needs no translation. Otherwise word it as `lib-specs.ftl` already words the same thing for another table. Never bend a note's meaning to fit a template.
 - Aim for notes under ~60 characters, at most 4 per table.
 - Never compute a derived figure.
 - Keep genuinely unclear remarks close to the manual's wording, and list them for the user.
@@ -104,7 +104,7 @@ Delegate to an Opus agent, one meter per commit (`lib: <model> readings carry th
   - write a printed word the one way the app does: `Not specified`, `In REL mode`, `About 10MΩ` (the transcription brief lists the printed forms each stands for); `verified.json` holds the same form, its provenance the printed text;
   - write fuse ratings as `Fuse <current> <voltage>` (`Fuse 1A 240V`), with the printed text in a `// Printed "…"` comment, diameter sign as `ø`; `verified.json` holds the same form, its provenance the printed text;
   - notes are exactly `app-notes.json`;
-  - new or changed inputs, notes and worded accuracy bands go into `i18n/en-US/lib-specs.ftl`: run `UPDATE_L10N=1 cargo test -p dmm-shared lib_ftl` and commit the file with the tables.
+  - new or changed inputs, notes and worded accuracy bands go into `i18n/en-US/lib-specs.ftl`: run `UPDATE_L10N=1 cargo test -p dmm-shared lib_ftl` and commit the file with the tables. The run stops once to name any new text that is close to a template: reword the table where the meaning is the same, then run it again.
 - **Rows:**
   - a reading gets a row only where the manual prints an accuracy for it;
   - where the manual gives only a rule ("add (1%+35 digits) for AC+DC"), the reading gets the table's mode spec and no row;

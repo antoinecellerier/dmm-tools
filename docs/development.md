@@ -429,7 +429,9 @@ second the spec tables' notes, inputs and bands. After changing any of
 those, run `UPDATE_L10N=1 cargo test -p dmm-shared lib_ftl` and commit the
 files; the test fails until then. It only adds messages. One whose English
 the library no longer shows fails the test by name: correct its English to
-the new text to keep its ID and translations, or delete it.
+the new text to keep its ID and translations, or delete it. A new spec text
+worded close to a template (`lib-spec-templates.ftl`) is named once: worded
+the template's way, it needs no translation.
 
 `i18n/en-US/cli-help.ftl` is generated from the doc comments in
 `crates/dmm-cli/src/cli.rs` that `dmm-cli --help` shows. After changing one,

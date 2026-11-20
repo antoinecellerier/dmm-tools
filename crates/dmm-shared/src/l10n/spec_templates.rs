@@ -96,6 +96,29 @@ pub(crate) fn templates(source: &str) -> Result<Vec<Template>, Vec<String>> {
 }
 
 impl Template {
+    /// The English pattern as the file writes it: "Max { $value }".
+    #[cfg(test)]
+    pub(crate) fn english(&self) -> String {
+        self.parts
+            .iter()
+            .map(|part| match part {
+                Part::Literal(text) => text.clone(),
+                Part::Slot(name) => format!("{{ ${name} }}"),
+            })
+            .collect()
+    }
+
+    /// The text between the slots, joined by spaces: the words a text must
+    /// share to be near this template.
+    #[cfg(test)]
+    pub(crate) fn fixed_text(&self) -> String {
+        let literals = self.parts.iter().filter_map(|part| match part {
+            Part::Literal(text) => Some(text.as_str()),
+            Part::Slot(_) => None,
+        });
+        literals.collect::<Vec<_>>().join(" ")
+    }
+
     /// Every way `text` reads as this template. A value slot takes one
     /// value ([`is_value`]); the text slot takes anything, which the caller
     /// judges.
