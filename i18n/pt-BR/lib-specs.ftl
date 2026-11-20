@@ -22,99 +22,27 @@ band-4000-counts = (4000 contagens)
 # Used by: VC920/VC940/VC960
 band-plus-40-to-plus-400-degc = +40 a +400 °C
 # Used by: VC920/VC940/VC960
-band-plus-40-to-plus-400-degc-2 = +40 a +400 °C (4000 contagens)
-# Used by: VC920/VC940/VC960
 band-plus-400-to-plus-1000-degc = +400 a +1000 °C
 # Used by: VC920/VC940/VC960
-band-plus-400-to-plus-1000-degc-2 = +400 a +1000 °C (4000 contagens)
-# Used by: VC920/VC940/VC960
 band-40-to-plus-40-degc = -40 a +40 °C
-# Used by: VC920/VC940/VC960
-band-40-to-plus-40-degc-4000 = -40 a +40 °C (4000 contagens)
-# Used by: VC920/VC940/VC960
-band-10khz-120khz-4000-counts = 10kHz~120kHz (4000 contagens)
 # Used by: VC920/VC940/VC960
 band-10khz-120khz-10-15-pct-of = 10kHz~120kHz, 10 - 15% da faixa
 # Used by: VC920/VC940/VC960
 band-10khz-120khz-15-100-pct-of = 10kHz~120kHz, 15 - 100% da faixa
 # Used by: VC920/VC940/VC960
-band-120khz-250khz-4000-counts = 120kHz~250kHz (4000 contagens)
-# Used by: VC920/VC940/VC960
 band-120khz-250khz-10-30-pct-of = 120kHz~250kHz, 10 - 30% da faixa
 # Used by: VC920/VC940/VC960
 band-120khz-250khz-30-100-pct-of = 120kHz~250kHz, 30 - 100% da faixa
 # Used by: VC920/VC940/VC960
-band-1khz-10khz-4000-counts = 1kHz~10kHz (4000 contagens)
-# Used by: VC920/VC940/VC960
 band-250khz-400khz-10-30-pct-of = 250kHz~400kHz, 10 - 30% da faixa
 # Used by: VC920/VC940/VC960
-band-250khz-400khz-10-30-pct-of-2 = 250kHz~400kHz, 10 - 30% da faixa (4000 contagens)
-# Used by: VC920/VC940/VC960
 band-30-100-pct-of-mr = 30 - 100% da faixa
-# Used by: VC920/VC940/VC960
-band-30-100-pct-of-mr-4000 = 30 - 100% da faixa (4000 contagens)
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
 # In: Logic Level Frequency (⎍Hz) & Duty Cycle (D%)
 band-3d-khz-plus-2d = 3d/kHz+2d
-# Used by: VC920/VC940/VC960
-# In: Temperature
-band-4-000-plus-40-to-plus = 4.000: +40 a +400 °C
-# Used by: VC920/VC940/VC960
-# In: Temperature
-band-4-000-plus-400-to-plus = 4.000: +400 a +1000 °C
-# Used by: VC920/VC940/VC960
-# In: Temperature
-band-4-000-40-to-plus-40 = 4.000: -40 a +40 °C
-# Used by: VC920/VC940/VC960
-# In: AC / V
-band-4-000-10khz-120khz-10-15 = 4.000: 10kHz~120kHz, 10 - 15% da faixa
-# Used by: VC920/VC940/VC960
-# In: AC / V
-band-4-000-10khz-120khz-15-100 = 4.000: 10kHz~120kHz, 15 - 100% da faixa
-# Used by: VC920/VC940/VC960
-# In: AC / V
-band-4-000-120khz-250khz-10-30 = 4.000: 120kHz~250kHz, 10 - 30% da faixa
-# Used by: VC920/VC940/VC960
-# In: AC / V
-band-4-000-120khz-250khz-30-100 = 4.000: 120kHz~250kHz, 30 - 100% da faixa
-# Used by: VC920/VC940/VC960
-# In: AC / V
-band-4-000-250khz-400khz-10-30 = 4.000: 250kHz~400kHz, 10 - 30% da faixa
-# Used by: VC920/VC940/VC960
-# In: AC / V
-band-4-000-30-100-pct-of = 4.000: 30 - 100% da faixa
-# Used by: VC920/VC940/VC960
-# In: Temperature
-band-40-000-plus-40-to-plus = 40.000: +40 a +400 °C
-# Used by: VC920/VC940/VC960
-# In: Temperature
-band-40-000-plus-400-to-plus = 40.000: +400 a +1000 °C
-# Used by: VC920/VC940/VC960
-# In: Temperature
-band-40-000-40-to-plus-40 = 40.000: -40 a +40 °C
-# Used by: VC920/VC940/VC960
-# In: AC / V
-band-40-000-10khz-120khz-10-15 = 40.000: 10kHz~120kHz, 10 - 15% da faixa
-# Used by: VC920/VC940/VC960
-# In: AC / V
-band-40-000-10khz-120khz-15-100 = 40.000: 10kHz~120kHz, 15 - 100% da faixa
-# Used by: VC920/VC940/VC960
-# In: AC / V
-band-40-000-120khz-250khz-10-30 = 40.000: 120kHz~250kHz, 10 - 30% da faixa
-# Used by: VC920/VC940/VC960
-# In: AC / V
-band-40-000-120khz-250khz-30-100 = 40.000: 120kHz~250kHz, 30 - 100% da faixa
-# Used by: VC920/VC940/VC960
-# In: AC / V
-band-40-000-250khz-400khz-10-30 = 40.000: 250kHz~400kHz, 10 - 30% da faixa
-# Used by: VC920/VC940/VC960
-# In: AC / V
-band-40-000-30-100-pct-of = 40.000: 30 - 100% da faixa
 # Used by: Mock UT61E+, UT161E, UT61E+
 # In: AC Voltage
 band-40hz-100hz-lpf = 40Hz~100Hz (LPF)
-# Used by: VC920/VC940/VC960
-band-45hz-1khz-4000-counts = 45Hz~1kHz (4000 contagens)
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
 # In: DC AC & AC+DC AC Voltage
 band-dc-50hz-60hz = DC, 50Hz ~ 60Hz

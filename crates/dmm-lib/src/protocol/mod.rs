@@ -1002,6 +1002,15 @@ pub trait Protocol: Send {
         self.spec_info(m)
     }
 
+    /// Whether a reading shows its row's bands under labels of its own
+    /// ([`Protocol::spec_source`]): the sheet's band labels are then the
+    /// review sheet's alone, not text to translate, and the family lists
+    /// the labels a reading gets in its `all_labels`.
+    #[cfg(any(test, feature = "test-support"))]
+    fn relabels_sheet_bands(&self) -> bool {
+        false
+    }
+
     /// Per-mode specs (input impedance, overload protection, notes) for
     /// reading `m`.
     /// Default `None` — families without a spec table can leave this unimplemented.

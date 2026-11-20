@@ -16,6 +16,7 @@
 //! never waits on its translations.
 
 use super::lib_index::{GUARDED, LIB_SPECS, kind_of_id, same_numbers};
+use super::spec_templates::LIB_SPEC_TEMPLATES;
 use fluent_bundle::FluentResource;
 use fluent_bundle::concurrent::FluentBundle;
 use fluent_syntax::ast;
@@ -295,13 +296,14 @@ fn spec_number_problems(english: &str, translated: &str, locale: &str) -> Vec<St
 
 /// Whether the messages of file `path` may be left out of a shipped
 /// language: the specification text, `lib-specs.ftl` (notes, input ratings,
-/// accuracy bands), and `capture`'s text, `cli/capture.ftl`
+/// accuracy bands) and its templates, `lib-spec-templates.ftl`, and
+/// `capture`'s text, `cli/capture.ftl`
 /// (the guided run behind a device report, whose report stays English),
 /// polish that shows in English one message at a time until translated.
 /// Everything that drives the meter or the apps — modes, ranges, keys,
 /// activation steps, errors — is required.
 fn optional(path: &str) -> bool {
-    path == CAPTURE || path == LIB_SPECS
+    path == CAPTURE || path == LIB_SPECS || path == LIB_SPEC_TEMPLATES
 }
 
 /// `capture`'s own text, every message of it [`optional`].
@@ -593,6 +595,7 @@ d = Extra
     assert_eq!(plural_forms("zh-CN"), BTreeSet::from(["other".into()]));
     // Specification text is the one thing a shipped language may lack.
     assert!(optional("lib-specs.ftl"));
+    assert!(optional("lib-spec-templates.ftl"));
     assert!(optional("cli/capture.ftl"));
     assert!(!optional("lib.ftl"));
     assert!(!optional("cli/read.ftl"));

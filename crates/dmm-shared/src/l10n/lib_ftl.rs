@@ -12,9 +12,10 @@
 
 use super::ftl_text::escape;
 use super::lib_index::{
-    GUARDED, LIB, LIB_SPECS, LibEntry, is_units_only, kind_of_id, lib_entries, split_qualifier,
-    unqualify,
+    GUARDED, LIB, LIB_SPECS, LibEntry, is_units_only, kind_of_id, lib_entries, spec_templates,
+    split_qualifier, unqualify,
 };
+use super::spec_templates::{Binding, TEXT_SLOT};
 use dmm_lib::protocol::registry;
 use dmm_lib::text::{TextKind, all_texts};
 use fluent_syntax::ast::{
@@ -314,13 +315,45 @@ fn wanted() -> BTreeMap<(TextKind, String), BTreeSet<&'static str>> {
     let qualifiers: Vec<(&str, &str)> = of(TextKind::Qualifier)
         .filter_map(split_qualifier)
         .collect();
-    all.entries()
-        .filter(|(kind, text, _)| {
-            !is_units_only(text)
-                && !(*kind == TextKind::Mode && qualified(text, &qualifiers, &modes))
-        })
-        .map(|(kind, text, by)| ((kind, text.to_string()), by.clone()))
-        .collect()
+    let mut wanted: BTreeMap<(TextKind, String), BTreeSet<&'static str>> = BTreeMap::new();
+    for (kind, text, by) in all.entries() {
+        if kind == TextKind::Mode && qualified(text, &qualifiers, &modes) {
+            continue;
+        }
+        // A spec text a template reads is listed as the texts in its text
+        // slots, used by whoever uses it.
+        for listed in listed_parts(kind, text) {
+            if !is_units_only(listed) {
+                wanted
+                    .entry((kind, listed.to_string()))
+                    .or_default()
+                    .extend(by);
+            }
+        }
+    }
+    wanted
+}
+
+/// What the files list for `text`: itself, or, when a spec template reads
+/// it ([`spec_templates`]), what the files list for each text its text slot
+/// holds; a value slot's content is listed nowhere.
+///
+/// Panics on a text that reads more than one way: the templates overlap.
+fn listed_parts(kind: TextKind, text: &str) -> Vec<&str> {
+    let parses: Vec<(&str, Binding<'_>)> = spec_templates()
+        .iter()
+        .filter(|t| t.kind == kind)
+        .flat_map(|t| t.parses(text).into_iter().map(|b| (t.id.as_str(), b)))
+        .collect();
+    match &parses[..] {
+        [] => vec![text],
+        [(_, binding)] => binding
+            .iter()
+            .filter(|(slot, _)| *slot == TEXT_SLOT)
+            .flat_map(|(_, held)| listed_parts(kind, held))
+            .collect(),
+        several => panic!("{text:?} reads more than one way: {several:?}"),
+    }
 }
 
 /// Whether mode `label` is a qualifier around a mode the library lists,
@@ -355,8 +388,10 @@ fn tables() -> BTreeMap<(TextKind, &'static str), BTreeSet<&'static str>> {
                 .map(|t| (TextKind::Input, t))
                 .chain(mode.notes.iter().map(|n| (TextKind::Note, *n)))
                 .chain(bands);
-            for key in texts {
-                out.entry(key).or_default().insert(table.name);
+            for (kind, text) in texts {
+                for listed in listed_parts(kind, text) {
+                    out.entry((kind, listed)).or_default().insert(table.name);
+                }
             }
         }
     }
@@ -467,6 +502,22 @@ fn lib_ftl_lists_the_library_text() {
         Ok(placed) => placed,
         Err(problems) => panic!("i18n/en-US/{LIB} and {LIB_SPECS}:\n{}", problems.join("\n")),
     };
+    // A template no library text reads any more is left for the maintainer,
+    // as an orphaned message is.
+    let all = all_texts();
+    let unread: Vec<&str> = spec_templates()
+        .iter()
+        .filter(|t| {
+            !all.entries()
+                .any(|(kind, text, _)| kind == t.kind && !t.parses(text).is_empty())
+        })
+        .map(|t| t.id.as_str())
+        .collect();
+    assert!(
+        unread.is_empty(),
+        "i18n/en-US/lib-spec-templates.ftl: no library text reads {unread:?}: delete them, \
+         in every language"
+    );
     let tables = tables();
     let mut stale = Vec::new();
     for (file, current) in FILES.iter().zip(&current) {

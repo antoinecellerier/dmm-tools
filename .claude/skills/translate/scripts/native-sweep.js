@@ -22,7 +22,7 @@ const APP = [
   { key: 'gui-b', files: lang => inDir(lang, ['graph', 'colors', 'export-import', 'alarm-scale', 'stats-markers'].map(f => `gui/${f}.ftl`)) },
   { key: 'cli', files: lang => [`i18n/${lang}/cli/*.ftl`, `i18n/${lang}/cli-help.ftl`] },
   { key: 'shared', files: lang => inDir(lang, ['shared.ftl', 'lib-names.ftl', 'lib-alarm.ftl', 'lib-errors.ftl']) },
-  { key: 'lib', files: lang => inDir(lang, ['lib.ftl', 'lib-specs.ftl']) },
+  { key: 'lib', files: lang => inDir(lang, ['lib.ftl', 'lib-specs.ftl', 'lib-spec-templates.ftl']) },
 ]
 const README = { key: 'readme', readme: true, files: lang => [`README.${lang}.md`] }
 const GROUPS = [...(TARGETS.has('app') ? APP : []), ...(TARGETS.has('readme') ? [README] : [])]

@@ -412,8 +412,8 @@ language lacks shows in English, so new or reworded English never waits on
 its translations. They are filled before each release, and before a
 language ships: `cargo test -p dmm-shared shipped_languages_are_complete -- --ignored`
 lists what each shipped language lacks, the specification text
-(`lib-specs.ftl`) and `capture`'s text (`cli/capture.ftl`) aside, which
-may stay English.
+(`lib-specs.ftl`, `lib-spec-templates.ftl`) and `capture`'s text
+(`cli/capture.ftl`) aside, which may stay English.
 `cargo test -p dmm-shared long_labels -- --ignored --nocapture` lists short
 labels that grew past one and a half times their English, for a look in
 the window.

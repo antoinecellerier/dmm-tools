@@ -1178,6 +1178,11 @@ impl Protocol for Ut80xProtocol {
         self.spec_row(m).map(|row| &row.spec)
     }
 
+    #[cfg(any(test, feature = "test-support"))]
+    fn relabels_sheet_bands(&self) -> bool {
+        self.model == Model::Vc920
+    }
+
     fn mode_spec_info(&self, m: &Measurement) -> Option<&'static ModeSpecInfo> {
         self.spec_table(m).map(|(table, _)| &table.mode)
     }

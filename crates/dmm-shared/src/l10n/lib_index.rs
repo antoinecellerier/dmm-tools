@@ -12,6 +12,7 @@
 //! message taking the translated mode as `$mode` ([`TextKind::Qualifier`]),
 //! and the lookup takes the label apart ([`Localizer::label`]).
 
+use super::spec_templates::{LIB_SPEC_TEMPLATES, TEXT_SLOT, Template, templates};
 use super::{Arg, Localizer, Resource};
 use dmm_lib::flags::Flag;
 use dmm_lib::text::{MODE_SLOT, TextKind};
@@ -29,37 +30,43 @@ pub(crate) const LIB: &str = "lib.ftl";
 pub(crate) const LIB_SPECS: &str = "lib-specs.ftl";
 
 /// The library's text: the generated `lib.ftl` and `lib-specs.ftl` and the
-/// hand-written `lib-names.ftl`, `lib-errors.ftl` and `lib-alarm.ftl`, in every language the binaries
+/// hand-written `lib-spec-templates.ftl`, `lib-names.ftl`, `lib-errors.ftl` and `lib-alarm.ftl`, in every language the binaries
 /// ship. A binary that draws library text or errors lists these with its
 /// own resources.
 pub const LIB_RESOURCES: &[Resource] = &[
     crate::ftl!("en-US", "lib.ftl"),
     crate::ftl!("en-US", "lib-specs.ftl"),
+    crate::ftl!("en-US", "lib-spec-templates.ftl"),
     crate::ftl!("en-US", "lib-names.ftl"),
     crate::ftl!("en-US", "lib-errors.ftl"),
     crate::ftl!("en-US", "lib-alarm.ftl"),
     crate::ftl!("fr", "lib.ftl"),
     crate::ftl!("fr", "lib-specs.ftl"),
+    crate::ftl!("fr", "lib-spec-templates.ftl"),
     crate::ftl!("fr", "lib-names.ftl"),
     crate::ftl!("fr", "lib-errors.ftl"),
     crate::ftl!("fr", "lib-alarm.ftl"),
     crate::ftl!("pt-BR", "lib.ftl"),
     crate::ftl!("pt-BR", "lib-specs.ftl"),
+    crate::ftl!("pt-BR", "lib-spec-templates.ftl"),
     crate::ftl!("pt-BR", "lib-names.ftl"),
     crate::ftl!("pt-BR", "lib-errors.ftl"),
     crate::ftl!("pt-BR", "lib-alarm.ftl"),
     crate::ftl!("zh-CN", "lib.ftl"),
     crate::ftl!("zh-CN", "lib-specs.ftl"),
+    crate::ftl!("zh-CN", "lib-spec-templates.ftl"),
     crate::ftl!("zh-CN", "lib-names.ftl"),
     crate::ftl!("zh-CN", "lib-errors.ftl"),
     crate::ftl!("zh-CN", "lib-alarm.ftl"),
     crate::ftl!("es", "lib.ftl"),
     crate::ftl!("es", "lib-specs.ftl"),
+    crate::ftl!("es", "lib-spec-templates.ftl"),
     crate::ftl!("es", "lib-names.ftl"),
     crate::ftl!("es", "lib-errors.ftl"),
     crate::ftl!("es", "lib-alarm.ftl"),
     crate::ftl!("ja", "lib.ftl"),
     crate::ftl!("ja", "lib-specs.ftl"),
+    crate::ftl!("ja", "lib-spec-templates.ftl"),
     crate::ftl!("ja", "lib-names.ftl"),
     crate::ftl!("ja", "lib-errors.ftl"),
     crate::ftl!("ja", "lib-alarm.ftl"),
@@ -147,6 +154,18 @@ fn words(text: &str) -> impl Iterator<Item = &str> {
 /// languages translate, so they are listed.
 pub fn is_units_only(text: &str) -> bool {
     words(text).all(|w| is_symbol(w) || PREFIXES.contains(&w))
+}
+
+/// Whether `text` is one value as a spec text writes it: one number with
+/// its sign, a comparator before it and a unit after it ("4.000", ">5A",
+/// "+400 °C", "≈-1.2V"), and nothing that separates clauses. What a value
+/// slot of a spec template holds ([`super::spec_templates`]).
+pub(super) fn is_value(text: &str) -> bool {
+    !text.is_empty()
+        && text.trim() == text
+        && !text.contains([':', ',', ';', '(', ')'])
+        && spec_numbers(text).len() == 1
+        && words(text).all(|w| spec_unit(w).is_some() || PREFIXES.contains(&w))
 }
 
 /// The kinds of spec text a translation may only show with the English's
@@ -332,6 +351,14 @@ struct Index {
     labels: HashMap<TextKind, HashMap<String, String>>,
     /// Each qualifier's text before and after its mode, with its ID.
     qualifiers: Vec<(String, String, String)>,
+    /// The spec templates, in file order.
+    templates: Vec<Template>,
+}
+
+/// The spec templates of the embedded en-US `lib-spec-templates.ftl`.
+#[cfg(test)]
+pub(crate) fn spec_templates() -> &'static [Template] {
+    &index().templates
 }
 
 fn index() -> &'static Index {
@@ -352,6 +379,16 @@ fn index() -> &'static Index {
                 index.qualifiers.push((before.into(), after.into(), id));
             }
             index.labels.entry(kind).or_default().insert(text, entry.id);
+        }
+        let hand_written = LIB_RESOURCES
+            .iter()
+            .find(|r| r.locale == super::EN_US.id && r.path == LIB_SPEC_TEMPLATES);
+        match hand_written.map(|r| templates(r.source)) {
+            Some(Ok(templates)) => index.templates = templates,
+            Some(Err(problems)) => {
+                log::warn!("l10n: en-US/{LIB_SPEC_TEMPLATES}: {problems:?}");
+            }
+            None => {}
         }
         index
     })
@@ -396,19 +433,113 @@ impl Localizer {
     /// A translation shows only if it carries the English's numbers, each
     /// with its sign, ± and unit ([`spec_numbers`]), in any order: one that
     /// changes, drops or adds a number is shown in English, as is text
-    /// `lib-specs.ftl` doesn't list. Each message is checked once, the first
-    /// time any spec text is asked for, and the verdicts kept. Other kinds
-    /// are [`Localizer::label`]'s.
+    /// neither `lib-specs.ftl` lists nor a spec template reads. Each
+    /// message is checked once, the first time any spec text is asked for,
+    /// and each composed text the first time it is, and the verdicts kept.
+    /// Other kinds are [`Localizer::label`]'s.
     pub fn spec_text<'a>(&'a self, kind: TextKind, english: &'a str) -> Cow<'a, str> {
         if self.plain_english() || !GUARDED.contains(&kind) {
             return self.label(kind, english);
         }
-        index()
-            .labels
-            .get(&kind)
-            .and_then(|ids| ids.get(english))
-            .and_then(|id| self.checked_spec_texts().get(id))
-            .map_or(Cow::Borrowed(english), |t| Cow::Borrowed(t.as_str()))
+        if let Some(id) = index().labels.get(&kind).and_then(|ids| ids.get(english)) {
+            return self
+                .checked_spec_texts()
+                .get(id)
+                .map_or(Cow::Borrowed(english), |t| Cow::Borrowed(t.as_str()));
+        }
+        self.composed(kind, english)
+            .map_or(Cow::Borrowed(english), Cow::Owned)
+    }
+
+    /// [`Localizer::compose`]'s text for `english` where it keeps the
+    /// numbers, from the cache after the first time. The cache holds the
+    /// library's spec texts at most: they are what is asked for.
+    fn composed(&self, kind: TextKind, english: &str) -> Option<String> {
+        let cache = || {
+            self.composed_spec_texts
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+        };
+        if let Some(known) = cache().get(&kind).and_then(|texts| texts.get(english)) {
+            return known.clone();
+        }
+        let made = match self.compose(kind, english) {
+            Some(Ok(text)) => Some(text),
+            Some(Err(text)) => {
+                log::warn!(
+                    "l10n: {}: {text:?} changes the numbers of {english:?}: \
+                     showing the English",
+                    self.language.id
+                );
+                None
+            }
+            None => None,
+        };
+        cache()
+            .entry(kind)
+            .or_default()
+            .insert(english.to_string(), made.clone());
+        made
+    }
+
+    /// `english` through the spec template that reads it: `None` when none
+    /// does, `Err` with the text when it changes the English's numbers
+    /// ([`same_numbers`]).
+    pub(crate) fn compose(&self, kind: TextKind, english: &str) -> Option<Result<String, String>> {
+        let raw = self.compose_raw(kind, english)?;
+        let shown = if self.pseudo {
+            super::pseudo::bracket(&raw)
+        } else {
+            raw
+        };
+        Some(if same_numbers(english, &shown) {
+            Ok(shown)
+        } else {
+            Err(shown)
+        })
+    }
+
+    /// [`Localizer::compose`] before the pseudo-locale's brackets, which go
+    /// around the whole text once.
+    fn compose_raw(&self, kind: TextKind, english: &str) -> Option<String> {
+        let templates = index().templates.iter().filter(|t| t.kind == kind);
+        for template in templates {
+            for binding in template.parses(english) {
+                let args: Option<Vec<(&str, Arg<'_>)>> = binding
+                    .into_iter()
+                    .map(|(slot, held)| {
+                        let held = if slot == TEXT_SLOT {
+                            Cow::Owned(self.spec_part(kind, held)?)
+                        } else {
+                            Cow::Borrowed(held)
+                        };
+                        Some((slot, Arg::Str(held)))
+                    })
+                    .collect();
+                if let Some(args) = args {
+                    return self.lookup_raw(&template.id, &args).map(Cow::into_owned);
+                }
+            }
+        }
+        None
+    }
+
+    /// What a template's text slot shows for `english`: its message, what
+    /// another template makes of it, or itself when it is numbers and units
+    /// only. `None` for anything else: the template doesn't read the text.
+    fn spec_part(&self, kind: TextKind, english: &str) -> Option<String> {
+        if let Some(id) = index().labels.get(&kind).and_then(|ids| ids.get(english)) {
+            let text = if self.pseudo {
+                self.lookup_raw(id, &[])?
+            } else {
+                self.checked_spec_texts()
+                    .get(id)
+                    .map_or(Cow::Borrowed(english), |t| Cow::Borrowed(t.as_str()))
+            };
+            return Some(text.into_owned());
+        }
+        self.compose_raw(kind, english)
+            .or_else(|| is_units_only(english).then(|| english.to_string()))
     }
 
     /// Each [`GUARDED`] message's text in this language, by ID, where it
@@ -715,7 +846,87 @@ mod tests {
             if kind == TextKind::Mode {
                 assert_eq!(l.mode_label(text).as_deref(), Some(text));
             } else if !is_units_only(text) {
-                assert_eq!(l.listed(kind, text).as_deref(), Some(text));
+                // Its own message, or the spec template that reads it.
+                let read = l
+                    .listed(kind, text)
+                    .map(Cow::into_owned)
+                    .or_else(|| l.compose_raw(kind, text));
+                assert_eq!(read.as_deref(), Some(text));
+            }
+        }
+    }
+
+    /// A band a template reads is made of the template and of what its
+    /// text slot holds, each in the language; numbers and units stay.
+    #[test]
+    fn a_template_composes_spec_text_from_its_parts() {
+        let resources = [
+            &english_lib()[..],
+            &[
+                Resource {
+                    locale: "fr",
+                    path: "lib-spec-templates.ftl",
+                    source: "band-at-4000-counts = { $text } (4000 points)\n",
+                },
+                Resource {
+                    locale: "fr",
+                    path: "lib-specs.ftl",
+                    source: "band-30-100-pct-of-mr = 30 - 100% de la plage\n",
+                },
+            ],
+        ]
+        .concat();
+        let l = Localizer::new(&FRENCH, &resources, &Options::default());
+        let band = |english| l.spec_text(TextKind::Band, english).into_owned();
+        assert_eq!(
+            band("30 - 100% of MR (4000 counts)"),
+            "30 - 100% de la plage (4000 points)"
+        );
+        assert_eq!(band("45Hz~1kHz (4000 counts)"), "45Hz~1kHz (4000 points)");
+        // A part without a translation stays English inside the template.
+        assert_eq!(
+            band("250kHz~400kHz, 10 - 30% of MR (4000 counts)"),
+            "250kHz~400kHz, 10 - 30% of MR (4000 points)"
+        );
+        // Text no template reads stays English whole.
+        assert_eq!(band("Sometimes: 4.000"), "Sometimes: 4.000");
+    }
+
+    /// A template whose translation changes a written number shows the
+    /// English, as a message does.
+    #[test]
+    fn a_template_that_changes_a_number_shows_english() {
+        let resources = [
+            &english_lib()[..],
+            &[Resource {
+                locale: "fr",
+                path: "lib-spec-templates.ftl",
+                source: "band-at-4000-counts = { $text } (400 points)\n",
+            }],
+        ]
+        .concat();
+        let l = Localizer::new(&FRENCH, &resources, &Options::default());
+        assert_eq!(
+            l.compose(TextKind::Band, "45Hz~1kHz (4000 counts)"),
+            Some(Err("45Hz~1kHz (400 points)".to_string()))
+        );
+        assert_eq!(
+            l.spec_text(TextKind::Band, "45Hz~1kHz (4000 counts)"),
+            "45Hz~1kHz (4000 counts)"
+        );
+    }
+
+    /// No shipped language's templates change a number of any spec text
+    /// the library shows: the app would show those in English.
+    #[test]
+    fn shipped_templates_keep_the_numbers() {
+        let all = dmm_lib::text::all_texts();
+        for language in crate::l10n::lang::SHIPPED {
+            let l = Localizer::new(language, LIB_RESOURCES, &Options::default());
+            for (kind, text, _) in all.entries().filter(|(k, _, _)| GUARDED.contains(k)) {
+                if let Some(Err(shown)) = l.compose(kind, text) {
+                    panic!("{}: {shown:?} changes the numbers of {text:?}", language.id);
+                }
             }
         }
     }

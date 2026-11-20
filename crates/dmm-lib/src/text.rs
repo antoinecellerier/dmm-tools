@@ -212,8 +212,12 @@ mod list {
                 for note in mode.notes {
                     out.add(TextKind::Note, *note, id);
                 }
+                // A sheet label no reading shows is not text to translate.
+                let labelled = !protocol.relabels_sheet_bands();
                 for band in table.rows.iter().flat_map(|row| row.spec.accuracy) {
-                    out.add(TextKind::Band, band.freq_range.unwrap_or_default(), id);
+                    if labelled {
+                        out.add(TextKind::Band, band.freq_range.unwrap_or_default(), id);
+                    }
                     out.add(TextKind::Band, band.accuracy, id);
                 }
             }

@@ -31,6 +31,7 @@ mod lib_ftl;
 mod lib_index;
 mod lib_names;
 mod pseudo;
+mod spec_templates;
 #[cfg(test)]
 mod translations;
 
@@ -39,12 +40,13 @@ pub use ftl_text::escape;
 pub use lang::{EN_US, Language, find, find_in, languages, resolve};
 pub use lib_index::{LIB_RESOURCES, is_units_only};
 
+use dmm_lib::text::TextKind;
 use fluent_bundle::concurrent::FluentBundle;
 use fluent_bundle::{FluentArgs, FluentResource, FluentValue};
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::sync::OnceLock;
+use std::sync::{Mutex, OnceLock};
 
 /// Developer switch for the padding pseudo-locale (any non-empty value): it
 /// lengthens every message to find layouts that can't take a longer
@@ -224,6 +226,9 @@ pub struct Localizer {
     /// The spec texts whose translation keeps their numbers, by message
     /// ID, checked on first use ([`Localizer::spec_text`]).
     spec_texts: OnceLock<HashMap<String, String>>,
+    /// The spec texts a template reads, as composed on first use; `None`
+    /// for one no template reads or whose translation changes its numbers.
+    composed_spec_texts: Mutex<HashMap<TextKind, HashMap<String, Option<String>>>>,
 }
 
 impl Localizer {
@@ -250,6 +255,7 @@ impl Localizer {
             format_failure: problem_level(options),
             pseudo: options.pseudo,
             spec_texts: OnceLock::new(),
+            composed_spec_texts: Mutex::default(),
         }
     }
 
@@ -293,16 +299,20 @@ impl Localizer {
     /// [`Localizer::message`], `None` where en-US lacks the message too or
     /// fails to format it.
     fn lookup<'a>(&'a self, id: &str, args: &[(&str, Arg<'_>)]) -> Option<Cow<'a, str>> {
-        let args = fluent_args(args);
-        let text = self
-            .bundles
-            .iter()
-            .find_map(|b| format_at(b, id, args.as_ref(), self.format_failure))?;
+        let text = self.lookup_raw(id, args)?;
         Some(if self.pseudo {
             Cow::Owned(pseudo::bracket(&text))
         } else {
             text
         })
+    }
+
+    /// [`Localizer::lookup`] before the pseudo-locale's brackets.
+    fn lookup_raw<'a>(&'a self, id: &str, args: &[(&str, Arg<'_>)]) -> Option<Cow<'a, str>> {
+        let args = fluent_args(args);
+        self.bundles
+            .iter()
+            .find_map(|b| format_at(b, id, args.as_ref(), self.format_failure))
     }
 
     /// Whether this localizer shows the English as written: en-US without
