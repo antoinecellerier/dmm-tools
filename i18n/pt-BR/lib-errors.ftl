@@ -90,6 +90,12 @@ error-bluetooth-only-switched-off = o multímetro { $model } só se conecta via 
 error-bluetooth-only-not-built = o multímetro { $model } só se conecta via Bluetooth, e esta versão não tem suporte a Bluetooth
 # $model is the meter, e.g. UNI-T UT60BT.
 error-bluetooth-only-usb-adapter = o multímetro { $model } só se conecta via Bluetooth, e --adapter indica um dispositivo USB: informe o endereço Bluetooth do multímetro ou omita --adapter
+# On Android: a cable is plugged in, and the user has not answered or has
+# refused the system's question about letting this app use it.
+error-cable-not-allowed = o cabo USB aguarda sua permissão: aceite a solicitação do Android ou conecte o cabo de novo para que ela reapareça
+# On Android, where the meter may be on either: nothing was found on USB
+# and Bluetooth could not be searched.
+error-no-cable-bluetooth-off = nenhum cabo USB está conectado, e o Bluetooth está desligado
 # Opening the meter was stopped part-way, by Disconnect or by quitting.
 error-cancelled = abertura da conexão cancelada
 
@@ -177,6 +183,9 @@ error-rejected-by-meter = o multímetro recusou { $sent }
 error-rejected-zero-needs-capacitance = ZERO só funciona no modo de capacitância
 error-rejected-rel-needs-reading = REL só funciona com um número no display
 error-rejected-rel-is-on = REL já está ativado; saia de REL primeiro
+# $code is a number, $model and $opened are meters (e.g. OWON B41T+). Each
+# app follows it with how to open the meter as its own model.
+error-rejected-other-model = o multímetro foi aberto como { $opened }, mas informa o código de modelo OWON { $code } ({ $model }); por isso as teclas remotas estão desativadas
 # $code is a number.
 error-rejected-unknown-model = o multímetro informa o código de modelo OWON { $code }, que o aplicativo ainda não conhece, por isso as teclas remotas estão desativadas
 # $command is a command word.
@@ -195,15 +204,29 @@ error-sent-range = a faixa { $range }
 ## read. After "invalid response:". Model names (OWON B35T+, Brymen BM82x)
 ## stay as they are. Each app follows the sentence with what to pick.
 
+# An OWON meter names its model, which sends the other kind of data frame.
+# $code is OWON's model number, e.g. 87; $model the model it names, e.g.
+# Voltcraft VC871; $frame the length of that model's frame in bytes, 6 or
+# 15; $opened the meter chosen, e.g. OWON B35T+.
+error-wrong-meter-other-frame = o multímetro foi aberto como { $opened }, mas informa o código de modelo OWON { $code } ({ $model }), que envia o quadro OWON de { $frame } bytes
+# An OWON meter sends the other kind of data frame and names no model.
+# $sent and $expected are frame lengths in bytes, 6 or 15; $opened is the
+# meter chosen, e.g. Voltcraft VC871.
+error-wrong-meter-other-frame-kind = o multímetro envia quadros OWON de { $sent } bytes, mas foi aberto como { $opened }, que usa quadros OWON de { $expected } bytes
 # An OWON model this tool does not read yet. $code is OWON's model number,
 # e.g. 83. "This message" is the whole error, for the issue.
 error-wrong-meter-not-yet = o multímetro informa o código de modelo OWON { $code }, de um modelo que o aplicativo ainda não lê; abra uma issue com esta mensagem
 # An OWON model whose readings carry their sign where this tool does not
 # read it yet. $code is OWON's model number, e.g. 55.
 error-wrong-meter-sign-in-function-word = o multímetro informa o código de modelo OWON { $code }: envia o quadro OWON de 6 bytes com o sinal na palavra de função, que o aplicativo ainda não lê
+# A Brymen meter of another series answered. $found and $opened are series,
+# e.g. Brymen BM82x and Brymen BM86x.
+error-wrong-meter-other-series = o multímetro conectado ao cabo é da série { $found }, não da série { $opened }
 # An OWON meter chosen by its model sends bytes, but never its 6-byte data
 # frame. B35 and B35T are OWON models.
 error-wrong-meter-no-six-byte-frames = o multímetro não envia quadros OWON de 6 bytes; pode ser um B35 ou B35T mais antigo, cujos quadros de 14 bytes o aplicativo ainda não lê
+# The same for a meter whose data frame is 15 bytes long.
+error-wrong-meter-no-fifteen-byte-frames = o multímetro não envia quadros OWON de 15 bytes
 # An OWON meter that names no model sends frames of neither length. "This
 # message" is the whole error, for the issue.
 error-wrong-meter-untold-frame-kind = nem o código de modelo do multímetro nem os quadros recebidos mostram se são quadros OWON de 6 ou de 15 bytes; abra uma issue com esta mensagem
@@ -240,6 +263,14 @@ error-bluetooth-login-refused =
        *[other] o multímetro recusou o login: erro desconhecido (código { $code })
     }
 
+## The session clock's contributor options, --mock-clock-scale and
+## --mock-clock-preseed, refused a value. Each app puts the option before
+## the sentence. $value is the number as read, e.g. -2 or inf.
+
+clock-scale-not-positive = a escala do relógio deve ser um número positivo, recebido '{ $value }'
+# $max is the longest preseed, in seconds: 86400.
+clock-preseed-out-of-range = a pré-carga do relógio deve estar entre 0 e { $max } segundos, recebido '{ $value }'
+
 ## Not an error: the notice under the reading in the GUI when a Bluetooth
 ## adapter hands over a reading late, together with the next one.
 
@@ -251,4 +282,11 @@ late-readings-advice =
     { $fix ->
         [command] Neste adaptador, uma leitura às vezes chega agrupada com a seguinte. Nenhuma se perde. Para obter carimbos de data/hora precisos até o multímetro se desconectar, execute:
        *[none] Neste adaptador, uma leitura às vezes chega agrupada com a seguinte. Nenhuma se perde.
+    }
+# The same for a Bluetooth meter that is not one of UNI-T's adapters; $fix as
+# above.
+late-readings-advice-link =
+    { $fix ->
+        [command] Uma leitura às vezes chega agrupada com a seguinte. Nenhuma se perde. Para obter carimbos de data/hora precisos até o multímetro se desconectar, execute:
+       *[none] Uma leitura às vezes chega agrupada com a seguinte. Nenhuma se perde.
     }

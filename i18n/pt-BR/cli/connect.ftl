@@ -11,6 +11,23 @@
 ## Refusals before anything is opened. Each follows "Error:" or "Warning:"
 ## (common.ftl) on the same line.
 
+# After shared.ftl's unrecognised-data, on a warning line: where to report
+# it. $url is the issue tracker; a command line to run follows on a line of
+# its own.
+connect-unrecognised-report = Com o multímetro neste estado, relate o problema em { $url }, anexando a saída de:
+# The same when the data came from a recording being played back: $url as
+# above.
+connect-unrecognised-report-file = Relate o problema em { $url }, anexando a gravação.
+# The late-readings notice's last line (lib-errors.ftl), on a link the tool
+# has no fix for yet. $url is the issue tracker.
+connect-late-readings-report = Relate o problema em { $url }, indicando o multímetro e o sistema operacional.
+# After saved-device-unknown: how to name the meter from now on. Settings
+# is dmm-gui's panel; --device a command-line option, kept as it is.
+connect-saved-device-unknown-action = Para indicar o multímetro, use --device ou escolha-o em Configurações, no dmm-gui.
+# After saved-mock-mode-unknown. Mock mode is dmm-gui's setting; --mock-mode
+# a command-line option, and 'dmm-cli read --help' a command line, kept as
+# they are.
+connect-saved-mock-mode-unknown-action = Escolha um modo na opção Modo simulado das Configurações do dmm-gui ou use --mock-mode; 'dmm-cli read --help' lista os modos.
 # info and debug talk to a real meter. $device is the simulated meter's id,
 # e.g. mock.
 connect-needs-hardware = Este comando requer um multímetro real (não disponível com --device { $device }).

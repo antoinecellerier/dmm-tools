@@ -7,6 +7,9 @@
 info-detected = Multímetro detectado: { $meter }
 # $transport is the kind of link, e.g. CP2110 or Bluetooth.
 info-transport = Transporte: { $transport }
+# Indented under info-transport, in place of the chip's identity when asking
+# for it failed. $bridge is common-unavailable's text.
+info-bridge = Ponte: { $bridge }
 # Indented under info-transport, after the chip's identity. $status is the
 # link's counters, e.g. "TX FIFO: 0 bytes, RX FIFO: 0 bytes".
 info-status = Estado: { $status }

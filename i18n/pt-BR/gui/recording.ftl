@@ -14,10 +14,14 @@
 
 # A button; ● is part of it.
 recording-record = ● Gravar
-    .hover = Começar a gravar as amostras ao vivo no buffer de gravação ({ $keys })
+    .hover = Iniciar a gravação ({ $keys })
 # The Record button while recording; ■ is part of it.
 recording-stop = ■ Parar
     .hover = Parar a gravação ({ $keys })
+# A button: puts a numbered marker on the reading the meter shows now. The
+# graph's menu has an entry of the same name; keep the two alike.
+recording-mark = Marcar
+    .hover = Marcar a leitura exibida ({ $keys })
 # Shown after Export… once a recording has stopped. Export… is the button
 # beside it, which saves the samples to a file.
 recording-discard = Descartar
@@ -77,6 +81,9 @@ recording-reading-resize =
 
 recording-big-meter-on =
     .hover = Ocultar os painéis laterais e mostrar a leitura do multímetro em tela inteira ({ $keys })
+# While the reading is full-screen with its buttons under it.
+recording-big-meter-minimal =
+    .hover = Mostrar só a leitura, sem os botões ({ $keys })
 # While the reading is full-screen.
 recording-big-meter-off =
     .hover = Voltar ao layout normal com vários painéis ({ $keys })

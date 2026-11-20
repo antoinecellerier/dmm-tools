@@ -49,7 +49,15 @@ stability-warning =
 ## dmm-gui's Settings, mock_mode its name in the settings file.
 
 flag-adapter = Selecionar um adaptador específico quando houver mais de um ao alcance. Use o número de série ou o caminho HID de um cabo USB, ou o endereço de um adaptador ou multímetro Bluetooth, tal como aparecem em 'dmm-cli list'
+# dmm-cli's, on read, get and set: the mock dmm-gui saved counts too.
+flag-mock-mode-cli = Fixar em um único modo de medição o dispositivo simulado (--device mock ou o salvo pelo dmm-gui), em vez de percorrer todos os modos. Sem esta opção, vale o mock_mode do arquivo de configurações (o Modo simulado do dmm-gui)
+# dmm-gui's: the mock picked in Settings counts too.
+flag-mock-mode-gui = Fixar em um único modo de medição o dispositivo simulado (--device mock ou o escolhido em Configurações), em vez de percorrer todos os modos. Nesta sessão, tem prioridade sobre o Modo simulado salvo
+# dmm-cli's: its 'list' command shows what is plugged in.
+flag-no-bluetooth-cli = Desativar a procura por dispositivos Bluetooth nesta execução: 'list' mostra apenas cabos. Tem prioridade sobre a configuração “{ bluetooth-setting }” do dmm-gui. Um endereço informado em --adapter é aberto mesmo assim
 flag-no-bluetooth-gui = Desativar a procura por dispositivos Bluetooth nesta sessão. Tem prioridade sobre a configuração “{ bluetooth-setting }”. Um endereço informado em --adapter é aberto mesmo assim
+# dmm-cli's, beside --no-bluetooth.
+flag-bluetooth-cli = Procurar adaptadores e multímetros Bluetooth nesta execução, independentemente da configuração “{ bluetooth-setting }” do dmm-gui
 
 ## The rest of --mock-mode's long help, after flag-mock-mode-cli or
 ## flag-mock-mode-gui.
@@ -58,6 +66,14 @@ flag-no-bluetooth-gui = Desativar a procura por dispositivos Bluetooth nesta ses
 mock-mode-list = Modos: { $modes }
 # $example is a command line.
 mock-mode-example = Exemplo: { $example }
+
+## Why a mock-only option was refused, after the option and the value as
+## typed.
+
+# The session's device, typed with --device or saved by dmm-gui, is not the
+# mock.
+mock-mode-mock-only = --mock-mode só se aplica ao dispositivo simulado. Execute de novo com --device mock ou sem --mock-mode.
+mock-clock-mock-only = --mock-clock-scale e --mock-clock-preseed só se aplicam a um multímetro simulado e a uma reprodução. Execute de novo com --device mock ou --replay, ou sem as opções de relógio.
 
 ## A link's short name, where the meter is already named: the GUI's
 ## status line, the setup help's section labels.
@@ -86,6 +102,9 @@ setup-bluetooth-check =
         [phone] ligue o Bluetooth neste celular e a transmissão de dados no multímetro.
        *[computer] ligue o Bluetooth neste computador e a transmissão de dados no multímetro.
     }
+# After "Bluetooth:", when the search was switched off; how to switch it on
+# follows as a step of its own.
+setup-bluetooth-off-check = procura desativada.
 # Linux. Two command lines follow.
 setup-usb-linux-rule = Verifique se a regra udev está instalada:
 # Linux. The setup guide's address follows.
@@ -114,6 +133,15 @@ setup-bluetooth-scan = Execute 'dmm-cli list' para procurar adaptadores e multí
 
 ## Notices both binaries show.
 
+# The settings file names a meter this version has no entry for: a file a
+# newer version wrote, or one edited by hand. $device is the id as the file
+# holds it, e.g. ut62; $path is the file. dmm-gui shows it in a toast,
+# dmm-cli after "Warning:" and before what to do.
+saved-device-unknown = O arquivo de configurações { $path } indica o dispositivo “{ $device }”, que esta versão não conhece; por isso, o multímetro é detectado automaticamente.
+# The settings file's mock_mode (the setting's name in the file, kept as it
+# is) names no scenario of the simulated meter. $given is the name as the
+# file holds it. Each app follows it with what to do.
+saved-mock-mode-unknown = O mock_mode “{ $given }” do arquivo de configurações não é um modo simulado; por isso, o multímetro simulado percorre todos os modos.
 # When the meter opened, other cables were there to open and the session
 # took the first, with --adapter a command-line option kept as it is. $count
 # is 2 or more. dmm-gui shows it in a toast, dmm-cli after "Warning:".
@@ -130,6 +158,14 @@ cables-at-open =
                *[other] Há { $count } cabos USB conectados disponíveis para esta sessão, e o primeiro encontrado foi aberto. Para escolher outro, use --adapter.
             }
     }
+# When the meter opened over Bluetooth, other adapters or meters matched as
+# well and the session took the first, with --adapter a command-line option
+# kept as it is. $count is 2 or more. $host as in cables-at-open.
+bluetooth-tied =
+    { $host ->
+        [phone] { $count } adaptadores ou multímetros Bluetooth correspondem igualmente bem, e o primeiro encontrado foi aberto.
+       *[computer] { $count } adaptadores ou multímetros Bluetooth correspondem igualmente bem, e o primeiro encontrado foi aberto. Para escolher outro, use --adapter com um dos dispositivos que 'dmm-cli list' mostra.
+    }
 # Follows cables-at-open when nothing tells those cables apart.
 cables-no-reconnect =
     { $host ->
@@ -140,6 +176,17 @@ cables-no-reconnect =
 # it gave, e.g. UT161E; $picked the model picked, e.g. UNI-T UT61E+. Each
 # app follows it with what to pick (choose-meter-gui, choose-meter-cli).
 other-model = O multímetro se identifica como “{ $reported }”, não como o modelo { $picked } selecionado.
+# The same when detection opened the meter, without hearing its name in
+# time, as $picked; $reported as above.
+other-model-detected = O multímetro se identifica como “{ $reported }”, mas a detecção automática o abriu como { $picked }.
+# The meter's packets are another model's than the one it was opened as:
+# $named is that model, e.g. ZOYI / ZOTEK ZT-5566SE; $opened the one opened,
+# e.g. ZOYI / ZOTEK ZT-300AB. Each app follows it with what to pick.
+other-data = O multímetro envia dados do modelo { $named }, mas foi aberto como { $opened }.
+# The meter sent data this tool doesn't read yet, said once per run. $meter
+# is the meter, e.g. UNI-T UT61E+; $detail what it sent, in English, e.g.
+# mode byte: 0x7f. Each app follows it with how to report it.
+unrecognised-data = O multímetro { $meter } enviou dados que este aplicativo não reconhece ({ $detail }).
 # A cable or Bluetooth link is open but no meter on it identified itself.
 # A notice title in the GUI; dmm-cli starts a sentence with it, naming the
 # link after it (cli/connect.ftl).
@@ -155,6 +202,14 @@ several-cables =
         [one] Há { $count } cabo USB conectado que esta sessão pode abrir, e não é possível identificá-lo. Uma reconexão poderia abrir o cabo de outro multímetro.
        *[other] Há { $count } cabos USB conectados que esta sessão pode abrir, e não é possível distingui-los. Uma reconexão poderia abrir o cabo de outro multímetro.
     }
+# Why a dropped link is no longer being reopened: it stayed down for
+# $minutes minutes, and the session has ended. A notice or the error that
+# ended the run says what the last attempt found.
+reconnect-gave-up =
+    { $minutes ->
+        [one] Tentativas de reconexão encerradas: a conexão com o multímetro ficou interrompida por { $minutes } minuto.
+       *[other] Tentativas de reconexão encerradas: a conexão com o multímetro ficou interrompida por { $minutes } minutos.
+    }
 # While a dropped link is being reopened: its cable has gone and another is
 # plugged in. Each binary follows it with how to use that other cable.
 waiting-for-own-cable = Outro cabo USB está conectado, mas esta sessão aguarda o cabo que abriu.
@@ -164,7 +219,40 @@ screen-only-reading = Veja as leituras do osciloscópio no display do multímetr
 # The GUI checkbox that lets a connection search over Bluetooth. The CLI
 # reads the same setting, so its help names the checkbox too.
 bluetooth-setting = Procurar dispositivos Bluetooth
+# How dmm-cli switches the search on: after --no-bluetooth, and when the
+# saved setting is off.
+bluetooth-off-cli-instead = Use --bluetooth em vez de --no-bluetooth.
+bluetooth-off-cli-saved = Use --bluetooth ou marque “{ bluetooth-setting }” nas configurações do dmm-gui, que o dmm-cli também lê.
 bluetooth-off-gui = Marque “{ bluetooth-setting }” em Configurações (⚙).
+# What to check after the meter refused a mode or range switch, or did not
+# take it. $setting is range (the input must be within the range too) or
+# another setting.
+switch-check-dial =
+    { $setting ->
+        [range] Verifique a posição da chave seletora e se o sinal de entrada está dentro da faixa.
+       *[other] Verifique a posição da chave seletora.
+    }
+# How to open the meter as the model it is, after a message saying it is
+# another, in dmm-gui. $choice is entry ($model the meter to pick, e.g.
+# OWON CMS061), entry-only (the same, when Auto-detect is what opened it),
+# auto-detect, or own-model (nothing says which model: the user has to pick
+# it). "Auto-detect" is the Device choice that finds the meter itself.
+choose-meter-gui =
+    { $choice ->
+        [entry] Escolha o modelo { $model } ou Detecção automática em Configurações (⚙).
+        [entry-only] Escolha o modelo { $model } em Configurações (⚙).
+        [auto-detect] Escolha Detecção automática em Configurações (⚙).
+       *[own-model] Escolha o modelo real do multímetro em Configurações (⚙).
+    }
+# The same in dmm-cli: $choice as above, $id the --device value of the
+# meter to pick, e.g. cms061; --device auto detects the meter.
+choose-meter-cli =
+    { $choice ->
+        [entry] Use --device { $id } ou --device auto.
+        [entry-only] Use --device { $id }.
+        [auto-detect] Use --device auto.
+       *[own-model] Use --device com o modelo real do multímetro; --help lista os modelos.
+    }
 
 ## What is connected, when an --adapter value matched nothing.
 
@@ -188,11 +276,20 @@ input-not-finite = deve ser um número finito
 input-zero-scale = um fator de escala igual a zero apagaria a leitura
 # The alarm's low limit and its high limit.
 input-low-not-below-high = o limite inferior deve ser menor que o superior
+# An alarm limit: a number, or a number with a unit or a prefix such as
+# 4980 mV, 10 kohm or 4.7k (kept as they are). $text is what was typed.
+input-not-a-quantity = “{ $text }” não é um número nem um número com unidade, como 4980 mV ou 4.7k
+# The alarm's two limits were typed with units of different quantities,
+# such as volts and amps.
+input-limit-units-differ = os limites inferior e superior devem estar na mesma unidade
 # The alarm's hysteresis band: a number in the limits' unit, or a percentage
 # of the limit. $text is what was typed, as it was typed.
 input-band-not-a-number = “{ $text }” não é um número nem uma porcentagem como 1%
 # A hysteresis band below zero.
 input-band-negative = deve ser maior ou igual a zero
+# A hysteresis band typed with a unit, while the limits were typed in
+# another unit or with none.
+input-band-not-the-limits-unit = a histerese só pode ter unidade se os limites forem digitados nessa unidade
 # A percentage band with a limit of 0, of which every percentage is 0.
 input-percent-of-zero = qualquer porcentagem de um limite igual a 0 é 0; informe um valor
 

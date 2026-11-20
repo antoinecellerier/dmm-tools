@@ -697,19 +697,110 @@ activation-ut202bt =
 # Used by: Mock UT61E+, Mock ZT-5B
 activation-mock = Não é preciso configurar nada: este é um dispositivo simulado.
 
-
 ## Specification accuracy bands, beside an accuracy in the
 ## Specifications panel: the condition it holds under, or an accuracy the manual
 ## gives in words. Keep every number, sign and ± exactly; a decimal comma is
 ## fine (0,6). A translation that changes, drops or adds a number is shown in
 ## English. Bands that are numbers and units only are not listed.
 
+# Used by: VC920/VC940/VC960
+band-4000-counts = (4000 contagens)
+# Used by: VC920/VC940/VC960
+band-plus-40-to-plus-400-degc = +40 a +400 °C
+# Used by: VC920/VC940/VC960
+band-plus-40-to-plus-400-degc-2 = +40 a +400 °C (4000 contagens)
+# Used by: VC920/VC940/VC960
+band-plus-400-to-plus-1000-degc = +400 a +1000 °C
+# Used by: VC920/VC940/VC960
+band-plus-400-to-plus-1000-degc-2 = +400 a +1000 °C (4000 contagens)
+# Used by: VC920/VC940/VC960
+band-40-to-plus-40-degc = -40 a +40 °C
+# Used by: VC920/VC940/VC960
+band-40-to-plus-40-degc-4000 = -40 a +40 °C (4000 contagens)
+# Used by: VC920/VC940/VC960
+band-10khz-120khz-4000-counts = 10kHz~120kHz (4000 contagens)
+# Used by: VC920/VC940/VC960
+band-10khz-120khz-10-15-pct-of = 10kHz~120kHz, 10 - 15% da faixa
+# Used by: VC920/VC940/VC960
+band-10khz-120khz-15-100-pct-of = 10kHz~120kHz, 15 - 100% da faixa
+# Used by: VC920/VC940/VC960
+band-120khz-250khz-4000-counts = 120kHz~250kHz (4000 contagens)
+# Used by: VC920/VC940/VC960
+band-120khz-250khz-10-30-pct-of = 120kHz~250kHz, 10 - 30% da faixa
+# Used by: VC920/VC940/VC960
+band-120khz-250khz-30-100-pct-of = 120kHz~250kHz, 30 - 100% da faixa
+# Used by: VC920/VC940/VC960
+band-1khz-10khz-4000-counts = 1kHz~10kHz (4000 contagens)
+# Used by: VC920/VC940/VC960
+band-250khz-400khz-10-30-pct-of = 250kHz~400kHz, 10 - 30% da faixa
+# Used by: VC920/VC940/VC960
+band-250khz-400khz-10-30-pct-of-2 = 250kHz~400kHz, 10 - 30% da faixa (4000 contagens)
+# Used by: VC920/VC940/VC960
+band-30-100-pct-of-mr = 30 - 100% da faixa
+# Used by: VC920/VC940/VC960
+band-30-100-pct-of-mr-4000 = 30 - 100% da faixa (4000 contagens)
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
 # In: Logic Level Frequency (⎍Hz) & Duty Cycle (D%)
 band-3d-khz-plus-2d = 3d/kHz+2d
+# Used by: VC920/VC940/VC960
+# In: Temperature
+band-4-000-plus-40-to-plus = 4.000: +40 a +400 °C
+# Used by: VC920/VC940/VC960
+# In: Temperature
+band-4-000-plus-400-to-plus = 4.000: +400 a +1000 °C
+# Used by: VC920/VC940/VC960
+# In: Temperature
+band-4-000-40-to-plus-40 = 4.000: -40 a +40 °C
+# Used by: VC920/VC940/VC960
+# In: AC / V
+band-4-000-10khz-120khz-10-15 = 4.000: 10kHz~120kHz, 10 - 15% da faixa
+# Used by: VC920/VC940/VC960
+# In: AC / V
+band-4-000-10khz-120khz-15-100 = 4.000: 10kHz~120kHz, 15 - 100% da faixa
+# Used by: VC920/VC940/VC960
+# In: AC / V
+band-4-000-120khz-250khz-10-30 = 4.000: 120kHz~250kHz, 10 - 30% da faixa
+# Used by: VC920/VC940/VC960
+# In: AC / V
+band-4-000-120khz-250khz-30-100 = 4.000: 120kHz~250kHz, 30 - 100% da faixa
+# Used by: VC920/VC940/VC960
+# In: AC / V
+band-4-000-250khz-400khz-10-30 = 4.000: 250kHz~400kHz, 10 - 30% da faixa
+# Used by: VC920/VC940/VC960
+# In: AC / V
+band-4-000-30-100-pct-of = 4.000: 30 - 100% da faixa
+# Used by: VC920/VC940/VC960
+# In: Temperature
+band-40-000-plus-40-to-plus = 40.000: +40 a +400 °C
+# Used by: VC920/VC940/VC960
+# In: Temperature
+band-40-000-plus-400-to-plus = 40.000: +400 a +1000 °C
+# Used by: VC920/VC940/VC960
+# In: Temperature
+band-40-000-40-to-plus-40 = 40.000: -40 a +40 °C
+# Used by: VC920/VC940/VC960
+# In: AC / V
+band-40-000-10khz-120khz-10-15 = 40.000: 10kHz~120kHz, 10 - 15% da faixa
+# Used by: VC920/VC940/VC960
+# In: AC / V
+band-40-000-10khz-120khz-15-100 = 40.000: 10kHz~120kHz, 15 - 100% da faixa
+# Used by: VC920/VC940/VC960
+# In: AC / V
+band-40-000-120khz-250khz-10-30 = 40.000: 120kHz~250kHz, 10 - 30% da faixa
+# Used by: VC920/VC940/VC960
+# In: AC / V
+band-40-000-120khz-250khz-30-100 = 40.000: 120kHz~250kHz, 30 - 100% da faixa
+# Used by: VC920/VC940/VC960
+# In: AC / V
+band-40-000-250khz-400khz-10-30 = 40.000: 250kHz~400kHz, 10 - 30% da faixa
+# Used by: VC920/VC940/VC960
+# In: AC / V
+band-40-000-30-100-pct-of = 40.000: 30 - 100% da faixa
 # Used by: Mock UT61E+, UT161E, UT61E+
 # In: AC Voltage
 band-40hz-100hz-lpf = 40Hz~100Hz (LPF)
+# Used by: VC920/VC940/VC960
+band-45hz-1khz-4000-counts = 45Hz~1kHz (4000 contagens)
 # Used by: UT803
 # In: B. AC Voltage
 band-50khz-100khz = >50kHZ–100kHz
@@ -728,6 +819,9 @@ band-not-specified-2 = Não especificado
 # Used by: UT181A
 # In: (1) AC Voltage; (3) AC Voltage + DC Voltage
 band-only-for-reference = Apenas para referência
+# Used by: CMS061, CMS101
+# In: Duty Cycle (%)
+band-typical-vrms-1-v-f-100hz = Típico: Vrms=1 V, f=100Hz
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
 # In: AC Voltage; DC AC & AC+DC AC Voltage
 band-unspec-d = Não especif.
@@ -773,9 +867,15 @@ input-around-2-5gohm = Cerca de 2.5GΩ
 # Used by: UT803
 # In: A. DC Voltage; B. AC Voltage
 input-around-3000mohm = Cerca de > 3000MΩ
+# Used by: UT71C/D/E
+# In: L. Power Measurement (UT71E only)
+input-current-fuse-10a-1000v-voltage-1000v = Corrente: fusível 10A 1000V; tensão: 1000V
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
 # In: AC & AC+DC Current; DC Current; Line Level Frequency (~Hz)
 input-fuse-0-44a-1000v = Fusível 0.44A 1000V
+# Used by: UT71A, UT71B, UT71C/D/E
+# In: C. DC Current; D. AC Current (AC+DC measurement is available); K. 4~20 mA loop current (UT71B/C/D/E)
+input-fuse-0-5a-1000v = Fusível 0.5A 1000V
 # Used by: UT804
 # In: C. DC Current; D. AC Current (AC+DC measurement is available); L. 4~20 mA loop current
 input-fuse-0-5a-250v = Fusível 0.5A 250V
@@ -819,18 +919,36 @@ input-initially-approx-3-0kohm-165pf-nominal = Inicialmente aprox. 3.0kΩ, 165pF
 ## is fine (0,6). A translation that changes, drops or adds a number is shown
 ## in English.
 
+# Used by: VC920/VC940/VC960
+# In: Power
+note-0-1150w-continuous-1150w-2500w-max = 0–1150W contínuo; >1150W–2500W: máx. 10s, depois 15min de pausa
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
 # In: AC & AC+DC Current; DC Current
 note-10a-continuous-10a-to-20a-30s = 10A contínuo; >10A a 20A: 30s máx., 5 min de resfriamento
+# Used by: VC920/VC940/VC960
+# In: AC / A; DC / A
+note-10a-0-5a-continuous-5a-10a = 10A: 0–5A contínuo; >5A–10A: máx. 10s, depois 15min de pausa
+# Used by: UT71A, UT71B, UT71C/D/E
+# In: C. DC Current; D. AC Current (AC+DC measurement is available)
+note-10a-5a-continuous-5a-10a-10s-2 = 10A: ≤5A contínuo; 5A–10A ≤10s por vez, com intervalo >15min
 # Used by: UT804
 # In: C. DC Current; D. AC Current (AC+DC measurement is available)
 note-10a-5a-continuous-5a-10a-10s = 10A: ≤5A contínuo; >5A–10A ≤10s por vez, com intervalo >15min
 # Used by: UT181A
 # In: (13) Pulse Width
 note-10hz-200khz-pulse-width-2us-depends = 10Hz–200kHz: largura de pulso >2µs, depende da frequência do sinal
+# Used by: CMS061, CMS101
+# In: Capacitance(F)
+note-20-00mf-measuring-duration-should-be = 20.00mF: a medição deve durar mais de 30 segundos
+# Used by: UT71A, UT71B
+# In: E. Resistance
+note-200ohm-accuracy-plus-test-lead-short = 200Ω: precisão + valor das pontas de prova em curto-circuito
 # Used by: UT181A
 # In: (4) AC Current; (5) DC Current; (6) AC Current + DC Current
 note-20a-30s-on-then-10min-off = 20A: 30s de medição, depois 10min de pausa; não especificado acima de 10A
+# Used by: UT71A, UT71B
+# In: H. Capacitance
+note-20nf-accuracy-plus-open-circuit-test = 20nF: precisão + capacitância das pontas de prova em circuito aberto
 # Used by: Mock UT61E+, UT161E, UT61E+
 # In: Capacitance
 note-220mf-range-measurement-takes-20s = Faixa de 220mF: a medição leva ≈20s
@@ -840,12 +958,18 @@ note-25-00mf-manual-range-not-specified = 25.00mF, faixa manual: não especifica
 # Used by: UT804
 # In: E. Resistance
 note-400ohm-accuracy-plus-test-lead-open = 400Ω: precisão + valor das pontas de prova em circuito aberto
+# Used by: UT71C/D/E
+# In: E. Resistance
+note-400ohm-accuracy-plus-test-lead-short = 400Ω: precisão + valor das pontas de prova em curto-circuito
 # Used by: UT804
 # In: H. Capacitance
 note-40nf-accuracy-plus-open-circuit-test = 40nF: precisão + capacitância das pontas de prova em circuito aberto
 # Used by: UT804
 # In: L. 4~20 mA loop current
 note-4ma-shows-0-pct-20ma-shows = 4mA corresponde a 0%, 20mA a 100%
+# Used by: UT71B, UT71C/D/E
+# In: K. 4~20 mA loop current (UT71B/C/D/E)
+note-4ma-shows-0-pct-20ma-shows-2 = 4mA corresponde a 0%; 20mA, a 100%
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
 # In: Capacitance
 note-6-000mf-manual-range-not-specified = 6.000mF, faixa manual: não especificado abaixo de 0.54mF
@@ -888,6 +1012,12 @@ note-9-999v-3khz-20khz-specified-for = 9.999V, 3kHz ~ 20kHz: especificado apenas
 # Used by: UT804
 # In: L. 4~20 mA loop current
 note-4ma-shows-lo-20ma-shows-hi = <4mA: exibe LO; >20mA: exibe HI
+# Used by: UT71B, UT71C/D/E
+# In: K. 4~20 mA loop current (UT71B/C/D/E)
+note-4ma-display-shows-lo = <4mA: o display exibe LO
+# Used by: UT71B, UT71C/D/E
+# In: K. 4~20 mA loop current (UT71B/C/D/E)
+note-20ma-display-shows-hi = >20mA: o display exibe HI
 # Used by: 7 meters
 # In: AC Current; DC Current
 note-5a-max-10s-rest-15-min = >5A: máx. 10s, repouso ≥15 min
@@ -924,6 +1054,9 @@ note-ac-99-99v-15-00-10 = AC 99.99V: 15.00 ~ 10.00kHz, sensibilidade de 25V (RMS
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
 # In: Line Level Frequency (~Hz)
 note-ac-999-9v-15-00-10 = AC 999.9V: 15.00 ~ 10.00kHz, sensibilidade de 100V (RMS senoidal)
+# Used by: VC920/VC940/VC960
+# In: AC / A; AC / V
+note-ac-plus-dc-add-1-pct-2 = AC+DC: acrescente 1%+30 dígitos à precisão
 # Used by: UT804
 # In: B. AC Voltage (AC+DC measurement is available); D. AC Current (AC+DC measurement is available)
 note-ac-plus-dc-add-1-pct = AC+DC: acrescente 1%+35 dígitos à precisão
@@ -945,6 +1078,9 @@ note-accuracy-valid-1-pct-100-pct = Precisão válida para 1%–100% da faixa
 # Used by: Mock UT61E+, UT161E, UT61E+
 # In: AC Current; AC Voltage
 note-accuracy-valid-1-pct-100-pct-2 = Precisão válida para 1%–100% da faixa (1kHz–10kHz: 10%–100%)
+# Used by: CMS061, CMS101
+# In: AC Current (A); AC Voltage (V)
+note-accuracy-valid-10-pct-100-pct = Precisão válida para 10%–100% da faixa
 # Used by: UT161D, UT61D+
 # In: AC Current
 note-accuracy-valid-40hz-1khz-1-pct = Precisão válida para 40Hz–1kHz, 1%–100% da faixa (600.0µA: 5%–100%)
@@ -957,9 +1093,15 @@ note-accuracy-valid-40hz-500hz-1-pct = Precisão válida para 40Hz–500Hz, 1%�
 # Used by: UT161B, UT61B+
 # In: AC Voltage
 note-accuracy-valid-40hz-500hz-1-pct-2 = Precisão válida para 40Hz–500Hz, 1%–100% da faixa (60mV: 2%–100%)
+# Used by: CMS061, CMS101
+# In: Capacitance(F); DC Current (A); DC Voltage (V)
+note-accuracy-valid-5-pct-100-pct = Precisão válida para 5%–100% da faixa
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
 # In: Capacitance
 note-accuracy-with-film-capacitor-or-better = Precisão medida com capacitor de filme ou de melhor qualidade
+# Used by: CMS061, CMS101
+# In: Capacitance(F); Resistance(Ω)
+note-allow-for-the-test-leads-own = Leve em conta a resistência e a reatância das próprias pontas de prova
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
 # In: Audible Continuity Tester
 note-audible-threshold-between-20ohm-and-300ohm = Limiar audível: entre 20Ω e 300Ω
@@ -978,6 +1120,12 @@ note-beeps-continuously-10ohm-silent-30ohm = Bip contínuo ≤10Ω; silencioso >
 # Used by: UT804
 # In: F. Continuity Test
 note-beeps-continuously-10ohm-silent-50ohm = Bip contínuo ≤10Ω; silencioso >50Ω
+# Used by: UT71A, UT71B, UT71C/D/E
+# In: F. Continuity Test
+note-beeps-continuously-40ohm = Bip contínuo ≤40Ω
+# Used by: UT71A, UT71B, UT71C/D/E
+# In: B. AC Voltage (AC+DC measurement is available)
+note-below-100khz-accuracy-guaranteed-10-pct = Abaixo de 100kHz: precisão garantida para 10%–100%
 # Used by: UT181A
 # In: (15) Diode Test
 note-brief-beep-on-a-normal-junction = Bip breve em junção normal, contínuo em caso de curto
@@ -993,6 +1141,9 @@ note-burden-voltage-2-1mv-ma = Queda de tensão de 2.1mV/mA
 # Used by: 7 meters
 # In: Continuity and Diode
 note-continuity-audio-visual-alarm-50ohm-no = Continuidade: alarme sonoro/visual <50Ω; sem bip ≥70Ω
+# Used by: VC920/VC940/VC960
+# In: Ω
+note-continuity-beeps-50ohm = Continuidade: bip <50Ω
 # Used by: UT803
 # In: B. AC Voltage
 note-crest-factor-3-0-1000v-1 = Fator de crista de 3.0 (1000V: 1.5)
@@ -1002,6 +1153,9 @@ note-crest-factor-2-1-at-full = Fator de crista < 2:1 em fundo de escala, < 4:1 
 # Used by: UT804
 # In: B. AC Voltage (AC+DC measurement is available)
 note-crest-factor-up-to-3-0 = Fator de crista até 3.0 (1000V: 1.5)
+# Used by: VC920/VC940/VC960
+# In: AC / A; AC / V
+note-crest-factor-3 = Fator de crista ≤3
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
 # In: Crest mode (Instantaneous Peak Hold)
 note-crest-specified-accuracy-adds-250-digits = Crista: acrescente 250 dígitos à precisão especificada para variações > 1.0 ms
@@ -1023,6 +1177,9 @@ note-duty-cycle-specified-for-5hz-10khz = Duty cycle especificado para 5Hz ~ 10k
 # Used by: 7 meters
 # In: Frequency/Duty Ratio
 note-duty-square-waves-only-1vpp-20vpp = Duty: apenas ondas quadradas, 1Vpp–20Vpp, ≤10kHz, 10.0%–90.0%
+# Used by: VC920/VC940/VC960
+# In: Ω
+note-fixed-at-4000-counts = Fixo em 4000 contagens
 # Used by: Mock UT61E+, UT161E, UT61E+
 # In: AC+DC Voltage
 note-for-ac-voltage-shorted-leads-residual = Em tensão alternada, pontas de prova em curto: residual ≤200 dígitos
@@ -1119,6 +1276,9 @@ note-max-9-999a = Máx. 9.999A
 # Used by: UT161D, UT61D+
 # In: Temperature
 note-measured-temperature-should-stay-below-230degc = A temperatura medida deve ficar abaixo de 230°C/446°F
+# Used by: UT71A, UT71B, UT71C/D/E
+# In: F. Continuity Test
+note-no-beep-60ohm = Sem bip >60Ω
 # Used by: 7 meters
 # In: AC Current; AC Voltage
 note-non-sine-add-4-pct-crest = Não senoidal: acrescente 4% (fator de crista 1–2), 5% (2–2.5), 7% (2.5–3)
@@ -1128,6 +1288,9 @@ note-normal-silicon-junction-0-5v-0 = Junção de silício normal: 0.5V–0.8V
 # Used by: UT181A
 # In: (14) Continuity Test
 note-open-alarm-beeps-50ohm-silent-10ohm = Alarme de circuito aberto: bip >50Ω, silencioso <10Ω
+# Used by: CMS061, CMS101
+# In: Diode
+note-open-circuit-3-2v = Circuito aberto 3.2V
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
 # In: AutoCheck™ (Ohms); Ohms
 note-open-circuit-1-2vdc-1-0vdc = Circuito aberto < 1.2VDC (< 1.0VDC na faixa de 60.00MΩ)
@@ -1164,6 +1327,9 @@ note-open-circuit-residual-5-digits = Circuito aberto: residual ≤5 dígitos
 # Used by: Mock ZT-5B, ZT-5B
 # In: AC current (A); DC current (A)
 note-over-2a-measure-for-less-than = Acima de 2A: meça por menos de 3s
+# Used by: UT71C/D/E
+# In: L. Power Measurement (UT71E only)
+note-power-factor-input-0-000-1 = Fator de potência de entrada 0.000–1.000
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
 # In: dBm
 note-range-accuracy-depend-on-acmv-acv = A faixa e a precisão dependem de ACmV/ACV e da impedância de referência
@@ -1197,6 +1363,9 @@ note-result-reading-shorted-lead-resistance = Resultado = leitura − resistênc
 # Used by: Mock ZT-5B, ZT-5B
 # In: Auto
 note-sel-ncv-continuity-diode-cap-hz = SEL/NCV: continuidade/diodo, capacitância, Hz, °C
+# Used by: VC920/VC940/VC960
+# In: Frequency
+note-sensitivity-10hz-40mhz-200mv-40mhz-not = Sensibilidade 10Hz–40MHz: 200mV; >40MHz não especificada
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
 # In: Logic Level Frequency (⎍Hz) & Duty Cycle (D%)
 note-sensitivity-2-5vp-square-wave-for = Sensibilidade: onda quadrada 2.5Vp, para famílias lógicas de 3V e 5V
@@ -1209,6 +1378,9 @@ note-shorted-input-residual-under-30-digits = Entrada em curto: residual abaixo 
 # Used by: UT804
 # In: B. AC Voltage (AC+DC measurement is available); D. AC Current (AC+DC measurement is available)
 note-shorted-leads-80-digit-residual-accuracy = Pontas de prova em curto: residual de 80 dígitos, sem efeito na precisão
+# Used by: VC920/VC940/VC960
+# In: AC / V
+note-shorted-leads-display-70-digits = Pontas de prova em curto: display ≤70 dígitos
 # Used by: Mock UT61E+, UT161E, UT61E+
 # In: AC Voltage
 note-shorted-leads-residual-10-digits = Pontas de prova em curto: residual ≤10 dígitos
@@ -1218,9 +1390,24 @@ note-shorted-leads-residual-3-digits = Pontas de prova em curto: residual ≤3 d
 # Used by: 7 meters
 # In: DC Voltage
 note-shorted-leads-residual-5-digits = Pontas de prova em curto: residual ≤5 dígitos
+# Used by: CMS061, CMS101
+# In: On-Off
+note-shows-ol-above-200-0ohm = Exibe OL acima de 200.0Ω
+# Used by: CMS061, CMS101
+# In: Frequency (Hz)
+note-signal-1hz-20mhz-1v-rms = Sinal: 1Hz–20MHz, ≥ 1V rms
+# Used by: UT71B, UT71C/D/E
+# In: J. Temperature (UT71B/C/D/E)
+note-supplied-k-type-point-probe-below = Sensor de contato pontual tipo K incluso: apenas abaixo de 230°C
+# Used by: VC920/VC940/VC960
+# In: Temperature
+note-supplied-wire-thermocouple-max-plus-230degc = Termopar de fio incluso: máx. +230°C
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
 # In: Diode Tester
 note-test-current-0-4ma-typical = Corrente de teste típica de 0.4mA
+# Used by: VC920/VC940/VC960
+# In: Diode test
+note-test-voltage-max-2-8v-test = Tensão de teste máx. 2.8V; corrente de teste ≈1mA
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
 # In: AutoCheck™ (ACV)
 note-then-typically-18kohm-100v-125kohm-300v = Depois, tipicamente 18kΩ@100V, 125kΩ@300V, 320kΩ@600V, 460kΩ@1000V
@@ -1230,6 +1417,9 @@ note-then-typically-18kohm-100v-125kohm-300v-2 = Depois, tipicamente 18kΩ@100V,
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
 # In: Non-Contact EF-Detection
 note-tolerance-10v-36v-23v-83v-59v = Tolerância: 10V~36V, 23V~83V, 59V~165V, 124V~330V, > 250V
+# Used by: VC920/VC940/VC960
+# In: AC / A; AC / V
+note-true-rms-accuracy-valid-10-pct-2 = Precisão True RMS válida para 10%–100% da faixa
 # Used by: UT804
 # In: B. AC Voltage (AC+DC measurement is available)
 note-true-rms-and-accuracy-valid-10 = True RMS e precisão válidos para 10%–100% da faixa
@@ -1242,6 +1432,12 @@ note-true-rms-from-10-pct-to = True RMS de 10% a 100% da faixa; BM821s: resposta
 # Used by: UT181A
 # In: 4 tables
 note-true-rms-valid-10-pct-100 = True RMS válido para 10%–100% da faixa
+# Used by: UT71A, UT71B, UT71C/D/E
+# In: D. AC Current (AC+DC measurement is available)
+note-true-rms-valid-10-pct-100-2 = True RMS válido para 10%–100% da faixa; fator de crista ≤3.0
+# Used by: UT71A, UT71B, UT71C/D/E
+# In: B. AC Voltage (AC+DC measurement is available)
+note-true-rms-valid-10-pct-100-3 = True RMS válido para 10%–100% da faixa; fator de crista ≤3.0 (1000V: 1.5)
 # Used by: UT803
 # In: B. AC Voltage
 note-true-rms-valid-10-pct-95 = True RMS válido para 10%–95% da faixa
@@ -1260,6 +1456,12 @@ note-true-rms-crest-factor-3-0 = True RMS; fator de crista ≤3.0 em 3000, ≤1.
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
 # In: Temperature
 note-type-k-thermocouple-range-accuracy-not = Faixa e precisão do termopar tipo K não incluídas
+# Used by: CMS061, CMS101
+# In: Duty Cycle (%)
+note-typical-waveform-square = Forma de onda típica: quadrada
+# Used by: CMS061, CMS101
+# In: Frequency (Hz)
+note-typical-waveform-square-or-sine = Forma de onda típica: quadrada ou senoidal
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
 # In: Non-Contact EF-Detection
 note-typical-20v-55v-110v-220v-440v = Típico: - 20V, -- 55V, --- 110V, ---- 220V, ----- 440V
@@ -1269,6 +1471,15 @@ note-valid-10-pct-90-pct-of = Válido para 10%–90% da faixa, apenas 5Hz–2kHz
 # Used by: UT803
 # In: K. Transistor
 note-vce-2-2v-bo-10ua = Vce ≈2.2V, bo ≈10µA
+# Used by: VC920/VC940/VC960
+# In: Power
+note-voltage-190v-250v-ac = Tensão 190V–250V AC
+# Used by: UT71C/D/E
+# In: L. Power Measurement (UT71E only)
+note-voltage-input-50v-250v-ac = Tensão de entrada 50V–250V AC
+# Used by: UT71C/D/E
+# In: L. Power Measurement (UT71E only)
+note-voltage-input-impedance-10mohm = Impedância da entrada de tensão ≈10MΩ
 # Used by: UT181A
 # In: (12) Duty Cycle; (13) Pulse Width
 note-when-rise-time-1us-signals-center = Com tempo de subida <1µs, os sinais se centralizam no nível de disparo

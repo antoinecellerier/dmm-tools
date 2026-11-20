@@ -100,3 +100,20 @@ settings-already =
 settings-ambiguous = valor ambíguo para { $setting }: { $input } corresponde a { $choices }
 # No choice matches $input, the choice as typed; the listing is printed above.
 settings-unknown = valor desconhecido para { $setting }: { $input }
+# The meter answered that it wouldn't switch. $choice is the choice, e.g.
+# 22V; $reason the meter's reason (lib-errors.ftl); $remedy what to check, a
+# sentence of its own (shared.ftl's switch-check-dial).
+settings-refused-check = o multímetro recusou a opção { $choice }: { $reason }. { $remedy }
+# The same when the reason says what to do itself, e.g. "leave MIN/MAX
+# first": $choice and $reason as above.
+settings-refused-because = o multímetro recusou a opção { $choice }: { $reason }
+# The meter refused because it is another model than the one chosen: $choice
+# and $reason as above; $remedy says what to pick, a sentence of its own
+# (shared.ftl's choose-meter-cli).
+settings-refused-other-model = o multímetro recusou a opção { $choice }: { $reason }. { $remedy }
+# The meter took the command, but its readings never showed the choice.
+# $remedy is what to check, as above.
+settings-not-taken = o multímetro não mudou para a opção escolhida. { $remedy }
+# As settings-not-taken, naming $live, the choice the meter is still on,
+# e.g. off; $remedy as there.
+settings-not-taken-still = o multímetro não mudou para a opção escolhida (continua em { $live }). { $remedy }
