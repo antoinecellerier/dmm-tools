@@ -198,6 +198,14 @@ cmd_run() {
 		die "no window on $disp within ${WINDOW_TIMEOUT}s — dmm-gui died or drew elsewhere; log: $LOG"
 	fi
 	echo "$wid" >"$STATE/wid"
+	# Xvfb puts the pointer mid-screen, on the graph's minimap, whose tooltip
+	# then shows in every shot. Park it in the bottom-right corner, outside the
+	# window unless that fills the screen. It must wait for the window: Xvfb
+	# resets the pointer when its last client leaves.
+	local sw sh
+	read -r sw sh < <(onx xdotool getdisplaygeometry) && [[ "$sw" =~ ^[0-9]+$ && "$sh" =~ ^[0-9]+$ ]] ||
+		{ kill_gui; die "could not read the display size"; }
+	onx xdotool mousemove --screen 0 "$((sw - 1))" "$((sh - 1))" || { kill_gui; die "could not park the pointer"; }
 	# Until the app logs the connect or the failure, FIRST_FRAMES at most (a
 	# settings-only session logs neither), then a moment for samples to draw.
 	for ((i = 0; i < FIRST_FRAMES * 10; i++)); do

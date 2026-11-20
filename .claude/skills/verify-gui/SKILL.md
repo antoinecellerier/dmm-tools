@@ -58,6 +58,7 @@ ${CLAUDE_SKILL_DIR}/scripts/gui-display.sh selftest
 ## Input behaviour
 
 - `key` takes xdotool keysym names joined by `+`: `ctrl+o`, `space`, `question`, `bracketleft`, `Home`. `click` and `wheel` coordinates are window-relative pixels at 1×.
+- `run` parks the pointer in the display's bottom-right corner, so nothing is hovered at launch; a `click` or `wheel` leaves it where it acted, and a hover there can draw a tooltip into later shots.
 - `key` holds each modifier down across a frame and releases it after; a bare key is sent at once: egui reads its modifier snapshot when the frame runs, so a chord released within a millisecond can arrive with no modifiers.
 - `type <text>` types one quoted argument into the window: 1–200 letters, digits, spaces and `.,:;()%+=_-`, not starting with `-`. Use it for a note or a field value; `key` for everything else.
 - `click` holds the button down across a frame too: a press and release inside one frame count as a click but never as a held button, which is what the graph minimap pans on.
