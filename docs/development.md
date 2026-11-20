@@ -411,9 +411,9 @@ and spec-note numbers that stay as written, with none added. A message a
 language lacks shows in English, so new or reworded English never waits on
 its translations. They are filled before each release, and before a
 language ships: `cargo test -p dmm-shared shipped_languages_are_complete -- --ignored`
-lists what each shipped language lacks, the specification text (`lib.ftl`'s
-notes, inputs and bands) and `capture`'s text
-(`cli/capture.ftl`) aside, which may stay English.
+lists what each shipped language lacks, the specification text
+(`lib-specs.ftl`) and `capture`'s text (`cli/capture.ftl`) aside, which
+may stay English.
 `cargo test -p dmm-shared long_labels -- --ignored --nocapture` lists short
 labels that grew past one and a half times their English, for a look in
 the window.
@@ -423,13 +423,13 @@ nor the settings file names a language; the test helpers rely on it, with
 a settings folder of their own. A script that must read English whatever
 the settings say passes `--lang en-US`, as the screenshot script does.
 
-`i18n/en-US/lib.ftl` is generated from the library's text: its labels, meter
-keys, activation steps and spec tables' notes, inputs and bands. After
-changing any of them, run
-`UPDATE_L10N=1 cargo test -p dmm-shared lib_ftl` and commit the file; the
-test fails until then. It only adds messages. One whose English the library
-no longer shows fails the test by name: correct its English to the new text
-to keep its ID and translations, or delete it.
+`i18n/en-US/lib.ftl` and `lib-specs.ftl` are generated from the library's
+text: the first holds its labels, meter keys and activation steps, the
+second the spec tables' notes, inputs and bands. After changing any of
+those, run `UPDATE_L10N=1 cargo test -p dmm-shared lib_ftl` and commit the
+files; the test fails until then. It only adds messages. One whose English
+the library no longer shows fails the test by name: correct its English to
+the new text to keep its ID and translations, or delete it.
 
 `i18n/en-US/cli-help.ftl` is generated from the doc comments in
 `crates/dmm-cli/src/cli.rs` that `dmm-cli --help` shows. After changing one,

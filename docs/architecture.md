@@ -230,8 +230,8 @@ Code: `crates/dmm-shared/src/lib.rs`, `export/`, `replay.rs`.
 Each binary builds a `Localizer` from the Fluent files compiled into it: the GUI holds it in its app
 state and replaces it on a language switch, and the CLI sets one for the whole run. Text is
 translated where it is shown: exports, settings and logs stay English, and so do the library's
-strings, which the apps look up by kind and English text in a `lib.ftl` generated
-from the library as they draw them (see [localization-design.md](localization-design.md)). Library
+strings, which the apps look up by kind and English text in `lib.ftl` and `lib-specs.ftl`, generated
+from the library, as they draw them (see [localization-design.md](localization-design.md)). Library
 errors are worded by variant from `lib-errors.ftl`. A connection notice keeps the failure and is
 worded on every frame, so it follows a language switch; a toast is worded when it is raised and
 keeps its language. clap has no translation hook, so
@@ -414,7 +414,7 @@ Protocol families are in [protocol.md](protocol.md); each family's internals are
 | `help.rs` | Help and version text both binaries print; `Diagnosis`, which help a failed open or command gets |
 | `reopen.rs` | What a lost link may come back on |
 | `input.rs` | Why a typed number was refused, worded once for both binaries |
-| `l10n/` | `Localizer`, the `tr!` macro, which language to speak, the pseudo-locale, the library-text lookup and `lib.ftl`'s generator, the `--help` walker, clap's help layout and command-line errors in the user's language |
+| `l10n/` | `Localizer`, the `tr!` macro, which language to speak, the pseudo-locale, the library-text lookup and the generator of `lib.ftl` and `lib-specs.ftl`, the `--help` walker, clap's help layout and command-line errors in the user's language |
 | `logging.rs` | The logger both binaries install |
 
 ### dmm-cli

@@ -224,8 +224,9 @@ pub(crate) fn golden_ids() -> Vec<String> {
 
 /// Whether reading `m` gets a spec row, panicking unless the spec table and
 /// row it is given are ones `protocol`'s sheet lists, so the translated texts
-/// (lib.ftl) and the `dump_specs` review sheet cover every spec the panel can
-/// show; a reading with a row has its table too. `by` names the reading.
+/// (lib-specs.ftl) and the `dump_specs` review sheet cover every spec the
+/// panel can show; a reading with a row has its table too. `by` names the
+/// reading.
 ///
 /// A spec that is a view of its sheet row ([`Protocol::spec_source`]) keeps
 /// the row's resolution, or none, and lists some of the row's figures under

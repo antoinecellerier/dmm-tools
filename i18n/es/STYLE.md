@@ -201,7 +201,7 @@ Fluent can't tell you the gender or number of what a placeable holds, and Spanis
 - **Trailing and leading spaces are dropped** by Fluent; write a needed one as `{" "}`. U+00A0 is ordinary text to Fluent and survives next to a placeable: type it literally.
 - **Text never translated:** the `###`/`#` comments, and `settings-language-no-chinese-font`, which its comment says is always shown in English.
 
-## 12. Spec text (lib.ftl: bands, inputs, notes): optional polish *(decided)*
+## 12. Spec text (lib-specs.ftl: bands, inputs, notes): optional polish *(decided)*
 
 - Keep every number, sign, ±, ≤, ≥, <, >, ≈ and ~, and each unit symbol right after its number. Numbers as in the English (§5). The spec check compares them and falls back to English on any mismatch.
 - Keep the exact sense: comparisons, ranges, «típico» / «típ.», «nominal», «aproximadamente» / «aprox.», «al menos», «máx.». The check can't catch a flipped comparison, and the panel shows the English on hover wherever the text differs.

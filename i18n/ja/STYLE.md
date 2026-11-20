@@ -195,7 +195,7 @@ Japanese has no gender, number or article to agree, and its word order puts the 
 - **Trailing and leading spaces** are dropped by Fluent; write `{" "}` where one matters.
 - **Never translated:** the `#` comments, and `settings-language-no-japanese-font` and `settings-language-no-chinese-font`, which are always shown in English.
 
-## 12. Spec text (lib.ftl: bands, inputs, notes)
+## 12. Spec text (lib-specs.ftl: bands, inputs, notes)
 
 Optional for shipping (`translations::optional()`), as for every language.
 

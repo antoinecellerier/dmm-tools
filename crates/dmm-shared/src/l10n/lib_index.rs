@@ -1,10 +1,10 @@
 //! The library's labels in the user's language, looked up by their English
 //! text and their [`TextKind`].
 //!
-//! `i18n/en-US/lib.ftl` is generated from `dmm_lib::text::all_texts()` (the
-//! generator is the `lib_ftl` test): one message per (kind, English text),
-//! whose English is the lookup key. Each language's `lib.ftl` translates
-//! those IDs. Labels made only of numbers and unit symbols are left out
+//! `i18n/en-US/lib.ftl` and `lib-specs.ftl` (the specification text) are
+//! generated from `dmm_lib::text::all_texts()` (the generator is the
+//! `lib_ftl` test): one message per (kind, English text), whose English is
+//! the lookup key. Each language's files translate those IDs. Labels made only of numbers and unit symbols are left out
 //! ([`is_units_only`]) and always show as the library wrote them.
 //!
 //! A mode label a family builds by putting a qualifier around another mode
@@ -21,32 +21,45 @@ use std::borrow::Cow;
 use std::collections::HashMap;
 use std::sync::OnceLock;
 
-/// The library's text: the generated `lib.ftl` and the hand-written
-/// `lib-names.ftl`, `lib-errors.ftl` and `lib-alarm.ftl`, in every language the binaries
+/// The generated file of the library's labels, keys and activation steps.
+pub(crate) const LIB: &str = "lib.ftl";
+
+/// The generated file of the specification text ([`GUARDED`]): optional in
+/// a translation, shown in English where left out.
+pub(crate) const LIB_SPECS: &str = "lib-specs.ftl";
+
+/// The library's text: the generated `lib.ftl` and `lib-specs.ftl` and the
+/// hand-written `lib-names.ftl`, `lib-errors.ftl` and `lib-alarm.ftl`, in every language the binaries
 /// ship. A binary that draws library text or errors lists these with its
 /// own resources.
 pub const LIB_RESOURCES: &[Resource] = &[
     crate::ftl!("en-US", "lib.ftl"),
+    crate::ftl!("en-US", "lib-specs.ftl"),
     crate::ftl!("en-US", "lib-names.ftl"),
     crate::ftl!("en-US", "lib-errors.ftl"),
     crate::ftl!("en-US", "lib-alarm.ftl"),
     crate::ftl!("fr", "lib.ftl"),
+    crate::ftl!("fr", "lib-specs.ftl"),
     crate::ftl!("fr", "lib-names.ftl"),
     crate::ftl!("fr", "lib-errors.ftl"),
     crate::ftl!("fr", "lib-alarm.ftl"),
     crate::ftl!("pt-BR", "lib.ftl"),
+    crate::ftl!("pt-BR", "lib-specs.ftl"),
     crate::ftl!("pt-BR", "lib-names.ftl"),
     crate::ftl!("pt-BR", "lib-errors.ftl"),
     crate::ftl!("pt-BR", "lib-alarm.ftl"),
     crate::ftl!("zh-CN", "lib.ftl"),
+    crate::ftl!("zh-CN", "lib-specs.ftl"),
     crate::ftl!("zh-CN", "lib-names.ftl"),
     crate::ftl!("zh-CN", "lib-errors.ftl"),
     crate::ftl!("zh-CN", "lib-alarm.ftl"),
     crate::ftl!("es", "lib.ftl"),
+    crate::ftl!("es", "lib-specs.ftl"),
     crate::ftl!("es", "lib-names.ftl"),
     crate::ftl!("es", "lib-errors.ftl"),
     crate::ftl!("es", "lib-alarm.ftl"),
     crate::ftl!("ja", "lib.ftl"),
+    crate::ftl!("ja", "lib-specs.ftl"),
     crate::ftl!("ja", "lib-names.ftl"),
     crate::ftl!("ja", "lib-errors.ftl"),
     crate::ftl!("ja", "lib-alarm.ftl"),
@@ -259,12 +272,13 @@ pub(crate) struct LibEntry {
     pub text: Option<String>,
 }
 
-/// The messages of an en-US `lib.ftl` `source`, in file order.
+/// The messages of an en-US `lib.ftl` or `lib-specs.ftl` `source`, in file
+/// order.
 pub(crate) fn lib_entries(source: &str) -> Vec<LibEntry> {
     let resource = match FluentResource::try_new(source.to_string()) {
         Ok(r) => r,
         Err((r, errors)) => {
-            log::warn!("l10n: en-US/lib.ftl has syntax errors: {errors:?}");
+            log::warn!("l10n: an en-US library file has syntax errors: {errors:?}");
             r
         }
     };
@@ -311,7 +325,7 @@ pub(crate) fn unqualify<'t>((before, after): (&str, &str), label: &'t str) -> Op
     (!mode.is_empty()).then_some(mode)
 }
 
-/// What the embedded en-US `lib.ftl` maps English to.
+/// What the embedded en-US `lib.ftl` and `lib-specs.ftl` map English to.
 #[derive(Default)]
 struct Index {
     /// (kind, English) → message ID.
@@ -324,7 +338,10 @@ fn index() -> &'static Index {
     static INDEX: OnceLock<Index> = OnceLock::new();
     INDEX.get_or_init(|| {
         let mut index = Index::default();
-        for entry in lib_entries(LIB_RESOURCES[0].source) {
+        let generated = LIB_RESOURCES
+            .iter()
+            .filter(|r| r.locale == super::EN_US.id && [LIB, LIB_SPECS].contains(&r.path));
+        for entry in generated.flat_map(|r| lib_entries(r.source)) {
             let (Some(kind), Some(text)) = (entry.kind, entry.text) else {
                 continue;
             };
@@ -379,9 +396,9 @@ impl Localizer {
     /// A translation shows only if it carries the English's numbers, each
     /// with its sign, ± and unit ([`spec_numbers`]), in any order: one that
     /// changes, drops or adds a number is shown in English, as is text
-    /// `lib.ftl` doesn't list. Each message is checked once, the first time
-    /// any spec text is asked for, and the verdicts kept. Other kinds are
-    /// [`Localizer::label`]'s.
+    /// `lib-specs.ftl` doesn't list. Each message is checked once, the first
+    /// time any spec text is asked for, and the verdicts kept. Other kinds
+    /// are [`Localizer::label`]'s.
     pub fn spec_text<'a>(&'a self, kind: TextKind, english: &'a str) -> Cow<'a, str> {
         if self.plain_english() || !GUARDED.contains(&kind) {
             return self.label(kind, english);
@@ -728,8 +745,8 @@ mod tests {
         assert_eq!(l.label(TextKind::Mode, "LPF Nonsense"), "LPF Nonsense");
     }
 
-    /// A French `lib.ftl` translating spec text: some translations keep
-    /// their English's numbers, some don't.
+    /// A French `lib-specs.ftl`: some translations keep their English's
+    /// numbers, some don't.
     fn french_specs() -> Localizer {
         let ids = |kind: TextKind, english: &str| index().labels[&kind][english].clone();
         let note = ids(
@@ -756,7 +773,7 @@ mod tests {
             &english_lib()[..],
             &[Resource {
                 locale: "fr",
-                path: "lib.ftl",
+                path: "lib-specs.ftl",
                 source: Box::leak(source.into_boxed_str()),
             }],
         ]
@@ -796,7 +813,7 @@ mod tests {
             l.spec_text(TextKind::Band, "40Hz~100Hz (LPF)"),
             "40Hz~100Hz (LPF)"
         );
-        // Text lib.ftl doesn't list, and untranslated text, stay English.
+        // Text lib-specs.ftl doesn't list, and untranslated text, stay English.
         assert_eq!(l.spec_text(TextKind::Band, "45Hz~1kHz"), "45Hz~1kHz");
         assert_eq!(l.spec_text(TextKind::Input, "1000V"), "1000V");
     }

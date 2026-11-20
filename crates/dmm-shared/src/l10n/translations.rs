@@ -15,7 +15,7 @@
 //! added in between shows in English until then, so a change to the English
 //! never waits on its translations.
 
-use super::lib_index::{GUARDED, kind_of_id, same_numbers};
+use super::lib_index::{GUARDED, LIB_SPECS, kind_of_id, same_numbers};
 use fluent_bundle::FluentResource;
 use fluent_bundle::concurrent::FluentBundle;
 use fluent_syntax::ast;
@@ -263,7 +263,7 @@ fn plural_forms(locale: &str) -> BTreeSet<String> {
         .collect()
 }
 
-/// Each spec note, input and band of `lib.ftl` whose translation drops,
+/// Each spec note, input and band of `lib-specs.ftl` whose translation drops,
 /// changes or adds a number: the app would show it in English.
 fn spec_number_problems(english: &str, translated: &str, locale: &str) -> Vec<String> {
     let bundle = |source: &str, locale: &str| {
@@ -293,18 +293,15 @@ fn spec_number_problems(english: &str, translated: &str, locale: &str) -> Vec<St
     problems
 }
 
-/// Whether message `key` of file `path` may be left out of a shipped
-/// language: the specification text of `lib.ftl` (notes, input ratings,
-/// accuracy bands) and every message of `cli/capture.ftl`
+/// Whether the messages of file `path` may be left out of a shipped
+/// language: the specification text, `lib-specs.ftl` (notes, input ratings,
+/// accuracy bands), and `capture`'s text, `cli/capture.ftl`
 /// (the guided run behind a device report, whose report stays English),
 /// polish that shows in English one message at a time until translated.
 /// Everything that drives the meter or the apps — modes, ranges, keys,
 /// activation steps, errors — is required.
-fn optional(path: &str, key: &str) -> bool {
-    path == CAPTURE
-        || path == "lib.ftl"
-            && kind_of_id(key.split('.').next().unwrap_or(key))
-                .is_some_and(|k| GUARDED.contains(&k))
+fn optional(path: &str) -> bool {
+    path == CAPTURE || path == LIB_SPECS
 }
 
 /// `capture`'s own text, every message of it [`optional`].
@@ -319,7 +316,7 @@ fn gaps(locale: &str, optional_too: bool) -> Vec<String> {
     for (path, english_source) in &english {
         let Some(source) = translated.get(path) else {
             // A file of optional messages only may be missing as a whole.
-            if optional_too || path != CAPTURE {
+            if optional_too || !optional(path) {
                 gaps.push(format!("{locale}/{path}: missing"));
             }
             continue;
@@ -327,7 +324,7 @@ fn gaps(locale: &str, optional_too: bool) -> Vec<String> {
         let (en, tr) = (shapes(english_source).0, shapes(source).0);
         for key in en
             .keys()
-            .filter(|k| (optional_too || !optional(path, k)) && !tr.contains_key(*k))
+            .filter(|k| (optional_too || !optional(path)) && !tr.contains_key(*k))
         {
             gaps.push(format!("{locale}/{path}: `{key}` is missing"));
         }
@@ -363,7 +360,7 @@ fn problems(locale: &str) -> Vec<String> {
             let Some(e) = en.get(key) else { continue };
             problems.extend(key_problems(key, e, t, locale, &forms).into_iter().map(at));
         }
-        if path == "lib.ftl" {
+        if path == LIB_SPECS {
             problems.extend(
                 spec_number_problems(english_source, source, locale)
                     .into_iter()
@@ -595,14 +592,10 @@ d = Extra
     assert_eq!(added, ["--format"]);
     assert_eq!(plural_forms("zh-CN"), BTreeSet::from(["other".into()]));
     // Specification text is the one thing a shipped language may lack.
-    assert!(optional("lib.ftl", "note-hold-sel-ncv-for-ncv"));
-    assert!(optional("lib.ftl", "input-about-10mohm"));
-    assert!(!optional("lib.ftl", "activation-ut8802"));
-    assert!(!optional("lib.ftl", "mode-capacitance"));
-    assert!(optional("cli/capture.ftl", "capture-no-response"));
-    assert!(optional("cli/capture.ftl", "capture-mismatch-mode"));
-    assert!(!optional("cli/read.ftl", "read-alarm-on"));
-    assert!(!optional("gui/settings.ftl", "note-x"));
+    assert!(optional("lib-specs.ftl"));
+    assert!(optional("cli/capture.ftl"));
+    assert!(!optional("lib.ftl"));
+    assert!(!optional("cli/read.ftl"));
     assert_eq!(plural_forms("pt-BR"), forms);
     // A variable the English only selects on isn't one it shows; a
     // misspelt plural key is still a selector on it.

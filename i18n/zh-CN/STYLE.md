@@ -182,7 +182,7 @@ Chinese has no gender, number or article to agree, so a placeable can sit anywhe
 - **Trailing and leading spaces** are dropped by Fluent; write `{" "}` where one matters.
 - **Never translated:** the `#` comments, and `settings-language-no-chinese-font`, which is always shown in English (a user without a Chinese font couldn't read it).
 
-## 12. Spec text (lib.ftl: bands, inputs, notes)
+## 12. Spec text (lib-specs.ftl: bands, inputs, notes)
 
 Optional for shipping (`translations::optional()`), as for every language.
 

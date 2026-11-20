@@ -551,7 +551,7 @@ mod tests {
         };
         let lib = Resource {
             locale: "fr",
-            path: "lib.ftl",
+            path: "lib-specs.ftl",
             source: "note-shorted-leads-residual-10-digits = Cordons en court-circuit : \
                      résidu ≤10 points\n\
                      input-about-10mohm = Environ 100 MΩ\n\

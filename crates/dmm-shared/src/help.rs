@@ -1178,7 +1178,8 @@ mod tests {
 
     /// Every message this crate looks up exists in en-US with the variables
     /// it is given, and every message in its hand-written files is used.
-    /// The generated `lib.ftl` is looked up by text, not by `tr!`.
+    /// The generated `lib.ftl` and `lib-specs.ftl` are looked up by text, not
+    /// by `tr!`.
     #[test]
     fn the_shared_messages_match_their_uses() {
         let src = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");

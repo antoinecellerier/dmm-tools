@@ -67,7 +67,7 @@ Language: <lang>
    - Fold the glossary gaps and style fixes the drafters, reviewers and fixer report into the glossary commit.
    - Anything that needs code rather than translation becomes a fix of its own, or an entry under "Localization follow-ups" in `docs/future-improvements.md`. First check it against "Stays English" in `docs/localization-design.md`: reviewers also flag text that is English by design, such as logs and `set` tokens.
 4. **Commits.** Three, in this order. Each adds `ftl!` entries in the same order the other languages use. Each commit's hook run must see only that commit's files under `i18n/<lang>/`: a translation with no `ftl!` line fails `messages_match_their_uses`. So keep the full result under `references/l10n/<lang>/workflow/`, and copy each group back into `i18n/<lang>/` just before its commit.
-   1. `shared: translate the help and the library's text into <lang>`: `shared.ftl` and the four `lib*.ftl` files, listed in `help.rs` `RESOURCES` and `lib_index.rs` `LIB_RESOURCES`.
+   1. `shared: translate the help and the library's text into <lang>`: `shared.ftl` and the five `lib*.ftl` files, listed in `help.rs` `RESOURCES` and `lib_index.rs` `LIB_RESOURCES`.
    2. `gui: translate the GUI and its desktop entry into <lang>`: `gui/*.ftl` and `gui-help.ftl`, listed in `crates/dmm-gui/src/l10n.rs` (GUI and GUI_HELP).
    3. `shared, cli, gui: translate dmm-cli into <lang> and offer <lang>`: `cli/*.ftl` and `cli-help.ftl`, listed in `crates/dmm-cli/src/l10n.rs` (CLI and CLI_HELP). This commit also:
       - adds the language to `SHIPPED` in `crates/dmm-shared/src/l10n/lang.rs`, with its native name and `reviewed: false`, in the place its doc comment's order gives it;
@@ -122,7 +122,7 @@ Check as in [Filling gaps](#filling-gaps), step 4, and commit one language at a 
 New or reworded English ships without its translations: it shows in English until they are filled in, at the latest by the release step in `docs/development.md`.
 
 1. At the release step, `scripts/l10n-reworded.py` lists the English reworded under the same ID since the last release: the steps below count such a message as translated. Where the meaning changed, apply [Rewording English later](#rewording-english-later) first, so the fill redrafts it.
-2. `cargo test -p dmm-shared shipped_languages_are_complete -- --ignored` lists each language's missing messages, the optional ones (the specification text, `cli/capture.ftl`) aside; `shipped_languages_have_the_optional_text` lists those too.
+2. `cargo test -p dmm-shared shipped_languages_are_complete -- --ignored` lists each language's missing messages, the optional ones (the specification text, `lib-specs.ftl`, and `cli/capture.ftl`) aside; `shipped_languages_have_the_optional_text` lists those too.
 3. For a handful, translate them inline, following each language's `i18n/<lang>/STYLE.md` and `glossary.tsv`, and read each back for native feel as the [native review](#native-review) does. A missing file is copied from en-US, translated, and given an `ftl!` line per language next to the en-US one; until it has that line, `cargo test` names it. For more, run:
 
    `Workflow({scriptPath: ".claude/skills/translate/scripts/fill-gaps.js", args: {repo: "<absolute repo path>", langs: [{lang: "fr", name: "French"}, …], writeModel?, optional?}})`

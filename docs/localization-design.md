@@ -40,7 +40,7 @@ About 1,400 messages in all, plus about 240 attributes for tooltips, accessibili
 | `dmm_shared::help`, clap's words and errors (`shared.ftl`) | ~95 |
 | Library labels and keys (`lib.ftl`) | ~220 |
 | Activation steps (`lib.ftl`) | 28 |
-| Spec text (`lib.ftl`) | ~200 |
+| Spec text (`lib-specs.ftl`) | ~200 |
 | Library names, errors and alarms (`lib-*.ftl`) | ~100 |
 
 **Numbers keep their point.** The meter's LCD shows a `.`, input fields parse only `.`, and the reference-lines field accepts `,` (alongside `;` and a space) as a separator, so `1,5` reads as two values. A localized decimal comma would break all three.
@@ -95,17 +95,17 @@ Each kind of library text is translated by the mechanism that fits it:
 - **Enum labels.** `Flag`, `Link`, `MainLabel` and `Brand` are enums, so their names translate by variant, through an exhaustive `match` over the hand-written `lib-names.ftl`. Of the brands only the simulated meters' heading translates: real brands are names. `Stability` translates with the help text that tags device lists.
 - **Strings.** Mode, range and aux labels, meter keys, device names, activation steps and spec notes are strings. The apps look them up the way gettext does, by their English text plus the kind of text the caller is drawing.
 
-On its first library lookup, `l10n` reads the en-US `lib.ftl` and builds a map from (kind, English text) to message ID. The kind matters: "Capacitance" is a mode on one meter and a sub-value on another, and translators may want different words for each. IDs are readable (`mode-capacitance`, `aux-period`), never hashed. Activation steps all start alike, so theirs name the first meter that shows them (`activation-ut181a`). Lookup is case-sensitive. A label read from a replay or an import is found the same way as a live one.
+On its first library lookup, `l10n` reads the en-US `lib.ftl` and `lib-specs.ftl` and builds a map from (kind, English text) to message ID. The kind matters: "Capacitance" is a mode on one meter and a sub-value on another, and translators may want different words for each. IDs are readable (`mode-capacitance`, `aux-period`), never hashed. Activation steps all start alike, so theirs name the first meter that shows them (`activation-ut181a`). Lookup is case-sensitive. A label read from a replay or an import is found the same way as a live one.
 
 **Unit-only labels are not listed.** A label whose letters are all unit symbols and SI prefixes, such as "200mV", "-40~1000°C" or "kΩ", has nothing to translate: unit symbols stay as they are. It gets no message, and its lookup returns the English. That leaves out almost every range, and modes such as "mA". Words printed beside a unit, such as "AC", "DC", "Auto" and "REL", are listed, because some languages translate them. The symbol list is in `crates/dmm-shared/src/l10n/lib_index.rs`, which spec notes check their numbers against too.
 
 **Mode qualifiers are translated once.** Some families build a mode by putting a word around another: "LPF" and "Peak" before it on OWON's meters, "peak" after it on ZOTEK's, "REL" after it on the UT181A. Their decoders accept every combination, most of which no real meter shows, and translators shouldn't face each one. The family takes the word from one pattern ("LPF {mode}") and lists it as a qualifier, which `lib.ftl` carries once as a message with a `$mode` variable that a translator may move. The modes it composes are left out. The lookup tries a mode whole, then as a qualifier around a mode it can look up: "LPF Peak AC V" is LPF around Peak around "AC V".
 
-The en-US `lib.ftl` is generated:
+The en-US `lib.ftl` and `lib-specs.ftl`, which holds the spec text, are generated:
 
 - A `test-support` enumerator in dmm-lib lists every string with its kind. Device names and activation steps come from the registry, notes from the spec tables, and labels from each family's `all_labels()`.
 - Each family's `all_labels()` runs its own label builder over every possible input. That includes labels built at run time from a finite set of parts, such as a mode with "Peak" or "REL" appended. Fallbacks like `Unknown(0x..)` stay English.
-- A test in dmm-shared regenerates the file on request, the way dmm-cli's `docs_snippets.rs` keeps the docs' CLI examples current.
+- A test in dmm-shared regenerates the files on request, the way dmm-cli's `docs_snippets.rs` keeps the docs' CLI examples current.
 - The generator only adds entries and reports orphaned ones. It never renames an ID, so the maintainer chooses: correct the English under its existing ID, or give a changed meaning a new ID.
 - A coverage test replays the golden fixtures and the mock devices, and asserts that every label they produce is in `lib.ftl`.
 

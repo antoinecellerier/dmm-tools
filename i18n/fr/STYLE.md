@@ -175,7 +175,7 @@ Fluent can't tell you the gender or number of what a placeable holds. So build s
 - **Trailing and leading spaces are dropped** by Fluent. Where one matters, write it as `{" "}`.
 - **Text never translated:** the `###`/`#` comments (translator help, never shown), and `settings-language-no-chinese-font`, which its comment says is always shown in English.
 
-## 12. Spec text (lib.ftl: bands, inputs, notes)
+## 12. Spec text (lib-specs.ftl: bands, inputs, notes)
 
 - Keep every number, sign, ±, ≤, ≥, <, >, ≈ and ~, and each unit symbol right after its number. Write numbers as in the English (§5). The spec check compares them and falls back to English on any mismatch.
 - Keep the exact sense: comparisons, ranges, «typique» / «typ.», «nominal», «environ», «au moins», «max.». The check can't catch a flipped comparison, and the panel shows the English on hover wherever the text differs.

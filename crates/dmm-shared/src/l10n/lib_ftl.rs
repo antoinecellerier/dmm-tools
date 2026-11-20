@@ -1,6 +1,7 @@
-//! The generator of `i18n/en-US/lib.ftl`, run as a test: the file must hold
-//! one message per text `dmm_lib::text::all_texts()` lists, unit-only
-//! labels aside ([`is_units_only`]).
+//! The generator of `i18n/en-US/lib.ftl` and `lib-specs.ftl`, run as a test:
+//! together they must hold one message per text `dmm_lib::text::all_texts()`
+//! lists, unit-only labels aside ([`is_units_only`]). The specification
+//! text (bands, inputs, notes) is `lib-specs.ftl`'s, the rest `lib.ftl`'s.
 //!
 //! `UPDATE_L10N=1 cargo test -p dmm-shared lib_ftl` adds what is missing;
 //! a plain run fails until then. The generator only adds: an existing
@@ -11,7 +12,8 @@
 
 use super::ftl_text::escape;
 use super::lib_index::{
-    LibEntry, is_units_only, kind_of_id, lib_entries, split_qualifier, unqualify,
+    GUARDED, LIB, LIB_SPECS, LibEntry, is_units_only, kind_of_id, lib_entries, split_qualifier,
+    unqualify,
 };
 use dmm_lib::protocol::registry;
 use dmm_lib::text::{TextKind, all_texts};
@@ -20,9 +22,40 @@ use fluent_syntax::ast::{
     Resource,
 };
 use std::collections::{BTreeMap, BTreeSet, HashSet};
-use std::path::Path;
+use std::path::PathBuf;
 
-const PATH: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../i18n/en-US/lib.ftl");
+/// One generated file: its name under `i18n/en-US/`, the `###` comment it
+/// opens with, and whether it holds the specification text ([`GUARDED`])
+/// or everything else.
+struct File {
+    name: &'static str,
+    header: &'static str,
+    specs: bool,
+}
+
+const FILES: [File; 2] = [
+    File {
+        name: LIB,
+        header: HEADER,
+        specs: false,
+    },
+    File {
+        name: LIB_SPECS,
+        header: SPECS_HEADER,
+        specs: true,
+    },
+];
+
+impl File {
+    fn path(&self) -> PathBuf {
+        PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/../../i18n/en-US")).join(self.name)
+    }
+
+    /// Whether a message of `kind` is this file's.
+    fn holds(&self, kind: TextKind) -> bool {
+        GUARDED.contains(&kind) == self.specs
+    }
+}
 
 /// Words of a text kept in its ID.
 const SLUG_WORDS: usize = 6;
@@ -34,8 +67,8 @@ const NAMED_TABLES: usize = 3;
 
 const HEADER: &str = "\
 Text the library shows: the labels of readings and of the choices a meter
-offers, meter keys, the steps that switch a meter's data transmission on,
-and the specification tables.
+offers, meter keys and the steps that switch a meter's data transmission on.
+The specification tables' text is in lib-specs.ftl.
 
 Generated from dmm-lib by `UPDATE_L10N=1 cargo test -p dmm-shared lib_ftl`.
 Entries are only ever added. The English of each one is what the library
@@ -46,6 +79,22 @@ Numbers and unit symbols stay as they are in every language. Labels made of
 nothing else (200mV, kΩ, °C) are not listed: they always show as they are.
 Nor are modes made of a qualifier around another mode (LPF AC V): the
 qualifier is listed once.";
+
+const SPECS_HEADER: &str = "\
+Text of the specification tables: accuracy bands, input ratings and notes,
+from each meter's manual, as the Specifications panel shows them.
+
+Optional: a message left out shows in English.
+
+Generated from dmm-lib by `UPDATE_L10N=1 cargo test -p dmm-shared lib_ftl`.
+Entries are only ever added. The English of each one is what the library
+shows and is how the app finds it: edit it only to follow a change in the
+library, keeping the ID to keep its translations.
+
+Keep every number, sign and ± exactly; a decimal comma is fine (0,6). A
+translation that changes, drops or adds a number is shown in English. Text
+made of numbers and unit symbols only is not listed: it always shows as it
+is.";
 
 /// The `##` comment opening each kind's section: what it is, where it
 /// shows, how to translate it.
@@ -89,24 +138,13 @@ when a connection gets no data. Keep each step on its own line, and the
 meter's key names, menu items and display text as the meter prints them."
         }
         TextKind::Band => {
-            "Specification accuracy bands, beside an accuracy in the
-Specifications panel: the condition it holds under, or an accuracy the manual
-gives in words. Keep every number, sign and ± exactly; a decimal comma is
-fine (0,6). A translation that changes, drops or adds a number is shown in
-English. Bands that are numbers and units only are not listed."
+            "Accuracy bands, beside an accuracy: the condition it holds under, or an
+accuracy the manual gives in words."
         }
-        TextKind::Input => {
-            "Specification inputs: a table's input impedance or overload
-protection. Keep every number, sign and ± exactly; a decimal comma is fine
-(0,6). A translation that changes, drops or adds a number is shown in
-English."
-        }
+        TextKind::Input => "Inputs: a table's input impedance or overload protection.",
         TextKind::Note => {
-            "Specification notes, under a table in the Specifications panel, from
-the meter's manual. Keep the exact sense, comparisons and qualifiers such as
-\"typical\" included. Keep every number, sign and ± exactly; a decimal comma
-is fine (0,6). A translation that changes, drops or adds a number is shown
-in English."
+            "Notes, under a table. Keep the exact sense, comparisons and qualifiers
+such as \"typical\" included."
         }
     }
 }
@@ -152,7 +190,7 @@ fn plan(
         }
         if !wanted_set.contains(&(kind, text)) {
             problems.push(format!(
-                "`{id}` = {text:?}: not {} text lib.ftl lists any more. \
+                "`{id}` = {text:?}: not {} text the library shows any more. \
                  Edit its English to the library's new text to keep its ID and \
                  translations, or delete it.",
                 kind.name()
@@ -335,18 +373,19 @@ fn listing(items: &[&str], named: usize, counted: &str, separator: &str) -> Stri
     }
 }
 
-/// The file for `placed`, comments included.
+/// `file` for the messages of `placed` it holds, comments included.
 fn render(
+    file: &File,
     placed: &[Placed],
     users: &BTreeMap<(TextKind, String), BTreeSet<&'static str>>,
     tables: &BTreeMap<(TextKind, &'static str), BTreeSet<&'static str>>,
 ) -> String {
     let lines = |text: &str| text.lines().map(str::to_string).collect::<Vec<_>>();
     let mut body = vec![Entry::ResourceComment(Comment {
-        content: lines(HEADER),
+        content: lines(file.header),
     })];
     let mut kind = None;
-    for p in placed {
+    for p in placed.iter().filter(|p| file.holds(p.kind)) {
         if kind != Some(p.kind) {
             kind = Some(p.kind);
             body.push(Entry::GroupComment(Comment {
@@ -420,52 +459,59 @@ fn qualifier_pattern(before: &str, after: &str) -> Vec<PatternElement<String>> {
 
 #[test]
 fn lib_ftl_lists_the_library_text() {
-    let path = Path::new(PATH);
-    let current = std::fs::read_to_string(path).unwrap_or_default();
+    let current = FILES.map(|f| std::fs::read_to_string(f.path()).unwrap_or_default());
+    let existing: Vec<LibEntry> = current.iter().flat_map(|c| lib_entries(c)).collect();
     let users = wanted();
     let wanted: Vec<(TextKind, &str)> = users.keys().map(|(k, t)| (*k, t.as_str())).collect();
-    let placed = match plan(&lib_entries(&current), &wanted, slug_of(&users)) {
+    let placed = match plan(&existing, &wanted, slug_of(&users)) {
         Ok(placed) => placed,
-        Err(problems) => panic!("i18n/en-US/lib.ftl:\n{}", problems.join("\n")),
+        Err(problems) => panic!("i18n/en-US/{LIB} and {LIB_SPECS}:\n{}", problems.join("\n")),
     };
-    let rendered = render(&placed, &users, &tables());
-    if rendered == current {
-        return;
+    let tables = tables();
+    let mut stale = Vec::new();
+    for (file, current) in FILES.iter().zip(&current) {
+        let rendered = render(file, &placed, &users, &tables);
+        if rendered == *current {
+            continue;
+        }
+        if std::env::var_os("UPDATE_L10N").is_some() {
+            crate::write_atomic(&file.path(), rendered.as_bytes()).expect("write the file");
+        } else {
+            let added = placed
+                .iter()
+                .filter(|p| file.holds(p.kind) && !current.contains(&format!("\n{} =", p.id)))
+                .count();
+            stale.push(format!("{} ({added} new)", file.name));
+        }
     }
-    if std::env::var_os("UPDATE_L10N").is_some() {
-        crate::write_atomic(path, rendered.as_bytes()).expect("write lib.ftl");
-    } else {
-        let added: Vec<&str> = placed
-            .iter()
-            .filter(|p| !current.contains(&format!("\n{} =", p.id)))
-            .map(|p| p.id.as_str())
-            .collect();
-        panic!(
-            "i18n/en-US/lib.ftl is out of date ({} new, starting {:?}); \
-             run `UPDATE_L10N=1 cargo test -p dmm-shared lib_ftl` and commit it",
-            added.len(),
-            &added[..added.len().min(5)]
-        );
-    }
+    assert!(
+        stale.is_empty(),
+        "i18n/en-US is out of date: {}; \
+         run `UPDATE_L10N=1 cargo test -p dmm-shared lib_ftl` and commit it",
+        stale.join(", ")
+    );
 }
 
 /// Every message the generator writes formats back, through Fluent, to
-/// exactly the library's text.
+/// exactly the library's text, each kind in its file.
 #[test]
 fn the_written_messages_read_back_as_the_library_wrote_them() {
     let users = wanted();
     let wanted: Vec<(TextKind, &str)> = users.keys().map(|(k, t)| (*k, t.as_str())).collect();
     let placed = plan(&[], &wanted, slug_of(&users)).unwrap();
-    let rendered = render(&placed, &users, &tables());
-    let read: Vec<(Option<TextKind>, Option<String>)> = lib_entries(&rendered)
-        .into_iter()
-        .map(|e| (e.kind, e.text))
-        .collect();
-    let expected: Vec<(Option<TextKind>, Option<String>)> = wanted
-        .iter()
-        .map(|(k, t)| (Some(*k), Some(t.to_string())))
-        .collect();
-    assert_eq!(read, expected);
+    for file in &FILES {
+        let rendered = render(file, &placed, &users, &tables());
+        let read: Vec<(Option<TextKind>, Option<String>)> = lib_entries(&rendered)
+            .into_iter()
+            .map(|e| (e.kind, e.text))
+            .collect();
+        let expected: Vec<(Option<TextKind>, Option<String>)> = wanted
+            .iter()
+            .filter(|(k, _)| file.holds(*k))
+            .map(|(k, t)| (Some(*k), Some(t.to_string())))
+            .collect();
+        assert_eq!(read, expected, "{}", file.name);
+    }
 }
 
 #[test]
@@ -486,7 +532,7 @@ fn text_fluent_would_read_as_syntax_is_escaped() {
             text: t.to_string(),
         })
         .collect();
-    let rendered = render(&placed, &BTreeMap::new(), &BTreeMap::new());
+    let rendered = render(&FILES[1], &placed, &BTreeMap::new(), &BTreeMap::new());
     let read: Vec<String> = lib_entries(&rendered)
         .into_iter()
         .map(|e| {

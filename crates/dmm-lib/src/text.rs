@@ -112,7 +112,7 @@ mod tests {
     }
 
     /// [`TextKind::ALL`] is kept by hand; a kind it leaves out would get no
-    /// IDs in the generated `lib.ftl`.
+    /// IDs in the generated `lib.ftl` and `lib-specs.ftl`.
     #[test]
     fn all_lists_every_kind() {
         let every = every_kind!(
