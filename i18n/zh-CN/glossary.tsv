@@ -91,7 +91,7 @@ overload protection	过载保护	n.	spec input rows	UT61E+ CN PDF p.15L (p.27) �
 of reading (±(a% of reading + b))	读数	n.	notes, accuracy bands	UT61E+ CN PDF p.15L (p.27) “±(a%读数+b字数)”; UT71 CN PDF p.33 “±（a%读数+字数）”	«±(a%读数+b)»: «读数» follows the percentage, no «的».
 digits / counts (accuracy, residual)	字	n.; 量词 个	"notes ""add 10 digits"", ""residual ≤10 digits"", ""Display digits: 6000"""	UT61E+ CN PDF p.15L (p.27) “短路允许有≤5个字剩余读数”; PDF p.17R (p.32) “需加10个字”; UT71 CN PDF p.35 “80个字剩余读数”	"""add 10 digits"" → «加 10 个字»; ""residual ≤10 digits"" → «剩余读数 ≤10 个字»."
 display counts (6000-count display)	6000 计数	n.	note-display-digits-6000, note-true-rms-crest-factor-*	UT71 CN PDF p.6 “20000计数4 1/2数位”; UT195 CN PDF p.3L (p.1) “6000计数”	UT61E+ CN PDF p.16L (p.29) keeps «counts» in Latin. Never «6千».
-Not specified / Unspec'd	未指定	adj.	"band-not-specified, notes ""not specified above 10A"""	UT71 CN PDF p.22 “>40MHz时 : 未指定”	
+Not specified	未指定	adj.	"band-not-specified-2, notes ""not specified above 10A"""	UT71 CN PDF p.22 “>40MHz时 : 未指定”	
 for reference only	仅供参考	loc.	band-only-for-reference, note-reading-for-reference-only	UT61E+ CN PDF p.16L (p.29) “占空比测量仅供参考”; PDF p.13R (p.24) “只供参考”	Sourced and idiomatic (fr had to choose).
 of range (10%–100% of range)	量程的	loc.	notes	UT61E+ CN PDF p.16L (p.29) “当前量程的10%-100%”; UT71 CN PDF p.9 “+量程的5%”	«量程的 10%–100%».
 sensitivity	灵敏度	n.	notes	no approved source found (MS-T sensitivity => 敏感度 is the data-privacy sense)	

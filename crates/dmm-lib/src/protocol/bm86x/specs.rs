@@ -486,7 +486,7 @@ static AC_V_V: ModeSpecs = ModeSpecs {
                     },
                     AccuracyBand {
                         freq_range: Some("3kHz ~ 20kHz"),
-                        accuracy: "Unspec’d",
+                        accuracy: "Not specified",
                     },
                 ],
             },
@@ -672,7 +672,7 @@ static DC_AC_V_V: ModeSpecs = ModeSpecs {
                     },
                     AccuracyBand {
                         freq_range: Some("1kHz ~ 20kHz"),
-                        accuracy: "Unspec’d",
+                        accuracy: "Not specified",
                     },
                 ],
             },
@@ -1245,7 +1245,7 @@ static AC_CURRENT_A: ModeSpecs = ModeSpecs {
         overload_protection: Some("Fuse 11A 1000V"),
         notes: &[
             "Burden voltage 0.02V/A",
-            "10A continuous; >10A to 20A: 30s max, 5 min cool-down",
+            "10A continuous; >10A–20A max. 30s, then rest 5min",
             "True RMS from 10% to 100% of range; BM821s: average sensing",
             "Crest factor < 2:1 at full scale, < 4:1 at half scale",
         ],
@@ -1357,7 +1357,7 @@ static DC_CURRENT_A: ModeSpecs = ModeSpecs {
         overload_protection: Some("Fuse 11A 1000V"),
         notes: &[
             "Burden voltage 0.02V/A",
-            "10A continuous; >10A to 20A: 30s max, 5 min cool-down",
+            "10A continuous; >10A–20A max. 30s, then rest 5min",
         ],
     },
 };

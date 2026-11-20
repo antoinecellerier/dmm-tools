@@ -793,7 +793,7 @@ static B_DC_A: ModeSpecs = ModeSpecs {
         notes: &[
             "Open circuit: residual ≤5 digits",
             "Accuracy valid 1%–100% of range",
-            ">5A: max 10s, rest ≥15 min",
+            ">5A: max. 10s, then rest ≥15min",
         ],
     },
 };
@@ -822,7 +822,7 @@ static D_DC_A: ModeSpecs = ModeSpecs {
         notes: &[
             "Open circuit: residual ≤5 digits",
             "Accuracy valid 1%–100% of range",
-            ">5A: max 10s, rest ≥15 min",
+            ">5A: max. 10s, then rest ≥15min",
         ],
     },
 };
@@ -952,7 +952,7 @@ static B_AC_A: ModeSpecs = ModeSpecs {
             "Non-sine: add 4% (crest factor 1–2), 5% (2–2.5), 7% (2.5–3)",
             "Accuracy valid 40Hz–500Hz, 1%–100% of range (600.0µA: 5%–100%)",
             "Open circuit: residual ≤5 digits",
-            ">5A: max 10s, rest ≥15 min",
+            ">5A: max. 10s, then rest ≥15min",
         ],
     },
 };
@@ -1017,7 +1017,7 @@ static D_AC_A: ModeSpecs = ModeSpecs {
             "Non-sine: add 4% (crest factor 1–2), 5% (2–2.5), 7% (2.5–3)",
             "Accuracy valid 40Hz–1kHz, 1%–100% of range (600.0µA: 5%–100%)",
             "Open circuit: residual ≤5 digits",
-            ">5A: max 10s, rest ≥15 min",
+            ">5A: max. 10s, then rest ≥15min",
         ],
     },
 };

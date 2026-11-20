@@ -3427,8 +3427,8 @@ raw_payload=11"#
             let m = parse_measurement_ut803(&p).unwrap();
             proto.mode_spec_info(&m).unwrap().input_impedance
         };
-        assert_eq!(impedance(4), Some("Around > 3000MΩ"));
-        assert_eq!(impedance(0), Some("Around 10MΩ"));
+        assert_eq!(impedance(4), Some("About > 3000MΩ"));
+        assert_eq!(impedance(0), Some("About 10MΩ"));
     }
 
     #[test]
@@ -3657,7 +3657,7 @@ raw_payload=11"#
         assert_eq!(proto.spec_info(&dc).unwrap().resolution, "0.01mV");
         assert_eq!(
             proto.mode_spec_info(&dc).unwrap().input_impedance,
-            Some("Around 2.5GΩ")
+            Some("About 2.5GΩ")
         );
         let ac = ut804_payload(&[1, 1, 1, 3, 7], 0, 0x3, 1, 0x0);
         assert_eq!(ut804_table_name(&ac), None);

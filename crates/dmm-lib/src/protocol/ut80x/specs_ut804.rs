@@ -96,13 +96,13 @@ static DC_MV: ModeSpecs = ModeSpecs {
         spec: SpecInfo {
             resolution: "0.01mV",
             accuracy: &[AccuracyBand {
-                freq_range: Some("under REL mode"),
+                freq_range: Some("In REL mode"),
                 accuracy: "0.025%+5",
             }],
         },
     }],
     mode: ModeSpecInfo {
-        input_impedance: Some("Around 2.5GΩ"),
+        input_impedance: Some("About 2.5GΩ"),
         overload_protection: Some("1000V"),
         notes: &[],
     },
@@ -161,7 +161,7 @@ static DC_V: ModeSpecs = ModeSpecs {
         },
     ],
     mode: ModeSpecInfo {
-        input_impedance: Some("Around 10MΩ"),
+        input_impedance: Some("About 10MΩ"),
         overload_protection: Some("1000V"),
         notes: &[],
     },
@@ -234,7 +234,7 @@ static AC_V: ModeSpecs = ModeSpecs {
                     },
                     AccuracyBand {
                         freq_range: Some(">10kHz~100kHz"),
-                        accuracy: "Not Specified",
+                        accuracy: "Not specified",
                     },
                 ],
             },
@@ -262,12 +262,12 @@ static AC_V: ModeSpecs = ModeSpecs {
         },
     ],
     mode: ModeSpecInfo {
-        input_impedance: Some("Approx 10MΩ"),
+        input_impedance: Some("About 10MΩ"),
         overload_protection: Some("1000V"),
         notes: &[
             "True RMS and accuracy valid 10%–100% of range",
-            "Crest factor up to 3.0 (1000V: 1.5)",
-            "Shorted leads: 80-digit residual, accuracy unaffected",
+            "Crest factor ≤3.0 (1000V: 1.5)",
+            "Shorted leads: residual 80 digits, accuracy unaffected",
             "AC+DC: add 1%+35 digits to accuracy",
         ],
     },
@@ -309,7 +309,7 @@ static DC_UA: ModeSpecs = ModeSpecs {
         input_impedance: None,
         // Printed "0.5A, 250V, fast type fuse, ø5×20mm".
         overload_protection: Some("Fuse 0.5A 250V"),
-        notes: &["10A: ≤5A continuous; >5A–10A ≤10s at a time, >15min apart"],
+        notes: &["10A: ≤5A continuous; >5A–10A max. 10s, then rest >15min"],
     },
 };
 
@@ -346,7 +346,7 @@ static DC_MA: ModeSpecs = ModeSpecs {
         input_impedance: None,
         // Printed "0.5A, 250V, fast type fuse, ø5×20mm".
         overload_protection: Some("Fuse 0.5A 250V"),
-        notes: &["10A: ≤5A continuous; >5A–10A ≤10s at a time, >15min apart"],
+        notes: &["10A: ≤5A continuous; >5A–10A max. 10s, then rest >15min"],
     },
 };
 
@@ -370,7 +370,7 @@ static DC_A: ModeSpecs = ModeSpecs {
         input_impedance: None,
         // Printed "10A, 250V, fast type fuse, ø5×20mm".
         overload_protection: Some("Fuse 10A 250V"),
-        notes: &["10A: ≤5A continuous; >5A–10A ≤10s at a time, >15min apart"],
+        notes: &["10A: ≤5A continuous; >5A–10A max. 10s, then rest >15min"],
     },
 };
 
@@ -429,10 +429,10 @@ static AC_UA: ModeSpecs = ModeSpecs {
         // Printed "0.5A, 250V, fast type fuse, ø5×20mm".
         overload_protection: Some("Fuse 0.5A 250V"),
         notes: &[
-            "True RMS and accuracy valid 10%–100% of range; crest factor up to 3.0",
-            "Shorted leads: 80-digit residual, accuracy unaffected",
+            "True RMS and accuracy valid 10%–100% of range; crest factor ≤3.0",
+            "Shorted leads: residual 80 digits, accuracy unaffected",
             "AC+DC: add 1%+35 digits to accuracy",
-            "10A: ≤5A continuous; >5A–10A ≤10s at a time, >15min apart",
+            "10A: ≤5A continuous; >5A–10A max. 10s, then rest >15min",
         ],
     },
 };
@@ -491,10 +491,10 @@ static AC_MA: ModeSpecs = ModeSpecs {
         // Printed "0.5A, 250V, fast type fuse, ø5×20mm".
         overload_protection: Some("Fuse 0.5A 250V"),
         notes: &[
-            "True RMS and accuracy valid 10%–100% of range; crest factor up to 3.0",
-            "Shorted leads: 80-digit residual, accuracy unaffected",
+            "True RMS and accuracy valid 10%–100% of range; crest factor ≤3.0",
+            "Shorted leads: residual 80 digits, accuracy unaffected",
             "AC+DC: add 1%+35 digits to accuracy",
-            "10A: ≤5A continuous; >5A–10A ≤10s at a time, >15min apart",
+            "10A: ≤5A continuous; >5A–10A max. 10s, then rest >15min",
         ],
     },
 };
@@ -531,10 +531,10 @@ static AC_A: ModeSpecs = ModeSpecs {
         // Printed "10A, 250V, fast type fuse, ø5×20mm".
         overload_protection: Some("Fuse 10A 250V"),
         notes: &[
-            "True RMS and accuracy valid 10%–100% of range; crest factor up to 3.0",
-            "Shorted leads: 80-digit residual, accuracy unaffected",
+            "True RMS and accuracy valid 10%–100% of range; crest factor ≤3.0",
+            "Shorted leads: residual 80 digits, accuracy unaffected",
             "AC+DC: add 1%+35 digits to accuracy",
-            "10A: ≤5A continuous; >5A–10A ≤10s at a time, >15min apart",
+            "10A: ≤5A continuous; >5A–10A max. 10s, then rest >15min",
         ],
     },
 };
@@ -843,7 +843,7 @@ static FREQUENCY: ModeSpecs = ModeSpecs {
                 resolution: "0.01MHz",
                 accuracy: &[AccuracyBand {
                     freq_range: None,
-                    accuracy: "Not Specified",
+                    accuracy: "Not specified",
                 }],
             },
         },
@@ -918,7 +918,7 @@ static TEMP_C: ModeSpecs = ModeSpecs {
         overload_protection: Some("1000V"),
         notes: &[
             "Included K-type point-contact probe: below 230°C only",
-            "Above 230°C: use the rod contact probe",
+            "Above 230°C: use the rod-type probe",
         ],
     },
 };
@@ -955,7 +955,7 @@ static TEMP_F: ModeSpecs = ModeSpecs {
         overload_protection: Some("1000V"),
         notes: &[
             "Included K-type point-contact probe: below 230°C only",
-            "Above 230°C: use the rod contact probe",
+            "Above 230°C: use the rod-type probe",
         ],
     },
 };
@@ -982,7 +982,7 @@ static LOOP_CURRENT: ModeSpecs = ModeSpecs {
         // Printed "0.5A, 250V, fast type fuse, ø5×20mm".
         overload_protection: Some("Fuse 0.5A 250V"),
         notes: &[
-            "4mA shows 0%, 20mA shows 100%",
+            "4mA shows 0%; 20mA shows 100%",
             "<4mA shows LO, >20mA shows HI",
         ],
     },

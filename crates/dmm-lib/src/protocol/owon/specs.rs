@@ -741,7 +741,7 @@ static CAPACITANCE: ModeSpecs = ModeSpecs {
         notes: &[
             "Accuracy valid 5%–100% of range",
             "Allow for the test leads' own resistance and reactance",
-            "20.00mF: measuring duration should be over 30 seconds",
+            "20.00mF range: measurement takes >30s",
         ],
     },
 };
@@ -822,7 +822,7 @@ static FREQUENCY: ModeSpecs = ModeSpecs {
         overload_protection: None,
         notes: &[
             "Typical waveform: square or sine",
-            "Signal: 1Hz–20MHz, ≥ 1V rms",
+            "Input 1Hz–20MHz: ≥1V rms",
         ],
     },
 };

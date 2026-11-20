@@ -115,20 +115,14 @@ band-40-000-30-100-pct-of = 40.000: 30 - 100% of MR
 band-40hz-100hz-lpf = 40Hz~100Hz (LPF)
 # Used by: VC920/VC940/VC960
 band-45hz-1khz-4000-counts = 45Hz~1kHz (4000 counts)
-# Used by: UT803
-# In: B. AC Voltage
-band-50khz-100khz = >50kHZ–100kHz
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
 # In: DC AC & AC+DC AC Voltage
 band-dc-50hz-60hz = DC, 50Hz ~ 60Hz
-# Used by: UT181A
-# In: (7) Resistance
-band-in-rel-state = In REL state
-# Used by: UT71A, UT71B, UT71C/D/E, UT804
-# In: B. AC Voltage (AC+DC measurement is available); I. Frequency
-band-not-specified = Not Specified
-# Used by: UT181A, UT71A, UT71B, UT71C/D/E, UT804, VC920/VC940/VC960
-# In: 4 tables
+# Used by: UT181A, UT804
+# In: (7) Resistance; A. DC Voltage
+band-in-rel-state = In REL mode
+# Used by: 8 meters
+# In: 8 tables
 band-not-specified-2 = Not specified
 # Used by: UT181A
 # In: (1) AC Voltage; (3) AC Voltage + DC Voltage
@@ -136,12 +130,6 @@ band-only-for-reference = Only for reference
 # Used by: CMS061, CMS101
 # In: Duty Cycle (%)
 band-typical-vrms-1-v-f-100hz = Typical: Vrms=1 V, f=100Hz
-# Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
-# In: AC Voltage; DC AC & AC+DC AC Voltage
-band-unspec-d = Unspec’d
-# Used by: UT804
-# In: A. DC Voltage
-band-under-rel-mode = under REL mode
 
 ## Inputs: a table's input impedance or overload protection.
 
@@ -160,24 +148,18 @@ input-1100v-dc-ac-rms = 1100V DC/AC rms
 # Used by: UT803
 # In: 6 tables
 input-250v-rms = 250V rms
-# Used by: 8 meters
-# In: 6 tables
+# Used by: 13 meters
+# In: 9 tables
 input-about-10mohm = About 10MΩ
 # Used by: 7 meters
 # In: DC Voltage
 input-about-1gohm = About 1GΩ
 # Used by: UT71A, UT71B, UT71C/D/E, UT804
-# In: B. AC Voltage (AC+DC measurement is available)
-input-approx-10mohm = Approx 10MΩ
-# Used by: UT71A, UT71B, UT71C/D/E, UT803, UT804
-# In: A. DC Voltage; B. AC Voltage
-input-around-10mohm = Around 10MΩ
-# Used by: UT71A, UT71B, UT71C/D/E, UT804
 # In: A. DC Voltage
-input-around-2-5gohm = Around 2.5GΩ
+input-around-2-5gohm = About 2.5GΩ
 # Used by: UT803
 # In: A. DC Voltage; B. AC Voltage
-input-around-3000mohm = Around > 3000MΩ
+input-around-3000mohm = About > 3000MΩ
 # Used by: UT71C/D/E
 # In: L. Power Measurement (UT71E only)
 input-current-fuse-10a-1000v-voltage-1000v = Current: Fuse 10A 1000V; Voltage: 1000V
@@ -229,31 +211,31 @@ input-initially-approx-3-0kohm-165pf-nominal = Initially approx. 3.0kΩ, 165pF n
 
 # Used by: VC920/VC940/VC960
 # In: Power
-note-0-1150w-continuous-1150w-2500w-max = 0–1150W continuous; >1150W–2500W max. 10s, then 15min pause
+note-0-1150w-continuous-1150w-2500w-max = 0–1150W continuous; >1150W–2500W max. 10s, then rest 15min
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
 # In: AC & AC+DC Current; DC Current
-note-10a-continuous-10a-to-20a-30s = 10A continuous; >10A to 20A: 30s max, 5 min cool-down
+note-10a-continuous-10a-to-20a-30s = 10A continuous; >10A–20A max. 30s, then rest 5min
 # Used by: VC920/VC940/VC960
 # In: AC / A; DC / A
-note-10a-0-5a-continuous-5a-10a = 10A: 0–5A continuous; >5A–10A max. 10s, then 15min pause
+note-10a-0-5a-continuous-5a-10a = 10A: 0–5A continuous; >5A–10A max. 10s, then rest 15min
 # Used by: UT71A, UT71B, UT71C/D/E
 # In: C. DC Current; D. AC Current (AC+DC measurement is available)
-note-10a-5a-continuous-5a-10a-10s-2 = 10A: ≤5A continuous; 5A–10A ≤10s at a time, >15min apart
+note-10a-5a-continuous-5a-10a-10s-2 = 10A: ≤5A continuous; 5A–10A max. 10s, then rest >15min
 # Used by: UT804
 # In: C. DC Current; D. AC Current (AC+DC measurement is available)
-note-10a-5a-continuous-5a-10a-10s = 10A: ≤5A continuous; >5A–10A ≤10s at a time, >15min apart
+note-10a-5a-continuous-5a-10a-10s = 10A: ≤5A continuous; >5A–10A max. 10s, then rest >15min
 # Used by: UT181A
 # In: (13) Pulse Width
 note-10hz-200khz-pulse-width-2us-depends = 10Hz–200kHz: pulse width >2µs, depends on signal frequency
 # Used by: CMS061, CMS101
 # In: Capacitance(F)
-note-20-00mf-measuring-duration-should-be = 20.00mF: measuring duration should be over 30 seconds
+note-20-00mf-measuring-duration-should-be = 20.00mF range: measurement takes >30s
 # Used by: UT71A, UT71B
 # In: E. Resistance
-note-200ohm-accuracy-plus-test-lead-short = 200Ω: accuracy + test-lead short-circuit value
+note-200ohm-accuracy-plus-test-lead-short = 200Ω: accuracy + test-lead short-circuit resistance
 # Used by: UT181A
 # In: (4) AC Current; (5) DC Current; (6) AC Current + DC Current
-note-20a-30s-on-then-10min-off = 20A: 30s on, then 10min off; not specified above 10A
+note-20a-30s-on-then-10min-off = 20A: max. 30s, then rest 10min; not specified above 10A
 # Used by: UT71A, UT71B
 # In: H. Capacitance
 note-20nf-accuracy-plus-open-circuit-test = 20nF: accuracy + open-circuit test-lead capacitance
@@ -268,15 +250,12 @@ note-25-00mf-manual-range-not-specified = 25.00mF, manual range: not specified b
 note-400ohm-accuracy-plus-test-lead-open = 400Ω: accuracy + test-lead open-circuit value
 # Used by: UT71C/D/E
 # In: E. Resistance
-note-400ohm-accuracy-plus-test-lead-short = 400Ω: accuracy + test-lead short-circuit value
+note-400ohm-accuracy-plus-test-lead-short = 400Ω: accuracy + test-lead short-circuit resistance
 # Used by: UT71C/D/E, UT804
 # In: H. Capacitance
 note-40nf-accuracy-plus-open-circuit-test = 40nF: accuracy + open-circuit test-lead capacitance
-# Used by: UT804
-# In: L. 4~20 mA loop current
-note-4ma-shows-0-pct-20ma-shows = 4mA shows 0%, 20mA shows 100%
-# Used by: UT71B, UT71C/D/E
-# In: K. 4~20 mA loop current (UT71B/C/D/E)
+# Used by: UT71B, UT71C/D/E, UT804
+# In: K. 4~20 mA loop current (UT71B/C/D/E); L. 4~20 mA loop current
 note-4ma-shows-0-pct-20ma-shows-2 = 4mA shows 0%; 20mA shows 100%
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
 # In: Capacitance
@@ -328,7 +307,7 @@ note-4ma-display-shows-lo = <4mA: display shows LO
 note-20ma-display-shows-hi = >20mA: display shows HI
 # Used by: 7 meters
 # In: AC Current; DC Current
-note-5a-max-10s-rest-15-min = >5A: max 10s, rest ≥15 min
+note-5a-max-10s-rest-15-min = >5A: max. 10s, then rest ≥15min
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
 # In: Line Level Frequency (~Hz)
 note-ac-10-00a-15-00-3 = AC 10.00A: 15.00 ~ 3.000kHz, sensitivity 6A (sine RMS)
@@ -371,11 +350,8 @@ note-ac-plus-dc-add-1-pct = AC+DC: add 1%+35 digits to accuracy
 # Used by: UT803
 # In: B. AC Voltage; D. AC Current
 note-ac-plus-dc-range-accuracy-plus = AC+DC: range accuracy + 1%
-# Used by: UT71B, UT71C/D/E, UT804
-# In: J. Temperature (UT71B/C/D/E); K. Temperature 1-1. Degrees Celsius; K. Temperature 1-2. Fahrenheit
-note-above-230degc-use-the-rod-contact = Above 230°C: use the rod contact probe
-# Used by: UT803
-# In: J. Temperature
+# Used by: UT71B, UT71C/D/E, UT803, UT804
+# In: 4 tables
 note-above-230degc-use-the-rod-type = Above 230°C: use the rod-type probe
 # Used by: UT181A
 # In: (10) Temperature
@@ -460,7 +436,7 @@ note-crest-factor-3-0-1000v-1 = Crest factor 3.0 (1000V: 1.5)
 note-crest-factor-2-1-at-full = Crest factor < 2:1 at full scale, < 4:1 at half scale
 # Used by: UT804
 # In: B. AC Voltage (AC+DC measurement is available)
-note-crest-factor-up-to-3-0 = Crest factor up to 3.0 (1000V: 1.5)
+note-crest-factor-up-to-3-0 = Crest factor ≤3.0 (1000V: 1.5)
 # Used by: VC920/VC940/VC960
 # In: AC / A; AC / V
 note-crest-factor-3 = Crest factor ≤3
@@ -494,8 +470,8 @@ note-for-ac-voltage-shorted-leads-residual = For AC voltage, shorted leads: resi
 # Used by: Mock ZT-5B, ZT-5B
 # In: AC Voltage (V); AC current (A); AC current (mA)
 note-frequency-response-40hz-1khz = Frequency response 40Hz–1kHz
-# Used by: UT71A, UT71B, UT71C/D/E, UT804
-# In: G. Diode Test
+# Used by: UT181A, UT71A, UT71B, UT71C/D/E, UT804
+# In: (15) Diode Test; G. Diode Test
 note-good-silicon-junction-0-5v-0 = Good silicon junction: 0.5V–0.8V
 # Used by: Mock ZT-5B, ZT-5B
 # In: Auto
@@ -521,8 +497,8 @@ note-ib0-1-8ua-vce-2-5v = Ib0 ≈1.8µA, Vce ≈2.5V
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
 # In: AutoCheck™ (ACV); AutoCheck™ (DCV)
 note-impedance-rises-within-a-fraction-of = Impedance rises within a fraction of a second above 50V (typ.)
-# Used by: UT804
-# In: K. Temperature 1-1. Degrees Celsius; K. Temperature 1-2. Fahrenheit
+# Used by: UT71B, UT71C/D/E, UT804
+# In: J. Temperature (UT71B/C/D/E); K. Temperature 1-1. Degrees Celsius; K. Temperature 1-2. Fahrenheit
 note-included-k-type-point-contact-probe = Included K-type point-contact probe: below 230°C only
 # Used by: UT803
 # In: J. Temperature
@@ -550,7 +526,7 @@ note-input-30mhz-not-specified = Input >30MHz: not specified
 note-input-at-zero-dc-level-40mhz = Input at zero DC level; >40MHz not specified
 # Used by: UT803
 # In: I. Frequency
-note-input-at-zero-dc-level-50mhz = Input at zero DC level; >50MHz unspecified
+note-input-at-zero-dc-level-50mhz = Input at zero DC level; >50MHz not specified
 # Used by: UT161D, UT61D+
 # In: Temperature
 note-k-type-thermocouple-only = K-type thermocouple only
@@ -586,13 +562,10 @@ note-max-9-999a = Max 9.999A
 note-measured-temperature-should-stay-below-230degc = Measured temperature should stay below 230°C/446°F
 # Used by: UT71A, UT71B, UT71C/D/E
 # In: F. Continuity Test
-note-no-beep-60ohm = No beep >60Ω
+note-no-beep-60ohm = Silent >60Ω
 # Used by: 7 meters
 # In: AC Current; AC Voltage
 note-non-sine-add-4-pct-crest = Non-sine: add 4% (crest factor 1–2), 5% (2–2.5), 7% (2.5–3)
-# Used by: UT181A
-# In: (15) Diode Test
-note-normal-silicon-junction-0-5v-0 = Normal silicon junction: 0.5V–0.8V
 # Used by: UT181A
 # In: (14) Continuity Test
 note-open-alarm-beeps-50ohm-silent-10ohm = Open alarm: beeps >50Ω, silent <10Ω
@@ -685,10 +658,10 @@ note-short-alarm-beeps-10ohm-silent-50ohm = Short alarm: beeps <10Ω, silent >50
 note-shorted-input-residual-under-30-digits = Shorted input: residual under ~30 digits, accuracy unaffected
 # Used by: UT71A, UT71B, UT71C/D/E, UT804
 # In: B. AC Voltage (AC+DC measurement is available); D. AC Current (AC+DC measurement is available)
-note-shorted-leads-80-digit-residual-accuracy = Shorted leads: 80-digit residual, accuracy unaffected
+note-shorted-leads-80-digit-residual-accuracy = Shorted leads: residual 80 digits, accuracy unaffected
 # Used by: VC920/VC940/VC960
 # In: AC / V
-note-shorted-leads-display-70-digits = Shorted leads: display ≤70 digits
+note-shorted-leads-display-70-digits = Shorted leads: residual ≤70 digits
 # Used by: Mock UT61E+, UT161E, UT61E+
 # In: AC Voltage
 note-shorted-leads-residual-10-digits = Shorted leads: residual ≤10 digits
@@ -703,10 +676,7 @@ note-shorted-leads-residual-5-digits = Shorted leads: residual ≤5 digits
 note-shows-ol-above-200-0ohm = Shows OL above 200.0Ω
 # Used by: CMS061, CMS101
 # In: Frequency (Hz)
-note-signal-1hz-20mhz-1v-rms = Signal: 1Hz–20MHz, ≥ 1V rms
-# Used by: UT71B, UT71C/D/E
-# In: J. Temperature (UT71B/C/D/E)
-note-supplied-k-type-point-probe-below = Supplied K-type point probe: below 230°C only
+note-signal-1hz-20mhz-1v-rms = Input 1Hz–20MHz: ≥1V rms
 # Used by: VC920/VC940/VC960
 # In: Temperature
 note-supplied-wire-thermocouple-max-plus-230degc = Supplied wire thermocouple: max. +230°C
@@ -725,15 +695,12 @@ note-then-typically-18kohm-100v-125kohm-300v-2 = Then typically 18kΩ@100V, 125k
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
 # In: Non-Contact EF-Detection
 note-tolerance-10v-36v-23v-83v-59v = Tolerance: 10V~36V, 23V~83V, 59V~165V, 124V~330V, > 250V
-# Used by: VC920/VC940/VC960
-# In: AC / A; AC / V
-note-true-rms-accuracy-valid-10-pct-2 = True RMS accuracy valid 10%–100% of range
-# Used by: UT804
-# In: B. AC Voltage (AC+DC measurement is available)
+# Used by: Mock UT61E+, UT161E, UT61E+, UT804, VC920/VC940/VC960
+# In: 4 tables
 note-true-rms-and-accuracy-valid-10 = True RMS and accuracy valid 10%–100% of range
 # Used by: UT804
 # In: D. AC Current (AC+DC measurement is available)
-note-true-rms-and-accuracy-valid-10-2 = True RMS and accuracy valid 10%–100% of range; crest factor up to 3.0
+note-true-rms-and-accuracy-valid-10-2 = True RMS and accuracy valid 10%–100% of range; crest factor ≤3.0
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
 # In: AC & AC+DC Current; AC Voltage
 note-true-rms-from-10-pct-to = True RMS from 10% to 100% of range; BM821s: average sensing
@@ -752,9 +719,6 @@ note-true-rms-valid-10-pct-95 = True RMS valid 10%–95% of range
 # Used by: UT803
 # In: D. AC Current
 note-true-rms-valid-10-pct-95-2 = True RMS valid 10%–95% of range; crest factor 3.0
-# Used by: Mock UT61E+, UT161E, UT61E+
-# In: AC+DC Voltage
-note-true-rms-accuracy-valid-10-pct = True RMS; accuracy valid 10%–100% of range
 # Used by: Mock UT61E+, UT161E, UT61E+
 # In: AC Current; AC Voltage
 note-true-rms-crest-factor-2-0 = True RMS; crest factor ≤2.0 at 10000, ≤1 at 22000 counts
@@ -793,10 +757,10 @@ note-voltage-input-impedance-10mohm = Voltage input impedance ≈10MΩ
 note-when-rise-time-1us-signals-center = When rise time <1µs, signals center on trigger level
 # Used by: UT803
 # In: G. Diode Testst
-note-working-current-1ma = Working current ≈1mA
+note-working-current-1ma = Test current ≈1mA
 # Used by: Mock UT61E+, UT161E, UT61E+
 # In: AC Current
 note-ua-ranges-min-30ua = µA ranges: min 30µA
 # Used by: UT803
 # In: C. DC Current; D. AC Current
-note-5a-range-continuous-5a-range-10s = ≤5A range: continuous; >5A range: ≤10s at a time, ≥15min apart
+note-5a-range-continuous-5a-range-10s = ≤5A range: continuous; >5A range: max. 10s, then rest ≥15min

@@ -567,7 +567,7 @@ static AC_UA: ModeSpecs = ModeSpecs {
         overload_protection: Some("Fuse 0.8A 1000V"),
         notes: &[
             "True RMS valid 10%–100% of range",
-            "20A: 30s on, then 10min off; not specified above 10A",
+            "20A: max. 30s, then rest 10min; not specified above 10A",
         ],
     },
 };
@@ -620,7 +620,7 @@ static AC_MA: ModeSpecs = ModeSpecs {
         overload_protection: Some("Fuse 0.8A 1000V"),
         notes: &[
             "True RMS valid 10%–100% of range",
-            "20A: 30s on, then 10min off; not specified above 10A",
+            "20A: max. 30s, then rest 10min; not specified above 10A",
         ],
     },
 };
@@ -654,7 +654,7 @@ static AC_A: ModeSpecs = ModeSpecs {
         overload_protection: Some("Fuse 10A 1000V"),
         notes: &[
             "True RMS valid 10%–100% of range",
-            "20A: 30s on, then 10min off; not specified above 10A",
+            "20A: max. 30s, then rest 10min; not specified above 10A",
         ],
     },
 };
@@ -693,7 +693,7 @@ static DC_UA: ModeSpecs = ModeSpecs {
         input_impedance: None,
         // Printed "0. 8A H 1000V Fuse Type ø 6x32 mm".
         overload_protection: Some("Fuse 0.8A 1000V"),
-        notes: &["20A: 30s on, then 10min off; not specified above 10A"],
+        notes: &["20A: max. 30s, then rest 10min; not specified above 10A"],
     },
 };
 
@@ -731,7 +731,7 @@ static DC_MA: ModeSpecs = ModeSpecs {
         input_impedance: None,
         // Printed "0. 8A H 1000V Fuse Type ø 6x32 mm".
         overload_protection: Some("Fuse 0.8A 1000V"),
-        notes: &["20A: 30s on, then 10min off; not specified above 10A"],
+        notes: &["20A: max. 30s, then rest 10min; not specified above 10A"],
     },
 };
 
@@ -756,7 +756,7 @@ static DC_A: ModeSpecs = ModeSpecs {
         input_impedance: None,
         // Printed "10A H 1000V Fuse Type ø10x38mm".
         overload_protection: Some("Fuse 10A 1000V"),
-        notes: &["20A: 30s on, then 10min off; not specified above 10A"],
+        notes: &["20A: max. 30s, then rest 10min; not specified above 10A"],
     },
 };
 
@@ -808,7 +808,7 @@ static ACDC_UA: ModeSpecs = ModeSpecs {
         overload_protection: Some("Fuse 0.8A 1000V"),
         notes: &[
             "True RMS valid 10%–100% of range",
-            "20A: 30s on, then 10min off; not specified above 10A",
+            "20A: max. 30s, then rest 10min; not specified above 10A",
         ],
     },
 };
@@ -861,7 +861,7 @@ static ACDC_MA: ModeSpecs = ModeSpecs {
         overload_protection: Some("Fuse 0.8A 1000V"),
         notes: &[
             "True RMS valid 10%–100% of range",
-            "20A: 30s on, then 10min off; not specified above 10A",
+            "20A: max. 30s, then rest 10min; not specified above 10A",
         ],
     },
 };
@@ -895,7 +895,7 @@ static ACDC_A: ModeSpecs = ModeSpecs {
         overload_protection: Some("Fuse 10A 1000V"),
         notes: &[
             "True RMS valid 10%–100% of range",
-            "20A: 30s on, then 10min off; not specified above 10A",
+            "20A: max. 30s, then rest 10min; not specified above 10A",
         ],
     },
 };
@@ -912,7 +912,7 @@ static RESISTANCE: ModeSpecs = ModeSpecs {
             spec: SpecInfo {
                 resolution: "0.01Ω",
                 accuracy: &[AccuracyBand {
-                    freq_range: Some("In REL state"),
+                    freq_range: Some("In REL mode"),
                     accuracy: "0.05%+10",
                 }],
             },
@@ -1379,7 +1379,7 @@ static DIODE: ModeSpecs = ModeSpecs {
         notes: &[
             "Open circuit ≈3V; forward drop up to ≈3V",
             "Brief beep on a normal junction, continuous if shorted",
-            "Normal silicon junction: 0.5V–0.8V",
+            "Good silicon junction: 0.5V–0.8V",
         ],
     },
 };

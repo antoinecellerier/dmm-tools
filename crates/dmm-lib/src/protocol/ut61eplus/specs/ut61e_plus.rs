@@ -413,7 +413,7 @@ static ACDC_V: ModeSpecs = ModeSpecs {
         input_impedance: Some("About 10MΩ"),
         overload_protection: Some("1000V"),
         notes: &[
-            "True RMS; accuracy valid 10%–100% of range",
+            "True RMS and accuracy valid 10%–100% of range",
             "For AC voltage, shorted leads: residual ≤200 digits",
         ],
     },
@@ -754,7 +754,7 @@ static DC_A: ModeSpecs = ModeSpecs {
         notes: &[
             "Open circuit: residual ≤10 digits",
             "Accuracy valid 1%–100% of range",
-            ">5A: max 10s, rest ≥15 min",
+            ">5A: max. 10s, then rest ≥15min",
         ],
     },
 };
@@ -902,7 +902,7 @@ static AC_A: ModeSpecs = ModeSpecs {
             "Non-sine: add 4% (crest factor 1–2), 5% (2–2.5), 7% (2.5–3)",
             "Accuracy valid 1%–100% of range (1kHz–10kHz: 10%–100%)",
             "Open circuit: residual ≤10 digits",
-            ">5A: max 10s, rest ≥15 min",
+            ">5A: max. 10s, then rest ≥15min",
         ],
     },
 };

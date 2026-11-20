@@ -115,18 +115,12 @@ band-40-000-30-100-pct-of = 40.000: 30 - 100% del rango
 band-40hz-100hz-lpf = 40Hz~100Hz (LPF)
 # Used by: VC920/VC940/VC960
 band-45hz-1khz-4000-counts = 45Hz~1kHz (4000 cuentas)
-# Used by: UT803
-# In: B. AC Voltage
-band-50khz-100khz = >50kHZ–100kHz
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
 # In: DC AC & AC+DC AC Voltage
 band-dc-50hz-60hz = DC, 50Hz ~ 60Hz
 # Used by: UT181A
 # In: (7) Resistance
 band-in-rel-state = En modo REL
-# Used by: UT804
-# In: B. AC Voltage (AC+DC measurement is available); I. Frequency
-band-not-specified = No especificado
 # Used by: UT181A, UT804
 # In: (9) Capacitance; H. Capacitance
 band-not-specified-2 = No especificado
@@ -136,12 +130,6 @@ band-only-for-reference = Solo como referencia
 # Used by: CMS061, CMS101
 # In: Duty Cycle (%)
 band-typical-vrms-1-v-f-100hz = Típico: Vrms=1 V, f=100Hz
-# Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
-# In: AC Voltage; DC AC & AC+DC AC Voltage
-band-unspec-d = No espec.
-# Used by: UT804
-# In: A. DC Voltage
-band-under-rel-mode = en modo REL
 
 ## Inputs: a table's input impedance or overload protection.
 
@@ -166,12 +154,6 @@ input-about-10mohm = Aprox. 10MΩ
 # Used by: 7 meters
 # In: DC Voltage
 input-about-1gohm = Aprox. 1GΩ
-# Used by: UT804
-# In: B. AC Voltage (AC+DC measurement is available)
-input-approx-10mohm = Aprox. 10MΩ
-# Used by: UT803, UT804
-# In: A. DC Voltage; B. AC Voltage
-input-around-10mohm = Aprox. 10MΩ
 # Used by: UT804
 # In: A. DC Voltage
 input-around-2-5gohm = Aprox. 2.5GΩ
@@ -247,7 +229,7 @@ note-10a-5a-continuous-5a-10a-10s = 10A: ≤5A continuo; >5A–10A ≤10s cada v
 note-10hz-200khz-pulse-width-2us-depends = 10Hz–200kHz: ancho de pulso >2µs, depende de la frecuencia de la señal
 # Used by: CMS061, CMS101
 # In: Capacitance(F)
-note-20-00mf-measuring-duration-should-be = 20.00mF: la medición debe durar más de 30 segundos
+note-20-00mf-measuring-duration-should-be = 20.00mF: la medición debe durar más de 30s
 # Used by: UT71A, UT71B
 # In: E. Resistance
 note-200ohm-accuracy-plus-test-lead-short = 200Ω: exactitud + lectura con los cables de prueba en cortocircuito
@@ -272,9 +254,6 @@ note-400ohm-accuracy-plus-test-lead-short = 400Ω: exactitud + lectura con los c
 # Used by: UT804
 # In: H. Capacitance
 note-40nf-accuracy-plus-open-circuit-test = 40nF: exactitud + capacitancia de los cables de prueba en circuito abierto
-# Used by: UT804
-# In: L. 4~20 mA loop current
-note-4ma-shows-0-pct-20ma-shows = Con 4mA muestra 0%; con 20mA, 100%
 # Used by: UT71B, UT71C/D/E
 # In: K. 4~20 mA loop current (UT71B/C/D/E)
 note-4ma-shows-0-pct-20ma-shows-2 = Con 4mA muestra 0%; con 20mA, 100%
@@ -371,9 +350,6 @@ note-ac-plus-dc-add-1-pct = AC+DC: sumar 1%+35 dígitos a la exactitud
 # Used by: UT803
 # In: B. AC Voltage; D. AC Current
 note-ac-plus-dc-range-accuracy-plus = AC+DC: exactitud del rango + 1%
-# Used by: UT804
-# In: K. Temperature 1-1. Degrees Celsius; K. Temperature 1-2. Fahrenheit
-note-above-230degc-use-the-rod-contact = Por encima de 230°C: usar la sonda de contacto de varilla
 # Used by: UT803
 # In: J. Temperature
 note-above-230degc-use-the-rod-type = Por encima de 230°C: usar la sonda de varilla
@@ -591,9 +567,6 @@ note-no-beep-60ohm = Sin pitido >60Ω
 # In: AC Current; AC Voltage
 note-non-sine-add-4-pct-crest = No sinusoidal: sumar 4% (factor de cresta 1–2), 5% (2–2.5), 7% (2.5–3)
 # Used by: UT181A
-# In: (15) Diode Test
-note-normal-silicon-junction-0-5v-0 = Unión de silicio normal: 0.5V–0.8V
-# Used by: UT181A
 # In: (14) Continuity Test
 note-open-alarm-beeps-50ohm-silent-10ohm = Alarma de circuito abierto: pitido >50Ω, silencio <10Ω
 # Used by: CMS061, CMS101
@@ -704,9 +677,6 @@ note-shows-ol-above-200-0ohm = Muestra OL por encima de 200.0Ω
 # Used by: CMS061, CMS101
 # In: Frequency (Hz)
 note-signal-1hz-20mhz-1v-rms = Señal: 1Hz–20MHz, ≥ 1V rms
-# Used by: UT71B, UT71C/D/E
-# In: J. Temperature (UT71B/C/D/E)
-note-supplied-k-type-point-probe-below = Sonda de contacto puntual tipo K incluida: solo por debajo de 230°C
 # Used by: VC920/VC940/VC960
 # In: Temperature
 note-supplied-wire-thermocouple-max-plus-230degc = Termopar de hilo incluido: máx. +230°C
@@ -725,9 +695,6 @@ note-then-typically-18kohm-100v-125kohm-300v-2 = Después, valores típicos: 18k
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
 # In: Non-Contact EF-Detection
 note-tolerance-10v-36v-23v-83v-59v = Tolerancia: 10V~36V, 23V~83V, 59V~165V, 124V~330V, > 250V
-# Used by: VC920/VC940/VC960
-# In: AC / A; AC / V
-note-true-rms-accuracy-valid-10-pct-2 = Exactitud True RMS válida del 10% al 100% del rango
 # Used by: UT804
 # In: B. AC Voltage (AC+DC measurement is available)
 note-true-rms-and-accuracy-valid-10 = True RMS y exactitud válidos del 10% al 100% del rango
@@ -752,9 +719,6 @@ note-true-rms-valid-10-pct-95 = True RMS válido en el 10%–95% del rango
 # Used by: UT803
 # In: D. AC Current
 note-true-rms-valid-10-pct-95-2 = True RMS válido en el 10%–95% del rango; factor de cresta 3.0
-# Used by: Mock UT61E+, UT161E, UT61E+
-# In: AC+DC Voltage
-note-true-rms-accuracy-valid-10-pct = True RMS; exactitud válida en el 10%–100% del rango
 # Used by: Mock UT61E+, UT161E, UT61E+
 # In: AC Current; AC Voltage
 note-true-rms-crest-factor-2-0 = True RMS; factor de cresta ≤2.0 a 10000, ≤1 a 22000 cuentas

@@ -43,7 +43,7 @@ fn hover_english(response: egui::Response, english: Option<String>) {
 }
 
 /// An accuracy as the manual prints it: a figure as `±(0.1%+5)`, a word
-/// accuracy ("Not Specified", "Only for reference") as it stands, in
+/// accuracy ("Not specified", "Only for reference") as it stands, in
 /// `l10n`'s language ([`spec_text`]). So does a response in dB ("3dB"): a
 /// bandwidth limit, not a tolerance either side.
 fn accuracy_text(l10n: Option<&Localizer>, accuracy: &str) -> String {
@@ -1027,11 +1027,11 @@ mod tests {
         assert_eq!(accuracy_text(None, "3dB"), "3dB");
     }
 
-    /// "Not Specified", "Only for reference" and "reference only" are words
+    /// "Not specified", "Only for reference" and "reference only" are words
     /// the manual prints in the accuracy column, not a tolerance.
     #[test]
     fn a_word_accuracy_stands_as_printed() {
-        for word in ["Not Specified", "Only for reference", "reference only"] {
+        for word in ["Not specified", "Only for reference", "reference only"] {
             assert_eq!(accuracy_text(None, word), word);
         }
         const WORD_FIRST: &[AccuracyBand] = &[

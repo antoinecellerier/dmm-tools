@@ -543,10 +543,10 @@ static AC_V: ModeSpecs = ModeSpecs {
         input_impedance: Some("10MΩ"),
         overload_protection: Some("1000V"),
         notes: &[
-            "True RMS accuracy valid 10%–100% of range",
+            "True RMS and accuracy valid 10%–100% of range",
             "AC+DC: add 1%+30 digits to accuracy",
             "Crest factor ≤3",
-            "Shorted leads: display ≤70 digits",
+            "Shorted leads: residual ≤70 digits",
         ],
     },
 };
@@ -598,7 +598,7 @@ static DC_UA: ModeSpecs = ModeSpecs {
         input_impedance: None,
         // Printed "0.5A 250V fast-acting fuse".
         overload_protection: Some("Fuse 0.5A 250V"),
-        notes: &["10A: 0–5A continuous; >5A–10A max. 10s, then 15min pause"],
+        notes: &["10A: 0–5A continuous; >5A–10A max. 10s, then rest 15min"],
     },
 };
 
@@ -647,7 +647,7 @@ static DC_MA: ModeSpecs = ModeSpecs {
         input_impedance: None,
         // Printed "0.5A 250V fast-acting fuse".
         overload_protection: Some("Fuse 0.5A 250V"),
-        notes: &["10A: 0–5A continuous; >5A–10A max. 10s, then 15min pause"],
+        notes: &["10A: 0–5A continuous; >5A–10A max. 10s, then rest 15min"],
     },
 };
 
@@ -677,7 +677,7 @@ static DC_A: ModeSpecs = ModeSpecs {
         input_impedance: None,
         // Printed "10A 250V fast-acting fuse".
         overload_protection: Some("Fuse 10A 250V"),
-        notes: &["10A: 0–5A continuous; >5A–10A max. 10s, then 15min pause"],
+        notes: &["10A: 0–5A continuous; >5A–10A max. 10s, then rest 15min"],
     },
 };
 
@@ -744,8 +744,8 @@ static AC_UA: ModeSpecs = ModeSpecs {
         // Printed "0.5A 250V fast-acting fuse".
         overload_protection: Some("Fuse 0.5A 250V"),
         notes: &[
-            "10A: 0–5A continuous; >5A–10A max. 10s, then 15min pause",
-            "True RMS accuracy valid 10%–100% of range",
+            "10A: 0–5A continuous; >5A–10A max. 10s, then rest 15min",
+            "True RMS and accuracy valid 10%–100% of range",
             "AC+DC: add 1%+30 digits to accuracy",
             "Crest factor ≤3",
         ],
@@ -814,8 +814,8 @@ static AC_MA: ModeSpecs = ModeSpecs {
         // Printed "0.5A 250V fast-acting fuse".
         overload_protection: Some("Fuse 0.5A 250V"),
         notes: &[
-            "10A: 0–5A continuous; >5A–10A max. 10s, then 15min pause",
-            "True RMS accuracy valid 10%–100% of range",
+            "10A: 0–5A continuous; >5A–10A max. 10s, then rest 15min",
+            "True RMS and accuracy valid 10%–100% of range",
             "AC+DC: add 1%+30 digits to accuracy",
             "Crest factor ≤3",
         ],
@@ -857,8 +857,8 @@ static AC_A: ModeSpecs = ModeSpecs {
         // Printed "10A 250 V fast-acting fuse".
         overload_protection: Some("Fuse 10A 250V"),
         notes: &[
-            "10A: 0–5A continuous; >5A–10A max. 10s, then 15min pause",
-            "True RMS accuracy valid 10%–100% of range",
+            "10A: 0–5A continuous; >5A–10A max. 10s, then rest 15min",
+            "True RMS and accuracy valid 10%–100% of range",
             "AC+DC: add 1%+30 digits to accuracy",
             "Crest factor ≤3",
         ],
@@ -895,7 +895,7 @@ static POWER: ModeSpecs = ModeSpecs {
         overload_protection: None,
         notes: &[
             "Voltage 190V–250V AC",
-            "0–1150W continuous; >1150W–2500W max. 10s, then 15min pause",
+            "0–1150W continuous; >1150W–2500W max. 10s, then rest 15min",
         ],
     },
 };

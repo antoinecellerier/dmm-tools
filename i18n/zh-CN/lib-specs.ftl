@@ -115,18 +115,12 @@ band-40-000-30-100-pct-of = 40.000: 量程的 30 - 100%
 band-40hz-100hz-lpf = 40Hz~100Hz (LPF)
 # Used by: VC920/VC940/VC960
 band-45hz-1khz-4000-counts = 45Hz~1kHz (4000 计数)
-# Used by: UT803
-# In: B. AC Voltage
-band-50khz-100khz = >50kHZ–100kHz
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
 # In: DC AC & AC+DC AC Voltage
 band-dc-50hz-60hz = DC, 50Hz ~ 60Hz
 # Used by: UT181A
 # In: (7) Resistance
-band-in-rel-state = REL 状态下
-# Used by: UT804
-# In: B. AC Voltage (AC+DC measurement is available); I. Frequency
-band-not-specified = 未指定
+band-in-rel-state = REL 模式下
 # Used by: UT181A, UT804
 # In: (9) Capacitance; H. Capacitance
 band-not-specified-2 = 未指定
@@ -136,12 +130,6 @@ band-only-for-reference = 仅供参考
 # Used by: CMS061, CMS101
 # In: Duty Cycle (%)
 band-typical-vrms-1-v-f-100hz = 典型值: Vrms=1 V，f=100Hz
-# Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
-# In: AC Voltage; DC AC & AC+DC AC Voltage
-band-unspec-d = 未指定
-# Used by: UT804
-# In: A. DC Voltage
-band-under-rel-mode = REL 模式下
 
 ## Inputs: a table's input impedance or overload protection.
 
@@ -166,12 +154,6 @@ input-about-10mohm = 约 10MΩ
 # Used by: 7 meters
 # In: DC Voltage
 input-about-1gohm = 约 1GΩ
-# Used by: UT804
-# In: B. AC Voltage (AC+DC measurement is available)
-input-approx-10mohm = 约 10MΩ
-# Used by: UT803, UT804
-# In: A. DC Voltage; B. AC Voltage
-input-around-10mohm = 约 10MΩ
 # Used by: UT804
 # In: A. DC Voltage
 input-around-2-5gohm = 约 2.5GΩ
@@ -247,7 +229,7 @@ note-10a-5a-continuous-5a-10a-10s = 10A: ≤5A 可连续使用；>5A–10A 每�
 note-10hz-200khz-pulse-width-2us-depends = 10Hz–200kHz: 脉冲宽度 >2µs，取决于信号频率
 # Used by: CMS061, CMS101
 # In: Capacitance(F)
-note-20-00mf-measuring-duration-should-be = 20.00mF: 测量时长应超过 30 秒
+note-20-00mf-measuring-duration-should-be = 20.00mF: 测量时长应超过 30s
 # Used by: UT71A, UT71B
 # In: E. Resistance
 note-200ohm-accuracy-plus-test-lead-short = 200Ω: 准确度 + 表笔短路值
@@ -272,9 +254,6 @@ note-400ohm-accuracy-plus-test-lead-short = 400Ω: 准确度 + 表笔短路值
 # Used by: UT804
 # In: H. Capacitance
 note-40nf-accuracy-plus-open-circuit-test = 40nF: 准确度 + 表笔开路电容
-# Used by: UT804
-# In: L. 4~20 mA loop current
-note-4ma-shows-0-pct-20ma-shows = 4mA 显示 0%，20mA 显示 100%
 # Used by: UT71B, UT71C/D/E
 # In: K. 4~20 mA loop current (UT71B/C/D/E)
 note-4ma-shows-0-pct-20ma-shows-2 = 4mA 显示 0%；20mA 显示 100%
@@ -371,9 +350,6 @@ note-ac-plus-dc-add-1-pct = AC+DC: 准确度加 1%+35 个字
 # Used by: UT803
 # In: B. AC Voltage; D. AC Current
 note-ac-plus-dc-range-accuracy-plus = AC+DC: 量程准确度 + 1%
-# Used by: UT804
-# In: K. Temperature 1-1. Degrees Celsius; K. Temperature 1-2. Fahrenheit
-note-above-230degc-use-the-rod-contact = 230°C 以上: 使用杆式接触探头
 # Used by: UT803
 # In: J. Temperature
 note-above-230degc-use-the-rod-type = 230°C 以上: 使用杆式探头
@@ -591,9 +567,6 @@ note-no-beep-60ohm = >60Ω 时不蜂鸣
 # In: AC Current; AC Voltage
 note-non-sine-add-4-pct-crest = 非正弦波: 加 4% (波峰因数 1–2)，5% (2–2.5)，7% (2.5–3)
 # Used by: UT181A
-# In: (15) Diode Test
-note-normal-silicon-junction-0-5v-0 = 正常硅结: 0.5V–0.8V
-# Used by: UT181A
 # In: (14) Continuity Test
 note-open-alarm-beeps-50ohm-silent-10ohm = 开路报警: >50Ω 时蜂鸣，<10Ω 时无声
 # Used by: CMS061, CMS101
@@ -704,9 +677,6 @@ note-shows-ol-above-200-0ohm = 高于 200.0Ω 时显示 OL
 # Used by: CMS061, CMS101
 # In: Frequency (Hz)
 note-signal-1hz-20mhz-1v-rms = 信号: 1Hz–20MHz，≥ 1V rms
-# Used by: UT71B, UT71C/D/E
-# In: J. Temperature (UT71B/C/D/E)
-note-supplied-k-type-point-probe-below = 随附的 K 型点式探头: 仅限 230°C 以下
 # Used by: VC920/VC940/VC960
 # In: Temperature
 note-supplied-wire-thermocouple-max-plus-230degc = 随附的线式热电偶: 最高 +230°C
@@ -725,9 +695,6 @@ note-then-typically-18kohm-100v-125kohm-300v-2 = 之后典型值 18kΩ@100V，12
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
 # In: Non-Contact EF-Detection
 note-tolerance-10v-36v-23v-83v-59v = 容差: 10V~36V，23V~83V，59V~165V，124V~330V，> 250V
-# Used by: VC920/VC940/VC960
-# In: AC / A; AC / V
-note-true-rms-accuracy-valid-10-pct-2 = 真有效值准确度有效范围: 量程的 10%–100%
 # Used by: UT804
 # In: B. AC Voltage (AC+DC measurement is available)
 note-true-rms-and-accuracy-valid-10 = 真有效值和准确度有效范围: 量程的 10%–100%
@@ -752,9 +719,6 @@ note-true-rms-valid-10-pct-95 = 真有效值有效范围: 量程的 10%–95%
 # Used by: UT803
 # In: D. AC Current
 note-true-rms-valid-10-pct-95-2 = 真有效值有效范围: 量程的 10%–95%；波峰因数 3.0
-# Used by: Mock UT61E+, UT161E, UT61E+
-# In: AC+DC Voltage
-note-true-rms-accuracy-valid-10-pct = 真有效值；准确度有效范围: 量程的 10%–100%
 # Used by: Mock UT61E+, UT161E, UT61E+
 # In: AC Current; AC Voltage
 note-true-rms-crest-factor-2-0 = 真有效值；波峰因数 10000 计数时 ≤2.0，22000 计数时 ≤1

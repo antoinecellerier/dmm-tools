@@ -759,7 +759,7 @@ mod tests {
             "60.00MΩ: tempco 0.6× accuracy/°C @(0°C ~ 18°C or 28°C ~ 45°C)",
         );
         let input = ids(TextKind::Input, "About 10MΩ");
-        let band = ids(TextKind::Band, "In REL state");
+        let band = ids(TextKind::Band, "In REL mode");
         let lpf = ids(TextKind::Band, "40Hz~100Hz (LPF)");
         let source = format!(
             "{note} = Seuil Lo-Z : > 1,5 VCC ou < -1,0 VCC nominal\n\
@@ -796,7 +796,7 @@ mod tests {
             "60,00 MΩ : coefficient 0,6× la précision/°C @(0 °C ~ 18 °C ou 28 °C ~ 45 °C)"
         );
         assert_eq!(l.spec_text(TextKind::Input, "About 10MΩ"), "Environ 10 MΩ");
-        assert_eq!(l.spec_text(TextKind::Band, "In REL state"), "En mode REL");
+        assert_eq!(l.spec_text(TextKind::Band, "In REL mode"), "En mode REL");
         // `label` takes the same guard.
         assert_eq!(l.label(TextKind::Input, "About 10MΩ"), "Environ 10 MΩ");
     }

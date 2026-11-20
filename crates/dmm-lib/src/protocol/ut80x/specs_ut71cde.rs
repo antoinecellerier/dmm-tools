@@ -74,7 +74,7 @@ static DC_MV: ModeSpecs = ModeSpecs {
         },
     }],
     mode: ModeSpecInfo {
-        input_impedance: Some("Around 2.5GΩ"),
+        input_impedance: Some("About 2.5GΩ"),
         overload_protection: Some("1000V"),
         notes: &[],
     },
@@ -133,7 +133,7 @@ static DC_V: ModeSpecs = ModeSpecs {
         },
     ],
     mode: ModeSpecInfo {
-        input_impedance: Some("Around 10MΩ"),
+        input_impedance: Some("About 10MΩ"),
         overload_protection: Some("1000V"),
         notes: &[],
     },
@@ -205,7 +205,7 @@ static AC_V: ModeSpecs = ModeSpecs {
                     },
                     AccuracyBand {
                         freq_range: Some("10kHz~100kHz"),
-                        accuracy: "Not Specified",
+                        accuracy: "Not specified",
                     },
                 ],
             },
@@ -233,11 +233,11 @@ static AC_V: ModeSpecs = ModeSpecs {
         },
     ],
     mode: ModeSpecInfo {
-        input_impedance: Some("Approx 10MΩ"),
+        input_impedance: Some("About 10MΩ"),
         overload_protection: Some("1000V"),
         notes: &[
             "True RMS valid 10%–100% of range; crest factor ≤3.0 (1000V: 1.5)",
-            "Shorted leads: 80-digit residual, accuracy unaffected",
+            "Shorted leads: residual 80 digits, accuracy unaffected",
             "Below 100kHz: accuracy guaranteed 10%–100%",
             "AC+DC: add 1%+35 digits to accuracy",
         ],
@@ -280,7 +280,7 @@ static DC_UA: ModeSpecs = ModeSpecs {
         input_impedance: None,
         // Printed "0.5A, 1000V, fast type fuse, ø6.3x32mm".
         overload_protection: Some("Fuse 0.5A 1000V"),
-        notes: &["10A: ≤5A continuous; 5A–10A ≤10s at a time, >15min apart"],
+        notes: &["10A: ≤5A continuous; 5A–10A max. 10s, then rest >15min"],
     },
 };
 
@@ -317,7 +317,7 @@ static DC_MA: ModeSpecs = ModeSpecs {
         input_impedance: None,
         // Printed "0.5A, 1000V, fast type fuse, ø6.3x32mm".
         overload_protection: Some("Fuse 0.5A 1000V"),
-        notes: &["10A: ≤5A continuous; 5A–10A ≤10s at a time, >15min apart"],
+        notes: &["10A: ≤5A continuous; 5A–10A max. 10s, then rest >15min"],
     },
 };
 
@@ -341,7 +341,7 @@ static DC_A: ModeSpecs = ModeSpecs {
         input_impedance: None,
         // Printed "10A, 1000V, fast type fuse, ø10.3x38mm".
         overload_protection: Some("Fuse 10A 1000V"),
-        notes: &["10A: ≤5A continuous; 5A–10A ≤10s at a time, >15min apart"],
+        notes: &["10A: ≤5A continuous; 5A–10A max. 10s, then rest >15min"],
     },
 };
 
@@ -393,9 +393,9 @@ static AC_UA: ModeSpecs = ModeSpecs {
         overload_protection: Some("Fuse 0.5A 1000V"),
         notes: &[
             "True RMS valid 10%–100% of range; crest factor ≤3.0",
-            "Shorted leads: 80-digit residual, accuracy unaffected",
+            "Shorted leads: residual 80 digits, accuracy unaffected",
             "AC+DC: add 1%+35 digits to accuracy",
-            "10A: ≤5A continuous; 5A–10A ≤10s at a time, >15min apart",
+            "10A: ≤5A continuous; 5A–10A max. 10s, then rest >15min",
         ],
     },
 };
@@ -447,9 +447,9 @@ static AC_MA: ModeSpecs = ModeSpecs {
         overload_protection: Some("Fuse 0.5A 1000V"),
         notes: &[
             "True RMS valid 10%–100% of range; crest factor ≤3.0",
-            "Shorted leads: 80-digit residual, accuracy unaffected",
+            "Shorted leads: residual 80 digits, accuracy unaffected",
             "AC+DC: add 1%+35 digits to accuracy",
-            "10A: ≤5A continuous; 5A–10A ≤10s at a time, >15min apart",
+            "10A: ≤5A continuous; 5A–10A max. 10s, then rest >15min",
         ],
     },
 };
@@ -482,9 +482,9 @@ static AC_A: ModeSpecs = ModeSpecs {
         overload_protection: Some("Fuse 10A 1000V"),
         notes: &[
             "True RMS valid 10%–100% of range; crest factor ≤3.0",
-            "Shorted leads: 80-digit residual, accuracy unaffected",
+            "Shorted leads: residual 80 digits, accuracy unaffected",
             "AC+DC: add 1%+35 digits to accuracy",
-            "10A: ≤5A continuous; 5A–10A ≤10s at a time, >15min apart",
+            "10A: ≤5A continuous; 5A–10A max. 10s, then rest >15min",
         ],
     },
 };
@@ -565,7 +565,7 @@ static RESISTANCE: ModeSpecs = ModeSpecs {
     mode: ModeSpecInfo {
         input_impedance: None,
         overload_protection: Some("1000V"),
-        notes: &["400Ω: accuracy + test-lead short-circuit value"],
+        notes: &["400Ω: accuracy + test-lead short-circuit resistance"],
     },
 };
 
@@ -588,7 +588,7 @@ static CONTINUITY: ModeSpecs = ModeSpecs {
         overload_protection: Some("1000V"),
         notes: &[
             "Open circuit ≈-1.2V",
-            "No beep >60Ω",
+            "Silent >60Ω",
             "Beeps continuously ≤40Ω",
         ],
     },
@@ -797,7 +797,7 @@ static FREQUENCY: ModeSpecs = ModeSpecs {
                 resolution: "0.01MHz",
                 accuracy: &[AccuracyBand {
                     freq_range: None,
-                    accuracy: "Not Specified",
+                    accuracy: "Not specified",
                 }],
             },
         },
@@ -844,8 +844,8 @@ static TEMP_C: ModeSpecs = ModeSpecs {
         input_impedance: None,
         overload_protection: Some("1000V"),
         notes: &[
-            "Supplied K-type point probe: below 230°C only",
-            "Above 230°C: use the rod contact probe",
+            "Included K-type point-contact probe: below 230°C only",
+            "Above 230°C: use the rod-type probe",
         ],
     },
 };
@@ -880,8 +880,8 @@ static TEMP_F: ModeSpecs = ModeSpecs {
         input_impedance: None,
         overload_protection: Some("1000V"),
         notes: &[
-            "Supplied K-type point probe: below 230°C only",
-            "Above 230°C: use the rod contact probe",
+            "Included K-type point-contact probe: below 230°C only",
+            "Above 230°C: use the rod-type probe",
         ],
     },
 };

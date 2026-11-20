@@ -43,8 +43,8 @@ pub enum TextKind {
     /// The steps that switch a meter's data transmission on.
     Activation,
     /// A specification row's accuracy band: the condition it holds under
-    /// ("In REL state", "40Hz~100Hz (LPF)") and its accuracy, which a manual
-    /// may give in words ("Not Specified").
+    /// ("In REL mode", "40Hz~100Hz (LPF)") and its accuracy, which a manual
+    /// may give in words ("Not specified").
     Band,
     /// A specification table's input impedance or overload protection.
     Input,

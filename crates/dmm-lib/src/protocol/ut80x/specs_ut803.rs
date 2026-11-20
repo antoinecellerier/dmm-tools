@@ -92,7 +92,7 @@ static DC_MV: ModeSpecs = ModeSpecs {
         },
     }],
     mode: ModeSpecInfo {
-        input_impedance: Some("Around > 3000MΩ"),
+        input_impedance: Some("About > 3000MΩ"),
         overload_protection: Some("1000V"),
         notes: &[],
     },
@@ -151,7 +151,7 @@ static DC_V: ModeSpecs = ModeSpecs {
         },
     ],
     mode: ModeSpecInfo {
-        input_impedance: Some("Around 10MΩ"),
+        input_impedance: Some("About 10MΩ"),
         overload_protection: Some("1000V"),
         notes: &[],
     },
@@ -174,14 +174,14 @@ static AC_MV: ModeSpecs = ModeSpecs {
                     accuracy: "0.6%+5",
                 },
                 AccuracyBand {
-                    freq_range: Some(">50kHZ–100kHz"),
+                    freq_range: Some(">50kHz–100kHz"),
                     accuracy: "1%+5",
                 },
             ],
         },
     }],
     mode: ModeSpecInfo {
-        input_impedance: Some("Around > 3000MΩ"),
+        input_impedance: Some("About > 3000MΩ"),
         overload_protection: Some("1000V"),
         notes: &[
             "True RMS valid 10%–95% of range",
@@ -281,7 +281,7 @@ static AC_V: ModeSpecs = ModeSpecs {
         },
     ],
     mode: ModeSpecInfo {
-        input_impedance: Some("Around 10MΩ"),
+        input_impedance: Some("About 10MΩ"),
         overload_protection: Some("1000V"),
         notes: &[
             "True RMS valid 10%–95% of range",
@@ -327,7 +327,7 @@ static DC_UA: ModeSpecs = ModeSpecs {
         input_impedance: None,
         // Printed "Fuse 500mA, 125V, fast type, ø5x20mm.".
         overload_protection: Some("Fuse 500mA 125V"),
-        notes: &["≤5A range: continuous; >5A range: ≤10s at a time, ≥15min apart"],
+        notes: &["≤5A range: continuous; >5A range: max. 10s, then rest ≥15min"],
     },
 };
 
@@ -364,7 +364,7 @@ static DC_MA: ModeSpecs = ModeSpecs {
         input_impedance: None,
         // Printed "Fuse 500mA, 125V, fast type, ø5x20mm.".
         overload_protection: Some("Fuse 500mA 125V"),
-        notes: &["≤5A range: continuous; >5A range: ≤10s at a time, ≥15min apart"],
+        notes: &["≤5A range: continuous; >5A range: max. 10s, then rest ≥15min"],
     },
 };
 
@@ -388,7 +388,7 @@ static DC_A: ModeSpecs = ModeSpecs {
         input_impedance: None,
         // Printed "Fuse 10A, 250V, fast type, ø5x20mm.".
         overload_protection: Some("Fuse 10A 250V"),
-        notes: &["≤5A range: continuous; >5A range: ≤10s at a time, ≥15min apart"],
+        notes: &["≤5A range: continuous; >5A range: max. 10s, then rest ≥15min"],
     },
 };
 
@@ -442,7 +442,7 @@ static AC_UA: ModeSpecs = ModeSpecs {
             "True RMS valid 10%–95% of range; crest factor 3.0",
             "Shorted input: residual under ~30 digits, accuracy unaffected",
             "AC+DC: range accuracy + 1%",
-            "≤5A range: continuous; >5A range: ≤10s at a time, ≥15min apart",
+            "≤5A range: continuous; >5A range: max. 10s, then rest ≥15min",
         ],
     },
 };
@@ -496,7 +496,7 @@ static AC_MA: ModeSpecs = ModeSpecs {
             "True RMS valid 10%–95% of range; crest factor 3.0",
             "Shorted input: residual under ~30 digits, accuracy unaffected",
             "AC+DC: range accuracy + 1%",
-            "≤5A range: continuous; >5A range: ≤10s at a time, ≥15min apart",
+            "≤5A range: continuous; >5A range: max. 10s, then rest ≥15min",
         ],
     },
 };
@@ -525,7 +525,7 @@ static AC_A: ModeSpecs = ModeSpecs {
             "True RMS valid 10%–95% of range; crest factor 3.0",
             "Shorted input: residual under ~30 digits, accuracy unaffected",
             "AC+DC: range accuracy + 1%",
-            "≤5A range: continuous; >5A range: ≤10s at a time, ≥15min apart",
+            "≤5A range: continuous; >5A range: max. 10s, then rest ≥15min",
         ],
     },
 };
@@ -651,7 +651,7 @@ static DIODE: ModeSpecs = ModeSpecs {
     mode: ModeSpecInfo {
         input_impedance: None,
         overload_protection: Some("250V rms"),
-        notes: &["Open circuit ≈2.7V", "Working current ≈1mA"],
+        notes: &["Open circuit ≈2.7V", "Test current ≈1mA"],
     },
 };
 
@@ -819,7 +819,7 @@ static FREQUENCY: ModeSpecs = ModeSpecs {
             "Input 10Hz–1MHz: 150mV–30V rms",
             "Input >1MHz–10MHz: 300mV–30V rms",
             "Input >10MHz–50MHz: 600mV–30V rms",
-            "Input at zero DC level; >50MHz unspecified",
+            "Input at zero DC level; >50MHz not specified",
         ],
     },
 };
