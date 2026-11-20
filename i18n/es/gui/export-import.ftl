@@ -205,6 +205,36 @@ export-unsaved-connect =
     }
 # The prompt's button that goes ahead: discards, then connects the meter.
 export-unsaved-connect-confirm = Descartar y conectar
+# The prompt when the window is asked to close (its close button, Ctrl+Q or
+# Ctrl+W). $lost, $samples and $markers are as for Record.
+export-unsaved-quit =
+    { $lost ->
+        [samples]
+            { $samples ->
+                [one] Si sales, descartarás { $samples } muestra sin exportar.
+               *[other] Si sales, descartarás { $samples } muestras sin exportar.
+            }
+        [markers]
+            { $markers ->
+                [one] Si sales, descartarás los cambios no guardados de { $markers } marcador.
+               *[other] Si sales, descartarás los cambios no guardados de { $markers } marcadores.
+            }
+       *[both]
+            { $samples ->
+                [one]
+                    { $markers ->
+                        [one] Si sales, descartarás { $samples } muestra sin exportar y los cambios no guardados de { $markers } marcador.
+                       *[other] Si sales, descartarás { $samples } muestra sin exportar y los cambios no guardados de { $markers } marcadores.
+                    }
+               *[other]
+                    { $markers ->
+                        [one] Si sales, descartarás { $samples } muestras sin exportar y los cambios no guardados de { $markers } marcador.
+                       *[other] Si sales, descartarás { $samples } muestras sin exportar y los cambios no guardados de { $markers } marcadores.
+                    }
+            }
+    }
+# The prompt's button that goes ahead: discards, then closes the window.
+export-unsaved-quit-confirm = Descartar y salir
 # The prompt's other button, which keeps everything; it has the focus.
 export-unsaved-cancel = Cancelar
 

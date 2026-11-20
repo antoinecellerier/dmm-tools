@@ -126,6 +126,11 @@ shortcuts-mouse-cursor = Colocar el cursor A / B en el punto más cercano
 shortcuts-mouse-menu = Marcar, copiar, cursores, líneas de referencia, alarma
     .gesture = Clic derecho
     .touch = Mantener presionado
+# On a touchscreen only: a tap leaves the crosshair, the two lines that
+# cross on a reading, and the readings shown beside it, where the finger
+# was; the × beside the readings takes it away.
+shortcuts-touch-pin = Fijar la cruz del cursor y sus lecturas en ese punto; × las quita
+    .gesture = Toque
 # The minimap is the strip under the graph showing all the readings:
 # dragging in it moves the view, dragging its edges resizes it.
 shortcuts-mouse-minimap = Ir a un momento / cambiar el tamaño del área visible

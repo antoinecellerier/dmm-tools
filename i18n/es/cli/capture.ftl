@@ -75,6 +75,9 @@ capture-resuming = Reanudando: se omitirán los pasos ya capturados.
 capture-unreadable = Se encontró el archivo { $path }, pero no se pudo analizar.
 # $yes is the key that answers: y.
 capture-overwrite-unreadable = ¿Sobrescribir? { $yes }=empezar de nuevo, cualquier otra tecla=cancelar:
+# After "Warning:", at the start and the end of a run whose output goes
+# through a pipe or into a file.
+capture-not-a-terminal = la salida de capture está redirigida a un archivo o a otro programa, así que capture no puede esperarte junto al multímetro, pedirte que confirmes las lecturas ni comprobar la detección automática. Para obtener un informe válido, ejecuta capture directamente en una ventana de terminal.
 # $path is the report file the run writes.
 capture-output-file = Archivo de salida: { $path }
 

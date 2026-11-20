@@ -120,3 +120,7 @@ remote-light =
 whats-new-title-unreleased = Novedades (sin publicar)
 # In a release. $version is its number, e.g. 0.10.0, after a v.
 whats-new-title = Novedades de la v{ $version }
+# The × button that closes the window where the system draws no title bar
+# for it (Android): its name for a screen reader.
+whats-new-close =
+    .a11y = Cerrar Novedades

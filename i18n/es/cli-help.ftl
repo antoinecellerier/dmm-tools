@@ -54,6 +54,12 @@ read--scale =
 # dmm-cli read --offset
 read--offset =
     .help = Sumar VALUE después de escalar (32 con --scale 1.8 convierte °C en °F)
+# dmm-cli read --unit
+read--unit =
+    .help = Mostrar la lectura escalada con esta unidad en lugar de la unidad base del multímetro. El número no se convierte: el prefijo lo da --scale, así que para leer en mA una pinza de 10 mV/A, usa --scale 100000 --unit mA
+# dmm-cli read --alarm-high
+read--alarm-high =
+    .help = Avisar cuando la lectura supere VALUE, en unidades base (V, A, Ω, …) o, si la lectura está escalada, en la unidad de --unit. Con una unidad (4980mV, 10kohm), la alarma además solo vigila las lecturas de esa magnitud; un prefijo sin unidad (4.7k) solo multiplica el valor
 # dmm-cli read --alarm-low
 read--alarm-low =
     .help = Avisar cuando la lectura baje de VALUE, en las mismas unidades que --alarm-high
@@ -113,7 +119,7 @@ capture =
     .about = Captura guiada del protocolo para informes de errores y verificación
 # dmm-cli capture --output
 capture--output =
-    .help = Archivo de salida (predeterminado: capture-<device>.yaml). Anula el nombre automático
+    .help = Archivo de salida (predeterminado: capture-<device>.yaml)
 # dmm-cli capture --steps
 capture--steps =
     .help = Ejecutar solo pasos concretos (identificadores separados por comas, p. ej. "dcmv,temp,duty")

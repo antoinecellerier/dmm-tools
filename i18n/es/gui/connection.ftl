@@ -27,6 +27,15 @@ connection-waiting-switch-on = Activa la transmisión de datos del multímetro o
 ## A failed connection: a title naming the problem, the steps to try, and a
 ## closing line.
 
+# Under a failed connection's steps when a meter is picked in Settings,
+# which a detected connect may have saved. $model is that meter, e.g.
+# UNI-T UT61E+.
+connection-selected-meter = El multímetro { $model } está seleccionado en Configuración (⚙). Si el tuyo es otro, selecciónalo allí o elige Detección automática.
+# The same when the title above already names the meter picked.
+connection-selected-meter-named = Si tu multímetro es otro, selecciónalo en Configuración (⚙) o elige allí Detección automática.
+# After shared.ftl's unrecognised-data, in a toast: where to report it.
+# { project-link } is the top bar's Help & Feedback link.
+connection-unrecognised-report = Comunícalo desde { project-link }, en la barra superior.
 # The closing line under the steps. "Connect" is the top bar's button.
 connection-click-connect = Resuelve el problema y vuelve a presionar “Conectar”.
 # The closing line after the Bluetooth steps when nothing answered at the
@@ -105,9 +114,18 @@ connection-several-cables-action = Deja conectado solo el cable de este multíme
 # A toast, when that notice ends a running recording. What it holds can still
 # be exported.
 connection-several-cables-recording = Grabación detenida: se perdió el enlace y el cable USB de este multímetro no se puede distinguir de los demás
+# A toast, when a different meter answers the session during a recording,
+# as after a reconnect under Auto-detect or a device picked in Settings.
+# $meter is the meter that answered, a model name. What was recorded can
+# still be exported.
+connection-other-meter-recording = Grabación detenida: respondió el multímetro { $meter } en lugar del que se estaba grabando. Lo grabado aún se puede exportar.
 # Any other failure to connect or to keep reading. The error itself
 # follows, then connection-click-connect.
 connection-failed = Error de conexión
+# The reading thread crashed, or the system refused to start it. $detail is
+# the crash's or the system's own text, which stays English. Followed by
+# connection-click-connect.
+connection-internal-error = Error interno: { $detail }
 
 # A meter that stopped answering in the middle of a session. $title is the
 # shared notice title, "No response from meter".
@@ -118,7 +136,7 @@ connection-acquisition-stopped = La adquisición se detuvo inesperadamente. Reco
 # The last line of a notice for a meter whose support isn't fully verified;
 # a link. $warning is the sentence saying how far it is verified.
 connection-feedback = { $warning } Enviar comentarios.
-    .hover = Abrir el gestor de incidencias de GitHub para enviar comentarios
+    .hover = Abrir el gestor de incidencias de GitHub
 
 ## The notice under the reading when the Bluetooth link delivers readings
 ## two at a time, which can end with a command that fixes it.
@@ -127,9 +145,15 @@ connection-feedback = { $warning } Enviar comentarios.
 connection-late-copy = Copiar
 # A toast, once the command is copied.
 connection-late-copied = Comando copiado
+# The notice's last line, on a link the tool has no fix for yet.
+# { project-link } is the top bar's Help & Feedback link.
+connection-late-report = Comunícalo desde { project-link }, en la barra superior, e indica el multímetro y el sistema operativo.
 
 ## Toasts.
 
+# After shared.ftl's saved-mock-mode-unknown. Mock mode is the setting's
+# name in Settings.
+connection-saved-mock-mode-unknown-action = Elige un modo simulado en Configuración (⚙).
 # A meter identified itself while Settings was on Auto-detect. $meter is
 # its name, e.g. UNI-T UT61E+. $saved is yes when Settings now names it, no
 # for a session that detects every time.
@@ -182,6 +206,11 @@ connection-switch-failed =
         [range] Error al cambiar el rango: { $error }
        *[other] Error al cambiar el ajuste { $setting }: { $error }
     }
+# One of the two messages above ($failed), then what to do about it, a
+# sentence of its own ($remedy): what to pick when the meter is another
+# model (shared.ftl's choose-meter-gui), or what to check after a refused
+# switch (switch-check-dial).
+connection-failed-then = { $failed }. { $remedy }
 
 # The × that closes a toast or a notice.
 connection-dismiss =
