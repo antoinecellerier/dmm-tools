@@ -20,13 +20,22 @@ connection-no-frames = Aucune trame à cet endroit du fichier de relecture
 # at the end, with nothing after it.
 connection-waiting = En attente du multimètre{ $dots }
 # Under the waiting title, when a meter is picked in Settings.
-connection-waiting-check-selection = Vérifiez que le bon appareil est sélectionné dans Paramètres (⚙), ou choisissez-y Détection automatique
+connection-waiting-check-selection = Vérifiez que le bon appareil est sélectionné dans Paramètres (⚙), ou choisissez Détection automatique
 # Under the waiting title, when Settings is on Auto-detect.
 connection-waiting-switch-on = Activez la transmission des données du multimètre, ou choisissez son modèle dans Paramètres (⚙)
 
 ## A failed connection: a title naming the problem, the steps to try, and a
 ## closing line.
 
+# Under a failed connection's steps when a meter is picked in Settings,
+# which a detected connect may have saved. $model is that meter, e.g.
+# UNI-T UT61E+.
+connection-selected-meter = Le multimètre { $model } est sélectionné dans Paramètres (⚙). Si vous utilisez un autre multimètre, sélectionnez-le à la place, ou choisissez Détection automatique.
+# The same when the title above already names the meter picked.
+connection-selected-meter-named = Si vous utilisez un autre multimètre, sélectionnez-le dans Paramètres (⚙), ou choisissez Détection automatique.
+# After shared.ftl's unrecognised-data, in a toast: where to report it.
+# { project-link } is the top bar's Help & Feedback link.
+connection-unrecognised-report = Signalez-le via le lien { project-link } de la barre supérieure.
 # The closing line under the steps. "Connect" is the top bar's button.
 connection-click-connect = Résolvez le problème, puis appuyez de nouveau sur « Connecter ».
 # The closing line after the Bluetooth steps when nothing answered at the
@@ -86,7 +95,7 @@ connection-no-response =
             ne répond pas ({ $model } sélectionné).
     }
 
-    Si ce n’est pas le bon appareil, changez-le dans Paramètres (⚙), ou choisissez-y Détection automatique.
+    Si ce n’est pas le bon appareil, changez-le dans Paramètres (⚙), ou choisissez Détection automatique.
     Sinon, activez la transmission des données :
     { $steps }
 # The same, on Auto-detect: no meter is picked to name.
@@ -105,9 +114,18 @@ connection-several-cables-action = Ne laissez branché que le câble de ce multi
 # A toast, when that notice ends a running recording. What it holds can still
 # be exported.
 connection-several-cables-recording = Enregistrement arrêté : la liaison a été coupée et le câble USB de ce multimètre ne se distingue pas des autres
+# A toast, when a different meter answers the session during a recording,
+# as after a reconnect under Auto-detect or a device picked in Settings.
+# $meter is the meter that answered, a model name. What was recorded can
+# still be exported.
+connection-other-meter-recording = Enregistrement arrêté : le multimètre { $meter } a répondu à la place du multimètre avec lequel l’enregistrement a commencé. Les données déjà enregistrées peuvent toujours être exportées.
 # Any other failure to connect or to keep reading. The error itself
 # follows, then connection-click-connect.
 connection-failed = Échec de la connexion
+# The reading thread crashed, or the system refused to start it. $detail is
+# the crash's or the system's own text, which stays English. Followed by
+# connection-click-connect.
+connection-internal-error = Erreur interne : { $detail }
 # A meter that stopped answering in the middle of a session. $title is the
 # shared notice title, "No response from meter".
 connection-no-response-check = { $title } : vérifiez l’appareil sélectionné et la transmission des données
@@ -117,7 +135,7 @@ connection-acquisition-stopped = L’acquisition s’est arrêtée de façon ina
 # The last line of a notice for a meter whose support isn't fully verified;
 # a link. $warning is the sentence saying how far it is verified.
 connection-feedback = { $warning } Envoyer des commentaires.
-    .hover = Ouvrir le suivi des tickets GitHub pour envoyer vos commentaires
+    .hover = Ouvrir le suivi des tickets GitHub
 
 ## The notice under the reading when the Bluetooth link delivers readings
 ## two at a time, which can end with a command that fixes it.
@@ -126,9 +144,15 @@ connection-feedback = { $warning } Envoyer des commentaires.
 connection-late-copy = Copier
 # A toast, once the command is copied.
 connection-late-copied = Commande copiée
+# The notice's last line, on a link the tool has no fix for yet.
+# { project-link } is the top bar's Help & Feedback link.
+connection-late-report = Signalez-le via le lien { project-link } de la barre supérieure, en précisant le multimètre et le système d’exploitation.
 
 ## Toasts.
 
+# After shared.ftl's saved-mock-mode-unknown. Mock mode is the setting's
+# name in Settings.
+connection-saved-mock-mode-unknown-action = Choisissez un mode simulé dans Paramètres (⚙).
 # A meter identified itself while Settings was on Auto-detect. $meter is
 # its name, e.g. UNI-T UT61E+. $saved is yes when Settings now names it, no
 # for a session that detects every time.
@@ -181,6 +205,11 @@ connection-switch-failed =
         [range] Échec du changement de plage : { $error }
        *[other] Échec du changement de { $setting } : { $error }
     }
+# One of the two messages above ($failed), then what to do about it, a
+# sentence of its own ($remedy): what to pick when the meter is another
+# model (shared.ftl's choose-meter-gui), or what to check after a refused
+# switch (switch-check-dial).
+connection-failed-then = { $failed }. { $remedy }
 
 # The × that closes a toast or a notice.
 connection-dismiss =

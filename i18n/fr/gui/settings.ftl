@@ -43,7 +43,7 @@ settings-mock-auto =
         [yes] Auto (en boucle) (--mock-mode)
        *[no] Auto (en boucle)
     }
-    .hover = Parcourir tous les modes simulés pour tester l’interface
+    .hover = Parcourir tous les modes simulés
 # The chip for the mode --mock-mode picked for this session. $mode is its
 # name, e.g. dcv.
 settings-mock-mode-pinned = { $mode } (--mock-mode)
@@ -55,7 +55,7 @@ settings-auto-connect = Se connecter au démarrage
     .hover = Se connecter au multimètre au lancement de l’application
 # Asking the meter its name makes it beep.
 settings-device-name = Afficher le nom de l’appareil à la connexion (bip sonore)
-    .hover = Demander son nom au multimètre après la connexion : il émet alors un bip sonore
+    .hover = Demander son nom au multimètre après la connexion
 # The Bluetooth checkbox while --no-bluetooth switched the search off for
 # this session. $setting is the checkbox's own label, e.g. Look for
 # Bluetooth devices.
@@ -181,6 +181,11 @@ settings-zoom-chip =
 # those that step the zoom.
 settings-zoom-reset-chip =
     .hover = Afficher l’interface à 100 % ({ $reset }, ou { $step } pour ajuster par paliers)
+# On Android only, in place of the two checkboxes below: hides the bars
+# Android draws at the screen's edges, with the clock and the navigation
+# buttons.
+settings-full-screen = Plein écran
+    .hover = Masquer les barres d’état et de navigation : un balayage depuis le bord de l’écran les fait réapparaître
 # Window decorations are the title bar and border.
 settings-hide-decorations = Masquer le cadre de la fenêtre
     .hover = Fenêtre sans cadre : utilisez { $keys } pour le rétablir

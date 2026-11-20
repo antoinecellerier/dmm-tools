@@ -114,10 +114,22 @@ graph-histogram = Histogramme
 # in the field after it. Short for reference.
 graph-ref = Réf.
     .hover = Tracer des lignes de référence horizontales aux valeurs du champ suivant ({ $keys })
-# The field after Ref, about 80 pixels wide. The text shows greyed inside
+# The field after Ref, about 120 pixels wide. The text shows greyed inside
 # the field while it is empty; the numbers in the hover are an example of
 # what to type, kept as they are.
 graph-ref-values = Valeurs
+    .hover = Valeurs de référence, avec une unité ou dans celle du tracé (p. ex. 3.3, 5 V, 4.7k)
+# Lines added to the reference values' hover, one for each value that draws
+# no line. $entry is the value as typed ("abc").
+graph-ref-not-a-number = { $entry } : ce n’est pas un nombre
+# $entry is the value as typed, with a word after it that is no unit ("3 x").
+graph-ref-unknown-unit = { $entry } : unité inconnue
+# $entry is the value as typed ("5 V"), in a unit of another quantity than the
+# graph shows; $unit is that quantity's unit ("V"), on whose readings it draws.
+graph-ref-other-quantity = { $entry } : ligne tracée sur les mesures en { $unit }
+# $entry is a number typed while a reading without a unit (a transistor's
+# gain) was plotted, now that one with a unit is.
+graph-ref-other-quantity-unitless = { $entry } : ligne tracée sur les mesures sans unité
 # A chip, after the reference values, that marks where the trace crosses a
 # reference line.
 graph-triggers = Déclencheurs
@@ -132,6 +144,11 @@ graph-cursors-hint = placez les curseurs sur le graphique
 ## The plot: the readout by the pointer, the labels on its lines, and the
 ## flags of markers along its bottom edge.
 
+# The × button on the readout of a crosshair that a tap on a touchscreen
+# left on the plot: it takes the crosshair and the readout away. Its name
+# for a screen reader.
+graph-unpin =
+    .a11y = Retirer le réticule
 # The readout by the pointer, under the time, inside a stretch where the
 # meter read over range (showed OL).
 graph-hover-overload = surcharge

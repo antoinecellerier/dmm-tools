@@ -205,6 +205,36 @@ export-unsaved-connect =
     }
 # The prompt's button that goes ahead: discards, then connects the meter.
 export-unsaved-connect-confirm = Abandonner et connecter
+# The prompt when the window is asked to close (its close button, Ctrl+Q or
+# Ctrl+W). $lost, $samples and $markers are as for Record.
+export-unsaved-quit =
+    { $lost ->
+        [samples]
+            { $samples ->
+                [one] Quitter l’application fera perdre { $samples } échantillon non exporté.
+               *[other] Quitter l’application fera perdre { $samples } échantillons non exportés.
+            }
+        [markers]
+            { $markers ->
+                [one] Quitter l’application fera perdre les modifications non enregistrées de { $markers } marqueur.
+               *[other] Quitter l’application fera perdre les modifications non enregistrées de { $markers } marqueurs.
+            }
+       *[both]
+            { $samples ->
+                [one]
+                    { $markers ->
+                        [one] Quitter l’application fera perdre { $samples } échantillon non exporté et les modifications non enregistrées de { $markers } marqueur.
+                       *[other] Quitter l’application fera perdre { $samples } échantillon non exporté et les modifications non enregistrées de { $markers } marqueurs.
+                    }
+               *[other]
+                    { $markers ->
+                        [one] Quitter l’application fera perdre { $samples } échantillons non exportés et les modifications non enregistrées de { $markers } marqueur.
+                       *[other] Quitter l’application fera perdre { $samples } échantillons non exportés et les modifications non enregistrées de { $markers } marqueurs.
+                    }
+            }
+    }
+# The prompt's button that goes ahead: discards, then closes the window.
+export-unsaved-quit-confirm = Abandonner et quitter
 # The prompt's other button, which keeps everything; it has the focus.
 export-unsaved-cancel = Annuler
 

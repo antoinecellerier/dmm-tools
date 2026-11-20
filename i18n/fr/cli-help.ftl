@@ -54,6 +54,12 @@ read--scale =
 # dmm-cli read --offset
 read--offset =
     .help = Ajouter VALUE après la mise à l’échelle (32 avec --scale 1.8 convertit les °C en °F)
+# dmm-cli read --unit
+read--unit =
+    .help = Étiqueter la mesure mise à l’échelle avec cette unité au lieu de l’unité de base du multimètre. Le nombre n’est pas converti : c’est --scale qui fixe le préfixe. Ainsi, une pince de 10 mV/A lue en mA s’utilise avec --scale 100000 --unit mA
+# dmm-cli read --alarm-high
+read--alarm-high =
+    .help = Avertir quand la mesure dépasse VALUE, en unités de base (V, A, Ω, …), ou dans l’unité --unit d’une mesure mise à l’échelle. Une unité (4980mV, 10kohm) restreint aussi l’alarme aux mesures de cette grandeur, alors qu’un préfixe seul (4.7k) ne fait que multiplier la valeur
 # dmm-cli read --alarm-low
 read--alarm-low =
     .help = Avertir quand la mesure passe sous VALUE, comme pour --alarm-high
@@ -113,7 +119,7 @@ capture =
     .about = Capture guidée du protocole pour les rapports de bug et la vérification
 # dmm-cli capture --output
 capture--output =
-    .help = Fichier de sortie (par défaut : capture-<device>.yaml). Remplace le nommage automatique
+    .help = Fichier de sortie (par défaut : capture-<device>.yaml)
 # dmm-cli capture --steps
 capture--steps =
     .help = N’exécuter que certaines étapes (identifiants séparés par des virgules, par exemple "dcmv,temp,duty")

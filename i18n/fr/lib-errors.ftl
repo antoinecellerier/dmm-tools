@@ -90,6 +90,12 @@ error-bluetooth-only-switched-off = le multimètre { $model } ne se connecte qu�
 error-bluetooth-only-not-built = le multimètre { $model } ne se connecte qu’en Bluetooth, mais cette version n’intègre pas la prise en charge du Bluetooth
 # $model is the meter, e.g. UNI-T UT60BT.
 error-bluetooth-only-usb-adapter = le multimètre { $model } ne se connecte qu’en Bluetooth, mais --adapter désigne un appareil USB : indiquez l’adresse Bluetooth du multimètre, ou retirez --adapter
+# On Android: a cable is plugged in, and the user has not answered or has
+# refused the system's question about letting this app use it.
+error-cable-not-allowed = le câble USB ne peut pas être utilisé sans votre autorisation : acceptez la demande d’Android, ou rebranchez le câble pour afficher de nouveau cette demande
+# On Android, where the meter may be on either: nothing was found on USB
+# and Bluetooth could not be searched.
+error-no-cable-bluetooth-off = aucun câble USB n’est branché, et le Bluetooth est désactivé
 # Opening the meter was stopped part-way, by Disconnect or by quitting.
 error-cancelled = ouverture annulée
 
@@ -177,6 +183,9 @@ error-rejected-by-meter = le multimètre a refusé { $sent }
 error-rejected-zero-needs-capacitance = ZERO ne fonctionne qu’en mode capacité
 error-rejected-rel-needs-reading = REL ne fonctionne que si l’écran affiche un nombre
 error-rejected-rel-is-on = REL est déjà activé : quittez d’abord le mode REL
+# $code is a number, $model and $opened are meters (e.g. OWON B41T+). Each
+# app follows it with how to open the meter as its own model.
+error-rejected-other-model = le multimètre indique le code de modèle OWON { $code } ({ $model }), et non le multimètre { $opened } choisi à l’ouverture : les touches à distance sont donc désactivées
 # $code is a number.
 error-rejected-unknown-model = le multimètre indique le code de modèle OWON { $code }, que cet outil ne connaît pas encore : les touches à distance sont donc désactivées
 # $command is a command word.
@@ -195,15 +204,29 @@ error-sent-range = la plage { $range }
 ## read. After "invalid response:". Model names (OWON B35T+, Brymen BM82x)
 ## stay as they are. Each app follows the sentence with what to pick.
 
+# An OWON meter names its model, which sends the other kind of data frame.
+# $code is OWON's model number, e.g. 87; $model the model it names, e.g.
+# Voltcraft VC871; $frame the length of that model's frame in bytes, 6 or
+# 15; $opened the meter chosen, e.g. OWON B35T+.
+error-wrong-meter-other-frame = le multimètre indique le code de modèle OWON { $code } ({ $model }), un modèle qui envoie des trames OWON de { $frame } octets : ce n’est donc pas le multimètre { $opened } choisi à l’ouverture
+# An OWON meter sends the other kind of data frame and names no model.
+# $sent and $expected are frame lengths in bytes, 6 or 15; $opened is the
+# meter chosen, e.g. Voltcraft VC871.
+error-wrong-meter-other-frame-kind = le multimètre envoie des trames OWON de { $sent } octets, et non les trames de { $expected } octets du multimètre { $opened } choisi à l’ouverture
 # An OWON model this tool does not read yet. $code is OWON's model number,
 # e.g. 83. "This message" is the whole error, for the issue.
 error-wrong-meter-not-yet = le multimètre indique le code de modèle OWON { $code }, que cet outil ne lit pas encore : ouvrez un ticket (issue) en y copiant ce message
 # An OWON model whose readings carry their sign where this tool does not
 # read it yet. $code is OWON's model number, e.g. 55.
 error-wrong-meter-sign-in-function-word = le multimètre indique le code de modèle OWON { $code } : il envoie la trame OWON de 6 octets avec le signe dans le mot de fonction, un format que cet outil ne lit pas encore
+# A Brymen meter of another series answered. $found and $opened are series,
+# e.g. Brymen BM82x and Brymen BM86x.
+error-wrong-meter-other-series = le multimètre branché sur le câble appartient à la série { $found }, et non à la série { $opened }
 # An OWON meter chosen by its model sends bytes, but never its 6-byte data
 # frame. B35 and B35T are OWON models.
 error-wrong-meter-no-six-byte-frames = le multimètre n’envoie aucune trame OWON de 6 octets : il s’agit peut-être d’un ancien B35 ou B35T, dont cet outil ne lit pas encore les trames de 14 octets
+# The same for a meter whose data frame is 15 bytes long.
+error-wrong-meter-no-fifteen-byte-frames = le multimètre n’envoie aucune trame OWON de 15 octets
 # An OWON meter that names no model sends frames of neither length. "This
 # message" is the whole error, for the issue.
 error-wrong-meter-untold-frame-kind = ni le code de modèle du multimètre ni ses trames n’indiquent s’il envoie des trames OWON de 6 ou de 15 octets : ouvrez un ticket (issue) en y copiant ce message
@@ -240,6 +263,14 @@ error-bluetooth-login-refused =
        *[other] le multimètre a refusé l’authentification : erreur inconnue (code { $code })
     }
 
+## The session clock's contributor options, --mock-clock-scale and
+## --mock-clock-preseed, refused a value. Each app puts the option before
+## the sentence. $value is the number as read, e.g. -2 or inf.
+
+clock-scale-not-positive = nombre positif attendu pour le facteur d’échelle de l’horloge, reçu '{ $value }'
+# $max is the longest preseed, in seconds: 86400.
+clock-preseed-out-of-range = durée de préremplissage de l’horloge attendue entre 0 et { $max } secondes, reçu '{ $value }'
+
 ## Not an error: the notice under the reading in the GUI when a Bluetooth
 ## adapter hands over a reading late, together with the next one.
 
@@ -251,4 +282,11 @@ late-readings-advice =
     { $fix ->
         [command] Sur cet adaptateur, une mesure arrive parfois groupée avec la suivante. Aucune n’est perdue. Pour des horodatages exacts jusqu’à la déconnexion du multimètre, lancez :
        *[none] Sur cet adaptateur, une mesure arrive parfois groupée avec la suivante. Aucune n’est perdue.
+    }
+# The same for a Bluetooth meter that is not one of UNI-T's adapters; $fix as
+# above.
+late-readings-advice-link =
+    { $fix ->
+        [command] Une mesure arrive parfois groupée avec la suivante. Aucune n’est perdue. Pour des horodatages exacts jusqu’à la déconnexion du multimètre, lancez :
+       *[none] Une mesure arrive parfois groupée avec la suivante. Aucune n’est perdue.
     }

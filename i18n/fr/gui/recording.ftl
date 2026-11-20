@@ -14,10 +14,14 @@
 
 # A button; ● is part of it.
 recording-record = ● Enregistrer
-    .hover = Commencer à écrire les échantillons en direct dans la mémoire tampon d’enregistrement ({ $keys })
+    .hover = Démarrer l’enregistrement ({ $keys })
 # The Record button while recording; ■ is part of it.
 recording-stop = ■ Arrêter
     .hover = Arrêter l’enregistrement ({ $keys })
+# A button: puts a numbered marker on the reading the meter shows now. The
+# graph's menu has an entry of the same name; keep the two alike.
+recording-mark = Marquer
+    .hover = Marquer la mesure affichée ({ $keys })
 # Shown after Export… once a recording has stopped. Export… is the button
 # beside it, which saves the samples to a file.
 recording-discard = Abandonner
@@ -75,6 +79,9 @@ recording-reading-resize =
 
 recording-big-meter-on =
     .hover = Masquer les panneaux latéraux et afficher la mesure en plein écran ({ $keys })
+# While the reading is full-screen with its buttons under it.
+recording-big-meter-minimal =
+    .hover = Afficher la mesure seule, sans ses boutons ({ $keys })
 # While the reading is full-screen.
 recording-big-meter-off =
     .hover = Revenir à la disposition normale à plusieurs panneaux ({ $keys })

@@ -55,10 +55,10 @@ scale-offset = Décal.
 scale-unit = Unité
 # Applies the three fields to the reading.
 scale-apply = Appliquer
-    .hover = Appliquer ces valeurs à chaque mesure à partir de maintenant
+    .hover = Activer la mise à l’échelle avec ces valeurs
 # Turns scaling off; the fields keep their values for the next Apply.
 scale-off = Désactiver
-    .hover = Arrêter la mise à l’échelle et réafficher la mesure du multimètre
+    .hover = Désactiver la mise à l’échelle
 
 ## The Scale row's toasts.
 
@@ -104,6 +104,11 @@ alarm-no-limit = aucune
 alarm-band = auto
     .hover = Écart de retour exigé avant qu’une limite puisse redéclencher l’alarme : une valeur ou un pourcentage, par exemple 1 %. Vide : automatique
 # After the limits, the unit they are in, e.g. V; this is its hover.
+# A line added to the Low or High field's hover when its limit is typed in a
+# unit of another quantity than the reading on screen: it is kept, and the
+# alarm watches only readings of that quantity. $entry is the limit as typed
+# ("5 kΩ"); $unit is its quantity's unit ("Ω").
+alarm-limit-other-quantity = { $entry } : alarme sur les mesures en { $unit }
 alarm-unit =
     .hover = L’unité des limites
 # The same before an alarm is on: the unit taken from the reading on
@@ -142,6 +147,10 @@ alarm-invalid-band = Hystérésis non valide : { $reason }
 alarm-on-toast = Alarme activée : { $limits }
 # The alarm turned off.
 alarm-off-toast = Alarme désactivée
+# The alarm carried over to an import or another meter turned off: the new
+# readings put its limits in another unit than before. $unit is the new
+# one, e.g. V or kV.
+alarm-off-other-unit = Alarme désactivée : les mesures sont maintenant en { $unit }. Redéfinissez ses limites dans cette unité
 
 ## The graph: a dotted line at each limit, labelled at its right end.
 

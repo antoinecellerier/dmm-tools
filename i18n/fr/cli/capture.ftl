@@ -80,6 +80,9 @@ capture-resuming = Reprise : les étapes déjà capturées seront ignorées.
 capture-unreadable = Fichier { $path } trouvé, mais impossible de l’analyser.
 # $yes is the key that answers: y.
 capture-overwrite-unreadable = Écraser ? { $yes }=recommencer, toute autre touche=abandonner :
+# After "Warning:", at the start and the end of a run whose output goes
+# through a pipe or into a file.
+capture-not-a-terminal = la sortie de dmm-cli capture passe par un tube ou est redirigée : la commande ne peut donc ni attendre que vous agissiez sur le multimètre, ni vous faire confirmer les mesures, ni vérifier la détection automatique. Lancez-la directement dans un terminal pour obtenir un rapport valable.
 # $path is the report file the run writes.
 capture-output-file = Fichier de sortie : { $path }
 
