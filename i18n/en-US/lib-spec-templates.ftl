@@ -65,3 +65,52 @@ note-capacitance-measurement-time = { $range } range: measurement takes { $time 
 # A low resistance range, whose reading includes the test leads' resistance.
 # e.g. 200Ω: accuracy + test-lead short-circuit resistance
 note-resistance-plus-lead-resistance = { $range }: accuracy + test-lead short-circuit resistance
+
+# Overload protection: the largest voltage, DC or AC rms.
+# e.g. 1000V DC/AC rms
+input-protection-dc-ac-rms = { $voltage } DC/AC rms
+# An input impedance: its resistance and the capacitance beside it.
+# e.g. 10MΩ, 50pF nominal
+input-impedance-nominal = { $resistance }, { $capacitance } nominal
+# The same on a low-impedance input, before it rises.
+# e.g. Initially approx. 3.0kΩ, 150pF nominal
+input-impedance-initially-nominal = Initially approx. { $resistance }, { $capacitance } nominal
+
+# What measuring AC+DC adds to a range's accuracy.
+# e.g. AC+DC: add 1%+30 digits to accuracy
+note-ac-dc-adds-to-accuracy = AC+DC: add { $percent }+{ $count } digits to accuracy
+# A low capacitance range, whose reading includes the open test leads'
+# capacitance.
+# e.g. 20nF: accuracy + open-circuit test-lead capacitance
+note-capacitance-plus-lead-capacitance = { $range }: accuracy + open-circuit test-lead capacitance
+# How to take the open test leads' capacitance off a reading.
+# e.g. Result = reading − open-lead capacitance; ≤1µF: use REL
+note-capacitance-result-use-rel = Result = reading − open-lead capacitance; { $limit }: use REL
+# The continuity beeper's two thresholds.
+# e.g. Beeps continuously ≤10Ω; silent >30Ω
+note-continuity-beeps-silent = Beeps continuously { $below }; silent { $above }
+# What a current range shows with nothing connected.
+# e.g. Open circuit: residual ≤5 digits
+note-open-circuit-residual = Open circuit: residual { $count } digits
+# The crest factor true-RMS sensing takes at two display counts.
+# e.g. True RMS; crest factor ≤3.0 at 3000, ≤1.5 at 6000 counts
+note-true-rms-crest-factor-at-counts = True RMS; crest factor { $factor } at { $count }, { $fullFactor } at { $fullCount } counts
+# Two ranges whose accuracy in a frequency band holds over a share of the
+# range only.
+# e.g. 60.00mV, 600.0mV, 1kHz ~ 20kHz: specified 30% to 100% of range
+note-ranges-specified-share-in-frequency-band = { $range }, { $otherRange }, { $low } ~ { $high }: specified { $from } to { $to } of range
+# A range whose accuracy in a frequency band holds over part of the band
+# only.
+# e.g. 9.999V, 1kHz ~ 20kHz: specified for 1kHz ~ 15kHz only
+note-range-specified-for-frequency-band = { $range }, { $low } ~ { $high }: specified for { $from } ~ { $to } only
+# The signal a frequency measurement needs, up to or above one frequency.
+# e.g. Hz input ≤100kHz: 200mV–20V rms
+note-hz-input-level = Hz input { $limit }: { $low }–{ $high } rms
+# A frequency measurement's input, and the frequency its accuracy ends at.
+# e.g. Input at zero DC level; >40MHz not specified
+note-frequency-input-zero-dc-level = Input at zero DC level; { $limit } not specified
+# How long a high current may be measured: $range is the range, $continuous
+# the current it takes without limit, $from and $to the currents it takes
+# for $time, with $rest between measurements.
+# e.g. 10A: ≤5A continuous; >5A–10A max. 10s, then rest >15min
+note-current-time-limit = { $range }: { $continuous } continuous; { $from }–{ $to } max. { $time }, then rest { $rest }

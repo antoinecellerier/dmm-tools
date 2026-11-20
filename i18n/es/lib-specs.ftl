@@ -45,18 +45,6 @@ band-typical-vrms-1-v-f-100hz = Típico: Vrms=1 V, f=100Hz
 
 ## Inputs: a table's input impedance or overload protection.
 
-# Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
-# In: 11 tables
-input-1000v-dc-ac-rms = 1000V DC/AC rms
-# Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
-# In: 4 tables
-input-10mohm-50pf-nominal = 10MΩ, 50pF nominal
-# Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
-# In: AC Voltage; DC AC & AC+DC AC Voltage; DC Voltage
-input-10mohm-80pf-nominal = 10MΩ, 80pF nominal
-# Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
-# In: 6 tables
-input-1100v-dc-ac-rms = 1100V DC/AC rms
 # Used by: UT803
 # In: 6 tables
 input-250v-rms = 250V rms
@@ -66,12 +54,6 @@ input-current-fuse-10a-1000v-voltage-1000v = Corriente: fusible 10A 1000V; tensi
 # Used by: UT803
 # In: K. Transistor
 input-fuse-200ma-250v-fuse-500ma-125v = Fusible 200mA 250V; fusible 500mA 125V
-# Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
-# In: AutoCheck™ (ACV)
-input-initially-approx-3-0kohm-150pf-nominal = Inicialmente aprox. 3.0kΩ, 150pF nominal
-# Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
-# In: AutoCheck™ (DCV)
-input-initially-approx-3-0kohm-165pf-nominal = Inicialmente aprox. 3.0kΩ, 165pF nominal
 
 ## Notes, under a table. Keep the exact sense, comparisons and qualifiers
 ## such as "typical" included.
@@ -85,39 +67,21 @@ note-10a-continuous-10a-to-20a-30s = 10A continuo; >10A a 20A: 30s máx., 5 min 
 # Used by: VC920/VC940/VC960
 # In: AC / A; DC / A
 note-10a-0-5a-continuous-5a-10a = 10A: 0–5A continuo; >5A–10A máx. 10s y después 15min de pausa
-# Used by: UT71A, UT71B, UT71C/D/E
-# In: C. DC Current; D. AC Current (AC+DC measurement is available)
-note-10a-5a-continuous-5a-10a-10s-2 = 10A: ≤5A continuo; 5A–10A ≤10s cada vez, con pausas de >15min
-# Used by: UT804
-# In: C. DC Current; D. AC Current (AC+DC measurement is available)
-note-10a-5a-continuous-5a-10a-10s = 10A: ≤5A continuo; >5A–10A ≤10s cada vez, con pausas de >15min
 # Used by: UT181A
 # In: (13) Pulse Width
 note-10hz-200khz-pulse-width-2us-depends = 10Hz–200kHz: ancho de pulso >2µs, depende de la frecuencia de la señal
 # Used by: UT181A
 # In: (4) AC Current; (5) DC Current; (6) AC Current + DC Current
 note-20a-30s-on-then-10min-off = 20A: 30s de medición, luego 10min de pausa; no especificado por encima de 10A
-# Used by: UT71A, UT71B
-# In: H. Capacitance
-note-20nf-accuracy-plus-open-circuit-test = 20nF: exactitud + capacitancia de los cables de prueba en circuito abierto
 # Used by: UT804
 # In: E. Resistance
 note-400ohm-accuracy-plus-test-lead-open = 400Ω: exactitud + valor de los cables de prueba en circuito abierto
-# Used by: UT804
-# In: H. Capacitance
-note-40nf-accuracy-plus-open-circuit-test = 40nF: exactitud + capacitancia de los cables de prueba en circuito abierto
 # Used by: UT71B, UT71C/D/E
 # In: K. 4~20 mA loop current (UT71B/C/D/E)
 note-4ma-shows-0-pct-20ma-shows-2 = Con 4mA muestra 0%; con 20mA, 100%
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
 # In: AutoCheck™ (Ohms)
 note-60-00mohm-tempco-0-6-accuracy = 60.00MΩ: coeficiente de temperatura 0.6× exactitud/°C @(0°C ~ 18°C o 28°C ~ 45°C)
-# Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
-# In: DC AC & AC+DC AC Voltage
-note-60-00mv-600-0mv-1khz-20khz = 60.00mV, 600.0mV, 1kHz ~ 20kHz: especificado del 30% al 100% del rango
-# Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
-# In: AC Voltage
-note-60-00mv-600-0mv-3khz-20khz = 60.00mV, 600.0mV, 3kHz ~ 20kHz: especificado del 30% al 100% del rango
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
 # In: dBm
 note-600ohm-ref-typical-acmv-42-22 = Ref. 600Ω, típico: ACmV -42.22 a -02.22dBm, ACV -17.78 a 62.22dBm
@@ -130,12 +94,6 @@ note-60mv-use-rel-to-compensate-bias = 60mV: usar REL para compensar la tensión
 # Used by: UT803
 # In: H. Capacitance
 note-6nf-60nf-600nf-subtract-open-circuit = 6nF, 60nF, 600nF: restar la capacitancia de los cables de prueba en circuito abierto
-# Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
-# In: DC AC & AC+DC AC Voltage
-note-9-999v-1khz-20khz-specified-for = 9.999V, 1kHz ~ 20kHz: especificado solo para 1kHz ~ 15kHz
-# Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
-# In: AC Voltage
-note-9-999v-3khz-20khz-specified-for = 9.999V, 3kHz ~ 20kHz: especificado solo para 3kHz ~ 15kHz
 # Used by: UT804
 # In: L. 4~20 mA loop current
 note-4ma-shows-lo-20ma-shows-hi = Con <4mA muestra LO; con >20mA, HI
@@ -148,12 +106,6 @@ note-20ma-display-shows-hi = >20mA: la pantalla muestra HI
 # Used by: 7 meters
 # In: AC Current; DC Current
 note-5a-max-10s-rest-15-min = >5A: máx. 10s, reposo ≥15 min
-# Used by: VC920/VC940/VC960
-# In: AC / A; AC / V
-note-ac-plus-dc-add-1-pct-2 = AC+DC: sumar 1%+30 dígitos a la exactitud
-# Used by: UT804
-# In: B. AC Voltage (AC+DC measurement is available); D. AC Current (AC+DC measurement is available)
-note-ac-plus-dc-add-1-pct = AC+DC: sumar 1%+35 dígitos a la exactitud
 # Used by: UT803
 # In: B. AC Voltage; D. AC Current
 note-ac-plus-dc-range-accuracy-plus = AC+DC: exactitud del rango + 1%
@@ -184,12 +136,6 @@ note-bar-segments-beep-tones-proportional-to = Segmentos de la barra y pitidos p
 # Used by: Mock ZT-5B, ZT-5B
 # In: Continuity
 note-beeps-50ohm = Pitido <50Ω
-# Used by: UT803
-# In: F. Continuity Test
-note-beeps-continuously-10ohm-silent-30ohm = Pitido continuo ≤10Ω; silencio >30Ω
-# Used by: UT804
-# In: F. Continuity Test
-note-beeps-continuously-10ohm-silent-50ohm = Pitido continuo ≤10Ω; silencio >50Ω
 # Used by: UT71A, UT71B, UT71C/D/E
 # In: F. Continuity Test
 note-beeps-continuously-40ohm = Pitido continuo ≤40Ω
@@ -259,15 +205,9 @@ note-humidity-50-pct = Humedad <50%
 # Used by: 7 meters
 # In: Frequency/Duty Ratio
 note-hz-input-100khz-1mhz-600mv-20v = Entrada Hz >100kHz–1MHz: 600mV–20V rms
-# Used by: UT161B, UT161D, UT61B+, UT61D+
-# In: Frequency/Duty Ratio
-note-hz-input-1mhz-1v-20v-rms = Entrada Hz >1MHz: 1V–20V rms
 # Used by: Mock UT61E+, UT161E, UT61E+
 # In: Frequency/Duty Ratio
 note-hz-input-1mhz-40mhz-1v-20v = Entrada Hz >1MHz–40MHz: 1V–20V rms; >40MHz no especificado
-# Used by: 7 meters
-# In: Frequency/Duty Ratio
-note-hz-input-100khz-200mv-20v-rms = Entrada Hz ≤100kHz: 200mV–20V rms
 # Used by: Mock UT61E+, UT161E, UT61E+
 # In: Transistor Magnification
 note-ib0-1-8ua-vce-2-5v = Ib0 ≈1.8µA, Vce ≈2.5V
@@ -283,12 +223,6 @@ note-included-point-contact-probe-below-230degc = Sonda de contacto puntual incl
 # Used by: UT181A
 # In: (11) Frequency
 note-input-30mhz-not-specified = Entrada >30MHz: no especificado
-# Used by: UT804
-# In: I. Frequency; J. Duty Cycle
-note-input-at-zero-dc-level-40mhz = Entrada con nivel DC cero; >40MHz no especificado
-# Used by: UT803
-# In: I. Frequency
-note-input-at-zero-dc-level-50mhz = Entrada con nivel DC cero; >50MHz no especificado
 # Used by: UT161D, UT61D+
 # In: Temperature
 note-k-type-thermocouple-only = Solo termopar tipo K
@@ -322,12 +256,6 @@ note-open-circuit-1-2vdc-1-0vdc = Circuito abierto < 1.2VDC (< 1.0VDC en 60.00M�
 # Used by: UT181A
 # In: (15) Diode Test
 note-open-circuit-3v-forward-drop-up = Circuito abierto ≈3V; tensión directa hasta ≈3V
-# Used by: Mock UT61E+, UT161E, UT61E+
-# In: AC Current; DC Current
-note-open-circuit-residual-10-digits = Circuito abierto: lectura residual ≤10 dígitos
-# Used by: UT161B, UT161D, UT61B+, UT61D+
-# In: AC Current; DC Current
-note-open-circuit-residual-5-digits = Circuito abierto: lectura residual ≤5 dígitos
 # Used by: Mock ZT-5B, ZT-5B
 # In: AC current (A); DC current (A)
 note-over-2a-measure-for-less-than = Más de 2A: medir durante menos de 3s
@@ -355,12 +283,6 @@ note-red-lead-in-vohm-picks-v = Con el cable rojo en VΩ, el multímetro selecci
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
 # In: Audible Continuity Tester
 note-response-time-100us = Tiempo de respuesta < 100µs
-# Used by: UT161B, UT161D, UT61B+, UT61D+
-# In: Capacitance
-note-result-reading-open-lead-capacitance-1uf = Resultado = lectura − capacitancia de los cables en circuito abierto; ≤1µF: usar REL
-# Used by: Mock UT61E+, UT161E, UT61E+
-# In: Capacitance
-note-result-reading-open-lead-capacitance-22nf = Resultado = lectura − capacitancia de los cables en circuito abierto; ≤22nF: usar REL
 # Used by: 7 meters
 # In: Resistance
 note-result-reading-shorted-lead-resistance = Resultado = lectura − resistencia de los cables en cortocircuito
@@ -415,12 +337,6 @@ note-true-rms-from-10-pct-to = True RMS del 10% al 100% del rango; BM821s: respu
 # Used by: UT71A, UT71B, UT71C/D/E
 # In: B. AC Voltage (AC+DC measurement is available)
 note-true-rms-valid-10-pct-100-3 = True RMS válido del 10% al 100% del rango; factor de cresta ≤3.0 (1000V: 1.5)
-# Used by: Mock UT61E+, UT161E, UT61E+
-# In: AC Current; AC Voltage
-note-true-rms-crest-factor-2-0 = True RMS; factor de cresta ≤2.0 a 10000, ≤1 a 22000 cuentas
-# Used by: UT161B, UT161D, UT61B+, UT61D+
-# In: AC Current; AC Voltage
-note-true-rms-crest-factor-3-0 = True RMS; factor de cresta ≤3.0 a 3000, ≤1.5 a 6000 cuentas
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
 # In: Temperature
 note-type-k-thermocouple-range-accuracy-not = No se incluyen el rango ni la exactitud del termopar tipo K

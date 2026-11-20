@@ -975,14 +975,14 @@ mod tests {
             TextKind::Note,
             "60.00MΩ: tempco 0.6× accuracy/°C @(0°C ~ 18°C or 28°C ~ 45°C)",
         );
-        let input = ids(TextKind::Input, "10MΩ, 50pF nominal");
+        let input = ids(TextKind::Input, "250V rms");
         let band = ids(TextKind::Band, "In REL mode");
         let lpf = ids(TextKind::Band, "40Hz~100Hz (LPF)");
         let source = format!(
             "{note} = Seuil Lo-Z : > 1,5 VCC ou < -1,0 VCC nominal\n\
              {probe} = Thermocouple filaire fourni : max. +230 °C\n\
              {tempco} = 60,00 MΩ : coefficient 0,6× la précision/°C @(0 °C ~ 18 °C ou 28 °C ~ 45 °C)\n\
-             {input} = 10 MΩ, 50 pF nominal\n\
+             {input} = 250 V eff.\n\
              {band} = En mode REL\n\
              {lpf} = 40 Hz~1000 Hz (LPF)\n"
         );
@@ -1012,11 +1012,11 @@ mod tests {
             ),
             "60,00 MΩ : coefficient 0,6× la précision/°C @(0 °C ~ 18 °C ou 28 °C ~ 45 °C)"
         );
-        let input = "10MΩ, 50pF nominal";
-        assert_eq!(l.spec_text(TextKind::Input, input), "10 MΩ, 50 pF nominal");
+        let input = "250V rms";
+        assert_eq!(l.spec_text(TextKind::Input, input), "250 V eff.");
         assert_eq!(l.spec_text(TextKind::Band, "In REL mode"), "En mode REL");
         // `label` takes the same guard.
-        assert_eq!(l.label(TextKind::Input, input), "10 MΩ, 50 pF nominal");
+        assert_eq!(l.label(TextKind::Input, input), "250 V eff.");
     }
 
     #[test]

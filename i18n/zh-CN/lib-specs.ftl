@@ -45,18 +45,6 @@ band-typical-vrms-1-v-f-100hz = 典型值: Vrms=1 V，f=100Hz
 
 ## Inputs: a table's input impedance or overload protection.
 
-# Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
-# In: 11 tables
-input-1000v-dc-ac-rms = 1000V DC/AC rms
-# Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
-# In: 4 tables
-input-10mohm-50pf-nominal = 标称 10MΩ，50pF
-# Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
-# In: AC Voltage; DC AC & AC+DC AC Voltage; DC Voltage
-input-10mohm-80pf-nominal = 标称 10MΩ，80pF
-# Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
-# In: 6 tables
-input-1100v-dc-ac-rms = 1100V DC/AC rms
 # Used by: UT803
 # In: 6 tables
 input-250v-rms = 250V rms
@@ -66,12 +54,6 @@ input-current-fuse-10a-1000v-voltage-1000v = 电流: 保险丝 10A 1000V；电�
 # Used by: UT803
 # In: K. Transistor
 input-fuse-200ma-250v-fuse-500ma-125v = 保险丝 200mA 250V；保险丝 500mA 125V
-# Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
-# In: AutoCheck™ (ACV)
-input-initially-approx-3-0kohm-150pf-nominal = 初始约 3.0kΩ，标称 150pF
-# Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
-# In: AutoCheck™ (DCV)
-input-initially-approx-3-0kohm-165pf-nominal = 初始约 3.0kΩ，标称 165pF
 
 ## Notes, under a table. Keep the exact sense, comparisons and qualifiers
 ## such as "typical" included.
@@ -85,39 +67,21 @@ note-10a-continuous-10a-to-20a-30s = 10A 可连续使用；>10A 到 20A: 最长 
 # Used by: VC920/VC940/VC960
 # In: AC / A; DC / A
 note-10a-0-5a-continuous-5a-10a = 10A: 0–5A 可连续使用；>5A–10A 每次最长 10s，之后需暂停 15min
-# Used by: UT71A, UT71B, UT71C/D/E
-# In: C. DC Current; D. AC Current (AC+DC measurement is available)
-note-10a-5a-continuous-5a-10a-10s-2 = 10A: ≤5A 可连续使用；5A–10A 每次 ≤10s，间隔 >15min
-# Used by: UT804
-# In: C. DC Current; D. AC Current (AC+DC measurement is available)
-note-10a-5a-continuous-5a-10a-10s = 10A: ≤5A 可连续使用；>5A–10A 每次 ≤10s，间隔 >15min
 # Used by: UT181A
 # In: (13) Pulse Width
 note-10hz-200khz-pulse-width-2us-depends = 10Hz–200kHz: 脉冲宽度 >2µs，取决于信号频率
 # Used by: UT181A
 # In: (4) AC Current; (5) DC Current; (6) AC Current + DC Current
 note-20a-30s-on-then-10min-off = 20A: 连续测量 30s，之后间隔 10min；10A 以上未指定
-# Used by: UT71A, UT71B
-# In: H. Capacitance
-note-20nf-accuracy-plus-open-circuit-test = 20nF: 准确度 + 表笔开路电容
 # Used by: UT804
 # In: E. Resistance
 note-400ohm-accuracy-plus-test-lead-open = 400Ω: 准确度 + 表笔开路值
-# Used by: UT804
-# In: H. Capacitance
-note-40nf-accuracy-plus-open-circuit-test = 40nF: 准确度 + 表笔开路电容
 # Used by: UT71B, UT71C/D/E
 # In: K. 4~20 mA loop current (UT71B/C/D/E)
 note-4ma-shows-0-pct-20ma-shows-2 = 4mA 显示 0%；20mA 显示 100%
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
 # In: AutoCheck™ (Ohms)
 note-60-00mohm-tempco-0-6-accuracy = 60.00MΩ: 温度系数 0.6× 准确度/°C @(0°C ~ 18°C 或 28°C ~ 45°C)
-# Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
-# In: DC AC & AC+DC AC Voltage
-note-60-00mv-600-0mv-1khz-20khz = 60.00mV，600.0mV，1kHz ~ 20kHz: 指定范围为量程的 30%–100%
-# Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
-# In: AC Voltage
-note-60-00mv-600-0mv-3khz-20khz = 60.00mV，600.0mV，3kHz ~ 20kHz: 指定范围为量程的 30%–100%
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
 # In: dBm
 note-600ohm-ref-typical-acmv-42-22 = 600Ω 参考，典型值: ACmV -42.22 到 -02.22dBm，ACV -17.78 到 62.22dBm
@@ -130,12 +94,6 @@ note-60mv-use-rel-to-compensate-bias = 60mV: 使用 REL 补偿偏置电压
 # Used by: UT803
 # In: H. Capacitance
 note-6nf-60nf-600nf-subtract-open-circuit = 6nF，60nF，600nF: 减去表笔开路电容
-# Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
-# In: DC AC & AC+DC AC Voltage
-note-9-999v-1khz-20khz-specified-for = 9.999V，1kHz ~ 20kHz: 指定范围仅为 1kHz ~ 15kHz
-# Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
-# In: AC Voltage
-note-9-999v-3khz-20khz-specified-for = 9.999V，3kHz ~ 20kHz: 指定范围仅为 3kHz ~ 15kHz
 # Used by: UT804
 # In: L. 4~20 mA loop current
 note-4ma-shows-lo-20ma-shows-hi = <4mA 显示 LO，>20mA 显示 HI
@@ -148,12 +106,6 @@ note-20ma-display-shows-hi = >20mA: 显示 HI
 # Used by: 7 meters
 # In: AC Current; DC Current
 note-5a-max-10s-rest-15-min = >5A: 最长 10s，之后间隔 ≥15 min
-# Used by: VC920/VC940/VC960
-# In: AC / A; AC / V
-note-ac-plus-dc-add-1-pct-2 = AC+DC: 准确度加 1%+30 个字
-# Used by: UT804
-# In: B. AC Voltage (AC+DC measurement is available); D. AC Current (AC+DC measurement is available)
-note-ac-plus-dc-add-1-pct = AC+DC: 准确度加 1%+35 个字
 # Used by: UT803
 # In: B. AC Voltage; D. AC Current
 note-ac-plus-dc-range-accuracy-plus = AC+DC: 量程准确度 + 1%
@@ -184,12 +136,6 @@ note-bar-segments-beep-tones-proportional-to = 条形段数和蜂鸣音调与场
 # Used by: Mock ZT-5B, ZT-5B
 # In: Continuity
 note-beeps-50ohm = <50Ω 时蜂鸣
-# Used by: UT803
-# In: F. Continuity Test
-note-beeps-continuously-10ohm-silent-30ohm = ≤10Ω 时连续蜂鸣；>30Ω 时无声
-# Used by: UT804
-# In: F. Continuity Test
-note-beeps-continuously-10ohm-silent-50ohm = ≤10Ω 时连续蜂鸣；>50Ω 时无声
 # Used by: UT71A, UT71B, UT71C/D/E
 # In: F. Continuity Test
 note-beeps-continuously-40ohm = ≤40Ω 时连续蜂鸣
@@ -259,15 +205,9 @@ note-humidity-50-pct = 湿度 <50%
 # Used by: 7 meters
 # In: Frequency/Duty Ratio
 note-hz-input-100khz-1mhz-600mv-20v = Hz 输入 >100kHz–1MHz: 600mV–20V rms
-# Used by: UT161B, UT161D, UT61B+, UT61D+
-# In: Frequency/Duty Ratio
-note-hz-input-1mhz-1v-20v-rms = Hz 输入 >1MHz: 1V–20V rms
 # Used by: Mock UT61E+, UT161E, UT61E+
 # In: Frequency/Duty Ratio
 note-hz-input-1mhz-40mhz-1v-20v = Hz 输入 >1MHz–40MHz: 1V–20V rms；>40MHz 未指定
-# Used by: 7 meters
-# In: Frequency/Duty Ratio
-note-hz-input-100khz-200mv-20v-rms = Hz 输入 ≤100kHz: 200mV–20V rms
 # Used by: Mock UT61E+, UT161E, UT61E+
 # In: Transistor Magnification
 note-ib0-1-8ua-vce-2-5v = Ib0 ≈1.8µA, Vce ≈2.5V
@@ -283,12 +223,6 @@ note-included-point-contact-probe-below-230degc = 随附的点式探头: 仅限 
 # Used by: UT181A
 # In: (11) Frequency
 note-input-30mhz-not-specified = 输入 >30MHz: 未指定
-# Used by: UT804
-# In: I. Frequency; J. Duty Cycle
-note-input-at-zero-dc-level-40mhz = 输入直流电平为零；>40MHz 未指定
-# Used by: UT803
-# In: I. Frequency
-note-input-at-zero-dc-level-50mhz = 输入直流电平为零；>50MHz 未指定
 # Used by: UT161D, UT61D+
 # In: Temperature
 note-k-type-thermocouple-only = 仅限 K 型热电偶
@@ -322,12 +256,6 @@ note-open-circuit-1-2vdc-1-0vdc = 开路电压 < 1.2VDC (60.00MΩ 量程 < 1.0VD
 # Used by: UT181A
 # In: (15) Diode Test
 note-open-circuit-3v-forward-drop-up = 开路电压 ≈3V；正向压降最高 ≈3V
-# Used by: Mock UT61E+, UT161E, UT61E+
-# In: AC Current; DC Current
-note-open-circuit-residual-10-digits = 开路: 剩余读数 ≤10 个字
-# Used by: UT161B, UT161D, UT61B+, UT61D+
-# In: AC Current; DC Current
-note-open-circuit-residual-5-digits = 开路: 剩余读数 ≤5 个字
 # Used by: Mock ZT-5B, ZT-5B
 # In: AC current (A); DC current (A)
 note-over-2a-measure-for-less-than = 超过 2A: 测量时间应少于 3s
@@ -355,12 +283,6 @@ note-red-lead-in-vohm-picks-v = 红表笔插入 VΩ: 高于 0.8V 时选择 V，�
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
 # In: Audible Continuity Tester
 note-response-time-100us = 响应时间 < 100µs
-# Used by: UT161B, UT161D, UT61B+, UT61D+
-# In: Capacitance
-note-result-reading-open-lead-capacitance-1uf = 结果 = 读数 − 表笔开路电容；≤1µF: 使用 REL
-# Used by: Mock UT61E+, UT161E, UT61E+
-# In: Capacitance
-note-result-reading-open-lead-capacitance-22nf = 结果 = 读数 − 表笔开路电容；≤22nF: 使用 REL
 # Used by: 7 meters
 # In: Resistance
 note-result-reading-shorted-lead-resistance = 结果 = 读数 − 表笔短路电阻
@@ -415,12 +337,6 @@ note-true-rms-from-10-pct-to = 真有效值: 量程的 10%–100%；BM821s: 平�
 # Used by: UT71A, UT71B, UT71C/D/E
 # In: B. AC Voltage (AC+DC measurement is available)
 note-true-rms-valid-10-pct-100-3 = 真有效值有效范围: 量程的 10%–100%；波峰因数 ≤3.0 (1000V: 1.5)
-# Used by: Mock UT61E+, UT161E, UT61E+
-# In: AC Current; AC Voltage
-note-true-rms-crest-factor-2-0 = 真有效值；波峰因数 10000 计数时 ≤2.0，22000 计数时 ≤1
-# Used by: UT161B, UT161D, UT61B+, UT61D+
-# In: AC Current; AC Voltage
-note-true-rms-crest-factor-3-0 = 真有效值；波峰因数 3000 计数时 ≤3.0，6000 计数时 ≤1.5
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
 # In: Temperature
 note-type-k-thermocouple-range-accuracy-not = 不含 K 型热电偶的量程和准确度

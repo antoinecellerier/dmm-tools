@@ -65,3 +65,52 @@ note-capacitance-measurement-time = { $range } レンジ: 測定時間 { $time }
 # A low resistance range, whose reading includes the test leads' resistance.
 # e.g. 200Ω: accuracy + test-lead short-circuit resistance
 note-resistance-plus-lead-resistance = { $range }: 確度 + テストリード短絡時の抵抗
+
+# Overload protection: the largest voltage, DC or AC rms.
+# e.g. 1000V DC/AC rms
+input-protection-dc-ac-rms = { $voltage } DC/AC rms
+# An input impedance: its resistance and the capacitance beside it.
+# e.g. 10MΩ, 50pF nominal
+input-impedance-nominal = { $resistance }, { $capacitance } (定格)
+# The same on a low-impedance input, before it rises.
+# e.g. Initially approx. 3.0kΩ, 150pF nominal
+input-impedance-initially-nominal = 初期状態で約 { $resistance }, { $capacitance } (定格)
+
+# What measuring AC+DC adds to a range's accuracy.
+# e.g. AC+DC: add 1%+30 digits to accuracy
+note-ac-dc-adds-to-accuracy = AC+DC: 確度に { $percent }+{ $count } カウントを加算
+# A low capacitance range, whose reading includes the open test leads'
+# capacitance.
+# e.g. 20nF: accuracy + open-circuit test-lead capacitance
+note-capacitance-plus-lead-capacitance = { $range }: 確度 + テストリード開放時の静電容量
+# How to take the open test leads' capacitance off a reading.
+# e.g. Result = reading − open-lead capacitance; ≤1µF: use REL
+note-capacitance-result-use-rel = 結果 = 測定値 − テストリード開放時の静電容量、{ $limit }: REL を使用
+# The continuity beeper's two thresholds.
+# e.g. Beeps continuously ≤10Ω; silent >30Ω
+note-continuity-beeps-silent = { $below } で連続ビープ音、{ $above } で鳴らない
+# What a current range shows with nothing connected.
+# e.g. Open circuit: residual ≤5 digits
+note-open-circuit-residual = 入力開放時: 残留 { $count } カウント
+# The crest factor true-RMS sensing takes at two display counts.
+# e.g. True RMS; crest factor ≤3.0 at 3000, ≤1.5 at 6000 counts
+note-true-rms-crest-factor-at-counts = 真の実効値、クレストファクター: { $count } カウントで { $factor }、{ $fullCount } カウントで { $fullFactor }
+# Two ranges whose accuracy in a frequency band holds over a share of the
+# range only.
+# e.g. 60.00mV, 600.0mV, 1kHz ~ 20kHz: specified 30% to 100% of range
+note-ranges-specified-share-in-frequency-band = { $range }, { $otherRange }, { $low } ~ { $high }: レンジの { $from } から { $to } で規定
+# A range whose accuracy in a frequency band holds over part of the band
+# only.
+# e.g. 9.999V, 1kHz ~ 20kHz: specified for 1kHz ~ 15kHz only
+note-range-specified-for-frequency-band = { $range }, { $low } ~ { $high }: { $from } ~ { $to } のみ規定
+# The signal a frequency measurement needs, up to or above one frequency.
+# e.g. Hz input ≤100kHz: 200mV–20V rms
+note-hz-input-level = Hz 入力 { $limit }: { $low }–{ $high } rms
+# A frequency measurement's input, and the frequency its accuracy ends at.
+# e.g. Input at zero DC level; >40MHz not specified
+note-frequency-input-zero-dc-level = DC 成分ゼロの入力、{ $limit } は規定なし
+# How long a high current may be measured: $range is the range, $continuous
+# the current it takes without limit, $from and $to the currents it takes
+# for $time, with $rest between measurements.
+# e.g. 10A: ≤5A continuous; >5A–10A max. 10s, then rest >15min
+note-current-time-limit = { $range }: { $continuous } は連続、{ $from }–{ $to } は ≤{ $time } ずつ、間隔 { $rest }

@@ -28,7 +28,7 @@ Stays English:
 - unit symbols, decimal points, timestamps — except in what a screen reader says (see [Writing messages](#writing-messages))
 - theme names, which are also setting values, `--theme` arguments and file names
 
-About 1,400 messages in all, plus about 240 attributes for tooltips, accessibility names and long help:
+About 1,500 messages in all, plus about 240 attributes for tooltips, accessibility names and long help:
 
 | Source | Messages |
 |---|---|
@@ -38,9 +38,9 @@ About 1,400 messages in all, plus about 240 attributes for tooltips, accessibili
 | CLI `--help` (`cli-help.ftl`) | ~50 |
 | GUI `--help` (`gui-help.ftl`, `gui/command-line.ftl`) | ~15 |
 | `dmm_shared::help`, clap's words and errors (`shared.ftl`) | ~95 |
-| Library labels and keys (`lib.ftl`) | ~220 |
+| Library labels and keys (`lib.ftl`) | ~245 |
 | Activation steps (`lib.ftl`) | 28 |
-| Spec text (`lib-specs.ftl`) | ~200 |
+| Spec text (`lib-specs.ftl`, `lib-spec-templates.ftl`) | ~150 |
 | Library names, errors and alarms (`lib-*.ftl`) | ~100 |
 
 **Numbers keep their point.** The meter's LCD shows a `.`, input fields parse only `.`, and the reference-lines field accepts `,` (alongside `;` and a space) as a separator, so `1,5` reads as two values. A localized decimal comma would break all three.
