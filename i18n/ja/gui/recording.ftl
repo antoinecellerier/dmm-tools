@@ -14,10 +14,14 @@
 
 # A button; ● is part of it.
 recording-record = ● 記録
-    .hover = 受信したサンプルを記録バッファーに書き込み始める ({ $keys })
+    .hover = 記録を開始する ({ $keys })
 # The Record button while recording; ■ is part of it.
 recording-stop = ■ 停止
     .hover = 記録を停止する ({ $keys })
+# A button: puts a numbered marker on the reading the meter shows now. The
+# graph's menu has an entry of the same name; keep the two alike.
+recording-mark = マーカーの追加
+    .hover = 画面上の測定値にマーカーを追加する ({ $keys })
 # Shown after Export… once a recording has stopped. Export… is the button
 # beside it, which saves the samples to a file.
 recording-discard = 破棄
@@ -63,6 +67,9 @@ recording-reading-resize =
 
 recording-big-meter-on =
     .hover = サイド パネルを隠して測定値を全画面表示する ({ $keys })
+# While the reading is full-screen with its buttons under it.
+recording-big-meter-minimal =
+    .hover = ボタンを隠して測定値だけを表示する ({ $keys })
 # While the reading is full-screen.
 recording-big-meter-off =
     .hover = 通常の複数パネルのレイアウトに戻す ({ $keys })

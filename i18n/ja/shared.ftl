@@ -49,7 +49,15 @@ stability-warning =
 ## dmm-gui's Settings, mock_mode its name in the settings file.
 
 flag-adapter = 複数のアダプターに接続できるとき、特定のアダプターを選択する。'dmm-cli list' が表示する USB ケーブルのシリアル番号か HID パス、または Bluetooth アダプターかマルチメーターのアドレスを指定する
+# dmm-cli's, on read, get and set: the mock dmm-gui saved counts too.
+flag-mock-mode-cli = すべての測定モードを巡回する代わりに、シミュレーションのマルチメーターを 1 つのモードに固定する。--device mock、または dmm-gui で保存したシミュレーションのマルチメーターに適用される。指定しない場合は、設定ファイルの mock_mode (dmm-gui の [シミュレーション モード]) で固定される
+# dmm-gui's: the mock picked in Settings counts too.
+flag-mock-mode-gui = すべての測定モードを巡回する代わりに、シミュレーションのマルチメーターを 1 つのモードに固定する。--device mock、または [設定] で選択したシミュレーションのマルチメーターに適用される。今回の実行に限り、保存された [シミュレーション モード] 設定より優先される
+# dmm-cli's: its 'list' command shows what is plugged in.
+flag-no-bluetooth-cli = 今回の実行に限り Bluetooth スキャンをオフにする ('list' はケーブルのみを表示する)。dmm-gui の [{ bluetooth-setting }] 設定より優先される。--adapter に指定したアドレスには通常どおり接続する
 flag-no-bluetooth-gui = 今回の実行に限り Bluetooth スキャンをオフにする。[{ bluetooth-setting }] 設定より優先される。--adapter に指定したアドレスには通常どおり接続する
+# dmm-cli's, beside --no-bluetooth.
+flag-bluetooth-cli = dmm-gui の [{ bluetooth-setting }] 設定にかかわらず、今回の実行では Bluetooth アダプターとマルチメーターをスキャンする
 
 ## The rest of --mock-mode's long help, after flag-mock-mode-cli or
 ## flag-mock-mode-gui.
@@ -58,6 +66,14 @@ flag-no-bluetooth-gui = 今回の実行に限り Bluetooth スキャンをオフ
 mock-mode-list = モード: { $modes }
 # $example is a command line.
 mock-mode-example = 例: { $example }
+
+## Why a mock-only option was refused, after the option and the value as
+## typed.
+
+# The session's device, typed with --device or saved by dmm-gui, is not the
+# mock.
+mock-mode-mock-only = --mock-mode はシミュレーションのマルチメーターにのみ適用されます。--device mock を指定するか、--mock-mode を外して、もう一度実行してください。
+mock-clock-mock-only = --mock-clock-scale と --mock-clock-preseed は、シミュレーションのマルチメーターとリプレイにのみ適用されます。--device mock または --replay を指定するか、クロックのオプションを外して、もう一度実行してください。
 
 ## A link's short name, where the meter is already named: the GUI's
 ## status line, the setup help's section labels.
@@ -86,6 +102,9 @@ setup-bluetooth-check =
         [phone] このスマートフォンの Bluetooth と、マルチメーターのデータ転送をオンにしてください。
        *[computer] このコンピューターの Bluetooth と、マルチメーターのデータ転送をオンにしてください。
     }
+# After "Bluetooth:", when the search was switched off; how to switch it on
+# follows as a step of its own.
+setup-bluetooth-off-check = 検索されませんでした。
 # Linux. Two command lines follow.
 setup-usb-linux-rule = udev ルールがインストールされていることをご確認ください:
 # Linux. The setup guide's address follows.
@@ -114,6 +133,15 @@ setup-bluetooth-scan = 'dmm-cli list' を実行すると、通信範囲内のア
 
 ## Notices both binaries show.
 
+# The settings file names a meter this version has no entry for: a file a
+# newer version wrote, or one edited by hand. $device is the id as the file
+# holds it, e.g. ut62; $path is the file. dmm-gui shows it in a toast,
+# dmm-cli after "Warning:" and before what to do.
+saved-device-unknown = 設定ファイル { $path } で指定されているデバイス「{ $device }」は、このバージョンでは認識できないため、代わりにマルチメーターを検出します。
+# The settings file's mock_mode (the setting's name in the file, kept as it
+# is) names no scenario of the simulated meter. $given is the name as the
+# file holds it. Each app follows it with what to do.
+saved-mock-mode-unknown = 設定ファイルの mock_mode の値「{ $given }」はシミュレーション モードではないため、すべてのモードを巡回します。
 # When the meter opened, other cables were there to open and the session
 # took the first, with --adapter a command-line option kept as it is. $count
 # is 2 or more. dmm-gui shows it in a toast, dmm-cli after "Warning:".
@@ -121,6 +149,14 @@ cables-at-open =
     { $host ->
         [phone] 使用できる USB ケーブルが { $count } 本接続されています。最初に見つかったケーブルを使用しています。
        *[computer] 使用できる USB ケーブルが { $count } 本接続されています。最初に見つかったケーブルを使用しています。別のケーブルを選択するには、--adapter を指定してください。
+    }
+# When the meter opened over Bluetooth, other adapters or meters matched as
+# well and the session took the first, with --adapter a command-line option
+# kept as it is. $count is 2 or more. $host as in cables-at-open.
+bluetooth-tied =
+    { $host ->
+        [phone] 同程度に一致する Bluetooth アダプターまたはマルチメーターが { $count } 個あります。最初に見つかったものを使用しています。
+       *[computer] 同程度に一致する Bluetooth アダプターまたはマルチメーターが { $count } 個あります。最初に見つかったものを使用しています。別のものを選択するには、'dmm-cli list' が表示するいずれかを --adapter に指定してください。
     }
 # Follows cables-at-open when nothing tells those cables apart.
 cables-no-reconnect =
@@ -132,6 +168,17 @@ cables-no-reconnect =
 # it gave, e.g. UT161E; $picked the model picked, e.g. UNI-T UT61E+. Each
 # app follows it with what to pick (choose-meter-gui, choose-meter-cli).
 other-model = マルチメーターは選択した { $picked } ではなく「{ $reported }」と報告しています。
+# The same when detection opened the meter, without hearing its name in
+# time, as $picked; $reported as above.
+other-model-detected = マルチメーターは「{ $reported }」と報告していますが、自動検出では { $picked } として接続されました。
+# The meter's packets are another model's than the one it was opened as:
+# $named is that model, e.g. ZOYI / ZOTEK ZT-5566SE; $opened the one opened,
+# e.g. ZOYI / ZOTEK ZT-300AB. Each app follows it with what to pick.
+other-data = マルチメーターから届いているのは、接続時の { $opened } ではなく { $named } のデータです。
+# The meter sent data this tool doesn't read yet, said once per run. $meter
+# is the meter, e.g. UNI-T UT61E+; $detail what it sent, in English, e.g.
+# mode byte: 0x7f. Each app follows it with how to report it.
+unrecognised-data = { $meter } から、このツールがまだ認識できないデータが届きました ({ $detail })。
 # A cable or Bluetooth link is open but no meter on it identified itself.
 # A notice title in the GUI; dmm-cli starts a sentence with it, naming the
 # link after it (cli/connect.ftl).
@@ -143,6 +190,10 @@ no-response = マルチメーターから応答がありません
 # open could take are plugged in, with no serial number of their own to tell
 # them apart. Each binary follows it with what to do.
 several-cables = 使用できる USB ケーブルが { $count } 本接続されていますが、区別できません。再接続すると、別のマルチメーターに接続してしまうおそれがあります。
+# Why a dropped link is no longer being reopened: it stayed down for
+# $minutes minutes, and the session has ended. A notice or the error that
+# ended the run says what the last attempt found.
+reconnect-gave-up = マルチメーターへのリンクが { $minutes } 分間切断されたままだったため、再接続を中止しました。
 # While a dropped link is being reopened: its cable has gone and another is
 # plugged in. Each binary follows it with how to use that other cable.
 waiting-for-own-cable = 別の USB ケーブルが接続されていますが、元のケーブルが接続されるのを待っています。
@@ -152,7 +203,40 @@ screen-only-reading = オシロスコープの測定値はマルチメーター�
 # The GUI checkbox that lets a connection search over Bluetooth. The CLI
 # reads the same setting, so its help names the checkbox too.
 bluetooth-setting = Bluetooth デバイスを探す
+# How dmm-cli switches the search on: after --no-bluetooth, and when the
+# saved setting is off.
+bluetooth-off-cli-instead = --no-bluetooth の代わりに --bluetooth を指定してください。
+bluetooth-off-cli-saved = --bluetooth を指定するか、dmm-gui の設定で [{ bluetooth-setting }] チェック ボックスをオンにしてください (この設定は dmm-cli にも適用されます)。
 bluetooth-off-gui = [設定] (⚙) で [{ bluetooth-setting }] チェック ボックスをオンにしてください。
+# What to check after the meter refused a mode or range switch, or did not
+# take it. $setting is range (the input must be within the range too) or
+# another setting.
+switch-check-dial =
+    { $setting ->
+        [range] ファンクションスイッチの位置と、入力がレンジ内にあることをご確認ください。
+       *[other] ファンクションスイッチの位置をご確認ください。
+    }
+# How to open the meter as the model it is, after a message saying it is
+# another, in dmm-gui. $choice is entry ($model the meter to pick, e.g.
+# OWON CMS061), entry-only (the same, when Auto-detect is what opened it),
+# auto-detect, or own-model (nothing says which model: the user has to pick
+# it). "Auto-detect" is the Device choice that finds the meter itself.
+choose-meter-gui =
+    { $choice ->
+        [entry] [設定] (⚙) で { $model } または [自動検出] を選択してください。
+        [entry-only] [設定] (⚙) で { $model } を選択してください。
+        [auto-detect] [設定] (⚙) で [自動検出] を選択してください。
+       *[own-model] [設定] (⚙) でマルチメーターの実際の機種を選択してください。
+    }
+# The same in dmm-cli: $choice as above, $id the --device value of the
+# meter to pick, e.g. cms061; --device auto detects the meter.
+choose-meter-cli =
+    { $choice ->
+        [entry] --device { $id } または --device auto を指定してください。
+        [entry-only] --device { $id } を指定してください。
+        [auto-detect] --device auto を指定してください。
+       *[own-model] --device でマルチメーターの実際の機種を指定してください。機種の一覧は --help で確認できます。
+    }
 
 ## What is connected, when an --adapter value matched nothing.
 
@@ -176,11 +260,20 @@ input-not-finite = 有限の数値である必要があります
 input-zero-scale = 倍率を 0 にすると測定値が消えます
 # The alarm's low limit and its high limit.
 input-low-not-below-high = 下限は上限より小さくする必要があります
+# An alarm limit: a number, or a number with a unit or a prefix such as
+# 4980 mV, 10 kohm or 4.7k (kept as they are). $text is what was typed.
+input-not-a-quantity = 「{ $text }」は数値でも、4980 mV や 4.7k のような単位付きの数値でもありません
+# The alarm's two limits were typed with units of different quantities,
+# such as volts and amps.
+input-limit-units-differ = 下限と上限は同じ単位で指定する必要があります
 # The alarm's hysteresis band: a number in the limits' unit, or a percentage
 # of the limit. $text is what was typed, as it was typed.
 input-band-not-a-number = 「{ $text }」は数値でも、1% のようなパーセンテージでもありません
 # A hysteresis band below zero.
 input-band-negative = 0 以上である必要があります
+# A hysteresis band typed with a unit, while the limits were typed in
+# another unit or with none.
+input-band-not-the-limits-unit = 単位を付けられるのは、上限と下限をその単位で入力した場合だけです
 # A percentage band with a limit of 0, of which every percentage is 0.
 input-percent-of-zero = 制限値が 0 のときはパーセンテージも常に 0 になるため、数値で指定してください
 

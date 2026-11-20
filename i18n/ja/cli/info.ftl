@@ -7,6 +7,9 @@
 info-detected = 検出したマルチメーター: { $meter }
 # $transport is the kind of link, e.g. CP2110 or Bluetooth.
 info-transport = トランスポート: { $transport }
+# Indented under info-transport, in place of the chip's identity when asking
+# for it failed. $bridge is common-unavailable's text.
+info-bridge = ブリッジ: { $bridge }
 # Indented under info-transport, after the chip's identity. $status is the
 # link's counters, e.g. "TX FIFO: 0 bytes, RX FIFO: 0 bytes".
 info-status = 状態: { $status }

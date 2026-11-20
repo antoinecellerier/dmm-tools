@@ -27,6 +27,15 @@ connection-waiting-switch-on = マルチメーターのデータ転送をオン�
 ## A failed connection: a title naming the problem, the steps to try, and a
 ## closing line.
 
+# Under a failed connection's steps when a meter is picked in Settings,
+# which a detected connect may have saved. $model is that meter, e.g.
+# UNI-T UT61E+.
+connection-selected-meter = [設定] (⚙) で { $model } が選択されています。使用するマルチメーターが別の機種の場合は、[設定] で選択し直すか、[自動検出] を選択してください。
+# The same when the title above already names the meter picked.
+connection-selected-meter-named = 使用するマルチメーターが別の機種の場合は、[設定] (⚙) で選択し直すか、[自動検出] を選択してください。
+# After shared.ftl's unrecognised-data, in a toast: where to report it.
+# { project-link } is the top bar's Help & Feedback link.
+connection-unrecognised-report = トップ バーの [{ project-link }] から報告してください。
 # The closing line under the steps. "Connect" is the top bar's button.
 connection-click-connect = 問題を解決してから、もう一度 [接続] を選択してください。
 # The closing line after the Bluetooth steps when nothing answered at the
@@ -104,9 +113,18 @@ connection-several-cables-action = このマルチメーターのケーブルだ
 # A toast, when that notice ends a running recording. What it holds can still
 # be exported.
 connection-several-cables-recording = リンクが切断され、このマルチメーターの USB ケーブルをほかのケーブルと区別できないため、記録を停止しました。
+# A toast, when a different meter answers the session during a recording,
+# as after a reconnect under Auto-detect or a device picked in Settings.
+# $meter is the meter that answered, a model name. What was recorded can
+# still be exported.
+connection-other-meter-recording = 記録の開始時とは別のマルチメーター { $meter } が応答したため、記録を停止しました。記録済みのデータは引き続きエクスポートできます。
 # Any other failure to connect or to keep reading. The error itself
 # follows, then connection-click-connect.
 connection-failed = 接続できませんでした
+# The reading thread crashed, or the system refused to start it. $detail is
+# the crash's or the system's own text, which stays English. Followed by
+# connection-click-connect.
+connection-internal-error = 内部エラー: { $detail }
 
 # A meter that stopped answering in the middle of a session. $title is the
 # shared notice title, "No response from meter".
@@ -117,7 +135,7 @@ connection-acquisition-stopped = データ取得が予期せず停止しまし�
 # The last line of a notice for a meter whose support isn't fully verified;
 # a link. $warning is the sentence saying how far it is verified.
 connection-feedback = { $warning }フィードバックを送る
-    .hover = GitHub の Issues を開いてフィードバックを送る
+    .hover = GitHub の Issues を開く
 
 ## The notice under the reading when the Bluetooth link delivers readings
 ## two at a time, which can end with a command that fixes it.
@@ -126,8 +144,15 @@ connection-feedback = { $warning }フィードバックを送る
 connection-late-copy = コピー
 # A toast, once the command is copied.
 connection-late-copied = コマンドをコピーしました
+# The notice's last line, on a link the tool has no fix for yet.
+# { project-link } is the top bar's Help & Feedback link.
+connection-late-report = マルチメーターの機種とオペレーティング システムを明記して、トップ バーの [{ project-link }] から報告してください。
 
 ## Toasts.
+
+# After shared.ftl's saved-mock-mode-unknown. Mock mode is the setting's
+# name in Settings.
+connection-saved-mock-mode-unknown-action = [設定] (⚙) でシミュレーション モードを選択してください。
 
 # A meter identified itself while Settings was on Auto-detect. $meter is
 # its name, e.g. UNI-T UT61E+. $saved is yes when Settings now names it, no
@@ -173,6 +198,11 @@ connection-switch-failed =
         [range] レンジを切り替えられませんでした: { $error }
        *[other] { $setting } を切り替えられませんでした: { $error }
     }
+# One of the two messages above ($failed), then what to do about it, a
+# sentence of its own ($remedy): what to pick when the meter is another
+# model (shared.ftl's choose-meter-gui), or what to check after a refused
+# switch (switch-check-dial).
+connection-failed-then = { $failed }。{ $remedy }
 
 # The × that closes a toast or a notice.
 connection-dismiss =

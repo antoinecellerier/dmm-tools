@@ -126,6 +126,11 @@ shortcuts-mouse-cursor = 最も近い点にカーソル A/B を配置
 shortcuts-mouse-menu = マーカー、コピー、カーソル、基準線、アラーム
     .gesture = 右クリック
     .touch = 長押し
+# On a touchscreen only: a tap leaves the crosshair, the two lines that
+# cross on a reading, and the readings shown beside it, where the finger
+# was; the × beside the readings takes it away.
+shortcuts-touch-pin = 十字線と測定値をその位置に固定 (× で削除)
+    .gesture = タップ
 # The minimap is the strip under the graph showing all the readings:
 # dragging in it moves the view, dragging its edges resizes it.
 shortcuts-mouse-minimap = 時刻へ移動/ビューポートのサイズ変更

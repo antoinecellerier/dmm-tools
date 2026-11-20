@@ -43,7 +43,7 @@ settings-mock-auto =
         [yes] 自動 (巡回) (--mock-mode)
        *[no] 自動 (巡回)
     }
-    .hover = GUI の動作確認のため、すべてのシミュレーション モードを順に切り替える
+    .hover = すべてのシミュレーション モードを順に切り替える
 # The chip for the mode --mock-mode picked for this session. $mode is its
 # name, e.g. dcv.
 settings-mock-mode-pinned = { $mode } (--mock-mode)
@@ -55,7 +55,7 @@ settings-auto-connect = 起動時に自動接続する
     .hover = アプリの起動時にマルチメーターに接続する
 # Asking the meter its name makes it beep.
 settings-device-name = 接続時にデバイス名を表示する (ビープ音あり)
-    .hover = 接続後にマルチメーターの名前を問い合わせる (ビープ音が 1 回鳴る)
+    .hover = 接続後にマルチメーターに名前を問い合わせる
 # The Bluetooth checkbox while --no-bluetooth switched the search off for
 # this session. $setting is the checkbox's own label, e.g. Look for
 # Bluetooth devices.
@@ -173,6 +173,11 @@ settings-zoom-chip =
 # those that step the zoom.
 settings-zoom-reset-chip =
     .hover = GUI の表示倍率を 100% にする ({ $reset }、または { $step } で段階的に変更)
+# On Android only, in place of the two checkboxes below: hides the bars
+# Android draws at the screen's edges, with the clock and the navigation
+# buttons.
+settings-full-screen = 全画面表示にする
+    .hover = ステータス バーとナビゲーション バーを隠す (画面の端からスワイプすると表示される)
 # Window decorations are the title bar and border.
 settings-hide-decorations = ウィンドウ枠を非表示にする
     .hover = 枠なしウィンドウ ({ $keys } で元に戻す)

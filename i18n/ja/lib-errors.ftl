@@ -90,6 +90,12 @@ error-bluetooth-only-switched-off = マルチメーター { $model } は Bluetoo
 error-bluetooth-only-not-built = マルチメーター { $model } は Bluetooth でのみ接続できますが、このビルドは Bluetooth に対応していません
 # $model is the meter, e.g. UNI-T UT60BT.
 error-bluetooth-only-usb-adapter = マルチメーター { $model } は Bluetooth でのみ接続できるため、--adapter には USB デバイスではなくマルチメーターの Bluetooth アドレスを指定するか、--adapter を省略してください
+# On Android: a cable is plugged in, and the user has not answered or has
+# refused the system's question about letting this app use it.
+error-cable-not-allowed = USB ケーブルの使用許可を待っています。Android のダイアログで許可してください。ダイアログが表示されていない場合は、ケーブルを接続し直してください
+# On Android, where the meter may be on either: nothing was found on USB
+# and Bluetooth could not be searched.
+error-no-cable-bluetooth-off = USB ケーブルが接続されておらず、Bluetooth もオフになっています
 # Opening the meter was stopped part-way, by Disconnect or by quitting.
 error-cancelled = 接続を中止しました
 
@@ -173,6 +179,9 @@ error-rejected-by-meter = マルチメーターが { $sent } を拒否しまし�
 error-rejected-zero-needs-capacitance = ZERO は静電容量の測定でのみ機能します
 error-rejected-rel-needs-reading = ディスプレイに数値が表示されていないと、REL は使用できません
 error-rejected-rel-is-on = REL はすでにオンになっているため、先に解除してください
+# $code is a number, $model and $opened are meters (e.g. OWON B41T+). Each
+# app follows it with how to open the meter as its own model.
+error-rejected-other-model = マルチメーターが報告した OWON のモデル コードは { $code } ({ $model }) で、接続時の { $opened } ではないため、リモート キーは無効です
 # $code is a number.
 error-rejected-unknown-model = マルチメーターが報告した OWON のモデル コード { $code } はこのツールではまだ認識できないため、リモート キーは無効です
 # $command is a command word.
@@ -191,15 +200,29 @@ error-sent-range = レンジ { $range }
 ## read. After "invalid response:". Model names (OWON B35T+, Brymen BM82x)
 ## stay as they are. Each app follows the sentence with what to pick.
 
+# An OWON meter names its model, which sends the other kind of data frame.
+# $code is OWON's model number, e.g. 87; $model the model it names, e.g.
+# Voltcraft VC871; $frame the length of that model's frame in bytes, 6 or
+# 15; $opened the meter chosen, e.g. OWON B35T+.
+error-wrong-meter-other-frame = マルチメーターが報告した OWON のモデル コードは { $code } ({ $model }) です。これは OWON の { $frame } バイト フレームを送信する機種で、接続時の { $opened } ではありません
+# An OWON meter sends the other kind of data frame and names no model.
+# $sent and $expected are frame lengths in bytes, 6 or 15; $opened is the
+# meter chosen, e.g. Voltcraft VC871.
+error-wrong-meter-other-frame-kind = マルチメーターが送信しているのは OWON の { $sent } バイト フレームで、接続時の { $opened } が送信する { $expected } バイト フレームではありません
 # An OWON model this tool does not read yet. $code is OWON's model number,
 # e.g. 83. "This message" is the whole error, for the issue.
 error-wrong-meter-not-yet = マルチメーターが報告した OWON のモデル コードは { $code } で、この機種はこのツールではまだ読み取れないため、このメッセージを添えて Issue を作成してください
 # An OWON model whose readings carry their sign where this tool does not
 # read it yet. $code is OWON's model number, e.g. 55.
 error-wrong-meter-sign-in-function-word = マルチメーターが報告した OWON のモデル コードは { $code } で、この機種はファンクション ワードに符号を含む OWON の 6 バイト フレームを送信しますが、このツールではまだ読み取れません
+# A Brymen meter of another series answered. $found and $opened are series,
+# e.g. Brymen BM82x and Brymen BM86x.
+error-wrong-meter-other-series = ケーブルに接続されているマルチメーターは { $found } で、{ $opened } ではありません
 # An OWON meter chosen by its model sends bytes, but never its 6-byte data
 # frame. B35 and B35T are OWON models.
 error-wrong-meter-no-six-byte-frames = マルチメーターが OWON の 6 バイト フレームを送信しません。古い B35 または B35T で、このツールではまだ読み取れない 14 バイト フレームを送信している可能性があります
+# The same for a meter whose data frame is 15 bytes long.
+error-wrong-meter-no-fifteen-byte-frames = マルチメーターが OWON の 15 バイト フレームを送信しません
 # An OWON meter that names no model sends frames of neither length. "This
 # message" is the whole error, for the issue.
 error-wrong-meter-untold-frame-kind = マルチメーターのモデル コードからもフレームからも、OWON の 6 バイト フレームと 15 バイト フレームのどちらを送信するのか判別できないため、このメッセージを添えて Issue を作成してください
@@ -235,6 +258,14 @@ error-bluetooth-login-refused =
        *[other] マルチメーターがログインを拒否しました: 不明なエラー (コード { $code })
     }
 
+## The session clock's contributor options, --mock-clock-scale and
+## --mock-clock-preseed, refused a value. Each app puts the option before
+## the sentence. $value is the number as read, e.g. -2 or inf.
+
+clock-scale-not-positive = クロックの倍率は正の数である必要がありますが、'{ $value }' が指定されました
+# $max is the longest preseed, in seconds: 86400.
+clock-preseed-out-of-range = クロックのプリシードは 0 から { $max } 秒の範囲である必要がありますが、'{ $value }' が指定されました
+
 ## Not an error: the notice under the reading in the GUI when a Bluetooth
 ## adapter hands over a reading late, together with the next one.
 
@@ -246,4 +277,11 @@ late-readings-advice =
     { $fix ->
         [command] このアダプターでは、測定値が次の測定値とまとめて届くことがあります。測定値が失われることはありません。マルチメーターが切断されるまでの間、正確なタイムスタンプを得るには、次のコマンドを実行してください:
        *[none] このアダプターでは、測定値が次の測定値とまとめて届くことがあります。測定値が失われることはありません。
+    }
+# The same for a Bluetooth meter that is not one of UNI-T's adapters; $fix as
+# above.
+late-readings-advice-link =
+    { $fix ->
+        [command] 測定値が次の測定値とまとめて届くことがあります。測定値が失われることはありません。マルチメーターが切断されるまでの間、正確なタイムスタンプを得るには、次のコマンドを実行してください:
+       *[none] 測定値が次の測定値とまとめて届くことがあります。測定値が失われることはありません。
     }

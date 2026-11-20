@@ -100,3 +100,20 @@ settings-already =
 settings-ambiguous = { $setting } の値があいまいです: { $input } は { $choices } のいずれにも一致します
 # No choice matches $input, the choice as typed; the listing is printed above.
 settings-unknown = { $setting } の値が不明です: { $input }
+# The meter answered that it wouldn't switch. $choice is the choice, e.g.
+# 22V; $reason the meter's reason (lib-errors.ftl); $remedy what to check, a
+# sentence of its own (shared.ftl's switch-check-dial).
+settings-refused-check = マルチメーターが { $choice } を拒否しました: { $reason }。{ $remedy }
+# The same when the reason says what to do itself, e.g. "leave MIN/MAX
+# first": $choice and $reason as above.
+settings-refused-because = マルチメーターが { $choice } を拒否しました: { $reason }
+# The meter refused because it is another model than the one chosen: $choice
+# and $reason as above; $remedy says what to pick, a sentence of its own
+# (shared.ftl's choose-meter-cli).
+settings-refused-other-model = マルチメーターが { $choice } を拒否しました: { $reason }。{ $remedy }
+# The meter took the command, but its readings never showed the choice.
+# $remedy is what to check, as above.
+settings-not-taken = マルチメーターが切り替わりませんでした。{ $remedy }
+# As settings-not-taken, naming $live, the choice the meter is still on,
+# e.g. off; $remedy as there.
+settings-not-taken-still = マルチメーターが切り替わらず、{ $live } のままです。{ $remedy }

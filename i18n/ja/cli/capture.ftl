@@ -80,6 +80,9 @@ capture-resuming = 再開します。キャプチャ済みのステップはス�
 capture-unreadable = { $path } が見つかりましたが、解析できませんでした。
 # $yes is the key that answers: y.
 capture-overwrite-unreadable = 上書きしますか? { $yes }=最初から開始、ほかのキー=中止:
+# After "Warning:", at the start and the end of a run whose output goes
+# through a pipe or into a file.
+capture-not-a-terminal = capture の出力がパイプまたはリダイレクトされているため、マルチメーターを操作するまで待つことも、測定値の確認や自動検出のチェックを求めることもできません。有効なレポートを作成するには、端末で直接実行してください。
 # $path is the report file the run writes.
 capture-output-file = 出力ファイル: { $path }
 

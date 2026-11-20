@@ -11,6 +11,23 @@
 ## Refusals before anything is opened. Each follows "Error:" or "Warning:"
 ## (common.ftl) on the same line.
 
+# After shared.ftl's unrecognised-data, on a warning line: where to report
+# it. $url is the issue tracker; a command line to run follows on a line of
+# its own.
+connect-unrecognised-report = マルチメーターをこの状態にしたまま次のコマンドを実行し、その出力を添えて { $url } で報告してください:
+# The same when the data came from a recording being played back: $url as
+# above.
+connect-unrecognised-report-file = リプレイ ファイルを添えて { $url } で報告してください。
+# The late-readings notice's last line (lib-errors.ftl), on a link the tool
+# has no fix for yet. $url is the issue tracker.
+connect-late-readings-report = マルチメーターの機種とオペレーティング システムを明記して、{ $url } で報告してください。
+# After saved-device-unknown: how to name the meter from now on. Settings
+# is dmm-gui's panel; --device a command-line option, kept as it is.
+connect-saved-device-unknown-action = マルチメーターを指定するには、--device を指定するか、dmm-gui の [設定] で選択してください。
+# After saved-mock-mode-unknown. Mock mode is dmm-gui's setting; --mock-mode
+# a command-line option, and 'dmm-cli read --help' a command line, kept as
+# they are.
+connect-saved-mock-mode-unknown-action = dmm-gui の [設定] でシミュレーション モードを選択するか、--mock-mode を指定してください。モードの一覧は 'dmm-cli read --help' で確認できます。
 # info and debug talk to a real meter. $device is the simulated meter's id,
 # e.g. mock.
 connect-needs-hardware = このコマンドには実際のハードウェアが必要です (--device { $device } では使用できません)。

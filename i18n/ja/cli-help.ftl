@@ -54,6 +54,12 @@ read--scale =
 # dmm-cli read --offset
 read--offset =
     .help = スケーリング後に VALUE を加える (--scale 1.8 と組み合わせて 32 を加えると、°C が °F になる)
+# dmm-cli read --unit
+read--unit =
+    .help = スケーリングした測定値に、マルチメーターの基本単位の代わりにこの単位を付ける。数値は換算されないため、接頭辞は --scale で合わせる。10 mV/A のクランプを mA で表示する場合は --scale 100000 --unit mA
+# dmm-cli read --alarm-high
+read--alarm-high =
+    .help = 測定値が VALUE を上回ったときに警告する。VALUE は基本単位 (V, A, Ω, …) で指定し、スケーリングした測定値では --unit の単位で指定する。4980mV や 10kohm のように単位を付けると、その物理量の測定値だけがアラームの対象になる。4.7k のように接頭辞だけを付けた場合は、値に倍率が掛かるだけになる
 # dmm-cli read --alarm-low
 read--alarm-low =
     .help = 測定値が VALUE を下回ったときに警告する (--alarm-high と同様)
@@ -113,7 +119,7 @@ capture =
     .about = バグ報告と検証のために、ガイドに沿ってプロトコルをキャプチャする
 # dmm-cli capture --output
 capture--output =
-    .help = 出力ファイル (既定値: capture-<device>.yaml)。自動で付くファイル名より優先される
+    .help = 出力ファイル (既定値: capture-<device>.yaml)
 # dmm-cli capture --steps
 capture--steps =
     .help = 特定のステップのみ実行する (カンマ区切りの ID。例: 「dcmv,temp,duty」)

@@ -55,10 +55,10 @@ scale-offset = 加算
 scale-unit = 単位
 # Applies the three fields to the reading.
 scale-apply = 適用
-    .hover = これ以降のすべての測定値にこの値を適用する
+    .hover = これらの値でスケーリングをオンにする
 # Turns scaling off; the fields keep their values for the next Apply.
 scale-off = オフ
-    .hover = スケーリングを停止し、マルチメーターの元の測定値を表示する
+    .hover = スケーリングをオフにする
 
 ## The Scale row's toasts.
 
@@ -104,6 +104,11 @@ alarm-no-limit = なし
 alarm-band = 自動
     .hover = 測定値がどこまで戻れば、その制限値でもう一度アラームが鳴るかを指定します。値、または 1% のようなパーセントを入力します。空欄の場合は自動です。
 # After the limits, the unit they are in, e.g. V; this is its hover.
+# A line added to the Low or High field's hover when its limit is typed in a
+# unit of another quantity than the reading on screen: it is kept, and the
+# alarm watches only readings of that quantity. $entry is the limit as typed
+# ("5 kΩ"); $unit is its quantity's unit ("Ω").
+alarm-limit-other-quantity = { $entry }: { $unit } の測定値にのみ適用されます
 alarm-unit =
     .hover = 上限と下限の単位
 # The same before an alarm is on: the unit taken from the reading on
@@ -142,6 +147,10 @@ alarm-invalid-band = ヒステリシスを使用できません: { $reason }
 alarm-on-toast = アラーム オン: { $limits }
 # The alarm turned off.
 alarm-off-toast = アラーム オフ
+# The alarm carried over to an import or another meter turned off: the new
+# readings put its limits in another unit than before. $unit is the new
+# one, e.g. V or kV.
+alarm-off-other-unit = 測定値の単位が { $unit } になったため、アラームはオフになりました。新しい単位で上限と下限を設定し直してください。
 
 ## The graph: a dotted line at each limit, labelled at its right end.
 
