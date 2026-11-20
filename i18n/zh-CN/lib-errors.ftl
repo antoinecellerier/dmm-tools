@@ -90,6 +90,12 @@ error-bluetooth-only-switched-off = 万用表 { $model } 只能通过蓝牙连�
 error-bluetooth-only-not-built = 万用表 { $model } 只能通过蓝牙连接，而此版本不支持蓝牙
 # $model is the meter, e.g. UNI-T UT60BT.
 error-bluetooth-only-usb-adapter = 万用表 { $model } 只能通过蓝牙连接，而 --adapter 指定的是 USB 设备: 请用 --adapter 指定该万用表的蓝牙地址，或去掉 --adapter
+# On Android: a cable is plugged in, and the user has not answered or has
+# refused the system's question about letting this app use it.
+error-cable-not-allowed = USB 连接线正在等待授权: 请在 Android 的提示中允许访问，或重新插入连接线以再次显示提示
+# On Android, where the meter may be on either: nothing was found on USB
+# and Bluetooth could not be searched.
+error-no-cable-bluetooth-off = 未插入 USB 连接线，且蓝牙已关闭
 # Opening the meter was stopped part-way, by Disconnect or by quitting.
 error-cancelled = 已取消连接万用表
 
@@ -173,6 +179,9 @@ error-rejected-by-meter = 万用表拒绝了 { $sent }
 error-rejected-zero-needs-capacitance = ZERO 只能在电容模式下使用
 error-rejected-rel-needs-reading = 显示屏上有数值时才能使用 REL
 error-rejected-rel-is-on = REL 已开启，请先退出 REL
+# $code is a number, $model and $opened are meters (e.g. OWON B41T+). Each
+# app follows it with how to open the meter as its own model.
+error-rejected-other-model = 万用表报告的 OWON 型号代码为 { $code } ({ $model })，而本次是作为 { $opened } 打开的，因此遥控按键已关闭
 # $code is a number.
 error-rejected-unknown-model = 万用表报告的 OWON 型号代码为 { $code }，本工具尚无法识别，因此遥控按键已关闭
 # $command is a command word.
@@ -191,15 +200,29 @@ error-sent-range = 量程 { $range }
 ## read. After "invalid response:". Model names (OWON B35T+, Brymen BM82x)
 ## stay as they are. Each app follows the sentence with what to pick.
 
+# An OWON meter names its model, which sends the other kind of data frame.
+# $code is OWON's model number, e.g. 87; $model the model it names, e.g.
+# Voltcraft VC871; $frame the length of that model's frame in bytes, 6 or
+# 15; $opened the meter chosen, e.g. OWON B35T+.
+error-wrong-meter-other-frame = 万用表报告的 OWON 型号代码为 { $code } ({ $model })，该型号发送 OWON 的 { $frame } 字节数据帧，而本次是作为 { $opened } 打开的
+# An OWON meter sends the other kind of data frame and names no model.
+# $sent and $expected are frame lengths in bytes, 6 or 15; $opened is the
+# meter chosen, e.g. Voltcraft VC871.
+error-wrong-meter-other-frame-kind = 万用表发送的是 OWON 的 { $sent } 字节数据帧，而作为 { $opened } 打开时应为 { $expected } 字节数据帧
 # An OWON model this tool does not read yet. $code is OWON's model number,
 # e.g. 83. "This message" is the whole error, for the issue.
 error-wrong-meter-not-yet = 万用表报告的 OWON 型号代码为 { $code }，本工具尚无法读取；请附上此消息提交议题
 # An OWON model whose readings carry their sign where this tool does not
 # read it yet. $code is OWON's model number, e.g. 55.
 error-wrong-meter-sign-in-function-word = 万用表报告的 OWON 型号代码为 { $code }: 该型号发送的 OWON 6 字节数据帧把符号放在功能字中，本工具尚无法读取
+# A Brymen meter of another series answered. $found and $opened are series,
+# e.g. Brymen BM82x and Brymen BM86x.
+error-wrong-meter-other-series = 连接线上的万用表是 { $found }，不是 { $opened }
 # An OWON meter chosen by its model sends bytes, but never its 6-byte data
 # frame. B35 and B35T are OWON models.
 error-wrong-meter-no-six-byte-frames = 万用表没有发送 OWON 的 6 字节数据帧；可能是较旧的 B35 或 B35T，本工具尚无法读取这些型号的 14 字节数据帧
+# The same for a meter whose data frame is 15 bytes long.
+error-wrong-meter-no-fifteen-byte-frames = 万用表没有发送 OWON 的 15 字节数据帧
 # An OWON meter that names no model sends frames of neither length. "This
 # message" is the whole error, for the issue.
 error-wrong-meter-untold-frame-kind = 无法从万用表的型号代码或数据帧判断发送的是 OWON 的 6 字节还是 15 字节数据帧，请附上此消息提交议题
@@ -234,6 +257,9 @@ error-bluetooth-login-refused =
         [6] 万用表拒绝了登录: 权限不足 (代码 { $code })
        *[other] 万用表拒绝了登录: 未知错误 (代码 { $code })
     }
+clock-scale-not-positive = 时钟倍率必须是正数，实际为 '{ $value }'
+# $max is the longest preseed, in seconds: 86400.
+clock-preseed-out-of-range = 时钟预置时长必须在 0 到 { $max } 秒之间，实际为 '{ $value }'
 
 ## Not an error: the notice under the reading in the GUI when a Bluetooth
 ## adapter hands over a reading late, together with the next one.
@@ -246,4 +272,11 @@ late-readings-advice =
     { $fix ->
         [command] 使用此适配器时，有时一个读数会和下一个读数一起到达，但不会丢失。要在万用表断开连接前获得准确的时间戳，请运行:
        *[none] 使用此适配器时，有时一个读数会和下一个读数一起到达，但不会丢失。
+    }
+# The same for a Bluetooth meter that is not one of UNI-T's adapters; $fix as
+# above.
+late-readings-advice-link =
+    { $fix ->
+        [command] 有时一个读数会和下一个读数一起到达，但不会丢失。要在万用表断开连接前获得准确的时间戳，请运行:
+       *[none] 有时一个读数会和下一个读数一起到达，但不会丢失。
     }

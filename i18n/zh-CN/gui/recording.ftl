@@ -14,10 +14,14 @@
 
 # A button; ● is part of it.
 recording-record = ● 记录
-    .hover = 开始将实时样本写入记录缓冲区 ({ $keys })
+    .hover = 开始记录 ({ $keys })
 # The Record button while recording; ■ is part of it.
 recording-stop = ■ 停止
     .hover = 停止记录 ({ $keys })
+# A button: puts a numbered marker on the reading the meter shows now. The
+# graph's menu has an entry of the same name; keep the two alike.
+recording-mark = 标记
+    .hover = 标记屏幕上的读数 ({ $keys })
 # Shown after Export… once a recording has stopped. Export… is the button
 # beside it, which saves the samples to a file.
 recording-discard = 放弃
@@ -72,6 +76,9 @@ recording-reading-resize =
 
 recording-big-meter-on =
     .hover = 隐藏侧边面板，全屏显示万用表读数 ({ $keys })
+# While the reading is full-screen with its buttons under it.
+recording-big-meter-minimal =
+    .hover = 只显示读数，不显示按钮 ({ $keys })
 # While the reading is full-screen.
 recording-big-meter-off =
     .hover = 返回常规的多面板布局 ({ $keys })

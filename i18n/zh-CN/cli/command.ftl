@@ -8,6 +8,12 @@ command-available = { $meter } 的可用命令:
 # After "Note:" (common.ftl): the meter takes no commands from dmm-cli.
 # $meter is its brand and model, e.g. UNI-T UT803.
 command-none = 尚未为 { $meter } 实现任何远程命令。
+# After "Error:" (common.ftl): the meter has no command by that name, and
+# the ones it takes. $meter is its brand and model, e.g. UNI-T UT61E+;
+# $command the word as typed; $commands its command words, comma-separated.
+command-unknown = 万用表 { $meter } 没有 '{ $command }' 命令，可用的命令有 { $commands }
+# The same for a meter dmm-cli sends no commands to; $meter as above.
+command-unknown-none = 万用表 { $meter } 尚不支持远程命令
 # Green, opening the line that confirms a command went to the meter; the
 # command word sent follows after a space.
 command-sent-label = 已发送

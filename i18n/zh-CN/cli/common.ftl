@@ -12,3 +12,5 @@ common-error-label = 错误:
 common-warning-label = 警告:
 # Yellow: something worth knowing about how the command runs.
 common-note-label = 注意:
+# $error is why, e.g. "HID error: …".
+common-unavailable = 无法获取 ({ $error })

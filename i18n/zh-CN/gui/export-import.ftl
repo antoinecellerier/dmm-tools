@@ -121,6 +121,16 @@ export-unsaved-connect =
     }
 # The prompt's button that goes ahead: discards, then connects the meter.
 export-unsaved-connect-confirm = 放弃并连接
+# The prompt when the window is asked to close (its close button, Ctrl+Q or
+# Ctrl+W). $lost, $samples and $markers are as for Record.
+export-unsaved-quit =
+    { $lost ->
+        [samples] 退出将放弃 { $samples } 个未导出的样本。
+        [markers] 退出将放弃 { $markers } 个标记的未保存更改。
+       *[both] 退出将放弃 { $samples } 个未导出的样本，以及 { $markers } 个标记的未保存更改。
+    }
+# The prompt's button that goes ahead: discards, then closes the window.
+export-unsaved-quit-confirm = 放弃并退出
 # The prompt's other button, which keeps everything; it has the focus.
 export-unsaved-cancel = 取消
 

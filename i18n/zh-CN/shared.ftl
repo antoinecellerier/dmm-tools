@@ -49,7 +49,15 @@ stability-warning =
 ## dmm-gui's Settings, mock_mode its name in the settings file.
 
 flag-adapter = 有多个可用适配器时，选择指定的一个。使用 USB 连接线的序列号或 HID 路径，或蓝牙适配器或万用表的地址，写法同 'dmm-cli list' 的输出
+# dmm-cli's, on read, get and set: the mock dmm-gui saved counts too.
+flag-mock-mode-cli = 让仿真设备固定使用一种测量模式，不再循环切换所有模式。适用于 --device mock 或 dmm-gui 保存的仿真设备。未指定此选项时，由设置文件中的 mock_mode (即 dmm-gui 的“仿真模式”) 固定模式
+# dmm-gui's: the mock picked in Settings counts too.
+flag-mock-mode-gui = 让仿真设备固定使用一种测量模式，不再循环切换所有模式。适用于 --device mock 或在“设置”中选择的仿真设备。在本次会话中覆盖已保存的“仿真模式”设置
+# dmm-cli's: its 'list' command shows what is plugged in.
+flag-no-bluetooth-cli = 在本次运行中关闭蓝牙扫描: 'list' 只显示连接线。覆盖 dmm-gui 的“{ bluetooth-setting }”设置。仍会连接 --adapter 指定的地址
 flag-no-bluetooth-gui = 在本次会话中关闭蓝牙扫描。覆盖“{ bluetooth-setting }”设置。仍会连接 --adapter 指定的地址
+# dmm-cli's, beside --no-bluetooth.
+flag-bluetooth-cli = 在本次运行中扫描蓝牙适配器和万用表，不论 dmm-gui 的“{ bluetooth-setting }”设置如何
 
 ## The rest of --mock-mode's long help, after flag-mock-mode-cli or
 ## flag-mock-mode-gui.
@@ -58,6 +66,10 @@ flag-no-bluetooth-gui = 在本次会话中关闭蓝牙扫描。覆盖“{ blueto
 mock-mode-list = 模式: { $modes }
 # $example is a command line.
 mock-mode-example = 示例: { $example }
+# The session's device, typed with --device or saved by dmm-gui, is not the
+# mock.
+mock-mode-mock-only = --mock-mode 只适用于仿真设备。请用 --device mock 重新运行，或去掉 --mock-mode。
+mock-clock-mock-only = --mock-clock-scale 和 --mock-clock-preseed 只适用于仿真万用表和回放。请用 --device mock 或 --replay 重新运行，或去掉这两个时钟选项。
 
 ## A link's short name, where the meter is already named: the GUI's
 ## status line, the setup help's section labels.
@@ -86,6 +98,9 @@ setup-bluetooth-check =
         [phone] 打开手机蓝牙，并在万用表上打开数据传输。
        *[computer] 打开此计算机的蓝牙，并在万用表上打开数据传输。
     }
+# After "Bluetooth:", when the search was switched off; how to switch it on
+# follows as a step of its own.
+setup-bluetooth-off-check = 未查找。
 # Linux. Two command lines follow.
 setup-usb-linux-rule = 确认已安装 udev 规则:
 # Linux. The setup guide's address follows.
@@ -115,6 +130,15 @@ setup-bluetooth-scan = 运行 'dmm-cli list' 扫描蓝牙范围内的适配器�
 
 ## Notices both binaries show.
 
+# The settings file names a meter this version has no entry for: a file a
+# newer version wrote, or one edited by hand. $device is the id as the file
+# holds it, e.g. ut62; $path is the file. dmm-gui shows it in a toast,
+# dmm-cli after "Warning:" and before what to do.
+saved-device-unknown = 设置文件 { $path } 指定了设备“{ $device }”，此版本无法识别该设备，因此改为自动检测万用表。
+# The settings file's mock_mode (the setting's name in the file, kept as it
+# is) names no scenario of the simulated meter. $given is the name as the
+# file holds it. Each app follows it with what to do.
+saved-mock-mode-unknown = 设置文件中的 mock_mode“{ $given }”不是有效的仿真模式，因此仿真设备将循环切换所有模式。
 # When the meter opened, other cables were there to open and the session
 # took the first, with --adapter a command-line option kept as it is. $count
 # is 2 or more. dmm-gui shows it in a toast, dmm-cli after "Warning:".
@@ -129,6 +153,14 @@ cables-at-open =
                *[other] 本次会话检测到 { $count } 根可用的 USB 连接线，已使用最先找到的一根。可通过 --adapter 选择其他连接线。
             }
     }
+# When the meter opened over Bluetooth, other adapters or meters matched as
+# well and the session took the first, with --adapter a command-line option
+# kept as it is. $count is 2 or more. $host as in cables-at-open.
+bluetooth-tied =
+    { $host ->
+        [phone] 有 { $count } 个蓝牙适配器或万用表匹配程度相同，本次会话已使用最先找到的一个。
+       *[computer] 有 { $count } 个蓝牙适配器或万用表匹配程度相同，本次会话已使用最先找到的一个。要改用其他设备，请用 --adapter 指定 'dmm-cli list' 输出中的一个。
+    }
 # Follows cables-at-open when nothing tells those cables apart.
 cables-no-reconnect =
     { $host ->
@@ -139,6 +171,17 @@ cables-no-reconnect =
 # it gave, e.g. UT161E; $picked the model picked, e.g. UNI-T UT61E+. Each
 # app follows it with what to pick (choose-meter-gui, choose-meter-cli).
 other-model = 万用表报告的名称为“{ $reported }”，与所选的 { $picked } 不符。
+# The same when detection opened the meter, without hearing its name in
+# time, as $picked; $reported as above.
+other-model-detected = 万用表报告的名称为“{ $reported }”，但检测时已按 { $picked } 打开。
+# The meter's packets are another model's than the one it was opened as:
+# $named is that model, e.g. ZOYI / ZOTEK ZT-5566SE; $opened the one opened,
+# e.g. ZOYI / ZOTEK ZT-300AB. Each app follows it with what to pick.
+other-data = 万用表发送的是 { $named } 的数据，而本次是作为 { $opened } 打开的。
+# The meter sent data this tool doesn't read yet, said once per run. $meter
+# is the meter, e.g. UNI-T UT61E+; $detail what it sent, in English, e.g.
+# mode byte: 0x7f. Each app follows it with how to report it.
+unrecognised-data = 万用表 { $meter } 发送了本工具尚无法识别的数据 ({ $detail })。
 # A cable or Bluetooth link is open but no meter on it identified itself.
 # A notice title in the GUI; dmm-cli starts a sentence with it, naming the
 # link after it (cli/connect.ftl).
@@ -153,6 +196,13 @@ several-cables =
     { $count ->
        *[other] 检测到 { $count } 根可供本次会话使用的 USB 连接线，它们无法相互区分。重新连接时可能会误用其他万用表的连接线。
     }
+# Why a dropped link is no longer being reopened: it stayed down for
+# $minutes minutes, and the session has ended. A notice or the error that
+# ended the run says what the last attempt found.
+reconnect-gave-up =
+    { $minutes ->
+       *[other] 已停止重新连接: 与万用表的连接已中断 { $minutes } 分钟。
+    }
 # While a dropped link is being reopened: its cable has gone and another is
 # plugged in. Each binary follows it with how to use that other cable.
 waiting-for-own-cable = 已插入另一根 USB 连接线，但本次会话正在等待原先使用的连接线。
@@ -162,7 +212,40 @@ screen-only-reading = 请在万用表显示屏上查看示波器读数
 # The GUI checkbox that lets a connection search over Bluetooth. The CLI
 # reads the same setting, so its help names the checkbox too.
 bluetooth-setting = 查找蓝牙设备
+# How dmm-cli switches the search on: after --no-bluetooth, and when the
+# saved setting is off.
+bluetooth-off-cli-instead = 传入 --bluetooth 代替 --no-bluetooth。
+bluetooth-off-cli-saved = 传入 --bluetooth，或在 dmm-gui 的“设置”中勾选“{ bluetooth-setting }”(dmm-cli 也会读取此设置)。
 bluetooth-off-gui = 在“设置”(⚙) 中勾选“{ bluetooth-setting }”。
+# What to check after the meter refused a mode or range switch, or did not
+# take it. $setting is range (the input must be within the range too) or
+# another setting.
+switch-check-dial =
+    { $setting ->
+        [range] 请检查旋钮档位，并确认输入未超出量程。
+       *[other] 请检查旋钮档位。
+    }
+# How to open the meter as the model it is, after a message saying it is
+# another, in dmm-gui. $choice is entry ($model the meter to pick, e.g.
+# OWON CMS061), entry-only (the same, when Auto-detect is what opened it),
+# auto-detect, or own-model (nothing says which model: the user has to pick
+# it). "Auto-detect" is the Device choice that finds the meter itself.
+choose-meter-gui =
+    { $choice ->
+        [entry] 在“设置”(⚙) 中选择 { $model } 或“自动检测”。
+        [entry-only] 在“设置”(⚙) 中选择 { $model }。
+        [auto-detect] 在“设置”(⚙) 中选择“自动检测”。
+       *[own-model] 在“设置”(⚙) 中选择万用表的实际型号。
+    }
+# The same in dmm-cli: $choice as above, $id the --device value of the
+# meter to pick, e.g. cms061; --device auto detects the meter.
+choose-meter-cli =
+    { $choice ->
+        [entry] 传入 --device { $id } 或 --device auto。
+        [entry-only] 传入 --device { $id }。
+        [auto-detect] 传入 --device auto。
+       *[own-model] 用 --device 指定万用表的实际型号，--help 会列出所有型号。
+    }
 
 ## What is connected, when an --adapter value matched nothing.
 
@@ -186,11 +269,20 @@ input-not-finite = 必须是有限数
 input-zero-scale = 比例因子为 0 会使读数始终为 0
 # The alarm's low limit and its high limit.
 input-low-not-below-high = 下限必须低于上限
+# An alarm limit: a number, or a number with a unit or a prefix such as
+# 4980 mV, 10 kohm or 4.7k (kept as they are). $text is what was typed.
+input-not-a-quantity = “{ $text }”不是数字，也不是 4980 mV 或 4.7k 这样带单位的数字
+# The alarm's two limits were typed with units of different quantities,
+# such as volts and amps.
+input-limit-units-differ = 下限和上限必须使用同一单位
 # The alarm's hysteresis band: a number in the limits' unit, or a percentage
 # of the limit. $text is what was typed, as it was typed.
 input-band-not-a-number = “{ $text }”不是数字，也不是 1% 这样的百分数
 # A hysteresis band below zero.
 input-band-negative = 必须大于或等于零
+# A hysteresis band typed with a unit, while the limits were typed in
+# another unit or with none.
+input-band-not-the-limits-unit = 只有限值也使用该单位时，回差才能带单位
 # A percentage band with a limit of 0, of which every percentage is 0.
 input-percent-of-zero = 0 的任何百分比都是 0，请改为输入一个数值
 

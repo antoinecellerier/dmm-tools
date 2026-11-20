@@ -43,7 +43,7 @@ settings-mock-auto =
         [yes] 自动 (循环) (--mock-mode)
        *[no] 自动 (循环)
     }
-    .hover = 依次循环切换所有合成模式，以测试 GUI
+    .hover = 循环切换所有仿真模式
 # The chip for the mode --mock-mode picked for this session. $mode is its
 # name, e.g. dcv.
 settings-mock-mode-pinned = { $mode } (--mock-mode)
@@ -55,7 +55,7 @@ settings-auto-connect = 启动时自动连接
     .hover = 应用启动时连接万用表
 # Asking the meter its name makes it beep.
 settings-device-name = 连接时显示设备名称 (会蜂鸣)
-    .hover = 连接后查询万用表的名称，万用表会蜂鸣一声
+    .hover = 连接后查询万用表的名称
 # The Bluetooth checkbox while --no-bluetooth switched the search off for
 # this session. $setting is the checkbox's own label, e.g. Look for
 # Bluetooth devices.
@@ -179,6 +179,11 @@ settings-zoom-chip =
 # those that step the zoom.
 settings-zoom-reset-chip =
     .hover = 将 GUI 缩放到 100% (用 { $reset } 恢复，用 { $step } 逐级调整)
+# On Android only, in place of the two checkboxes below: hides the bars
+# Android draws at the screen's edges, with the clock and the navigation
+# buttons.
+settings-full-screen = 全屏
+    .hover = 隐藏状态栏和导航栏，从屏幕边缘向内滑动可重新显示
 # Window decorations are the title bar and border.
 settings-hide-decorations = 隐藏标题栏和边框
     .hover = 无边框窗口: 用 { $keys } 切换回来

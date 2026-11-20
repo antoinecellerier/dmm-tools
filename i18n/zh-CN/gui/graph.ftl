@@ -114,10 +114,22 @@ graph-histogram = 直方图
 # in the field after it. Short for reference.
 graph-ref = 参考
     .hover = 在右侧输入框中的各值处绘制水平参考线 ({ $keys })
-# The field after Ref, about 80 pixels wide. The text shows greyed inside
+# The field after Ref, about 120 pixels wide. The text shows greyed inside
 # the field while it is empty; the numbers in the hover are an example of
 # what to type, kept as they are.
 graph-ref-values = 参考值
+    .hover = 参考值: 可带单位，不带单位时按所绘读数的单位 (例如 3.3, 5 V, 4.7k)
+# Lines added to the reference values' hover, one for each value that draws
+# no line. $entry is the value as typed ("abc").
+graph-ref-not-a-number = { $entry }: 不是数字
+# $entry is the value as typed, with a word after it that is no unit ("3 x").
+graph-ref-unknown-unit = { $entry }: 未知单位
+# $entry is the value as typed ("5 V"), in a unit of another quantity than the
+# graph shows; $unit is that quantity's unit ("V"), on whose readings it draws.
+graph-ref-other-quantity = { $entry }: 仅在绘制 { $unit } 读数时显示
+# $entry is a number typed while a reading without a unit (a transistor's
+# gain) was plotted, now that one with a unit is.
+graph-ref-other-quantity-unitless = { $entry }: 仅在绘制无单位读数时显示
 # A chip, after the reference values, that marks where the trace crosses a
 # reference line.
 graph-triggers = 触发
@@ -132,6 +144,11 @@ graph-cursors-hint = 在图表上放置光标
 ## The plot: the readout by the pointer, the labels on its lines, and the
 ## flags of markers along its bottom edge.
 
+# The × button on the readout of a crosshair that a tap on a touchscreen
+# left on the plot: it takes the crosshair and the readout away. Its name
+# for a screen reader.
+graph-unpin =
+    .a11y = 移除十字线
 # The readout by the pointer, under the time, inside a stretch where the
 # meter read over range (showed OL).
 graph-hover-overload = 超量程

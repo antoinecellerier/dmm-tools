@@ -54,6 +54,12 @@ read--scale =
 # dmm-cli read --offset
 read--offset =
     .help = 换算后加上 VALUE (--scale 1.8 配合 32 可将 °C 转换为 °F)
+# dmm-cli read --unit
+read--unit =
+    .help = 不使用万用表的基本单位，改用此单位标注换算后的读数。数值不做转换，前缀由 --scale 决定: 例如要以 mA 显示 10 mV/A 电流钳的读数，应使用 --scale 100000 --unit mA
+# dmm-cli read --alarm-high
+read--alarm-high =
+    .help = 读数升到 VALUE 以上时报警。VALUE 使用基本单位 (V, A, Ω, …)，换算后的读数则使用 --unit 指定的单位。带单位的值 (4980mV, 10kohm) 还会将报警限定于该物理量的读数，只带前缀的值 (4.7k) 则只起倍乘作用
 # dmm-cli read --alarm-low
 read--alarm-low =
     .help = 读数降到 VALUE 以下时报警，写法同 --alarm-high
@@ -113,7 +119,7 @@ capture =
     .about = 用于错误报告和验证的引导式协议捕获
 # dmm-cli capture --output
 capture--output =
-    .help = 输出文件 (默认值: capture-<device>.yaml)。指定后不再自动命名
+    .help = 输出文件 (默认值: capture-<device>.yaml)
 # dmm-cli capture --steps
 capture--steps =
     .help = 只运行指定的步骤 (以逗号分隔的 ID，例如 "dcmv,temp,duty")

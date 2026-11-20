@@ -11,6 +11,23 @@
 ## Refusals before anything is opened. Each follows "Error:" or "Warning:"
 ## (common.ftl) on the same line.
 
+# After shared.ftl's unrecognised-data, on a warning line: where to report
+# it. $url is the issue tracker; a command line to run follows on a line of
+# its own.
+connect-unrecognised-report = 请保持万用表的当前状态，在 { $url } 报告此问题，并附上以下命令的输出:
+# The same when the data came from a recording being played back: $url as
+# above.
+connect-unrecognised-report-file = 请在 { $url } 报告此问题，并附上该回放文件。
+# The late-readings notice's last line (lib-errors.ftl), on a link the tool
+# has no fix for yet. $url is the issue tracker.
+connect-late-readings-report = 请在 { $url } 报告此问题，并注明万用表型号和操作系统。
+# After saved-device-unknown: how to name the meter from now on. Settings
+# is dmm-gui's panel; --device a command-line option, kept as it is.
+connect-saved-device-unknown-action = 要指定万用表，请传入 --device，或在 dmm-gui 的“设置”中选择。
+# After saved-mock-mode-unknown. Mock mode is dmm-gui's setting; --mock-mode
+# a command-line option, and 'dmm-cli read --help' a command line, kept as
+# they are.
+connect-saved-mock-mode-unknown-action = 在 dmm-gui 的“设置”中为“仿真模式”选择一项，或传入 --mock-mode；'dmm-cli read --help' 会列出所有模式。
 # info and debug talk to a real meter. $device is the simulated meter's id,
 # e.g. mock.
 connect-needs-hardware = 此命令需要真实硬件 (--device { $device } 不支持)。

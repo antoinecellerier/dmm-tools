@@ -74,6 +74,9 @@ capture-resuming = 正在继续: 将跳过已捕获的步骤。
 capture-unreadable = 找到 { $path }，但无法解析。
 # $yes is the key that answers: y.
 capture-overwrite-unreadable = 是否覆盖? { $yes }=重新开始，其他任意键=中止:
+# After "Warning:", at the start and the end of a run whose output goes
+# through a pipe or into a file.
+capture-not-a-terminal = capture 的输出经过了管道或重定向，因此无法在你操作万用表时等待、请你确认读数或验证自动检测。请直接在终端中运行，以生成有效的报告。
 # $path is the report file the run writes.
 capture-output-file = 输出文件: { $path }
 

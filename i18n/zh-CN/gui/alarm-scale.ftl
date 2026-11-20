@@ -55,10 +55,10 @@ scale-offset = 偏移
 scale-unit = 单位
 # Applies the three fields to the reading.
 scale-apply = 应用
-    .hover = 从现在起对每个读数应用这些值
+    .hover = 用这些值开启换算
 # Turns scaling off; the fields keep their values for the next Apply.
 scale-off = 关闭
-    .hover = 停止换算，重新显示万用表本身的读数
+    .hover = 关闭换算
 
 ## The Scale row's toasts.
 
@@ -103,6 +103,11 @@ alarm-no-limit = 无
 # that blank picks the band automatically.
 alarm-band = 自动
     .hover = 读数回到限值内超过此幅度后，该限值才会再次报警: 填写数值或百分比 (如 1%)，留空则自动设置
+# A line added to the Low or High field's hover when its limit is typed in a
+# unit of another quantity than the reading on screen: it is kept, and the
+# alarm watches only readings of that quantity. $entry is the limit as typed
+# ("5 kΩ"); $unit is its quantity's unit ("Ω").
+alarm-limit-other-quantity = { $entry }: 仅对 { $unit } 读数报警
 # After the limits, the unit they are in, e.g. V; this is its hover.
 alarm-unit =
     .hover = 限值使用的单位
@@ -142,6 +147,10 @@ alarm-invalid-band = 回差无效: { $reason }
 alarm-on-toast = 报警已开启: { $limits }
 # The alarm turned off.
 alarm-off-toast = 报警已关闭
+# The alarm carried over to an import or another meter turned off: the new
+# readings put its limits in another unit than before. $unit is the new
+# one, e.g. V or kV.
+alarm-off-other-unit = 读数单位已变为 { $unit }，报警已关闭；请用新单位重新设置限值
 
 ## The graph: a dotted line at each limit, labelled at its right end.
 

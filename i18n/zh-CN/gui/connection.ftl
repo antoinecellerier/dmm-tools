@@ -27,6 +27,15 @@ connection-waiting-switch-on = 打开万用表的数据传输，或在“设置�
 ## A failed connection: a title naming the problem, the steps to try, and a
 ## closing line.
 
+# Under a failed connection's steps when a meter is picked in Settings,
+# which a detected connect may have saved. $model is that meter, e.g.
+# UNI-T UT61E+.
+connection-selected-meter = “设置”(⚙) 中选择的是 { $model }。如果万用表不是这个型号，请改选正确的型号或“自动检测”。
+# The same when the title above already names the meter picked.
+connection-selected-meter-named = 如果万用表不是这个型号，请在“设置”(⚙) 中改选正确的型号或“自动检测”。
+# After shared.ftl's unrecognised-data, in a toast: where to report it.
+# { project-link } is the top bar's Help & Feedback link.
+connection-unrecognised-report = 请通过顶栏中的“{ project-link }”报告此问题。
 # The closing line under the steps. "Connect" is the top bar's button.
 connection-click-connect = 解决问题后，再次选择“连接”。
 # The closing line after the Bluetooth steps when nothing answered at the
@@ -105,9 +114,18 @@ connection-several-cables-action = 只保留这台万用表的连接线，拔下
 # A toast, when that notice ends a running recording. What it holds can still
 # be exported.
 connection-several-cables-recording = 记录已停止: 连接已断开，且无法将这台万用表的 USB 连接线与其他连接线区分开
+# A toast, when a different meter answers the session during a recording,
+# as after a reconnect under Auto-detect or a device picked in Settings.
+# $meter is the meter that answered, a model name. What was recorded can
+# still be exported.
+connection-other-meter-recording = 记录已停止: 响应的是 { $meter }，而不是开始记录时的万用表。已记录的数据仍可导出。
 # Any other failure to connect or to keep reading. The error itself
 # follows, then connection-click-connect.
 connection-failed = 连接失败
+# The reading thread crashed, or the system refused to start it. $detail is
+# the crash's or the system's own text, which stays English. Followed by
+# connection-click-connect.
+connection-internal-error = 内部错误: { $detail }
 # A meter that stopped answering in the middle of a session. $title is the
 # shared notice title, "No response from meter".
 connection-no-response-check = { $title }，请检查所选设备和数据传输
@@ -117,7 +135,7 @@ connection-acquisition-stopped = 采集意外停止，请重新连接以继续
 # The last line of a notice for a meter whose support isn't fully verified;
 # a link. $warning is the sentence saying how far it is verified.
 connection-feedback = { $warning }提供反馈。
-    .hover = 打开 GitHub 议题页面以提供反馈
+    .hover = 打开 GitHub 议题页面
 
 ## The notice under the reading when the Bluetooth link delivers readings
 ## two at a time, which can end with a command that fixes it.
@@ -126,9 +144,15 @@ connection-feedback = { $warning }提供反馈。
 connection-late-copy = 复制
 # A toast, once the command is copied.
 connection-late-copied = 命令已复制
+# The notice's last line, on a link the tool has no fix for yet.
+# { project-link } is the top bar's Help & Feedback link.
+connection-late-report = 请通过顶栏中的“{ project-link }”报告此问题，并注明万用表型号和操作系统。
 
 ## Toasts.
 
+# After shared.ftl's saved-mock-mode-unknown. Mock mode is the setting's
+# name in Settings.
+connection-saved-mock-mode-unknown-action = 在“设置”(⚙) 中为“仿真模式”选择一项。
 # A meter identified itself while Settings was on Auto-detect. $meter is
 # its name, e.g. UNI-T UT61E+. $saved is yes when Settings now names it, no
 # for a session that detects every time.
@@ -179,6 +203,11 @@ connection-switch-failed =
         [range] 切换量程失败: { $error }
        *[other] 切换 { $setting } 失败: { $error }
     }
+# One of the two messages above ($failed), then what to do about it, a
+# sentence of its own ($remedy): what to pick when the meter is another
+# model (shared.ftl's choose-meter-gui), or what to check after a refused
+# switch (switch-check-dial).
+connection-failed-then = { $failed }。{ $remedy }
 
 # The × that closes a toast or a notice.
 connection-dismiss =

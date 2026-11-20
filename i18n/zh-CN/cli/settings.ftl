@@ -100,3 +100,20 @@ settings-already =
 settings-ambiguous = { $setting } 不明确: { $input } 匹配 { $choices }
 # No choice matches $input, the choice as typed; the listing is printed above.
 settings-unknown = 未知的 { $setting }: { $input }
+# The meter answered that it wouldn't switch. $choice is the choice, e.g.
+# 22V; $reason the meter's reason (lib-errors.ftl); $remedy what to check, a
+# sentence of its own (shared.ftl's switch-check-dial).
+settings-refused-check = 万用表拒绝了{ $choice }: { $reason }。{ $remedy }
+# The same when the reason says what to do itself, e.g. "leave MIN/MAX
+# first": $choice and $reason as above.
+settings-refused-because = 万用表拒绝了{ $choice }: { $reason }
+# The meter refused because it is another model than the one chosen: $choice
+# and $reason as above; $remedy says what to pick, a sentence of its own
+# (shared.ftl's choose-meter-cli).
+settings-refused-other-model = 万用表拒绝了{ $choice }: { $reason }。{ $remedy }
+# The meter took the command, but its readings never showed the choice.
+# $remedy is what to check, as above.
+settings-not-taken = 万用表没有切换。{ $remedy }
+# As settings-not-taken, naming $live, the choice the meter is still on,
+# e.g. off; $remedy as there.
+settings-not-taken-still = 万用表没有切换 (仍为{ $live })。{ $remedy }

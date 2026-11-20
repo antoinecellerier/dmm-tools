@@ -126,6 +126,11 @@ shortcuts-mouse-cursor = 将光标 A/B 放到最近的点
 shortcuts-mouse-menu = 标记、复制、光标、参考线、报警
     .gesture = 右键单击
     .touch = 长按
+# On a touchscreen only: a tap leaves the crosshair, the two lines that
+# cross on a reading, and the readings shown beside it, where the finger
+# was; the × beside the readings takes it away.
+shortcuts-touch-pin = 在点按处保留十字线和读数，点按 × 可移除
+    .gesture = 点按
 # The minimap is the strip under the graph showing all the readings:
 # dragging in it moves the view, dragging its edges resizes it.
 shortcuts-mouse-minimap = 跳到某个时间/调整视区大小

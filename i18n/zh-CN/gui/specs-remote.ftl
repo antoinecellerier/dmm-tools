@@ -120,3 +120,7 @@ remote-light =
 whats-new-title-unreleased = 新增功能 (未发布)
 # In a release. $version is its number, e.g. 0.10.0, after a v.
 whats-new-title = v{ $version } 新增功能
+# The × button that closes the window where the system draws no title bar
+# for it (Android): its name for a screen reader.
+whats-new-close =
+    .a11y = 关闭“新增功能”
