@@ -36,12 +36,12 @@ impl NotesHidden {
     }
 }
 
-/// Narrower than this, a marker's number and note go on a line of their own
-/// under the reading rather than beside it.
-const NARROW_ROW_WIDTH: f32 = 460.0;
-
-/// The note keeps at least this much room beside its reading.
+/// The note keeps at least this much room on a line it shares: with less,
+/// the controls start a line of their own.
 const MIN_NOTE_WIDTH: f32 = 120.0;
+
+/// The least a note is drawn at, in a panel narrower than the controls.
+const SQUEEZED_NOTE_WIDTH: f32 = 40.0;
 
 /// Past this many pixels an `f32` position steps by more than one, so the log
 /// shows no more rows than fit in it.
@@ -202,38 +202,56 @@ impl LogRows {
     }
 }
 
-/// Where the log's rows sit: a pitch each, and two for the `tall` ones — a
-/// marker's row in a narrow panel, its controls on a line of their own.
+/// Where the log's rows sit: a pitch each, and `lines` of them for the `tall`
+/// ones — the markers' rows, where a marker's row takes more than one line.
 struct RowGeometry {
     pitch: f32,
     tall: Vec<usize>,
+    /// The pitches a tall row takes.
+    lines: usize,
     /// Where each tall row ends, in pitches.
     ends: Vec<usize>,
 }
 
 impl RowGeometry {
-    fn new(pitch: f32, tall: Vec<usize>) -> Self {
-        let ends = tall.iter().enumerate().map(|(m, &t)| t + m + 2).collect();
-        Self { pitch, tall, ends }
+    /// `markers` are the markers' rows, each `lines` lines tall.
+    fn new(pitch: f32, markers: impl Iterator<Item = usize>, lines: usize) -> Self {
+        let tall: Vec<usize> = if lines > 1 {
+            markers.collect()
+        } else {
+            Vec::new()
+        };
+        let ends = tall
+            .iter()
+            .enumerate()
+            .map(|(m, &t)| t + m * (lines - 1) + lines)
+            .collect();
+        Self {
+            pitch,
+            tall,
+            lines,
+            ends,
+        }
     }
 
     fn top(&self, r: usize) -> f32 {
-        (r + self.tall.partition_point(|&t| t < r)) as f32 * self.pitch
+        let above = self.tall.partition_point(|&t| t < r);
+        (r + above * (self.lines - 1)) as f32 * self.pitch
     }
 
     fn height(&self, r: usize) -> f32 {
         let pitches = if self.tall.binary_search(&r).is_ok() {
-            2.0
+            self.lines
         } else {
-            1.0
+            1
         };
-        pitches * self.pitch
+        pitches as f32 * self.pitch
     }
 
     /// The row at `y`.
     fn row_at(&self, y: f32) -> usize {
         let above = self.ends.partition_point(|&e| e as f32 * self.pitch <= y);
-        let r = ((y.max(0.0) / self.pitch) as usize).saturating_sub(above);
+        let r = ((y.max(0.0) / self.pitch) as usize).saturating_sub(above * (self.lines - 1));
         self.tall.get(above).map_or(r, |&tall| r.min(tall))
     }
 }
@@ -543,9 +561,9 @@ impl App {
                 marker_row_label(&l10n, markers[i], sample, graph, recording)
             })
             .collect();
-        // The marker column starts past the widest of them, so it lines up
-        // on every row.
-        let reading_width = reading_column_width(ui, &labels, weak);
+        // The widest reading and the widest tag: every marker's row is
+        // arranged by them, so the tags and the controls line up.
+        let (reading_width, tag_width) = marker_text_widths(ui, &labels, weak);
         let spacing = ui.spacing().item_spacing.x;
         // A floating scroll bar is drawn over the rows' right end: the ×
         // stays clear of it.
@@ -580,6 +598,10 @@ impl App {
             let number_width =
                 TAG_TIP + 2.0 * TAG_PAD + 3.0 * ui.fonts_mut(|f| f.glyph_width(&log_font(), '0'));
             let width = ui.available_width();
+            // The controls with the note at its least: number, note, ×, the
+            // gaps between them and the scroll bar's gutter.
+            let controls_width =
+                number_width + delete_width + 2.0 * spacing + gutter + MIN_NOTE_WIDTH;
             let layout = LogLayout {
                 line,
                 number_width,
@@ -587,26 +609,13 @@ impl App {
                 spacing,
                 row_spacing: ui.spacing().item_spacing.y,
                 gutter,
-                column: marker_column(
-                    width,
-                    reading_width,
-                    number_width,
-                    delete_width,
-                    spacing,
-                    gutter,
-                ),
+                marker: MarkerRow::pack(width, reading_width, tag_width, controls_width, spacing),
                 flag,
                 flag_text,
                 weak,
             };
             let marker_rows = rows.markers.iter().map(|&(row, _)| row);
-            let geometry = RowGeometry::new(
-                pitch,
-                match layout.column {
-                    Some(_) => Vec::new(),
-                    None => marker_rows.clone().collect(),
-                },
-            );
+            let geometry = RowGeometry::new(pitch, marker_rows.clone(), layout.marker.lines);
             let height = geometry.top(rows.len()) - layout.row_spacing;
             // The rows are children placed by rect, which the content's own
             // rect doesn't grow to hold: it is set here, whole, as
@@ -672,35 +681,22 @@ impl App {
                     }
                     response
                 };
-                let response = if let Some(column) = layout.column {
-                    ui.horizontal(|ui| {
-                        // Its own rect, whatever the reading's text: a child
-                        // ui would hand back only as much as its text took.
-                        let (rect, _) = ui.allocate_exact_size(
-                            egui::vec2(column, layout.line),
-                            egui::Sense::hover(),
-                        );
-                        reading_label(
-                            &mut ui.new_child(
-                                egui::UiBuilder::new()
-                                    .max_rect(rect)
-                                    .layout(egui::Layout::left_to_right(egui::Align::Center)),
-                            ),
-                            &layout,
-                            text,
-                            tag.as_deref(),
-                        );
-                        let note_width = ui.available_width() - layout.fixed() + layout.spacing;
-                        controls(ui, note_width.max(MIN_NOTE_WIDTH))
-                    })
-                    .inner
-                } else {
-                    reading_label(ui, &layout, text, tag.as_deref());
-                    ui.horizontal(|ui| {
-                        controls(ui, (ui.available_width() - layout.fixed()).max(40.0))
-                    })
-                    .inner
-                };
+                // Each part in the place `MarkerRow::pack` gave it, the same
+                // on every marker's row.
+                let shape = layout.marker;
+                layout
+                    .part(ui, (0, 0.0), shape.reading)
+                    .add(egui::Label::new(RichText::new(text).font(log_font())).truncate());
+                if let (Some(tag), Some((place, tag_width))) = (tag, shape.tag) {
+                    layout.part(ui, place, tag_width).add(
+                        egui::Label::new(RichText::new(&**tag).small().color(weak)).truncate(),
+                    );
+                }
+                let (_, x) = shape.controls;
+                let response = controls(
+                    &mut layout.part(ui, shape.controls, width - x),
+                    layout.note_width(width - x),
+                );
                 if list.track_note(ui, &response, number, &mut m.note) {
                     reveal = Some(at);
                 }
@@ -788,8 +784,8 @@ impl MarkerList {
 /// What the log's rows are sized and coloured by, this frame.
 #[derive(Clone, Copy)]
 struct LogLayout {
-    /// One line of the log font: a row's height, a marked one's too (two in a
-    /// narrow panel).
+    /// One line of the log font: a row's height, and each line of a marker's
+    /// row.
     line: f32,
     /// A marker's number tag, with room for three digits.
     number_width: f32,
@@ -801,10 +797,8 @@ struct LogLayout {
     row_spacing: f32,
     /// What a floating scroll bar takes of the rows' right end.
     gutter: f32,
-    /// Where the marker column starts beside the reading, the same on every
-    /// row. `None` in a panel too narrow for it there, which puts it on a
-    /// line of its own.
-    column: Option<f32>,
+    /// Where the parts of a marker's row go, the same on every such row.
+    marker: MarkerRow,
     /// A marker tag's fill, the graph's flag colour, and the faint `+` tag's
     /// outline.
     flag: egui::Color32,
@@ -815,34 +809,70 @@ struct LogLayout {
 }
 
 impl LogLayout {
-    /// What a marker row's number, ×, three gaps and the scroll bar's gutter
-    /// take, the note aside.
-    fn fixed(&self) -> f32 {
-        self.number_width + self.delete_width + 3.0 * self.spacing + self.gutter
+    /// A ui for one part of a row, `width` wide on the line and at the x
+    /// `place` names, its content centred on the line.
+    fn part(&self, row: &mut Ui, (line, x): (usize, f32), width: f32) -> Ui {
+        let pitch = self.line + self.row_spacing;
+        let min = row.max_rect().min + egui::vec2(x, line as f32 * pitch);
+        row.new_child(
+            egui::UiBuilder::new()
+                .max_rect(egui::Rect::from_min_size(min, egui::vec2(width, self.line)))
+                .layout(egui::Layout::left_to_right(egui::Align::Center)),
+        )
+    }
+
+    /// The note's width in controls `room` wide: what the number, the ×,
+    /// their gaps and the scroll bar's gutter leave.
+    fn note_width(&self, room: f32) -> f32 {
+        (room - self.number_width - self.delete_width - 2.0 * self.spacing - self.gutter)
+            .max(SQUEEZED_NOTE_WIDTH)
     }
 }
 
-/// Where the marker column starts in rows `width` wide: past the widest of
-/// the marker rows' readings (`reading_width`), or as far short of it as
-/// leaves the note [`MIN_NOTE_WIDTH`] beside the number, the ×, their gaps
-/// and the scroll bar's gutter. `None` under [`NARROW_ROW_WIDTH`], where it
-/// goes on a line of its own; the breakpoint is the row's width alone, so a
-/// longer reading never moves the rows already there onto two lines.
-fn marker_column(
-    width: f32,
-    reading_width: f32,
-    number_width: f32,
-    delete_width: f32,
-    spacing: f32,
-    gutter: f32,
-) -> Option<f32> {
-    if width < NARROW_ROW_WIDTH {
-        return None;
+/// Where the parts of a marker's row go: the reading, the tag that says what
+/// became of it, and the controls (number, note, ×). Worked out once from
+/// the widest reading and tag, so every marker's row has the same shape, and
+/// the rows' heights and their drawing both go by it.
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct MarkerRow {
+    /// The lines the row takes.
+    lines: usize,
+    /// The reading's width, at the start of the first line.
+    reading: f32,
+    /// The tag's (line, x) and its width, where a row has one.
+    tag: Option<((usize, f32), f32)>,
+    /// The controls' (line, x); they run to the end of their line.
+    controls: (usize, f32),
+}
+
+impl MarkerRow {
+    /// Pack the parts into rows `width` wide, `spacing` apart: each joins the
+    /// line of the one before it while that line has room, and starts the
+    /// next line otherwise. `controls` is their width with the note at its
+    /// least. A part wider than the row is cut to it.
+    fn pack(width: f32, reading: f32, tag: Option<f32>, controls: f32, spacing: f32) -> Self {
+        let reading = reading.min(width);
+        let (mut line, mut used) = (0, reading);
+        let mut place = |part: f32| {
+            let x = used + spacing;
+            if x + part <= width {
+                used = x + part;
+                (line, x)
+            } else {
+                line += 1;
+                used = part;
+                (line, 0.0)
+            }
+        };
+        let tag = tag.map(|tag| (place(tag), tag.min(width)));
+        let controls = place(controls);
+        Self {
+            lines: line + 1,
+            reading,
+            tag,
+            controls,
+        }
     }
-    // `LogLayout::fixed`'s terms, kept in this order: the column lands on the
-    // same pixel as it always has.
-    let room = width - number_width - delete_width - 3.0 * spacing - gutter - MIN_NOTE_WIDTH;
-    Some(reading_width.min(room).max(0.0))
 }
 
 /// A marker row's text, its wall time then its reading — the sample's line
@@ -875,28 +905,28 @@ fn marker_row_label<'a>(
     )
 }
 
-/// The widest of the marker rows' readings with their tags: where the
-/// marker column starts, room permitting.
-fn reading_column_width(
+/// The widest of the marker rows' readings, and the widest of their tags
+/// where any row has one.
+fn marker_text_widths(
     ui: &Ui,
     labels: &[(String, Option<Cow<str>>)],
     weak: egui::Color32,
-) -> f32 {
+) -> (f32, Option<f32>) {
     let small = egui::TextStyle::Small.resolve(ui.style());
-    let spacing = ui.spacing().item_spacing.x;
     ui.fonts_mut(|f| {
-        labels
-            .iter()
-            .map(|(text, tag)| {
-                let mut width = |text: &str, font: &egui::FontId| {
-                    f.layout_no_wrap(text.to_string(), font.clone(), weak)
-                        .size()
-                        .x
-                };
-                let reading = width(text, &log_font());
-                reading + tag.as_deref().map_or(0.0, |t| spacing + width(t, &small))
-            })
-            .fold(0.0, f32::max)
+        let mut width = |text: &str, font: &egui::FontId| {
+            f.layout_no_wrap(text.to_string(), font.clone(), weak)
+                .size()
+                .x
+        };
+        let (mut reading, mut widest_tag) = (0.0_f32, None::<f32>);
+        for (text, tag) in labels {
+            reading = reading.max(width(text, &log_font()));
+            if let Some(tag) = tag {
+                widest_tag = Some(widest_tag.unwrap_or(0.0).max(width(tag, &small)));
+            }
+        }
+        (reading, widest_tag)
     })
 }
 
@@ -927,8 +957,13 @@ fn sample_row(
     if !ui.rect_contains_pointer(pitch_rect) {
         return None;
     }
-    let column = layout.column.unwrap_or(0.0);
-    let x = (label.rect.width().max(column) + layout.spacing)
+    // Where the markers' numbers are, when those are on the reading's line.
+    let numbers = match layout.marker.controls {
+        (0, x) => x,
+        _ => 0.0,
+    };
+    let x = (label.rect.width() + layout.spacing)
+        .max(numbers)
         .min(row_rect.width() - layout.number_width);
     let slot = egui::Rect::from_min_size(
         row_rect.min + egui::vec2(x, 0.0),
@@ -964,28 +999,6 @@ fn sample_row(
     response
         .clicked()
         .then(|| (s.measurement.timestamp, log_line(l10n, &s.measurement)))
-}
-
-/// A marker row's reading and its tag, if any. The tag keeps its room: the
-/// reading is what gets cut.
-fn reading_label(ui: &mut Ui, layout: &LogLayout, text: &str, tag: Option<&str>) {
-    let tag = tag.map(|tag| {
-        egui::WidgetText::from(RichText::new(tag).small().color(layout.weak)).into_galley(
-            ui,
-            Some(egui::TextWrapMode::Extend),
-            f32::INFINITY,
-            egui::TextStyle::Small,
-        )
-    });
-    let tag_width = tag.as_ref().map_or(0.0, |g| g.size().x + layout.spacing);
-    ui.allocate_ui_with_layout(
-        egui::vec2((ui.available_width() - tag_width).max(0.0), layout.line),
-        egui::Layout::left_to_right(egui::Align::Center),
-        |ui| ui.add(egui::Label::new(RichText::new(text).font(log_font())).truncate()),
-    );
-    if let Some(tag) = tag {
-        ui.label(tag);
-    }
 }
 
 /// Marker `m`'s number tag: a button, so Tab stops on it, that brings the
@@ -1174,11 +1187,11 @@ mod tests {
         assert_eq!(row_names(&rows, &samples, t0), ["m0", "m1"]);
     }
 
-    /// Two-pitch rows push the rows under them down, and a position inside
-    /// one finds it.
+    /// Tall rows push the rows under them down, and a position inside one
+    /// finds it.
     #[test]
-    fn tall_rows_take_two_pitches() {
-        let geometry = RowGeometry::new(10.0, vec![1, 3]);
+    fn tall_rows_take_their_lines() {
+        let geometry = RowGeometry::new(10.0, [1, 3].into_iter(), 2);
         let tops: Vec<f32> = (0..5).map(|r| geometry.top(r)).collect();
         assert_eq!(tops, [0.0, 10.0, 30.0, 40.0, 60.0]);
         for (y, row) in [
@@ -1195,33 +1208,81 @@ mod tests {
         }
         assert_eq!(geometry.height(3), 20.0);
         assert_eq!(geometry.height(4), 10.0);
+
+        let three = RowGeometry::new(10.0, [1, 3].into_iter(), 3);
+        let tops: Vec<f32> = (0..5).map(|r| three.top(r)).collect();
+        assert_eq!(tops, [0.0, 10.0, 40.0, 50.0, 80.0]);
+        for (y, row) in [(39.0, 1), (40.0, 2), (50.0, 3), (79.0, 3), (80.0, 4)] {
+            assert_eq!(three.row_at(y), row, "at {y}");
+        }
+        assert_eq!(three.height(1), 30.0);
+
+        let flat = RowGeometry::new(10.0, [1, 3].into_iter(), 1);
+        assert_eq!(flat.top(4), 40.0);
+        assert_eq!(flat.height(3), 10.0);
+        assert_eq!(flat.row_at(35.0), 3);
     }
 
-    /// The marker column starts past the widest reading while the note keeps
-    /// its room, gives the reading less when it doesn't, and under 460 points
-    /// leaves the reading's line.
+    /// A reading 200 points wide, a tag 100 and controls 180 at their least,
+    /// 8 apart: each part joins the line before it while that line has room.
     #[test]
-    fn the_marker_column_follows_the_row_width() {
-        // A 30-point number, an 18-point ×, 8-point gaps and no gutter: 72
-        // points beside the note's 120.
-        let column = |width, reading| marker_column(width, reading, 30.0, 18.0, 8.0, 0.0);
-        assert_eq!(column(900.0, 300.0), Some(300.0), "past the reading");
-        assert_eq!(column(492.0, 300.0), Some(300.0), "an exact fit");
-        assert_eq!(column(491.0, 300.0), Some(299.0), "the reading gives way");
-        assert_eq!(column(460.0, 300.0), Some(268.0), "at the breakpoint");
-        assert_eq!(column(459.5, 300.0), None, "under it, a line of its own");
-        assert_eq!(column(459.5, 10.0), None, "however short the reading");
-        assert_eq!(column(600.0, 0.0), Some(0.0), "no marker rows");
-        // A gutter is room the reading gives up too.
+    fn a_marker_rows_parts_fill_each_line_in_order() {
+        let row = |width, tag| MarkerRow::pack(width, 200.0, tag, 180.0, 8.0);
+        let tagged = |width| row(width, Some(100.0));
         assert_eq!(
-            marker_column(491.0, 300.0, 30.0, 18.0, 8.0, 14.0),
-            Some(285.0)
+            tagged(496.0),
+            MarkerRow {
+                lines: 1,
+                reading: 200.0,
+                tag: Some(((0, 208.0), 100.0)),
+                controls: (0, 316.0),
+            },
+            "an exact fit on one line"
         );
-        // A number tag wider than the row leaves the reading nothing.
         assert_eq!(
-            marker_column(480.0, 300.0, 400.0, 18.0, 8.0, 0.0),
-            Some(0.0)
+            tagged(495.0),
+            MarkerRow {
+                lines: 2,
+                reading: 200.0,
+                tag: Some(((0, 208.0), 100.0)),
+                controls: (1, 0.0),
+            },
+            "the controls start a line"
         );
+        assert_eq!(
+            tagged(307.0),
+            MarkerRow {
+                lines: 2,
+                reading: 200.0,
+                tag: Some(((1, 0.0), 100.0)),
+                controls: (1, 108.0),
+            },
+            "the tag starts a line, and the controls join it"
+        );
+        assert_eq!(
+            tagged(287.0),
+            MarkerRow {
+                lines: 3,
+                reading: 200.0,
+                tag: Some(((1, 0.0), 100.0)),
+                controls: (2, 0.0),
+            },
+            "a line each"
+        );
+        assert_eq!(
+            tagged(150.0),
+            MarkerRow {
+                lines: 3,
+                reading: 150.0,
+                tag: Some(((1, 0.0), 100.0)),
+                controls: (2, 0.0),
+            },
+            "only a reading wider than the row is cut"
+        );
+        // No row has a tag: the controls take its place.
+        assert_eq!(row(388.0, None).controls, (0, 208.0));
+        assert_eq!(row(387.0, None).controls, (1, 0.0));
+        assert_eq!(row(387.0, None).lines, 2);
     }
 
     /// Marking a reading that has a marker, from the log or the graph's

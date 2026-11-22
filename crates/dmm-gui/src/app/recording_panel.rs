@@ -1958,6 +1958,72 @@ mod tests {
         assert!(cross.right() + bar <= 800.0, "{cross:?}");
     }
 
+    /// In a narrow log a marker's row is two lines, whatever it says of its
+    /// reading: the reading with its tag beside it, then the controls, none
+    /// of them reaching into the row below.
+    #[test]
+    fn a_narrow_marker_row_keeps_its_tag_on_the_reading_line() {
+        let mut run = MenuRun::new();
+        let t0 = Instant::now();
+        // Two markers before Record, whose rows say so.
+        for i in 0..4 {
+            let mut m = reading();
+            m.timestamp = t0 + std::time::Duration::from_secs(i);
+            m.wall_time = run.app.clock.wall_time_for(m.timestamp);
+            run.app.graph.push(1.234, m.timestamp, "DC V", "V", None);
+            run.app.last_measurement = Some(m);
+            if i % 2 == 1 {
+                run.app.add_marker(false);
+            }
+        }
+        run.app.toggle_recording();
+        run.width = 400.0;
+        run.frame(1.0, vec![]);
+        run.frame(1.0, vec![]);
+
+        let rects = |pred: &dyn Fn(&egui::accesskit::Node) -> bool| -> Vec<Rect> {
+            let mut rects: Vec<Rect> = run
+                .tree
+                .iter()
+                .filter(|(_, n)| pred(n))
+                .filter_map(|(_, n)| n.bounds())
+                .map(to_rect)
+                .collect();
+            rects.sort_by(|a, b| a.top().total_cmp(&b.top()));
+            // A label and its text run share a line.
+            rects.dedup_by(|a, b| a.top() == b.top());
+            rects
+        };
+        let readings = rects(&|n| n.value().is_some_and(|v| v.contains(':')));
+        let tags = rects(&|n| n.value() == Some("not in the recording"));
+        let notes = [1, 2].map(|n| run.node_rect(&format!("Note for marker {n}")));
+        assert_eq!(
+            (readings.len(), tags.len()),
+            (2, 2),
+            "{readings:?} {tags:?}"
+        );
+        for i in 0..2 {
+            assert!(
+                readings[i].y_range().contains(tags[i].center().y),
+                "the tag beside its reading: {:?} and {:?}",
+                readings[i],
+                tags[i]
+            );
+            assert!(
+                readings[i].bottom() <= notes[i].top(),
+                "the controls under the reading: {:?} and {:?}",
+                readings[i],
+                notes[i]
+            );
+        }
+        assert!(
+            notes[0].bottom() <= readings[1].top(),
+            "the first row clear of the second: {:?} and {:?}",
+            notes[0],
+            readings[1]
+        );
+    }
+
     /// Where the log drew the row of the sample taken at `at`.
     fn sample_rect(run: &MenuRun, at: Instant) -> Rect {
         let sample = run

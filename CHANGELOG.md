@@ -8,6 +8,7 @@
 
 ### Bug fixes
 
+- **A marker's row in the log takes the lines a narrow panel needs** — a "not in the recording" note cut its reading short or put its number over the next row.
 - **A narrow window shows `OL` in the error colour** — and keeps the unit plain when a reading passes an alarm limit, as wider windows do.
 
 ## v0.11.0 — Android Support
