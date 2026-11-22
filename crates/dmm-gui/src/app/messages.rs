@@ -18,7 +18,7 @@ use super::connection::{
     self, ConnectedMeter, DmmMessage, RECONNECT_INTERVAL, RECONNECT_LIMIT, RemoteCommand,
     ReopenSource, ThreadContext, spawn_acquisition,
 };
-use super::connection_issue::{ConnectionIssue, NoticeKind};
+use super::connection_issue::{ConnectionIssue, ConnectionNotice, NoticeKind};
 use super::toast::{ERROR_GLYPH, Toast, dismiss_button};
 use super::{App, ConnectionState, Worker, named_device};
 use crate::settings::format_sample_count;
@@ -1044,14 +1044,24 @@ impl App {
         }
     }
 
+    /// Whether [`Self::show_late_readings`] draws its notice. The meter-only
+    /// view keys its fit on this, the notice taking room from the reading.
+    pub(super) fn late_readings_note_shown(&self) -> bool {
+        self.connection.late_readings.is_some()
+    }
+
+    /// Whether [`Self::show_screen_only_note`] draws its line, for the
+    /// meter-only view's fit as well.
+    pub(super) fn screen_only_note_shown(&self) -> bool {
+        self.last_measurement
+            .as_ref()
+            .is_some_and(|m| m.screen_only)
+    }
+
     /// A muted line under a reading the meter shows on its own screen only,
     /// as a CMS's oscilloscope: the readout's dashes alone read as a fault.
     pub(super) fn show_screen_only_note(&self, ui: &mut Ui) {
-        if !self
-            .last_measurement
-            .as_ref()
-            .is_some_and(|m| m.screen_only)
-        {
+        if !self.screen_only_note_shown() {
             return;
         }
         ui.add_space(4.0);
@@ -1067,9 +1077,14 @@ impl App {
     ///
     /// The big-meter modes do not call this — see [`App::connection_notice`].
     pub(super) fn show_connection_help(&self, ui: &mut Ui) {
-        let Some(notice) = self.connection_notice() else {
-            return;
-        };
+        if let Some(notice) = self.connection_notice() {
+            self.show_notice_help(ui, &notice);
+        }
+    }
+
+    /// [`Self::show_connection_help`] for a notice the caller built: the
+    /// meter-only view, which keys its fit on the notice it draws.
+    pub(super) fn show_notice_help(&self, ui: &mut Ui, notice: &ConnectionNotice) {
         let warn_color = self
             .settings
             .theme_colors(ui.visuals().dark_mode)

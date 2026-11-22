@@ -213,11 +213,17 @@ pub(super) struct FitInputs {
     /// A set alarm reserves the limit badge's slot by the reading and adds
     /// the Alarms line to the statistics.
     pub(super) alarm_set: bool,
-    /// Which connection notice, if any, stands in for the reading. Its title
-    /// takes the readout's place in the big-meter modes and the titles differ
-    /// in length, so the fitted font has to be re-measured when one replaces
-    /// another.
+    /// Which connection notice, if any, is on screen. Its title takes the
+    /// readout's place in the big-meter modes and the titles differ in
+    /// length; with the mode `Off` its whole help is drawn under the
+    /// buttons. Either way the reading is fitted again when one arrives,
+    /// goes or replaces another.
     pub(super) notice_kind: Option<NoticeKind>,
+    /// The late-readings notice and the screen-only line, drawn under the
+    /// buttons with the mode `Off`: each takes room from the reading while
+    /// it shows.
+    pub(super) late_readings_note: bool,
+    pub(super) screen_only_note: bool,
     /// The language the badges, the placeholder and a notice's hint are
     /// written in, whose words differ in length.
     pub(super) language: &'static str,
@@ -316,6 +322,8 @@ mod tests {
             transform_is_identity: true,
             alarm_set: false,
             notice_kind: None,
+            late_readings_note: false,
+            screen_only_note: false,
             language: "en-US",
             stats_widths: [7, 2, 3, 4],
         }
@@ -743,6 +751,14 @@ mod tests {
         });
         mutations.push(FitInputs {
             notice_kind: Some(NoticeKind::NoResponse),
+            ..inputs()
+        });
+        mutations.push(FitInputs {
+            late_readings_note: true,
+            ..inputs()
+        });
+        mutations.push(FitInputs {
+            screen_only_note: true,
             ..inputs()
         });
         mutations.push(FitInputs {

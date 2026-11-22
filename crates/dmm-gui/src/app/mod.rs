@@ -946,6 +946,24 @@ impl App {
         .into_owned()
     }
 
+    /// Whether `notice` is the waiting one for a meter that was reading and
+    /// has missed a single read.
+    ///
+    /// The meter alone draws its notice under the buttons and fits the
+    /// reading to what is left, so a notice that arrives re-opens the fit
+    /// and one that goes re-opens it again. A read timeout is a couple of
+    /// seconds, and a slow range or a mode change can take that long: fitted
+    /// from the first, the notice shrank the reading and everything under
+    /// it, and the next reading grew them back. It is neither drawn nor
+    /// fitted until a second read is missed, which keeps the reading still
+    /// and the statistics in the window. A meter that has yet to answer has
+    /// no reading to keep still, and is waited for from the first.
+    fn is_one_missed_read(&self, notice: &connection_issue::ConnectionNotice) -> bool {
+        notice.kind == connection_issue::NoticeKind::Waiting
+            && self.connection.has_read
+            && self.connection.waiting_timeouts < 2
+    }
+
     /// The big meter: one reading scaled to fill the window, with the command
     /// buttons under it — and, when the mode is `Off` and it is only the
     /// hidden panels that left the reading alone, the connection help, specs
@@ -960,19 +978,25 @@ impl App {
         let frame = egui::Frame::central_panel(ctx.global_style().as_ref())
             .inner_margin(default_margin * margin_scale);
 
+        // One notice for the fit's key and for whichever place draws it,
+        // so the fit cannot miss what reaches the screen. Built here, outside
+        // the closure that borrows `self` mutably.
+        let notice = self
+            .connection_notice()
+            .filter(|n| self.big_meter_mode != BigMeterMode::Off || !self.is_one_missed_read(n));
         // Full and Minimal fill the window with the reading, leaving nowhere
         // to draw the connection help: the issue takes the reading's place
-        // instead, and the steps become its hover text. Built here, outside
-        // the closure that borrows `self` mutably.
-        let notice = (self.big_meter_mode != BigMeterMode::Off)
-            .then(|| self.connection_notice())
-            .flatten();
+        // instead, and the steps become its hover text. With the mode `Off`
+        // the whole help is drawn under the buttons.
+        let in_readout = notice
+            .as_ref()
+            .filter(|_| self.big_meter_mode != BigMeterMode::Off);
         // The sections and the prose under them as one string: the tooltip is
         // the only place a big-meter session can read them.
-        let tooltip = notice.as_ref().map(|n| n.help_text(&self.l10n));
+        let tooltip = in_readout.map(|n| n.help_text(&self.l10n));
         // The keys rendered by the context rather than spelled out: the
         // binding uses `Modifiers::COMMAND`, which is Cmd on macOS.
-        let hint = notice.is_some().then(|| {
+        let hint = in_readout.map(|_| {
             let keys = shortcuts::Shortcut::CycleBigMeter.keys(ctx, &self.l10n);
             dmm_shared::tr!(self.l10n, "reading-big-meter-hint", keys = keys).into_owned()
         });
@@ -1001,6 +1025,8 @@ impl App {
                 transform_is_identity: self.transform.is_identity(),
                 alarm_set: self.alarm.is_some(),
                 notice_kind: notice.as_ref().map(|n| n.kind),
+                late_readings_note: self.late_readings_note_shown(),
+                screen_only_note: self.screen_only_note_shown(),
                 language: self.l10n.language().id,
                 stats_widths: self.stats_widths.fit_key(),
             };
@@ -1017,7 +1043,7 @@ impl App {
                         self.meter_fit.content_height
                     };
                     let tc = self.settings.theme_colors(ui.visuals().dark_mode);
-                    let no_reading = match (notice.as_ref(), hint.as_deref(), tooltip.as_deref()) {
+                    let no_reading = match (in_readout, hint.as_deref(), tooltip.as_deref()) {
                         (Some(n), Some(hint), Some(tooltip)) => display::NoReadingText::Notice {
                             title: &n.title,
                             hint,
@@ -1060,7 +1086,9 @@ impl App {
                         // Only here: in Full and Minimal the notice is
                         // already in the readout, and the help drawn under a
                         // window-filling reading would land off-screen.
-                        self.show_connection_help(ui);
+                        if let Some(notice) = &notice {
+                            self.show_notice_help(ui, notice);
+                        }
                         self.show_screen_only_note(ui);
                         self.show_late_readings(ui);
                         self.show_specs_section_inline(ui, scale);
@@ -2907,6 +2935,170 @@ mod tests {
             "raised after closing:\n{}",
             raised.join("\n")
         );
+    }
+
+    /// With both panels hidden the reading is drawn alone and fitted to the
+    /// window, with the connection help, specs and statistics under it. A
+    /// meter going quiet after the fit closed used to add the help to a
+    /// window already full, pushing the statistics under the bottom edge.
+    /// The notice is part of the fit's key whatever the big-meter mode: the
+    /// reading shrinks to make room for the help, and is fitted again
+    /// without it when readings come back.
+    #[test]
+    fn help_arriving_under_the_meter_alone_keeps_the_statistics_in_the_window() {
+        let (w, h) = (1000.0, 540.0);
+        let reading = [" 15.070", "\u{00B5}F", "Capacitance", "22\u{00B5}F"];
+        let mut app = crate::app::test_support::connected_to("ut61eplus");
+        app.settings.shared.device_family = "ut61eplus".to_string();
+        app.settings.show_graph = false;
+        app.settings.show_recording = false;
+        show_reading(&mut app, reading);
+        let ctx = crate::app::styled_context();
+        ctx.enable_accesskit();
+        let screen = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(w, h));
+        let value_height = |nodes: &[(NodeId, Node)]| {
+            label_exact(nodes, " 15.070")
+                .expect("the value is drawn")
+                .height()
+        };
+        let statistics = |nodes: &[(NodeId, Node)]| {
+            // The heading's line, a row, and the last row.
+            ["Statistics", "Mean", "\u{03C3}"].map(|row| {
+                text_bounds(nodes, row).unwrap_or_else(|| panic!("no {row:?} statistics line"))
+            })
+        };
+
+        let settled = meter_nodes_on(&ctx, &mut app, w, h);
+        assert_eq!(outside(&settled, screen), [""; 0], "settled");
+        statistics(&settled);
+
+        app.connection.last_error = Some(ConnectionIssue::of(dmm_lib::error::Error::Timeout));
+        let stalled = meter_nodes_on(&ctx, &mut app, w, h);
+        assert!(shows_text(&stalled, BODY_PHRASE), "the help is drawn");
+        for row in statistics(&stalled) {
+            assert!(
+                screen.contains_rect(row),
+                "with the help: a statistics line at {row:?} hangs out of {screen:?}"
+            );
+        }
+        assert_eq!(outside(&stalled, screen), [""; 0], "with the help");
+        assert!(
+            value_height(&stalled) < value_height(&settled),
+            "the reading made no room for the help"
+        );
+
+        app.connection.last_error = None;
+        let cleared = meter_nodes_on(&ctx, &mut app, w, h);
+        assert!(!shows_text(&cleared, BODY_PHRASE), "the help is gone");
+        let (back, before) = (value_height(&cleared), value_height(&settled));
+        assert!(
+            (back - before).abs() <= 2.0,
+            "the reading came back {back} pt tall, from {before}"
+        );
+    }
+
+    /// A meter that misses one read is waited for under the reading's own
+    /// size. The waiting notice used to re-open the fit as it arrived, after
+    /// a single read timeout, and again as the next reading cleared it, so
+    /// with both panels hidden the reading and all under it shrank and grew
+    /// back at every missed read. The meter alone now takes the notice from
+    /// the second read missed in a row, drawn and fitted together, so the
+    /// statistics stay in the window; a meter that has yet to answer is
+    /// waited for from the first, with no reading to keep still.
+    #[test]
+    fn one_missed_read_leaves_the_reading_alone_at_its_size() {
+        for (w, h) in [(1000.0, 540.0), (600.0, 400.0)] {
+            let mut app = crate::app::test_support::connected_to("ut61eplus");
+            app.settings.show_graph = false;
+            app.settings.show_recording = false;
+            app.connection.has_read = true;
+            show_reading(
+                &mut app,
+                [" 15.070", "\u{00B5}F", "Capacitance", "22\u{00B5}F"],
+            );
+            let ctx = crate::app::styled_context();
+            ctx.enable_accesskit();
+            let screen = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(w, h));
+            meter_nodes_on(&ctx, &mut app, w, h);
+            let frame = |app: &mut App| {
+                headless_frame(&ctx, Some(screen), None, vec![], |ui| {
+                    let ctx = ui.ctx().clone();
+                    app.show_window(ui, &ctx);
+                })
+            };
+            // Where the reading and the last line under it were drawn.
+            let placed = |out: &egui::FullOutput| {
+                let (nodes, _) = a11y(out);
+                [" 15.070", "\u{03C3}"]
+                    .map(|text| text_bounds(&nodes, text).unwrap_or_else(|| panic!("no {text:?}")))
+            };
+            let settled = placed(&frame(&mut app));
+
+            app.connection.waiting_timeouts = 1;
+            for n in 0..6 {
+                let out = frame(&mut app);
+                assert_eq!(
+                    placed(&out),
+                    settled,
+                    "{w}x{h}: frame {n} after one missed read moved the window"
+                );
+                let repaint = out.viewport_output[&egui::ViewportId::ROOT].repaint_delay;
+                assert!(
+                    repaint > std::time::Duration::from_millis(100),
+                    "{w}x{h}: frame {n} asked for another in {repaint:?}"
+                );
+            }
+
+            app.connection.waiting_timeouts = 2;
+            let waiting = meter_nodes_on(&ctx, &mut app, w, h);
+            assert!(shows_text(&waiting, "Waiting for meter"), "the notice");
+            assert_eq!(outside(&waiting, screen), [""; 0], "{w}x{h}: waiting");
+
+            app.connection.waiting_timeouts = 0;
+            meter_nodes_on(&ctx, &mut app, w, h);
+            app.connection.has_read = false;
+            app.connection.waiting_timeouts = 1;
+            let unanswered = meter_nodes_on(&ctx, &mut app, w, h);
+            assert!(
+                shows_text(&unanswered, "Waiting for meter"),
+                "{w}x{h}: a meter that never answered is waited for unseen"
+            );
+        }
+    }
+
+    /// The waiting notice's dots move at every timeout under one notice
+    /// kind, so the fit stays closed through them; and they change nothing
+    /// the fit measures, so the grow guard has no frame to raise it to and
+    /// asks for no repaint: the reading keeps one size and the app idles.
+    #[test]
+    fn the_waiting_dots_leave_a_closed_fit_alone() {
+        let (w, h) = (1000.0, 540.0);
+        let mut app = crate::app::test_support::connected_to("ut61eplus");
+        app.settings.show_graph = false;
+        app.settings.show_recording = false;
+        show_reading(&mut app, [" 118.26", "\u{03A9}", "\u{03A9}", "220\u{03A9}"]);
+        let ctx = crate::app::styled_context();
+        ctx.enable_accesskit();
+        app.connection.waiting_timeouts = 1;
+        let nodes = meter_nodes_on(&ctx, &mut app, w, h);
+        assert!(shows_text(&nodes, "Waiting for meter"), "the notice");
+        let fitted = |app: &App| (app.meter_fit.content_height, app.meter_fit.reading_ratios.w);
+        let settled = fitted(&app);
+
+        let screen = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(w, h));
+        for timeouts in 2..=9 {
+            app.connection.waiting_timeouts = timeouts;
+            let out = headless_frame(&ctx, Some(screen), None, vec![], |ui| {
+                let ctx = ui.ctx().clone();
+                app.show_window(ui, &ctx);
+            });
+            assert_eq!(fitted(&app), settled, "timeout {timeouts} moved the fit");
+            let repaint = out.viewport_output[&egui::ViewportId::ROOT].repaint_delay;
+            assert!(
+                repaint > std::time::Duration::from_millis(100),
+                "timeout {timeouts}: the frame asked for another in {repaint:?}"
+            );
+        }
     }
 
     #[test]

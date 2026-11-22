@@ -289,3 +289,9 @@ Bugs a reader can reproduce: symptom, cause, and the fix where known.
   Visible row's ∫ wraps onto a line of its own, just above the session's ∫
   line. Fix, untried: keep that ∫ with its row, or draw the session's ∫
   first. Any live mock at a quarter of a 1600 px screen.
+- **A small window with both panels hidden loses statistics under the
+  connection help.** At 420 x 240 "No response from meter" leaves the σ row
+  below the edge: the help is drawn at its normal size, while the fit
+  (`show_meter_only`) and the window's minimum size (`min_window_size`) count
+  it as shrinking with the reading. Fix, untried: measure the help apart from
+  the scaled content. A cable whose meter is switched off.
