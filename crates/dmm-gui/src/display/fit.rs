@@ -235,15 +235,6 @@ pub(super) fn pick_layout(
 /// leaves the one it drew last; see [`pick_layout`].
 const LAYOUT_SWITCH_MARGIN: f32 = 0.02;
 
-/// What the big meter drew last frame, kept in egui's memory: the layout,
-/// for [`pick_layout`]'s margin, and the value's size, which the fit lays the
-/// sub-values out at to weigh them — a size already drawn, so its glyphs are
-/// cached, and the very size the next frame picks once the window is still.
-#[derive(Clone, Copy)]
-pub(super) struct LastFit {
-    pub(super) layout: ReadingLayout,
-    pub(super) size: f32,
-}
 #[cfg(test)]
 mod tests {
     use super::*;

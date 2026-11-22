@@ -3101,6 +3101,102 @@ mod tests {
         }
     }
 
+    /// Where a frame drew every node that has bounds: what a still window
+    /// must repeat from one frame to the next.
+    fn drawn(out: &egui::FullOutput) -> Vec<(NodeId, egui::Rect)> {
+        let (nodes, _) = a11y(out);
+        nodes
+            .iter()
+            .filter_map(|(id, n)| Some((*id, to_rect(n.bounds()?))))
+            .collect()
+    }
+
+    /// The big meter on a reading with a frequency and a period under it, as
+    /// AC V shows them.
+    fn with_two_sub_values() -> App {
+        use dmm_lib::measurement::{AuxValue, MeasuredValue};
+        let row = |label: &'static str, digits: &str, unit: &'static str| AuxValue {
+            label: label.into(),
+            value: MeasuredValue::Normal(digits.trim().parse().unwrap_or(0.0)),
+            unit: unit.into(),
+            display_raw: Some(digits.to_string()),
+            elapsed_secs: None,
+        };
+        let mut app = big_meter_app([" 118.16", "V", "AC V Hz", "220V"]);
+        app.last_measurement.as_mut().expect("a reading").aux_values = vec![
+            row("Frequency", "59.951", "Hz"),
+            row("Period", "16.680", "ms"),
+        ];
+        app
+    }
+
+    /// Resize one window through `sizes` and hold it at each: once the fit
+    /// has had its passes, every further frame must draw what the one before
+    /// drew and ask for no other. Returns the sizes that kept moving.
+    fn sizes_that_never_settle(
+        app: &mut App,
+        sizes: impl Iterator<Item = (u16, u16)>,
+    ) -> Vec<String> {
+        let ctx = crate::app::styled_context();
+        ctx.enable_accesskit();
+        let mut moving = Vec::new();
+        for (w, h) in sizes {
+            let screen =
+                egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(f32::from(w), f32::from(h)));
+            let mut frame = || {
+                headless_frame(&ctx, Some(screen), None, vec![], |ui| {
+                    let ctx = ui.ctx().clone();
+                    app.show_window(ui, &ctx);
+                })
+            };
+            // The fit's passes and its closing frame, then the frames the
+            // grid and the layout take to follow it.
+            for _ in 0..12 {
+                frame();
+            }
+            let mut last = drawn(&frame());
+            for n in 0..4 {
+                let out = frame();
+                let now = drawn(&out);
+                let repaint = out.viewport_output[&egui::ViewportId::ROOT].repaint_delay;
+                if now != last || repaint < std::time::Duration::from_millis(100) {
+                    moving.push(format!(
+                        "{w}x{h}: frame {n} {}, next frame in {repaint:?}, asked by {:?}",
+                        if now == last { "still" } else { "moved" },
+                        ctx.repaint_causes()
+                    ));
+                    break;
+                }
+                last = now;
+            }
+        }
+        moving
+    }
+
+    /// The reported window: AC V with its frequency and period under the
+    /// reading, the big meter 746 x 193, reached by a resize. The reading's
+    /// size was worked out from the size drawn the frame before, and here
+    /// that had no size it came back to: it changed every frame, for ever,
+    /// and each frame's new grid asked for the next. A band of sizes around
+    /// it, walked both ways as a dragged edge does.
+    #[test]
+    fn the_big_meter_with_sub_values_settles_at_every_size() {
+        let mut app = with_two_sub_values();
+        let band = (190..=198).step_by(2).flat_map(|h| {
+            let widths: Vec<u16> = if h % 4 == 0 {
+                (736..=756).collect()
+            } else {
+                (736..=756).rev().collect()
+            };
+            widths.into_iter().map(move |w| (w, h))
+        });
+        let walk = [(1200, 190), (746, 190), (746, 193)]
+            .into_iter()
+            .chain(band);
+        let moving = sizes_that_never_settle(&mut app, walk);
+        assert!(moving.is_empty(), "never settled:\n{}", moving.join("\n"));
+    }
+
     #[test]
     fn the_big_meter_puts_the_connection_issue_in_the_readout() {
         for mode in [BigMeterMode::Full, BigMeterMode::Minimal] {

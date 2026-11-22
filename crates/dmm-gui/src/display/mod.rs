@@ -18,7 +18,7 @@ use crate::theme::ThemeColors;
 use aux_grid::{AuxGridMetrics, aux_grid_id, aux_summary_job, show_aux_rows};
 use dmm_shared::l10n::Localizer;
 use dmm_shared::tr;
-use fit::{GridFit, LastFit, ReadingLayout, beside_extra_width, pick_layout};
+use fit::{GridFit, ReadingLayout, beside_extra_width, pick_layout};
 pub use fit::{ReadingFit, ReadingRatios};
 pub(crate) use readout::mode_switch_offered;
 use readout::{RangeAtRest, show_mode_readout, show_range_readout};
@@ -813,32 +813,34 @@ pub fn show_reading_large(
         .then(|| no_reading.layout_ratios(ui))
         .flatten();
     let ratios = own_ratios.as_ref().unwrap_or(ratios);
-    let last_id = ui.scope_id().with("big_meter_last_fit");
-    let last: Option<LastFit> = ui.data(|d| d.get_temp(last_id));
-    // Laid out at the size drawn last, scaled from there: text does not
-    // scale exactly, but at the size it was laid out at the estimate is the
-    // grid as drawn, so a still window fits it to the pixel. The side panel's
-    // size, whose glyphs are cached too, stands in before the first frame.
-    let reference = last.map_or(BASE_READING_FONT_SIZE, |l| l.size);
-    let grid = measurement
-        .and_then(|m| AuxGridMetrics::measure(ui, l10n, m, reference * MODE_SIZE_RATIO, tc))
-        .map(|metrics| GridFit {
-            metrics,
-            min_cell: ui.spacing().interact_size,
-            spacing_y: ui.spacing().item_spacing.y,
-            selectors: choices.any_offered(),
-        });
+    let last_id = ui.scope_id().with("big_meter_last_layout");
+    let last: Option<ReadingLayout> = ui.data(|d| d.get_temp(last_id));
     let avail = ui.available_size();
     let content_coeff = base_content_height / BASE_READING_FONT_SIZE;
-    let (layout, size) = pick_layout(
-        avail,
-        content_coeff,
-        ratios,
-        grid.as_ref(),
-        last.map(|l| l.layout),
-    );
+    let grid_at = |value_size: f32| {
+        measurement
+            .and_then(|m| AuxGridMetrics::measure(ui, l10n, m, value_size * MODE_SIZE_RATIO, tc))
+            .map(|metrics| GridFit {
+                metrics,
+                min_cell: ui.spacing().interact_size,
+                spacing_y: ui.spacing().item_spacing.y,
+                selectors: choices.any_offered(),
+            })
+    };
+    // Text does not scale exactly — a row's height is whole pixels — so the
+    // sub-values are weighed twice: laid out at the side panel's size, whose
+    // glyphs are cached, for a first size, then at that size for the one
+    // drawn, a few percent away at most. Both come from this frame alone. A
+    // size worked out from the one drawn the frame before has, at some
+    // windows, no size it comes back to, and the reading then changes size
+    // every frame for ever, each frame's new grid asking for the next.
+    let grid = grid_at(BASE_READING_FONT_SIZE).and_then(|rough| {
+        let (_, size) = pick_layout(avail, content_coeff, ratios, Some(&rough), None);
+        grid_at(size.max(MIN_BIG_METER_FONT_SIZE))
+    });
+    let (layout, size) = pick_layout(avail, content_coeff, ratios, grid.as_ref(), last);
     let size = size.max(MIN_BIG_METER_FONT_SIZE);
-    ui.data_mut(|d| d.insert_temp(last_id, LastFit { layout, size }));
+    ui.data_mut(|d| d.insert_temp(last_id, layout));
 
     // Render and measure actual dimensions.
     let before = ui.cursor().top();

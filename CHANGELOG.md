@@ -16,6 +16,7 @@
 - **The plot's key fits a short plot** — its lower entries were cut off; it now takes one row, and a plot too small for that draws none.
 - **The big meter keeps its buttons in the window on HOLD** — a badge or a longer unit arriving in a tight window pushed them or the reading past the edge.
 - **The reading alone shrinks to fit connection help under it** — with both panels hidden, the help pushed the statistics below the window.
+- **The big meter's reading holds one size in a still window** — with sub-values, it kept changing size at some window sizes and kept the processor busy.
 
 ## v0.11.0 — Android Support
 
