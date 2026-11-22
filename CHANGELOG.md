@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## v0.11.0 — Android Support
+
+dmm-gui runs on Android, over Bluetooth and USB cables. Reference values and alarm limits take a unit. The UNI-T UT71D is partly verified. Fixes make the graph, imported and replayed recordings, and reconnecting more dependable.
 
 ### Devices
 
@@ -13,22 +15,21 @@
 - **Reference values take a unit, kept through auto-range steps and exports** — `1 Ω`, `4.7k` or `10 mohm`; a bare number takes the plotted unit.
 - **Alarm limits take a unit, and then watch only that quantity** — `4980 mV` or `10 kohm`; a bare number stays in the base unit.
 - **Quitting asks first when a recording or its markers aren't exported** — the close button, `Ctrl+Q` and `Ctrl+W` dropped them unasked.
+- **Statistics is one table shaped to the panel, the cursors' figures included** — a narrow window put the session's ∫ after the visible window's line.
 - **Toasts stack, each with a close button and a time-left ring** — a newer message replaced the one on screen.
 - **An imported file that starts past an alarm limit says so** — as a meter's first reading does.
-- **Statistics is one table shaped to the panel, the cursors' figures included** — a narrow window put the session's ∫ after the visible window's line.
 - **The Specifications panel covers more meters** — the OWON CMS061 and CMS101 (UNI-T UT217A and UT217B), UNI-T UT71, and Voltcraft VC920, VC940 and VC960.
 - **The ⊞ button steps through big meter and minimal mode** — minimal mode needed `Ctrl+B`.
 - **A Mark button marks the reading on screen** — only the `N` key and the plot's right-click menu did.
-- **Graph and histogram readouts work under a finger** — the histogram showed none, and the hand covered the graph's.
-- **A tap keeps the graph's crosshair and readings on a touchscreen** — they went as the finger lifted.
+- **Graph and histogram readouts work on a touchscreen** — a tap keeps the graph's crosshair and readings; the histogram showed none, and the hand covered the graph's readout.
 - **dmm-gui stops reconnecting after ten minutes** — it retried a lost link for as long as it ran.
 - **Ref, Alarm, Scale and Y-range fields underline values they won't use** — the hover says why.
 - **Failure notices name the meter picked in Settings and point to Auto-detect** — "No USB cable found" after a meter swap sent you to drivers.
 - **"No USB cable found" says when Bluetooth wasn't searched** — and how to switch the search on.
 - **A refused mode or range switch says to check the dial**
 - **Meter data this tool doesn't know asks for a report** — the request only reached the log.
-- **Bluetooth readings arriving in pairs ask for a report** — on any meter
-- **A ZOTEK meter sending another model's data names the model to pick** — the notice only reached the log.
+- **Bluetooth readings arriving in pairs ask for a report** — on any meter.
+- **A notice about another model's data names the model to pick** — a ZOTEK meter's only reached the log; an OWON or Brymen meter's said to pass `--device`.
 - **dmm-gui says when it took the first of several Bluetooth devices** — unless `--adapter` named it.
 - **dmm-gui says when the settings file names a device it doesn't know** — it detected the meter without saying why.
 - **`--mock-mode` needs `--device mock` or the mock picked in Settings** — it switched to the mock on its own.
@@ -37,12 +38,12 @@
 
 - **`--bluetooth` scans Bluetooth for one run, whatever the saved setting**
 - **`--alarm-high` and `--alarm-low` take a unit, and then watch only that quantity** — `4980mV` or `10kohm`; a bare number stays in the base unit.
+- **`read` ends with an error after ten minutes without its meter** — it waited for a lost link until Ctrl+C.
 - **An unknown `--device` value points to `--help`, which lists the devices**
 - **A mistyped `command` name is answered with the meter's commands**
-- **`read` ends with an error after ten minutes without its meter** — it waited for a lost link until Ctrl+C.
 - **dmm-cli's connection warnings come in the chosen language** — several USB cables or Bluetooth adapters, a meter naming or sending another model, unknown data, late Bluetooth readings.
 - **dmm-cli says which meter is picked when its data won't read**
-- **Bluetooth readings arriving in pairs ask for a report** — on any meter
+- **Bluetooth readings arriving in pairs ask for a report** — on any meter.
 - **"No USB cable found" says when Bluetooth wasn't searched** — and how to switch the search on.
 - **`--mock-mode` with a real meter or Auto-detect is refused** — it was ignored.
 
@@ -51,40 +52,42 @@
 - **The graph shows readings before an auto-range step as the meter did** — 0.07 Ω read 0.0000 MΩ, and the axis 12000000 Ω.
 - **The graph shades OL that opens a session or dial turn** — it stayed blank, and Export… dropped those readings.
 - **dmm-gui starts afresh and stops a recording when a different meter answers** — the new meter's readings joined the first one's graph, statistics and recording.
+- **Alarms judge an imported scaled file in its own unit** — a limit of 5 on a kV file meant 5 V.
+- **Alarms turn off when an import or another meter changes the unit** — the same numbers judged the new unit.
+- **A file's Y range and reference lines stay on their trace** — an export after a mode change put them on another.
+- **`--replay` integrates across readings logged over a second apart** — the integral skipped every interval, and dmm-gui's graph broke between readings over 5 s apart.
+- **dmm-gui's graph breaks its trace where the integral stops counting** — under a 0.4 s **Sample interval**, a silence shorter than 2 s broke the graph but was integrated across.
+- **A recording made in pairs plays back in dmm-gui as one line** — played with `--replay`, readings handed over two at a time more than a second apart broke the graph at every pair.
+- **An imported file keeps its spacing after a clock set back** — the readings piled onto one instant until the clock caught up.
+- **A capture plan's `at_least` is always in the mode's base unit** — lead noise shown in mV passed a floor of 1.
 - **dmm-gui names the meter of a played-back recording** — with **Show device name on connect (beeps)** off, it showed none.
 - **dmm-gui's replay files name the meter as dmm-cli's do** — they gave the menu's name, such as "UNI-T UT61E+".
 - **A rebranded Bluetooth meter keeps its picked name when Bluetooth isn't searched** — the UNI-T UT217A was called the OWON CMS061.
-- **dmm-gui names the model to pick for another OWON or Brymen meter** — it said to pass `--device`.
-- **"Waiting for meter…" no longer stays frozen while dmm-gui reconnects**
+- **Markers start at 1 when dmm-gui connects after an import** — the first one took the number after the imported file's last marker.
 - **dmm-gui's remote buttons, dropdown picks, Pause and Sample interval act at once** — they waited for the next sample.
 - **dmm-gui's mode and range readouts switch only a connected meter** — a pick made while reconnecting went to whichever meter answered next.
 - **A ZOTEK meter's current, °C/°F and zero keys follow its screen now** — paused or at a slow sample interval, they followed an older screen.
 - **dmm-gui stays paused when a Settings change reconnects it** — it started reading again.
-- **Clicking the colour preset already in use keeps your custom colours** — it cleared them in both dark and light.
-- **`Ctrl+R`, `Ctrl+L`, `Ctrl+O` and `Ctrl+I` wait while the discard prompt is open** — they changed its question or acted behind it.
-- **dmm-gui's Linux launcher and icon work from a path containing a space**
-- **dmm-gui keeps the settings a newer version saved** — an older version run in between deleted them at its next save.
-- **dmm-cli detects the meter when the settings name an unknown device** — every command stopped, `list` and `completions` too.
-- **Alarms judge an imported scaled file in its own unit** — a limit of 5 on a kV file meant 5 V.
-- **Alarms turn off when an import or another meter changes the unit** — the same numbers judged the new unit.
 - **A Y bound or reference value being typed survives an auto-range step** — the graph rewrote it under the caret.
 - **A right axis keeps its fixed range when the plotted reading auto-ranges**
-- **A file's Y range and reference lines stay on their trace** — an export after a mode change put them on another.
-- **An imported file keeps its spacing after a clock set back** — the readings piled onto one instant until the clock caught up.
-- **`--replay` integrates across readings logged over a second apart** — the integral skipped every interval, and dmm-gui's graph broke between readings over 5 s apart.
-- **dmm-gui's graph breaks its trace where the integral stops counting** — under a 0.4 s **Sample interval**, a silence shorter than 2 s broke the graph but was integrated across.
-- **A recording made in pairs plays back in dmm-gui as one line** — played with `--replay`, readings handed over two at a time more than a second apart broke the graph at every pair.
-- **Markers start at 1 when dmm-gui connects after an import** — the first one took the number after the imported file's last marker.
-- **A capture plan's `at_least` is always in the mode's base unit** — lead noise shown in mV passed a floor of 1.
-- **A cable pulled at `capture`'s meter check asks for no report** — it saved a no-response report and asked you to attach it.
-- **Turning a UT71C/D/E from AC mA to 4-20 mA % asks for no report** — dmm-cli took it for unknown meter data.
+- **Clicking the colour preset already in use keeps your custom colours** — it cleared them in both dark and light.
+- **`Ctrl+R`, `Ctrl+L`, `Ctrl+O` and `Ctrl+I` wait while the discard prompt is open** — they changed its question or acted behind it.
+- **"Waiting for meter…" no longer stays frozen while dmm-gui reconnects**
+- **dmm-gui keeps the settings a newer version saved** — an older version run in between deleted them at its next save.
+- **dmm-cli detects the meter when the settings name an unknown device** — every command stopped, `list` and `completions` too.
+- **dmm-gui's Linux launcher and icon work from a path containing a space**
+- **A failed dmm-cli command prints its error once** — it printed it twice.
 - **`dmm-cli debug` stops when the link to the meter is lost** — it filled the terminal with errors until Ctrl+C.
 - **`dmm-cli read` and `debug` piped into `head` end cleanly** — `read` ended with "Broken pipe" and no summary, and `debug` crashed.
+- **A cable pulled at `capture`'s meter check asks for no report** — it saved a no-response report and asked you to attach it.
+- **Turning a UT71C/D/E from AC mA to 4-20 mA % asks for no report** — dmm-cli took it for unknown meter data.
 - **The mock ignores HOLD, REL, MIN/MAX and Peak where a UT61E+ does**
 
 ### Internal
 
 - **dmm-gui and dmm-cli are smaller** — a third on Linux and macOS, a tenth on Windows.
+
+**Full Changelog**: https://github.com/antoinecellerier/dmm-tools/compare/v0.10.0...v0.11.0
 
 ## v0.10.0 — Translations
 
