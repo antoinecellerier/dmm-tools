@@ -1180,10 +1180,8 @@ impl App {
     /// shows: `minimal` big meter, the meter alone, or the panels.
     fn update_min_window_size(&mut self, ctx: &egui::Context, minimal: bool, meter_only: bool) {
         // Reading dimensions come from cached ratios × minimum big meter
-        // font size; top bar widths come from previous-frame measurements.
-        let bar_left_w: f32 = ctx.data(|d| d.get_temp(top_bar::left_width_id()).unwrap_or(300.0));
-        let bar_right_w: f32 = ctx.data(|d| d.get_temp(top_bar::right_width_id()).unwrap_or(120.0));
-        let bar_min_w = bar_left_w.max(bar_right_w) + 16.0;
+        // font size; the top bar's minimum from the widths it last measured.
+        let bar_min_w = top_bar::min_width(ctx);
 
         let window_content = if minimal {
             WindowContent::ReadingOnly
@@ -2477,10 +2475,7 @@ mod tests {
             nodes
         };
         frames(900.0);
-        let row: f32 = ctx
-            .data(|d| d.get_temp(top_bar::left_width_id()))
-            .expect("the bar caches its first row's width");
-        let nodes = frames(row + 16.0 - 0.4);
+        let nodes = frames(top_bar::first_row_window_width(&ctx) - 0.4);
         let rect = |text: &str| {
             crate::app::test_support::node_rect(&nodes, |n| node_text(n) == Some(text))
                 .unwrap_or_else(|| panic!("no {text:?} on the bar"))
@@ -2513,10 +2508,7 @@ mod tests {
             nodes
         };
         frames(900.0);
-        let row: f32 = ctx
-            .data(|d| d.get_temp(top_bar::left_width_id()))
-            .expect("the bar caches its first row's width");
-        let width = row + 16.0 - 30.0;
+        let width = top_bar::first_row_window_width(&ctx) - 30.0;
         let nodes = frames(width);
         let rect = |text: &str| {
             crate::app::test_support::node_rect(&nodes, |n| node_text(n) == Some(text))

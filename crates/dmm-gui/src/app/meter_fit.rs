@@ -112,8 +112,8 @@ impl MeterFit {
     /// Smallest window that still fits the reading, derived from the cached
     /// ratios at the minimum big-meter font size.
     ///
-    /// `bar_min_w` is the wider of the top bar's two groups as measured on
-    /// the previous frame, plus its spacing.
+    /// `bar_min_w` is the narrowest the top bar lets the window be
+    /// (`top_bar::min_width`).
     pub(super) fn min_window_size(&self, content: WindowContent, bar_min_w: f32) -> egui::Vec2 {
         let min_font = display::MIN_BIG_METER_FONT_SIZE;
         let min_scale = min_font / display::BASE_READING_FONT_SIZE;

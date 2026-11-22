@@ -10,7 +10,9 @@ use dmm_shared::tr;
 use eframe::egui::{self, RichText, Ui};
 use std::borrow::Cow;
 
+use super::appearance::frame_panel;
 use super::shortcuts::Shortcut;
+use super::update_check::Tag;
 use super::{App, ConnectionState};
 use crate::a11y::{ResponseA11yExt, UiA11yExt};
 
@@ -49,48 +51,40 @@ impl App {
 
         // The groups' widths as the previous frame drew them, to decide
         // which row each takes.
-        let left_id = left_width_id();
-        let right_id = right_width_id();
-        let link_id = egui::Id::unique("top_bar_link_w");
-        let cached_left: f32 = ui.data(|d| d.get_temp(left_id)).unwrap_or(300.0);
-        let cached_right: f32 = ui.data(|d| d.get_temp(right_id)).unwrap_or(200.0);
-        // What the link suffix would add. Cached apart from the row's own
-        // width so the row can be measured as if the link were not there —
-        // that width is what the window's minimum comes from, and naming the
-        // link must not stop the window being made as narrow as before.
-        let cached_link: f32 = ui.data(|d| d.get_temp(link_id)).unwrap_or(0.0);
         let spacing = ui.spacing().item_spacing.x;
+        let cached = BarWidths::load(ui.ctx(), spacing);
         let available = ui.available_width();
         // The link is the first thing the window edge takes: it names
         // nothing the user has to act on, and the hover spells it out
         // whether or not the bar has room for it.
-        let show_link = fits_with_link(cached_left, cached_link, available);
-        let link_shown_w = if show_link { cached_link } else { 0.0 };
+        let show_link = fits_with_link(cached.first_row(spacing), cached.link, available);
+        let link_shown_w = if show_link { cached.link } else { 0.0 };
         // The update notice in full: the right group moves to a row of its
         // own rather than drop it, and shortens it only where even that row
         // is too narrow. Left out of the group's cached width, so it never
         // raises the window's minimum.
-        let notice_w = self
+        let notice = self
             .update_check
             .notice(self.settings.check_for_updates)
-            .map_or(0.0, |tag| text_width(ui, &tag.label(l10n)) + spacing);
-        // The status without the link, as the left group's width is.
-        let status_id = egui::Id::unique("top_bar_status_w");
-        let cached_status: f32 = ui.data(|d| d.get_temp(status_id)).unwrap_or(150.0);
+            .map(|tag| Notice {
+                tag: tag.clone(),
+                full: worded(ui, tag.label(l10n)),
+            });
+        let notice_w = notice.as_ref().map_or(0.0, |notice| notice.full.1);
         // The bar's groups in order: the meter and its buttons, the status,
         // then the version, help and settings.
-        let buttons_w = (cached_left - spacing - cached_status).max(0.0);
         let [_, status_row, right_row] = pack_rows(
             [
-                buttons_w,
-                cached_status + link_shown_w,
-                cached_right + notice_w,
+                cached.buttons,
+                cached.status + link_shown_w,
+                cached.right + notice_w,
             ],
             spacing,
             available,
         );
+        let mut buttons_width = 0.0;
         let mut status_width = 0.0;
-        let mut row_width = 0.0;
+        let mut right_width = 0.0;
         let mut link = (0.0, 0.0);
         let (mut dot_color, mut status_text) = (gray, String::new());
 
@@ -178,8 +172,9 @@ impl App {
 
             // The status on the row while the row has room for it; where it
             // has not (a phone, a long name, a large zoom) it moves to a row
-            // below instead of running off the window's edge.
-            let buttons_right = ui.min_rect().right();
+            // below instead of running off the window's edge. The meter's
+            // name and the buttons are measured before it is drawn.
+            buttons_width = ui.min_rect().right() - left_start;
             if status_row == 0 {
                 status_width = self.show_status(ui, l10n, dot_color, &status_text, orange);
             }
@@ -199,13 +194,10 @@ impl App {
                 0.0
             };
             let drawn = if link_drawn { link_w } else { 0.0 };
-            // What the row needs with the status on it, wherever the
-            // status was drawn this frame.
-            row_width = buttons_right - left_start;
             link = (link_w, drawn);
 
             if right_row == 0 {
-                self.show_top_bar_right(ui, right_id);
+                right_width = self.show_top_bar_right(ui, cached.right, notice.as_ref());
             }
         });
 
@@ -224,17 +216,18 @@ impl App {
                     status_width = self.show_status(ui, l10n, dot_color, &status_text, orange);
                 }
                 if right_row == row {
-                    self.show_top_bar_right(ui, right_id);
+                    right_width = self.show_top_bar_right(ui, cached.right, notice.as_ref());
                 }
             });
         }
         let (link_w, drawn) = link;
-        let status_w = status_width - drawn;
-        ui.data_mut(|d| {
-            d.insert_temp(left_id, row_width + spacing + status_w);
-            d.insert_temp(status_id, status_w);
-            d.insert_temp(link_id, link_w);
-        });
+        BarWidths {
+            buttons: buttons_width,
+            status: status_width - drawn,
+            link: link_w,
+            right: right_width,
+        }
+        .store(ui.ctx());
     }
 
     /// The status: its dot, its text and the meter's stability badge.
@@ -457,33 +450,33 @@ impl App {
     /// Items are added left-to-right so that egui's Tab order matches the
     /// visual reading direction. A cached-width spacer right-aligns the
     /// group without needing a right-to-left layout (which would reverse
-    /// tab order). The cached width comes from the previous frame and
-    /// self-corrects in one frame.
-    fn show_top_bar_right(&mut self, ui: &mut Ui, cache_id: egui::Id) {
+    /// tab order). `cached_width` is what the group took on the previous
+    /// frame, so the spacer self-corrects in one frame.
+    ///
+    /// Returns the group's width without the update notice, which is what
+    /// the window's minimum comes from: the notice takes whatever room is
+    /// left, in full, shortened, or not at all, and never asks for more.
+    fn show_top_bar_right(
+        &mut self,
+        ui: &mut Ui,
+        cached_width: f32,
+        notice: Option<&Notice>,
+    ) -> f32 {
         let l10n = self.l10n.clone();
         let l10n = l10n.as_ref();
-        // The group's width without the update notice, which is what the
-        // window's minimum comes from: the notice takes whatever room is
-        // left, in full, shortened, or not at all, and never asks for more.
-        let cached_width: f32 = ui.data(|d| d.get_temp(cache_id)).unwrap_or(200.0);
-        let notice = self
-            .update_check
-            .notice(self.settings.check_for_updates)
-            .cloned();
-        let spacing = ui.spacing().item_spacing.x;
         let room = ui.available_width() - cached_width;
-        let notice_text = notice.as_ref().and_then(|tag| {
-            [tag.label(l10n), tag.short_label(l10n)]
-                .into_iter()
-                .map(|text| {
-                    let width = text_width(ui, &text) + spacing;
-                    (text, width)
-                })
+        let notice_text = notice.and_then(|notice| {
+            // The longest wording that fits, the short one measured only
+            // where the full one does not.
+            let short = || worded(ui, notice.tag.short_label(l10n));
+            std::iter::once(notice.full.clone())
+                .chain(std::iter::once_with(short))
                 .find(|(_, width)| *width <= room)
         });
         let notice_w = notice_text.as_ref().map_or(0.0, |(_, width)| *width);
+        let tag = notice.map(|notice| &notice.tag);
         // A notice the bar has no room for: the version button carries it.
-        let hidden_notice = notice.as_ref().filter(|_| notice_text.is_none());
+        let hidden_notice = tag.filter(|_| notice_text.is_none());
         let spacer = (room - notice_w).max(0.0);
         ui.add_space(spacer);
         let before = ui.cursor().left();
@@ -528,7 +521,7 @@ impl App {
             )),
         };
         version_resp.on_hover_cursor(egui::CursorIcon::PointingHand);
-        if let (Some(tag), Some((text, _))) = (&notice, &notice_text) {
+        if let (Some(tag), Some((text, _))) = (tag, &notice_text) {
             ui.hyperlink_to(RichText::new(text).small(), tag.url())
                 .on_hover_text(tr!(l10n, "top-bar-update.hover", version = tag.name()))
                 .a11y_label(&tr!(l10n, "top-bar-update.a11y", version = tag.name()));
@@ -566,8 +559,7 @@ impl App {
             }
         }
 
-        let actual_width = ui.min_rect().right() - before - notice_w;
-        ui.data_mut(|d| d.insert_temp(cache_id, actual_width));
+        ui.min_rect().right() - before - notice_w
     }
 }
 
@@ -634,16 +626,89 @@ fn link_suffix_width(ui: &Ui, l10n: &Localizer, link: Option<Link>) -> f32 {
     })
 }
 
-/// Where the top bar caches the width its left group took last frame: the
-/// one-row decision and the window's minimum width read it.
-pub(super) fn left_width_id() -> egui::Id {
-    egui::Id::unique("top_bar_left_w")
+/// The widths the bar's groups took on the previous frame: which row each
+/// takes this frame, and the window's minimum width, come from them.
+#[derive(Clone, Copy)]
+struct BarWidths {
+    /// The meter's name and the connection's buttons.
+    buttons: f32,
+    /// The status without the link.
+    status: f32,
+    /// What the link suffix would add. Kept apart from the status so the
+    /// first row is measured as if the link were not there — that width is
+    /// what the window's minimum comes from, and naming the link must not
+    /// stop the window being made as narrow as before.
+    link: f32,
+    /// The version, help and settings group without the update notice.
+    right: f32,
 }
 
-/// Where the top bar caches the width its right group took last frame: the
-/// one-row decision and the window's minimum width read it.
-pub(super) fn right_width_id() -> egui::Id {
-    egui::Id::unique("top_bar_right_w")
+impl BarWidths {
+    fn id() -> egui::Id {
+        egui::Id::unique("top_bar_widths")
+    }
+
+    /// The previous frame's widths. Before any frame has drawn the bar: a
+    /// first row of 300 points, 150 of them the status, no link, and a right
+    /// group of 200.
+    fn load(ctx: &egui::Context, spacing: f32) -> Self {
+        ctx.data(|d| d.get_temp(Self::id())).unwrap_or(Self {
+            buttons: 300.0 - spacing - 150.0,
+            status: 150.0,
+            link: 0.0,
+            right: 200.0,
+        })
+    }
+
+    fn store(self, ctx: &egui::Context) {
+        ctx.data_mut(|d| d.insert_temp(Self::id(), self));
+    }
+
+    /// The buttons and the status on one row, without the link.
+    fn first_row(self, spacing: f32) -> f32 {
+        self.buttons + spacing + self.status
+    }
+}
+
+/// The narrowest the window may be made for the bar: its first row without
+/// the link, or its right group without the update notice where that is
+/// wider, inside the top panel's side margins.
+pub(super) fn min_width(ctx: &egui::Context) -> f32 {
+    let style = ctx.global_style();
+    let spacing = style.spacing.item_spacing.x;
+    let widths = BarWidths::load(ctx, spacing);
+    widths.first_row(spacing).max(widths.right) + side_margins(&style)
+}
+
+/// The window width the bar's first row exactly fits, without the link:
+/// [`min_width`] wherever the right group is the narrower of the two. For
+/// the tests that size a window around it.
+#[cfg(test)]
+pub(super) fn first_row_window_width(ctx: &egui::Context) -> f32 {
+    let style = ctx.global_style();
+    let spacing = style.spacing.item_spacing.x;
+    BarWidths::load(ctx, spacing).first_row(spacing) + side_margins(&style)
+}
+
+/// The top panel's left and right margins together.
+fn side_margins(style: &egui::Style) -> f32 {
+    // The fill has no part in the margins.
+    let frame = frame_panel(style, egui::Color32::PLACEHOLDER);
+    frame.inner_margin.sum().x
+}
+
+/// The update notice on its way to the bar: the release it points at, and
+/// its full wording with the width that takes.
+struct Notice {
+    tag: Tag,
+    full: (String, f32),
+}
+
+/// One of the update notice's wordings with the width it takes on the bar,
+/// the gap to its neighbour included.
+fn worded(ui: &Ui, text: String) -> (String, f32) {
+    let width = text_width(ui, &text) + ui.spacing().item_spacing.x;
+    (text, width)
 }
 
 /// How far a row may reach into the panel's margin and still count as

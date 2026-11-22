@@ -559,13 +559,11 @@ mod tests {
             (self.screen.bottom() - self.toast_rect().top() + TOAST_MARGIN) * STACK_HEIGHT_SHARE
         }
 
-        /// The width the bar's left group reported last frame — the number
-        /// that decides whether the bar wraps to two rows, and feeds the
-        /// window's minimum width.
+        /// The window width the bar's left group fitted last frame — the
+        /// number that decides whether the bar wraps to two rows, and feeds
+        /// the window's minimum width.
         fn bar_left_width(&self) -> f32 {
-            self.ctx
-                .data(|d| d.get_temp(crate::app::top_bar::left_width_id()))
-                .expect("the bar caches its left width every frame")
+            crate::app::top_bar::first_row_window_width(&self.ctx)
         }
 
         fn toast_rect(&self) -> Rect {
