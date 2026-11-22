@@ -387,3 +387,71 @@ fn dragging_the_divider_over_the_band_resizes_it() {
     drag(&mut g, 1000.0);
     assert_eq!(g.histogram_sizes.1, MIN_BAND_HEIGHT);
 }
+
+/// The band at its least height still labels its count axis: a share, in
+/// the room left of the bars, clear of the value labels under them and of
+/// the band's top.
+#[test]
+fn the_band_at_its_least_height_labels_a_share() {
+    use crate::graph::histogram::MIN_BAND_HEIGHT;
+    fn walk(shape: &egui::Shape, found: &mut Vec<(String, egui::Rect)>) {
+        match shape {
+            egui::Shape::Text(t) => found.push((
+                t.galley.text().to_string(),
+                egui::Rect::from_min_size(t.pos, t.galley.size()),
+            )),
+            egui::Shape::Vec(shapes) => shapes.iter().for_each(|s| walk(s, found)),
+            _ => {}
+        }
+    }
+    let ctx = crate::app::styled_context();
+    let tc = ThemeColors::new(true, ColorPreset::Default, &PaletteOverrides::default());
+    let markers = crate::markers::Markers::default();
+    // A mains voltage swinging as the mock's does: its fullest bin holds
+    // about a tenth of the readings.
+    let mut g = Graph::new();
+    let t0 = Instant::now();
+    for k in 0..450_u64 {
+        let v = 120.0 + 2.0 * (k as f64 * 0.1 / 5.185 * std::f64::consts::TAU).sin();
+        let at = t0 + Duration::from_millis(k * 100);
+        g.push((v * 100.0).round() / 100.0, at, "AC V", "V", None);
+    }
+    g.show_histogram = true;
+    g.histogram_sizes.1 = MIN_BAND_HEIGHT;
+    // Too narrow for the strip beside the plot.
+    let screen = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(396.0, 500.0));
+    let mut texts = Vec::new();
+    for _ in 0..3 {
+        let out = headless_frame(&ctx, Some(screen), None, vec![], |ui| {
+            g.show(ui, &crate::l10n::english(), &tc, &markers, None, NO_DIGITS)
+        });
+        texts.clear();
+        for clipped in &out.shapes {
+            walk(&clipped.shape, &mut texts);
+        }
+    }
+    let place = g.histogram_place.expect("the band is placed");
+    assert_eq!(
+        (place.dock, place.size),
+        (crate::graph::histogram::Dock::Below, MIN_BAND_HEIGHT)
+    );
+    let shares: Vec<_> = texts.iter().filter(|(t, _)| t.ends_with('%')).collect();
+    assert!(!shares.is_empty(), "no share among {texts:?}");
+    // The band is the last thing drawn: its value labels are the lowest
+    // text, a row of them under the bars, which start at the band's top.
+    let (values_top, row) = texts
+        .iter()
+        .filter(|(t, _)| t.ends_with(" V"))
+        .map(|(_, r)| (r.top(), r.height()))
+        .fold(
+            (f32::NEG_INFINITY, 0.0),
+            |a, b| if b.0 > a.0 { b } else { a },
+        );
+    let band_top = values_top - (MIN_BAND_HEIGHT - row);
+    for (text, rect) in shares {
+        assert!(
+            rect.top() >= band_top - 0.5 && rect.bottom() <= values_top,
+            "{text} at {rect:?}, outside {band_top}..{values_top}"
+        );
+    }
+}

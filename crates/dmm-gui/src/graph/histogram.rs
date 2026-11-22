@@ -939,14 +939,16 @@ impl Pane<'_> {
         let right = bars.right_top() + egui::vec2(-3.0, 3.0);
         self.paint_beyond(&painter, true, '\u{2192}', right, egui::Align2::RIGHT_TOP);
         // The scale up the left side, in the room the plot keeps for its axis.
+        // Each beside its gridline, shifted down from the band's top it
+        // would be cut at.
         for (at, label) in grid {
-            painter.text(
+            let galley = painter.layout_no_wrap(label, font.clone(), colors.text);
+            let rect = egui::Align2::RIGHT_CENTER.anchor_size(
                 egui::pos2(bars.left() - 4.0, bars.bottom() - at),
-                egui::Align2::RIGHT_CENTER,
-                label,
-                font.clone(),
-                colors.text,
+                galley.size(),
             );
+            let shift = (bars.top() - rect.top()).max(0.0);
+            painter.galley(rect.min + egui::vec2(0.0, shift), galley, colors.text);
         }
         // An axis of its own along the bottom, at round values with their unit
         // as the plot's axis writes them. The count and σ are the statistics
@@ -992,16 +994,30 @@ impl Pane<'_> {
 
 /// Round shares about `spacing` points apart along `room` points of bar, a
 /// full bar standing for `peak`, from the first step up to `peak`: each
-/// share with its label.
+/// share with its label. Bars too short to reach the first step get the one
+/// tick they have room for, at the largest round share they do reach.
 fn share_ticks(peak: f64, room: f32, spacing: f32) -> Vec<(f64, String)> {
     if !peak.is_finite() || peak <= 0.0 || room <= 0.0 {
         return Vec::new();
     }
-    let step = super::axes::nice_step(peak * 100.0 * f64::from(spacing / room)) / 100.0;
+    let reached = |step: f64| step <= peak * (1.0 + 1e-9);
+    let spaced = super::axes::nice_step(peak * 100.0 * f64::from(spacing / room)) / 100.0;
+    let (step, count) = if reached(spaced) {
+        (spaced, usize::MAX)
+    } else {
+        // The largest 1, 2 or 5 × 10ⁿ at most `peak`.
+        let base = 10f64.powf((peak * 100.0).log10().floor()) / 100.0;
+        let lower = [5.0, 2.0, 1.0]
+            .map(|m| m * base)
+            .into_iter()
+            .find(|&s| reached(s));
+        (lower.unwrap_or(base), 1)
+    };
     let decimals = (-(step * 100.0).log10()).ceil().max(0.0) as usize;
     (1..)
         .map(|k| f64::from(k) * step)
-        .take_while(|&share| share <= peak * (1.0 + 1e-9))
+        .take_while(|&share| reached(share))
+        .take(count)
         .map(|share| (share, format!("{:.decimals$}%", share * 100.0)))
         .collect()
 }
@@ -1392,6 +1408,46 @@ mod tests {
         assert_eq!(labels(0.012, 90.0), ["0.5%", "1.0%"]);
         assert!(labels(0.0, 90.0).is_empty());
         assert!(labels(f64::MIN_POSITIVE, 90.0).len() < 10);
+    }
+
+    /// Bars too short for two round shares that far apart still get one:
+    /// the largest that a full bar reaches. The band at its least height
+    /// leaves its bars 33 points, the strip at its narrowest 62.
+    #[test]
+    fn short_bars_keep_one_share_tick() {
+        let labels = |peak, room, spacing| -> Vec<String> {
+            share_ticks(peak, room, spacing)
+                .into_iter()
+                .map(|(_, l)| l)
+                .collect()
+        };
+        for (peak, label) in [
+            (0.094, "5%"),
+            (0.07, "5%"),
+            (0.06, "5%"),
+            (0.049, "2%"),
+            (0.018, "1%"),
+            (0.0045, "0.2%"),
+            (1.0, "100%"),
+        ] {
+            assert_eq!(labels(peak, 33.0, 24.0), [label], "a peak of {peak}");
+        }
+        assert_eq!(labels(0.047, 62.0, 28.0), ["2%"]);
+        assert_eq!(labels(0.12, 62.0, 28.0), ["10%"]);
+        // Whatever the peak and the room, a tick, none past the bar's end
+        // and none closer together than asked.
+        for room in [20.0_f32, 33.0, 62.0, 150.0] {
+            for k in 1..=1000 {
+                let peak = f64::from(k) / 1000.0;
+                let ticks = share_ticks(peak, room, 24.0);
+                assert!(!ticks.is_empty(), "a peak of {peak} over {room} points");
+                assert!(ticks.iter().all(|(share, _)| *share <= peak * (1.0 + 1e-9)));
+                if let [(a, _), (b, _), ..] = ticks.as_slice() {
+                    let apart = (b - a) / peak * f64::from(room);
+                    assert!(apart >= 24.0 - 1e-3, "{apart} points apart");
+                }
+            }
+        }
     }
 
     #[test]
