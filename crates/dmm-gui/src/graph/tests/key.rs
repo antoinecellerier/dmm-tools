@@ -1,7 +1,7 @@
 //! The plot key and the **Show:** toggles.
 
 use super::*;
-use crate::graph::key::KeyStyle;
+use crate::graph::key::{KeyLayout, KeyStyle, key_layout};
 use crate::graph::toolbar::{overlay_chip_label, series_chip_label};
 
 /// The two chip rows show the same sub-value names, so their accessible
@@ -304,4 +304,150 @@ fn clear_drops_the_overlays_but_keeps_the_selection() {
     assert!(g.overlay_labels().is_empty());
     assert_eq!(g.current_series, None);
     assert_eq!(g.selected_series(), Some("T2"));
+}
+
+/// A plot body `width` by `height`, away from the origin as a real one is.
+fn body(width: f32, height: f32) -> egui::Rect {
+    egui::Rect::from_min_size(egui::pos2(70.0, 100.0), egui::vec2(width, height))
+}
+
+/// Name widths of a three-entry key, and the height of one entry.
+const WIDTHS: [f32; 3] = [55.0, 95.0, 75.0];
+const ROW_HEIGHT: f32 = 16.0;
+
+/// With room for it the key is the column it always was: 6 points in from
+/// the plot's corner, as wide as its widest entry, a row per entry.
+#[test]
+fn the_key_is_a_column_where_it_fits() {
+    assert_eq!(
+        key_layout(body(600.0, 300.0), &WIDTHS, ROW_HEIGHT),
+        KeyLayout::Column(egui::Rect::from_min_size(
+            egui::pos2(76.0, 106.0),
+            egui::vec2(12.0 + 24.0 + 6.0 + 95.0, 12.0 + 3.0 * 16.0),
+        ))
+    );
+}
+
+/// A plot at its minimum height is shorter than three entries stacked: the
+/// key lays them side by side instead of being cut at the plot's edge.
+#[test]
+fn the_key_takes_one_row_in_a_short_plot() {
+    let body = body(600.0, 47.0);
+    let KeyLayout::Row(rect) = key_layout(body, &WIDTHS, ROW_HEIGHT) else {
+        panic!("not a row: {:?}", key_layout(body, &WIDTHS, ROW_HEIGHT));
+    };
+    assert_eq!(rect.left_top(), egui::pos2(76.0, 106.0), "the same corner");
+    assert_eq!(rect.height(), 12.0 + 16.0, "one entry high");
+    assert!(
+        rect.width() >= 12.0 + WIDTHS.iter().map(|w| 24.0 + 6.0 + w).sum::<f32>(),
+        "every entry in it: {rect:?}"
+    );
+    assert!(body.contains_rect(rect));
+}
+
+/// Too short for the column and too narrow for the row, or too short for
+/// one entry: no key, rather than part of one.
+#[test]
+fn a_key_that_fits_no_way_is_not_drawn() {
+    assert_eq!(
+        key_layout(body(300.0, 47.0), &WIDTHS, ROW_HEIGHT),
+        KeyLayout::Hidden
+    );
+    assert_eq!(
+        key_layout(body(600.0, 30.0), &WIDTHS, ROW_HEIGHT),
+        KeyLayout::Hidden
+    );
+}
+
+/// Whatever the plot's size and however many entries, a key that is drawn
+/// lies inside the plot, a margin from its edges.
+#[test]
+fn the_key_stays_inside_the_plot() {
+    let all = [55.0, 95.0, 75.0, 120.0, 40.0];
+    for width in [200.0, 420.0, 900.0] {
+        for height in (30..=300).step_by(3) {
+            for n in 1..=all.len() {
+                let body = body(width, height as f32);
+                let layout = key_layout(body, &all[..n], ROW_HEIGHT);
+                let (KeyLayout::Column(rect) | KeyLayout::Row(rect)) = layout else {
+                    continue;
+                };
+                assert!(
+                    body.shrink(6.0).contains_rect(rect),
+                    "{n} entries in {body:?}: {layout:?}"
+                );
+            }
+        }
+    }
+}
+
+/// Where a frame of the graph on a `screen`-sized window draws each of the
+/// key's names, and the plot's body.
+fn painted_key(g: &mut Graph, screen: egui::Vec2) -> (Vec<egui::Rect>, egui::Rect) {
+    fn walk(shape: &egui::Shape, names: &[String], found: &mut Vec<egui::Rect>) {
+        match shape {
+            egui::Shape::Text(t) if names.iter().any(|n| n == t.galley.text()) => {
+                found.push(egui::Rect::from_min_size(t.pos, t.galley.size()));
+            }
+            egui::Shape::Vec(shapes) => shapes.iter().for_each(|s| walk(s, names, found)),
+            _ => {}
+        }
+    }
+    let names = key_names(g);
+    let ctx = crate::app::styled_context();
+    let tc = ThemeColors::new(true, ColorPreset::Default, &PaletteOverrides::default());
+    let screen = egui::Rect::from_min_size(egui::Pos2::ZERO, screen);
+    let mut found = Vec::new();
+    // The plot's rect settles on the second frame.
+    for _ in 0..2 {
+        let out = headless_frame(&ctx, Some(screen), None, vec![], |ui| {
+            g.show(
+                ui,
+                &crate::l10n::english(),
+                &tc,
+                &crate::markers::Markers::default(),
+                None,
+                NO_DIGITS,
+            )
+        });
+        found.clear();
+        for clipped in &out.shapes {
+            walk(&clipped.shape, &names, &mut found);
+        }
+    }
+    (found, g.plot_rect.expect("a plot was drawn"))
+}
+
+/// The whole graph drawn in a short window: the key's three names share a
+/// line inside the plot. In a tall one they are stacked as before.
+#[test]
+fn a_short_graph_draws_its_key_in_one_row() {
+    let (names, body) = painted_key(&mut graph_with_hz(), egui::vec2(800.0, 200.0));
+    assert_eq!(names.len(), 3, "{names:?}");
+    assert!(names.iter().all(|r| r.top() == names[0].top()), "{names:?}");
+    assert!(names.windows(2).all(|w| w[0].right() < w[1].left()));
+    assert!(
+        names.iter().all(|r| body.contains_rect(*r)),
+        "{names:?} in {body:?}"
+    );
+
+    let (names, body) = painted_key(&mut graph_with_hz(), egui::vec2(800.0, 600.0));
+    assert_eq!(names.len(), 3, "{names:?}");
+    assert!(names.windows(2).all(|w| w[0].bottom() <= w[1].top()));
+    assert!(
+        names.iter().all(|r| r.left() == names[0].left()),
+        "{names:?}"
+    );
+    assert!(
+        names.iter().all(|r| body.contains_rect(*r)),
+        "{names:?} in {body:?}"
+    );
+}
+
+/// A graph too narrow for the row and too short for the column draws no
+/// key.
+#[test]
+fn a_short_narrow_graph_draws_no_key() {
+    let (names, body) = painted_key(&mut graph_with_hz(), egui::vec2(460.0, 200.0));
+    assert!(names.is_empty(), "{names:?} in {body:?}");
 }

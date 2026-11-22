@@ -242,7 +242,9 @@ AC+DC V) get two more toolbar groups:
   greyed out until another unit is hidden. Hidden traces are still recorded,
   and stay hidden at the next launch.
 - Sub-values are drawn as dashed or dotted lines, named in a key in the plot's
-  top-left corner. Each keeps going where the plotted series is over range.
+  top-left corner. A short plot lays the key out in one row, and a plot too
+  small for the row draws no key. Each keeps going where the plotted series is
+  over range.
 - A sub-value in another unit, such as a UT181A's frequency and period beside
   its AC voltage, gets a Y axis of its own on the right, and the key names
   every unit. Two or more right axes share one column. A narrow window drops

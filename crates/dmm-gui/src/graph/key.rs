@@ -25,6 +25,57 @@ const MIN_KEY_FONT_SIZE: f32 = 11.0;
 /// Width of the line sample drawn at the left of each key row.
 const KEY_SAMPLE_WIDTH: f32 = 24.0;
 
+/// Space around the key, and between its border and its entries.
+const PAD: f32 = 6.0;
+
+/// Space between an entry's line sample and its name.
+const GAP: f32 = 6.0;
+
+/// Space between two entries of a key laid out in one row.
+const ENTRY_GAP: f32 = 12.0;
+
+/// Where the plot key goes, and how its entries are laid out in it.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(super) enum KeyLayout {
+    /// One entry under the other, in a panel as wide as the widest.
+    Column(egui::Rect),
+    /// The entries side by side, for a plot too short for the column.
+    Row(egui::Rect),
+    /// No key: the plot has room for neither.
+    Hidden,
+}
+
+/// The first shape of the key that fits in the plot's `body` with [`PAD`]
+/// around it: the column, else one row, else none. A key larger than its
+/// plot would be cut at the plot's edge, some of its entries with it.
+///
+/// `text_widths` holds the width of each entry's name and `row_height` the
+/// height of one entry.
+pub(super) fn key_layout(body: egui::Rect, text_widths: &[f32], row_height: f32) -> KeyLayout {
+    let entry_width = |text: f32| KEY_SAMPLE_WIDTH + GAP + text;
+    let at_corner =
+        |size: egui::Vec2| egui::Rect::from_min_size(body.left_top() + egui::vec2(PAD, PAD), size);
+    let widest = text_widths.iter().copied().fold(0.0_f32, f32::max);
+    let column = at_corner(egui::vec2(
+        PAD * 2.0 + entry_width(widest),
+        PAD * 2.0 + row_height * text_widths.len() as f32,
+    ));
+    let row = at_corner(egui::vec2(
+        PAD * 2.0
+            + text_widths.iter().copied().map(entry_width).sum::<f32>()
+            + ENTRY_GAP * text_widths.len().saturating_sub(1) as f32,
+        PAD * 2.0 + row_height,
+    ));
+    let fits = |key: egui::Rect| body.shrink(PAD).contains_rect(key);
+    if fits(column) {
+        KeyLayout::Column(column)
+    } else if fits(row) {
+        KeyLayout::Row(row)
+    } else {
+        KeyLayout::Hidden
+    }
+}
+
 impl Graph {
     /// Name the plotted series goes by on the plot and in the key.
     pub(super) fn plotted_series_name(&self) -> String {
@@ -79,7 +130,8 @@ impl Graph {
         entries
     }
 
-    /// Paint the plot key in the top-left of the plot area.
+    /// Paint the plot key in the top-left of the plot area, in the shape
+    /// [`key_layout`] finds room for.
     ///
     /// A key, not a control: egui_plot's own `Legend` renders show/hide
     /// checkboxes, but `Plot::reset()` — which pins the view every frame while
@@ -87,7 +139,8 @@ impl Graph {
     /// click on one had no effect past the frame it happened in. The **Show:**
     /// chips in the toolbar are the control instead.
     ///
-    /// Returns the key's rect, which the overlay labels keep off.
+    /// Returns the key's rect, which the overlay labels keep off: `None`
+    /// when no key is drawn, for want of entries or of room.
     pub(super) fn paint_plot_key(
         ui: &Ui,
         plot_rect: egui::Rect,
@@ -101,24 +154,20 @@ impl Graph {
         let mut font = egui::TextStyle::Body.resolve(ui.style());
         font.size = font.size.max(MIN_KEY_FONT_SIZE);
 
-        const PAD: f32 = 6.0;
-        const GAP: f32 = 6.0;
         let text_color = ui.visuals().text_color();
         let painter = ui.painter_at(plot_rect);
 
-        // Measure first so the panel is exactly as wide as its widest row.
         let galleys: Vec<_> = entries
             .iter()
             .map(|(name, _)| painter.layout_no_wrap(name.clone(), font.clone(), text_color))
             .collect();
-        let text_width = galleys.iter().map(|g| g.size().x).fold(0.0_f32, f32::max);
+        let text_widths: Vec<f32> = galleys.iter().map(|g| g.size().x).collect();
         let row_height = galleys.iter().map(|g| g.size().y).fold(font.size, f32::max);
-        let width = PAD * 2.0 + KEY_SAMPLE_WIDTH + GAP + text_width;
-        let height = PAD * 2.0 + row_height * entries.len() as f32;
-        let rect = egui::Rect::from_min_size(
-            plot_rect.left_top() + egui::vec2(PAD, PAD),
-            egui::vec2(width, height),
-        );
+        let (rect, in_row) = match key_layout(plot_rect, &text_widths, row_height) {
+            KeyLayout::Column(rect) => (rect, false),
+            KeyLayout::Row(rect) => (rect, true),
+            KeyLayout::Hidden => return None,
+        };
         // `window_fill`, not `extreme_bg_color`: the App assigns the latter
         // the plot's own background, so a key painted in it would be invisible
         // apart from its border. `window_fill` is the panel ground either
@@ -133,24 +182,29 @@ impl Graph {
             egui::StrokeKind::Inside,
         );
 
+        let mut left = rect.left() + PAD;
         for (i, ((_, style), galley)) in entries.iter().zip(&galleys).enumerate() {
-            let top = rect.top() + PAD + row_height * i as f32;
+            let line = if in_row { 0.0 } else { i as f32 };
+            let top = rect.top() + PAD + row_height * line;
             let mid = top + row_height / 2.0;
             let (color, line_style) = match style {
                 KeyStyle::Plotted => (tc.graph_line(), egui_plot::LineStyle::Solid),
                 KeyStyle::Overlay(k) => Self::overlay_color_and_style(tc, *k, solid),
             };
             painter.extend(styled_line(
-                egui::pos2(rect.left() + PAD, mid),
-                egui::pos2(rect.left() + PAD + KEY_SAMPLE_WIDTH, mid),
+                egui::pos2(left, mid),
+                egui::pos2(left + KEY_SAMPLE_WIDTH, mid),
                 egui::Stroke::new(1.5, color),
                 line_style,
             ));
             painter.galley(
-                egui::pos2(rect.left() + PAD + KEY_SAMPLE_WIDTH + GAP, top),
+                egui::pos2(left + KEY_SAMPLE_WIDTH + GAP, top),
                 galley.clone(),
                 text_color,
             );
+            if in_row {
+                left += KEY_SAMPLE_WIDTH + GAP + text_widths[i] + ENTRY_GAP;
+            }
         }
         Some(rect)
     }

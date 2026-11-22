@@ -13,6 +13,7 @@
 - **The recording panel keeps its place as a graph gets its first readings** — it sat higher on connect and after Clear, then dropped.
 - **A histogram under the graph fits the window** — with the recording panel hidden, its value labels were cut off and the window scrolled a few points.
 - **A narrow window's log fills a recording panel dragged taller** — it stayed five rows high over an empty panel.
+- **The plot's key fits a short plot** — its lower entries were cut off; it now takes one row, and a plot too small for that draws none.
 
 ## v0.11.0 — Android Support
 
