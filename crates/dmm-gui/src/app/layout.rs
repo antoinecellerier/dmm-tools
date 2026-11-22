@@ -122,19 +122,7 @@ impl App {
             && (self.settings.show_graph || self.settings.show_recording)
         {
             ui.separator();
-            // The split reads `ui.available_height()`, which inside the
-            // column's scroller is the viewport rather than what is left of
-            // the window, so give it an explicit height: the rest of the
-            // viewport while the column fits — content then equals viewport
-            // and no scrollbar appears — and its least height once it
-            // doesn't, so the graph stays usable and the column scrolls.
-            let height = ui
-                .available_height()
-                .max(self.min_split_height(ui.available_width()))
-                .floor();
-            ui.allocate_ui(egui::vec2(ui.available_width(), height), |ui| {
-                self.show_graph_recording_split(ui, true);
-            });
+            self.show_split_in_scroller(ui, true);
         }
     }
 

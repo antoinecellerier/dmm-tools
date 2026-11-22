@@ -70,7 +70,7 @@ use field::{NumberField, NumberListField};
 use figures::{BinnedHistogram, RangeFigures, strip_room};
 use level::MinimapLevel;
 use menu::MenuPoint;
-use minimap::{MINIMAP_HEIGHT, MinimapDrag};
+use minimap::MinimapDrag;
 use view::{BoxZoom, YAxis};
 
 /// Maximum number of sub-value traces the graph keeps beside the plotted
@@ -114,6 +114,18 @@ const RIGHT_AXIS_ROOM: f32 = 90.0;
 const MIN_PLOT_BESIDE_STRIP: f32 = 400.0;
 // A plot roomy enough for the strip leaves the right axes their column.
 const _: () = assert!(MIN_PLOT_BESIDE_STRIP >= MIN_PLOT_WIDTH + RIGHT_AXIS_ROOM);
+
+/// The least height the plot is drawn at, its time axis included, however
+/// little the graph is given.
+const MIN_PLOT_HEIGHT: f32 = 60.0;
+/// The space between the plot and the minimap.
+const MINIMAP_GAP: f32 = 4.0;
+/// Held back with the minimap and its gap for what the layout puts between
+/// the pieces: egui's item spacing after the plot (3 points in the app's
+/// style) and a point to spare.
+const UNDER_PLOT_SLACK: f32 = 4.0;
+/// What the graph keeps under the plot for the minimap.
+const UNDER_PLOT: f32 = minimap::STRIP_HEIGHT + MINIMAP_GAP + UNDER_PLOT_SLACK;
 
 /// Why a sub-value's unit gets no Y axis: see [`Graph::axis_refusal`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1179,7 +1191,7 @@ impl Graph {
         let width = ui.available_width();
         self.fit_axes_to(width);
         self.show_toolbar(ui, l10n, tc);
-        let room = ui.available_height() - (MINIMAP_HEIGHT + 30.0);
+        let room = ui.available_height() - UNDER_PLOT;
         // After the toolbar, so a click on the Histogram chip lays the pane
         // out in the frame it lands in.
         self.histogram_place = self
@@ -1190,7 +1202,7 @@ impl Graph {
             Some(p) if p.dock == histogram::Dock::Below => p.size + histogram::DIVIDER,
             _ => 0.0,
         };
-        let main_height = (room - band_room).max(60.0);
+        let main_height = (room - band_room).max(MIN_PLOT_HEIGHT);
         if let Some(p) = place.filter(|p| p.dock == histogram::Dock::Side) {
             let area = ui
                 .horizontal_top(|ui| {
@@ -1218,7 +1230,7 @@ impl Graph {
                 self.show_main(ui, l10n, tc, markers, limits, digits);
             });
         }
-        ui.add_space(4.0);
+        ui.add_space(MINIMAP_GAP);
         self.show_minimap(ui, l10n, tc, markers);
         if let Some(p) = place.filter(|p| p.dock == histogram::Dock::Below) {
             let (rect, _) = ui.allocate_exact_size(

@@ -112,13 +112,18 @@ fn discard_prompt(
 /// Smallest height the graph + recording split is squeezed into; below it the
 /// column that holds the split scrolls instead of shrinking it further.
 ///
-/// The sum of the floors the split and its two halves already enforce: the
-/// graph's toolbar row (~28), the plot's 60 px floor, the minimap strip
-/// (`MINIMAP_HEIGHT` 60 + a 14 px label + 8 px of stroke margin), the drag
-/// divider and the recording panel's 40 px floor, plus the item spacing
-/// between them. `MINIMAP_HEIGHT` is private to `crate::graph`, so the sum is
-/// written out here rather than derived.
+/// Room for the floors the split and its two halves enforce: the graph's
+/// toolbar on one row, the plot's `MIN_PLOT_HEIGHT` and the minimap's
+/// `UNDER_PLOT` (both in `crate::graph`), the drag divider and the recording
+/// panel's [`MIN_RECORDING_HEIGHT`], plus the item spacing between them. An
+/// estimate rather than their sum: the toolbar's height is only known once
+/// it is drawn.
 const MIN_SPLIT_HEIGHT: f32 = 240.0;
+
+/// The least height the split hands the graph, however tall the recording
+/// panel was dragged. The graph's own floors take more than this, and what
+/// it draws past it pushes the recording panel down.
+const MIN_GRAPH_HEIGHT: f32 = 80.0;
 
 /// What the discard prompt is asking to go ahead with.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -629,15 +634,6 @@ impl App {
     /// The graph + recording split as the wide layout's centre column, inside
     /// the page scroller that keeps a short window from cropping it.
     ///
-    /// The split sizes itself from `ui.available_height()`, which inside a
-    /// scroll area is the viewport rather than what is left of the window, so
-    /// the height is allocated explicitly: the rest of the viewport while the
-    /// column fits — content then equals viewport and no scrollbar appears —
-    /// and [`App::min_split_height`] once it doesn't, so the graph stays usable and
-    /// the column scrolls instead. `floor()` keeps a fractional viewport from
-    /// spilling the content a hair past it and raising a scrollbar on a window
-    /// that fits.
-    ///
     /// Returns the scroller's output so tests can see whether it had to scroll.
     pub(super) fn show_graph_column(
         &mut self,
@@ -647,15 +643,30 @@ impl App {
             .id_salt("graph_column")
             .auto_shrink([false, true])
             .show(ui, |ui| {
-                let height = ui
-                    .available_height()
-                    .max(self.min_split_height(ui.available_width()))
-                    .floor();
-                ui.allocate_ui(egui::vec2(ui.available_width(), height), |ui| {
-                    self.show_graph_recording_split(ui, false);
-                });
+                self.show_split_in_scroller(ui, false);
                 crate::a11y::scroll_to_focus(ui);
             })
+    }
+
+    /// The graph + recording split as the last thing in a column that
+    /// scrolls.
+    ///
+    /// The split sizes itself from `ui.available_height()`, which inside a
+    /// scroll area is the viewport rather than what is left of the window, so
+    /// the height is allocated explicitly: the rest of the viewport while the
+    /// column fits — content then equals viewport and no scrollbar appears —
+    /// and [`App::min_split_height`] once it doesn't, so the graph stays
+    /// usable and the column scrolls instead. `floor()` keeps a fractional
+    /// viewport from spilling the content a hair past it and raising a
+    /// scrollbar on a window that fits.
+    pub(super) fn show_split_in_scroller(&mut self, ui: &mut Ui, compact: bool) {
+        let height = ui
+            .available_height()
+            .max(self.min_split_height(ui.available_width()))
+            .floor();
+        ui.allocate_ui(egui::vec2(ui.available_width(), height), |ui| {
+            self.show_graph_recording_split(ui, compact);
+        });
     }
 
     /// The least height the graph + recording split takes in a column
@@ -721,7 +732,7 @@ impl App {
         self.take_graph_actions(ui.ctx());
     }
 
-    pub(super) fn show_graph_recording_split(&mut self, ui: &mut Ui, compact: bool) {
+    fn show_graph_recording_split(&mut self, ui: &mut Ui, compact: bool) {
         // Built before `self.graph` is borrowed mutably below: the palette
         // reads `self.settings`, which the borrow checker would otherwise
         // see as overlapping.
@@ -729,7 +740,7 @@ impl App {
         self.graph.solid_lines = self.settings.graph_lines == GraphLines::Solid;
         if self.settings.show_graph && self.settings.show_recording {
             let total = ui.available_height();
-            let graph_height = (total - self.settings.recording_height).max(80.0);
+            let graph_height = (total - self.settings.recording_height).max(MIN_GRAPH_HEIGHT);
 
             ui.allocate_ui(egui::vec2(ui.available_width(), graph_height), |ui| {
                 self.show_graph(ui, &tc);
@@ -747,7 +758,7 @@ impl App {
             let fit = |height: f32| {
                 height.clamp(
                     MIN_RECORDING_HEIGHT,
-                    (total - 80.0).max(MIN_RECORDING_HEIGHT),
+                    (total - MIN_GRAPH_HEIGHT).max(MIN_RECORDING_HEIGHT),
                 )
             };
             let before = self.settings.recording_height;

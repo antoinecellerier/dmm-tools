@@ -13,8 +13,18 @@ use crate::a11y::ResponseA11yExt;
 use crate::markers::Markers;
 use crate::theme::ThemeColors;
 
-/// Minimap height in logical pixels.
-pub(super) const MINIMAP_HEIGHT: f32 = 60.0;
+/// Height of the minimap's trace, in logical pixels.
+const MINIMAP_HEIGHT: f32 = 60.0;
+
+/// Height of the time labels under the trace.
+const LABEL_HEIGHT: f32 = 14.0;
+
+/// Room around the trace for the bracket strokes at its edges.
+const MARGIN: f32 = 4.0;
+
+/// What a drawn minimap takes of the graph's height: the trace, its labels
+/// and the margin above and below.
+pub(super) const STRIP_HEIGHT: f32 = MINIMAP_HEIGHT + LABEL_HEIGHT + MARGIN * 2.0;
 
 /// Half-width of a bracket's resize hit zone, in pixels.
 const HANDLE_HALF: f32 = 8.0;
@@ -467,12 +477,8 @@ impl Graph {
         let (data_min, data_max) = self.data_time_range();
         let (view_min, view_max) = self.view_bounds();
 
-        // Allocate rect for minimap + label space below, with margin for bracket strokes
-        let label_height = 14.0;
-        let margin = 4.0; // room for bracket strokes at edges
-        let total_height = MINIMAP_HEIGHT + label_height + margin * 2.0;
         let (full_rect, pointer_response) = ui.allocate_exact_size(
-            egui::vec2(ui.available_width(), total_height),
+            egui::vec2(ui.available_width(), STRIP_HEIGHT),
             egui::Sense::click_and_drag(),
         );
         let pointer_response = pointer_response
@@ -480,8 +486,8 @@ impl Graph {
             .a11y_label(&tr!(l10n, "graph-minimap.a11y"));
         // Inset the plot area so brackets at edges have room to render
         let rect = egui::Rect::from_min_size(
-            egui::pos2(full_rect.left() + margin, full_rect.top() + margin),
-            egui::vec2(full_rect.width() - margin * 2.0, MINIMAP_HEIGHT),
+            egui::pos2(full_rect.left() + MARGIN, full_rect.top() + MARGIN),
+            egui::vec2(full_rect.width() - MARGIN * 2.0, MINIMAP_HEIGHT),
         );
 
         // Use full_rect painter so nothing gets clipped

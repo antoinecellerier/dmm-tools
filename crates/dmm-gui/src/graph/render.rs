@@ -1014,7 +1014,7 @@ impl Graph {
         // The plot's whole area, axes included, as egui_plot is about to
         // allocate it: the axes' strips around the plot body take the menu's
         // right-click too.
-        let plot_height = ui.available_height().max(60.0);
+        let plot_height = ui.available_height().max(super::MIN_PLOT_HEIGHT);
         let complete_rect = egui::Rect::from_min_size(
             ui.cursor().min,
             egui::vec2(ui.available_size_before_wrap().x, plot_height),
