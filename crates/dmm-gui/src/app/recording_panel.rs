@@ -386,7 +386,7 @@ impl App {
         }
     }
 
-    fn show_recording_section(&mut self, ui: &mut Ui, compact: bool) {
+    fn show_recording_section(&mut self, ui: &mut Ui) {
         let l10n = self.l10n.clone();
         let l10n = l10n.as_ref();
         let keys = Shortcut::ToggleRecording.keys(ui.ctx(), l10n);
@@ -488,7 +488,7 @@ impl App {
                 .wrap(),
             );
         }
-        self.show_log(ui, compact);
+        self.show_log(ui);
     }
 
     /// The Export… split button: the label saves a CSV in one click, the
@@ -643,7 +643,7 @@ impl App {
             .id_salt("graph_column")
             .auto_shrink([false, true])
             .show(ui, |ui| {
-                self.show_split_in_scroller(ui, false);
+                self.show_split_in_scroller(ui);
                 crate::a11y::scroll_to_focus(ui);
             })
     }
@@ -659,13 +659,13 @@ impl App {
     /// usable and the column scrolls instead. `floor()` keeps a fractional
     /// viewport from spilling the content a hair past it and raising a
     /// scrollbar on a window that fits.
-    pub(super) fn show_split_in_scroller(&mut self, ui: &mut Ui, compact: bool) {
+    pub(super) fn show_split_in_scroller(&mut self, ui: &mut Ui) {
         let height = ui
             .available_height()
             .max(self.min_split_height(ui.available_width()))
             .floor();
         ui.allocate_ui(egui::vec2(ui.available_width(), height), |ui| {
-            self.show_graph_recording_split(ui, compact);
+            self.show_graph_recording_split(ui);
         });
     }
 
@@ -732,7 +732,7 @@ impl App {
         self.take_graph_actions(ui.ctx());
     }
 
-    fn show_graph_recording_split(&mut self, ui: &mut Ui, compact: bool) {
+    fn show_graph_recording_split(&mut self, ui: &mut Ui) {
         // Built before `self.graph` is borrowed mutably below: the palette
         // reads `self.settings`, which the borrow checker would otherwise
         // see as overlapping.
@@ -782,11 +782,11 @@ impl App {
                 ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeVertical);
             }
 
-            self.show_recording_section(ui, compact);
+            self.show_recording_section(ui);
         } else if self.settings.show_graph {
             self.show_graph(ui, &tc);
         } else if self.settings.show_recording {
-            self.show_recording_section(ui, compact);
+            self.show_recording_section(ui);
         }
     }
 }
@@ -961,7 +961,7 @@ mod tests {
                 // read is what takes the focus off a menu entry the
                 // opening click landed outside of.
                 egui::ScrollArea::vertical().show(ui, |ui| {
-                    app.show_recording_section(ui, false);
+                    app.show_recording_section(ui);
                     crate::a11y::scroll_to_focus(ui);
                 });
                 let ctx = ui.ctx().clone();

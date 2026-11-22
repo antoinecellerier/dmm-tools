@@ -134,7 +134,7 @@ impl App {
             && (self.settings.show_graph || self.settings.show_recording)
         {
             ui.separator();
-            self.show_split_in_scroller(ui, true);
+            self.show_split_in_scroller(ui);
         }
     }
 
@@ -582,6 +582,60 @@ mod tests {
         let columns = run_layout(700.0, 640.0);
         assert_no_scrollbar("the narrow column", &columns.reading);
         assert!(columns.graph.is_none(), "narrow has one column");
+    }
+
+    /// The narrow layout's log takes the rest of its panel, as the wide
+    /// layout's does: a recording panel dragged tall shows more of the log,
+    /// down to the bottom of the window, and the column still fits.
+    #[test]
+    fn a_tall_recording_panel_in_the_narrow_layout_is_filled_by_its_log() {
+        let settings = Settings {
+            recording_height: 500.0,
+            ..Settings::default()
+        };
+        let mut app = session_app(settings, true, 0);
+        // A row a second, more than the panel holds.
+        let mut m = app.last_measurement.clone().expect("a reading");
+        for _ in 0..50 {
+            m.timestamp += std::time::Duration::from_secs(1);
+            m.wall_time = app.clock.wall_time_for(m.timestamp);
+            app.capture.recording.push(&m, 0);
+        }
+        let ctx = crate::app::styled_context();
+        ctx.enable_accesskit();
+        let screen = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(454.0, 980.0));
+        let mut columns = None;
+        let mut tree = Vec::new();
+        for _ in 0..3 {
+            let out = headless_frame(&ctx, Some(screen), None, vec![], |ui| {
+                let ctx = ui.ctx().clone();
+                columns = app.show_window(ui, &ctx).1;
+            });
+            tree = crate::app::test_support::a11y(&out).0;
+        }
+        let columns = columns.expect("a column");
+        assert!(columns.graph.is_none(), "narrow has one column");
+        assert_no_scrollbar("the narrow column", &columns.reading);
+
+        // The log's rows, each a time of day and its reading.
+        let rows: Vec<egui::Rect> = tree
+            .iter()
+            .filter(|(_, n)| n.value().is_some_and(|v| v.contains(':')))
+            .filter_map(|(_, n)| n.bounds())
+            .map(crate::app::test_support::to_rect)
+            .filter(|r| r.top() > screen.bottom() - 500.0)
+            .collect();
+        let top = rows.iter().map(|r| r.top()).fold(f32::INFINITY, f32::min);
+        let bottom = rows.iter().map(|r| r.bottom()).fold(0.0, f32::max);
+        assert!(
+            bottom > screen.bottom() - 30.0,
+            "the log ends at {bottom}, short of the window's {}",
+            screen.bottom()
+        );
+        assert!(
+            bottom - top > 400.0,
+            "the log shows rows from {top} to {bottom} of a 500-point panel"
+        );
     }
 
     /// With nothing recorded the panel shows one wrapped line instead of the

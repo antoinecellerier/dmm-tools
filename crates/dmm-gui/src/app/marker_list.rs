@@ -483,7 +483,7 @@ impl App {
     ///
     /// A marker's number, note and `×` sit in a column of their own at the
     /// right, so they line up whatever the reading's line says.
-    pub(super) fn show_log(&mut self, ui: &mut Ui, compact: bool) {
+    pub(super) fn show_log(&mut self, ui: &mut Ui) {
         let markers = &self.markers;
         if let Some(edit) = self
             .marker_list
@@ -531,8 +531,7 @@ impl App {
             );
         }
         // The rest of the panel, floored: past it, the column scrolls.
-        let rest = ui.available_height().max(0.0).floor();
-        let max_height = if compact { rest.min(80.0) } else { rest };
+        let max_height = ui.available_height().max(0.0).floor();
         // A panel squeezed below one row has nowhere to show the note Ctrl+N
         // opened: say so rather than type into a row no one can see.
         if max_height < line
@@ -1334,9 +1333,7 @@ mod tests {
             let ctx = crate::app::styled_context();
             let screen = Rect::from_min_size(Pos2::ZERO, vec2(800.0, 400.0));
             let frame = |app: &mut App| {
-                headless_frame(&ctx, Some(screen), None, vec![], |ui| {
-                    app.show_log(ui, false)
-                });
+                headless_frame(&ctx, Some(screen), None, vec![], |ui| app.show_log(ui));
             };
             for _ in 0..3 {
                 frame(&mut app);
@@ -1657,7 +1654,7 @@ mod tests {
             headless_frame(&self.ctx, Some(screen), Some(self.seconds), events, |ui| {
                 let ctx = ui.ctx().clone();
                 app.handle_keyboard_shortcuts(&ctx);
-                app.show_log(ui, false);
+                app.show_log(ui);
             });
         }
 
