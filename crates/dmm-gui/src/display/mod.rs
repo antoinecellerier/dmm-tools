@@ -877,10 +877,7 @@ pub fn show_reading_compact(
     } = *cx;
     match measurement {
         Some(m) => {
-            // This layout's colours are its own: the value and the unit both
-            // take the alarm's verdict, and an overload is not told apart.
-            // The other layouts go by `show_value_and_unit`.
-            let color = state.reading_color(tc);
+            // Coloured as `show_value_and_unit` colours the sized layouts.
             let draw_value = |ui: &mut Ui| {
                 value_and_unit_labels(
                     ui,
@@ -888,8 +885,8 @@ pub fn show_reading_compact(
                     m,
                     COMPACT_READING_FONT_SIZE,
                     MIN_AUX_FONT_SIZE,
-                    color,
-                    color,
+                    value_color(m, tc, state),
+                    tc.reading(),
                 );
             };
 
@@ -1131,6 +1128,64 @@ mod tests {
             ]
         );
     }
+
+    /// The compact layout colours the reading as the sized layouts do: an
+    /// overload in the error colour, a value past a limit in it too, and the
+    /// unit in the reading colour whatever the alarm says.
+    #[test]
+    fn the_compact_reading_is_coloured_as_the_sized_layouts_colour_it() {
+        fn walk(shape: &egui::Shape, out: &mut Vec<(String, Color32)>) {
+            match shape {
+                egui::Shape::Text(t) => {
+                    let color = t.galley.job.sections.last().map(|s| s.format.color);
+                    out.extend(color.map(|c| (t.galley.text().trim().to_string(), c)));
+                }
+                egui::Shape::Vec(shapes) => shapes.iter().for_each(|s| walk(s, out)),
+                _ => {}
+            }
+        }
+        let ctx = crate::app::styled_context();
+        let tc = crate::settings::Settings::default().theme_colors(true);
+        let colours = |value: MeasuredValue, alarm: Option<Zone>| {
+            let m = Measurement::test_fixture(value, "V", StatusFlags::default());
+            let cx = ReadingCtx {
+                state: ReadingState {
+                    alarm_set: alarm.is_some(),
+                    alarm,
+                    ..ReadingState::PLAIN
+                },
+                ..plain(&tc, Default::default())
+            };
+            let out = headless_frame(&ctx, None, None, vec![], |ui| {
+                show_reading_compact(ui, &cx, Some(&m));
+            });
+            let mut texts = Vec::new();
+            for clipped in &out.shapes {
+                walk(&clipped.shape, &mut texts);
+            }
+            let colour_of = |text: &str| {
+                texts
+                    .iter()
+                    .find(|(t, _)| t == text)
+                    .unwrap_or_else(|| panic!("no {text:?} among {texts:?}"))
+                    .1
+            };
+            (colour_of(format_value_display(&m).trim()), colour_of("V"))
+        };
+        assert_eq!(
+            colours(MeasuredValue::Normal(5.0), None),
+            (tc.reading(), tc.reading())
+        );
+        assert_eq!(
+            colours(MeasuredValue::Overload, None),
+            (tc.status_error(), tc.reading())
+        );
+        assert_eq!(
+            colours(MeasuredValue::Normal(5.0), Some(Zone::Above)),
+            (tc.status_error(), tc.reading())
+        );
+    }
+
     /// While an alarm is set, the flags row is as wide with the reading
     /// inside the limits as past either one, so nothing after it moves.
     #[test]
