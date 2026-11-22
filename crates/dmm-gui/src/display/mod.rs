@@ -18,7 +18,7 @@ use crate::theme::ThemeColors;
 use aux_grid::{AuxGridMetrics, aux_grid_id, aux_summary_job, show_aux_rows};
 use dmm_shared::l10n::Localizer;
 use dmm_shared::tr;
-use fit::{GridFit, LastFit, ReadingLayout, pick_layout};
+use fit::{GridFit, LastFit, ReadingLayout, beside_extra_width, pick_layout};
 pub use fit::{ReadingFit, ReadingRatios};
 pub(crate) use readout::mode_switch_offered;
 use readout::{RangeAtRest, show_mode_readout, show_range_readout};
@@ -196,15 +196,80 @@ fn value_label(
     job
 }
 
-/// Prepare the value text and color from a measurement.
-fn value_display(m: &Measurement, tc: &ThemeColors, state: ReadingState) -> (String, Color32) {
+/// The colour of the value in the layouts that size it: the alarm's verdict
+/// on a number, the error colour over range, the plain reading colour for
+/// what is not a number.
+fn value_color(m: &Measurement, tc: &ThemeColors, state: ReadingState) -> Color32 {
     match &m.value {
-        MeasuredValue::Normal(_) => (format_value_display(m), state.reading_color(tc)),
-        MeasuredValue::Overload => (format_value_display(m), tc.status_error()),
+        MeasuredValue::Normal(_) => state.reading_color(tc),
+        MeasuredValue::Overload => tc.status_error(),
         MeasuredValue::NcvLevel(_) | MeasuredValue::NoReading(_) | MeasuredValue::Absent => {
-            (format_value_display(m), tc.reading())
+            tc.reading()
         }
     }
+}
+
+/// The value and its unit as two labels, the drawing every layout shares:
+/// both at `size`, the value's own name, where it has one, at `caption_size`.
+fn value_and_unit_labels(
+    ui: &mut Ui,
+    l10n: &Localizer,
+    m: &Measurement,
+    size: f32,
+    caption_size: f32,
+    value_color: Color32,
+    unit_color: Color32,
+) {
+    ui.label(value_label(
+        ui,
+        l10n,
+        m,
+        &format_value_display(m),
+        FontId::monospace(size),
+        value_color,
+        caption_size,
+    ));
+    ui.label(
+        RichText::new(&*m.unit)
+            .font(FontId::monospace(size))
+            .color(unit_color),
+    );
+}
+
+/// The value and its unit as the layouts that size the reading draw them:
+/// the value in [`value_color`], the unit in the plain reading colour.
+fn show_value_and_unit(ui: &mut Ui, cx: &ReadingCtx<'_>, m: &Measurement, value_size: f32) {
+    let ReadingCtx {
+        l10n, tc, state, ..
+    } = *cx;
+    value_and_unit_labels(
+        ui,
+        l10n,
+        m,
+        value_size,
+        value_size * MODE_SIZE_RATIO,
+        value_color(m, tc, state),
+        tc.reading(),
+    );
+}
+
+/// The mode and range readouts and the badges after them, in the row and at
+/// the spacing the caller set. `range_at_rest` is what the range readout
+/// draws on a meter that lists no rung to pick.
+///
+/// Returns the setting and value the user picked from a selector, if any.
+fn show_mode_line(
+    ui: &mut Ui,
+    cx: &ReadingCtx<'_>,
+    m: &Measurement,
+    mode_size: f32,
+    range_at_rest: RangeAtRest,
+) -> Option<ReadoutPick> {
+    let ReadingCtx { l10n, choices, .. } = *cx;
+    let mode = show_mode_readout(ui, l10n, m, mode_size, choices);
+    let range = show_range_readout(ui, l10n, m, mode_size, choices, range_at_rest);
+    show_flags(ui, cx, m, mode_size);
+    mode.or(range)
 }
 
 /// Draw `add_contents` as the spoken reading: the row a screen reader hears
@@ -240,24 +305,16 @@ fn show_reading_line_with_selector(
     draw_value: impl FnOnce(&mut Ui),
     mode_size: f32,
 ) -> Option<ReadoutPick> {
-    let ReadingCtx {
-        l10n,
-        state,
-        choices,
-        ..
-    } = *cx;
+    let ReadingCtx { l10n, state, .. } = *cx;
     ui.horizontal(|ui| {
         spoken_measurement(ui, l10n, state, Some(m), "", |ui| {
             ui.spacing_mut().item_spacing.x = 2.0;
             draw_value(ui);
         });
         ui.separator();
-        let mode = show_mode_readout(ui, l10n, m, mode_size, choices);
         // This line has never carried a range label, so a meter with no rung
         // to pick keeps the line it has: mode, then the badges.
-        let range = show_range_readout(ui, l10n, m, mode_size, choices, RangeAtRest::Nothing);
-        show_flags(ui, cx, m, mode_size);
-        mode.or(range)
+        show_mode_line(ui, cx, m, mode_size, RangeAtRest::Nothing)
     })
     .inner
 }
@@ -282,7 +339,7 @@ fn show_reading_line_plain(
         let mut mode = RichText::new(l10n.label(TextKind::Mode, &m.mode))
             .color(ui.visuals().weak_text_color());
         if mode_size > 0.0 {
-            ui.spacing_mut().item_spacing.x = (mode_size * 0.3).max(2.0);
+            ui.spacing_mut().item_spacing.x = one_row_spacing(mode_size);
             mode = mode.font(FontId::proportional(mode_size));
         } else {
             mode = mode.small();
@@ -429,10 +486,27 @@ impl<'a> NoReadingText<'a> {
     }
 }
 
-/// The dashes that stand in for a value.
-fn no_reading_bars(ui: &mut Ui, value_size: f32) {
+/// The dashes that stand in for a value, then the placeholder's text at the
+/// mode line's size: side by side in a row, stacked in a column.
+fn no_reading_bars_and_text(
+    ui: &mut Ui,
+    l10n: &Localizer,
+    text: &NoReadingText<'_>,
+    value_size: f32,
+) {
     ui.label(
         RichText::new(crate::NO_DATA)
+            .font(FontId::monospace(value_size))
+            .color(ui.visuals().weak_text_color()),
+    );
+    text.show_text(ui, l10n, value_size * MODE_SIZE_RATIO);
+}
+
+/// The dashes and "No reading" as one label at the value's size: the plain
+/// placeholder of the one-row layouts.
+fn no_reading_line(ui: &mut Ui, l10n: &Localizer, value_size: f32) {
+    ui.label(
+        RichText::new(format!("{} {}", crate::NO_DATA, tr!(l10n, "reading-none")))
             .font(FontId::monospace(value_size))
             .color(ui.visuals().weak_text_color()),
     );
@@ -488,46 +562,24 @@ fn show_reading_sized(
     no_reading: NoReadingText<'_>,
 ) -> Option<ReadoutPick> {
     let ReadingCtx {
-        l10n,
-        tc,
-        state,
-        choices,
+        l10n, tc, state, ..
     } = *cx;
-    let unit_size = value_size;
     let mode_size = value_size * MODE_SIZE_RATIO;
 
     match measurement {
         Some(m) => {
-            let (value_text, value_color) = value_display(m, tc, state);
-
             spoken_measurement(ui, l10n, state, Some(m), "", |ui| {
                 ui.spacing_mut().item_spacing.x = 2.0;
-                ui.label(value_label(
-                    ui,
-                    l10n,
-                    m,
-                    &value_text,
-                    FontId::monospace(value_size),
-                    value_color,
-                    mode_size,
-                ));
-                ui.label(
-                    RichText::new(&*m.unit)
-                        .font(FontId::monospace(unit_size))
-                        .color(tc.reading()),
-                );
+                show_value_and_unit(ui, cx, m, value_size);
             });
 
             let _ = show_aux_rows(ui, l10n, aux_grid_id(ui), m, mode_size, tc);
 
             ui.horizontal_wrapped(|ui| {
                 ui.spacing_mut().item_spacing.x = (mode_size * 0.5).max(2.0);
-                let mode = show_mode_readout(ui, l10n, m, mode_size, choices);
                 // The range has always been a label on this line, so it stays
                 // one on a meter that lists no rung to pick.
-                let range = show_range_readout(ui, l10n, m, mode_size, choices, RangeAtRest::Label);
-                show_flags(ui, cx, m, mode_size);
-                mode.or(range)
+                show_mode_line(ui, cx, m, mode_size, RangeAtRest::Label)
             })
             .inner
         }
@@ -538,40 +590,14 @@ fn show_reading_sized(
                     // already gives a reading and its mode line: an issue
                     // title set beside a scaled-up row of dashes would push
                     // the fitted font down to nothing.
-                    ui.vertical(|ui| {
-                        no_reading_bars(ui, value_size);
-                        no_reading.show_text(ui, l10n, mode_size);
-                    });
+                    ui.vertical(|ui| no_reading_bars_and_text(ui, l10n, &no_reading, value_size));
                 } else {
-                    no_reading_bars(ui, value_size);
-                    no_reading.show_text(ui, l10n, mode_size);
+                    no_reading_bars_and_text(ui, l10n, &no_reading, value_size);
                 }
             });
             None
         }
     }
-}
-
-/// The value and its unit, as the one-row layouts draw them.
-fn show_value_and_unit(ui: &mut Ui, cx: &ReadingCtx<'_>, m: &Measurement, value_size: f32) {
-    let ReadingCtx {
-        l10n, tc, state, ..
-    } = *cx;
-    let (value_text, value_color) = value_display(m, tc, state);
-    ui.label(value_label(
-        ui,
-        l10n,
-        m,
-        &value_text,
-        FontId::monospace(value_size),
-        value_color,
-        value_size * MODE_SIZE_RATIO,
-    ));
-    ui.label(
-        RichText::new(&*m.unit)
-            .font(FontId::monospace(value_size))
-            .color(tc.reading()),
-    );
 }
 
 /// Space between the blocks of a one-row reading — value, separators,
@@ -637,14 +663,9 @@ fn show_reading_inline(
         None => {
             no_reading_placeholder(ui, l10n, state, &no_reading, |ui| {
                 if no_reading.is_notice() {
-                    no_reading_bars(ui, value_size);
-                    no_reading.show_text(ui, l10n, mode_size);
+                    no_reading_bars_and_text(ui, l10n, &no_reading, value_size);
                 } else {
-                    ui.label(
-                        RichText::new(format!("{} {}", crate::NO_DATA, tr!(l10n, "reading-none")))
-                            .font(FontId::monospace(value_size))
-                            .color(ui.visuals().weak_text_color()),
-                    );
+                    no_reading_line(ui, l10n, value_size);
                 }
             });
             (None, line(ui))
@@ -717,9 +738,7 @@ fn show_reading_beside(
             // Past the dividers, the readouts space as the line under the
             // value spaces them.
             ui.spacing_mut().item_spacing.x = one_row_spacing(mode_size);
-            let mode = show_mode_readout(ui, l10n, m, mode_size, choices);
-            let range = show_range_readout(ui, l10n, m, mode_size, choices, RangeAtRest::Nothing);
-            show_flags(ui, cx, m, mode_size);
+            let picked = show_mode_line(ui, cx, m, mode_size, RangeAtRest::Nothing);
             // The row is the line's height unless the grid made it taller; then
             // the value is, as the selectors centred beside it are no taller.
             let row = ui.min_rect().height();
@@ -728,10 +747,10 @@ fn show_reading_beside(
             } else {
                 value.height()
             };
-            (mode.or(range), line_h)
+            (picked, line_h)
         })
         .inner;
-    let extra = grid.x + SEPARATOR_WIDTH + 2.0 * gap;
+    let extra = beside_extra_width(grid.x, gap);
     (
         picked,
         vec2(ui.min_rect().width() - extra, line_h + spacing_y),
@@ -858,22 +877,19 @@ pub fn show_reading_compact(
     } = *cx;
     match measurement {
         Some(m) => {
-            let value_text = format_value_display(m);
+            // This layout's colours are its own: the value and the unit both
+            // take the alarm's verdict, and an overload is not told apart.
+            // The other layouts go by `show_value_and_unit`.
+            let color = state.reading_color(tc);
             let draw_value = |ui: &mut Ui| {
-                let color = state.reading_color(tc);
-                ui.label(value_label(
+                value_and_unit_labels(
                     ui,
                     l10n,
                     m,
-                    &value_text,
-                    FontId::monospace(COMPACT_READING_FONT_SIZE),
-                    color,
+                    COMPACT_READING_FONT_SIZE,
                     MIN_AUX_FONT_SIZE,
-                ));
-                ui.label(
-                    RichText::new(&*m.unit)
-                        .font(FontId::monospace(COMPACT_READING_FONT_SIZE))
-                        .color(color),
+                    color,
+                    color,
                 );
             };
 
@@ -899,13 +915,8 @@ pub fn show_reading_compact(
             picked
         }
         None => {
-            let none = tr!(l10n, "reading-none");
             no_reading_placeholder(ui, l10n, state, &NoReadingText::Plain, |ui| {
-                ui.label(
-                    RichText::new(format!("{} {none}", crate::NO_DATA))
-                        .font(FontId::monospace(COMPACT_READING_FONT_SIZE))
-                        .color(ui.visuals().weak_text_color()),
-                );
+                no_reading_line(ui, l10n, COMPACT_READING_FONT_SIZE);
             });
             None
         }

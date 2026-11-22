@@ -107,10 +107,19 @@ impl GridFit {
     /// What the beside layout adds to the line's width at `value_size`: the
     /// grid, a second separator, and the spacing either side of it.
     pub(super) fn beside_extra_width(&self, value_size: f32) -> f32 {
-        self.size(value_size).x
-            + SEPARATOR_WIDTH
-            + 2.0 * divider_gap(value_size * MODE_SIZE_RATIO, self.selectors)
+        beside_extra_width(
+            self.size(value_size).x,
+            divider_gap(value_size * MODE_SIZE_RATIO, self.selectors),
+        )
     }
+}
+
+/// What the beside layout adds to the line's width, for a grid `grid_width`
+/// wide and `gap` either side of a divider: the grid, a second separator, and
+/// the spacing either side of it. The fit adds it to the line and the layout
+/// takes it off the row it drew, so the two must agree.
+pub(super) fn beside_extra_width(grid_width: f32, gap: f32) -> f32 {
+    grid_width + SEPARATOR_WIDTH + 2.0 * gap
 }
 
 /// The largest font size at which `fits` holds, searched up to `limit`; 0
