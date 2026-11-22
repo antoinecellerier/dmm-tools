@@ -1199,7 +1199,7 @@ impl Graph {
             .then(|| histogram::place(width, strip_room(width), room, self.histogram_sizes));
         let place = self.histogram_place;
         let band_room = match place {
-            Some(p) if p.dock == histogram::Dock::Below => p.size + histogram::DIVIDER,
+            Some(p) if p.dock == histogram::Dock::Below => histogram::band_block(p.size),
             _ => 0.0,
         };
         let main_height = (room - band_room).max(MIN_PLOT_HEIGHT);
@@ -1231,19 +1231,21 @@ impl Graph {
             });
         }
         ui.add_space(MINIMAP_GAP);
-        self.show_minimap(ui, l10n, tc, markers);
-        if let Some(p) = place.filter(|p| p.dock == histogram::Dock::Below) {
-            let (rect, _) = ui.allocate_exact_size(
-                egui::vec2(ui.available_width(), histogram::DIVIDER),
-                egui::Sense::hover(),
-            );
-            let (area, _) = ui.allocate_exact_size(
-                egui::vec2(ui.available_width(), p.size),
-                egui::Sense::hover(),
-            );
-            self.paint_histogram(ui, l10n, area, tc, limits);
-            self.histogram_divider(ui, l10n, rect, p);
-        }
+        // The minimap and the band's block with nothing between them, so the
+        // room reserved for the band above is all it takes.
+        ui.scope(|ui| {
+            ui.spacing_mut().item_spacing.y = 0.0;
+            self.show_minimap(ui, l10n, tc, markers);
+            if let Some(p) = place.filter(|p| p.dock == histogram::Dock::Below) {
+                let (block, _) = ui.allocate_exact_size(
+                    egui::vec2(ui.available_width(), histogram::band_block(p.size)),
+                    egui::Sense::hover(),
+                );
+                let (rect, area) = block.split_top_bottom_at_y(block.top() + histogram::DIVIDER);
+                self.paint_histogram(ui, l10n, area, tc, limits);
+                self.histogram_divider(ui, l10n, rect, p);
+            }
+        });
         if self.figures_key() != before {
             ui.ctx().request_repaint();
         }

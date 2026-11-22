@@ -435,6 +435,13 @@ mod tests {
         record: bool,
         markers: u64,
     ) -> Columns {
+        let mut app = session_app(settings, record, markers);
+        run_layout_of(&mut app, width, height)
+    }
+
+    /// An app on `settings` with a session's worth of data and `markers`
+    /// markers; `record` says whether the samples are a recording.
+    fn session_app(settings: Settings, record: bool, markers: u64) -> App {
         let settings = Settings {
             // No acquisition thread: this is about layout only.
             auto_connect: false,
@@ -471,7 +478,11 @@ mod tests {
                 .add(at, std::time::SystemTime::now(), "1.234 V".to_string());
         }
         app.last_measurement = Some(m);
+        app
+    }
 
+    /// The scrollers of `app`'s window laid out at `width` x `height`.
+    fn run_layout_of(app: &mut App, width: f32, height: f32) -> Columns {
         let ctx = crate::app::styled_context();
         let screen = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(width, height));
         let mut columns = None;
@@ -544,6 +555,23 @@ mod tests {
             "the graph column",
             columns.graph.as_ref().expect("wide has a graph column"),
         );
+    }
+
+    /// The histogram's band under the minimap is counted in the graph's own
+    /// height: alone in the narrow column, the graph has nothing after it to
+    /// absorb what it overshoots.
+    #[test]
+    fn a_histogram_band_without_the_recording_panel_shows_no_scrollbar() {
+        let settings = Settings {
+            show_recording: false,
+            ..Settings::default()
+        };
+        let mut app = session_app(settings, true, 0);
+        app.graph.show_histogram = true;
+        let columns = run_layout_of(&mut app, 454.0, 800.0);
+        assert!(columns.graph.is_none(), "narrow has one column");
+        assert!(app.graph.histogram_band_height(454.0) > 0.0, "a band");
+        assert_no_scrollbar("the narrow column", &columns.reading);
     }
 
     /// The narrow column stacks the graph and recording below the reading, so

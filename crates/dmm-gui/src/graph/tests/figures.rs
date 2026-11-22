@@ -307,3 +307,83 @@ fn dragging_the_divider_resizes_the_histogram() {
         "a narrow window keeps the width dragged"
     );
 }
+
+/// The graph draws inside the height it is given, with the histogram's band
+/// under the minimap as without it: the column it sits in scrolls by what
+/// it overshoots.
+#[test]
+fn the_graph_with_a_histogram_band_stays_inside_its_height() {
+    let ctx = crate::app::styled_context();
+    let tc = ThemeColors::new(true, ColorPreset::Default, &PaletteOverrides::default());
+    let markers = crate::markers::Markers::default();
+    // Too narrow for the strip beside the plot.
+    let screen = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(454.0, 600.0));
+    let given = 400.0;
+    for band in [false, true] {
+        let mut g = graph_with_a_minute_of_data();
+        g.show_histogram = band;
+        let mut used = 0.0;
+        for _ in 0..3 {
+            headless_frame(&ctx, Some(screen), None, vec![], |ui| {
+                let size = egui::vec2(ui.available_width(), given);
+                used = ui
+                    .allocate_ui(size, |ui| {
+                        g.show(ui, &crate::l10n::english(), &tc, &markers, None, NO_DIGITS);
+                        ui.min_rect().height()
+                    })
+                    .inner;
+            });
+        }
+        assert_eq!(
+            g.histogram_place.map(|p| p.dock),
+            band.then_some(crate::graph::histogram::Dock::Below)
+        );
+        assert!(
+            used <= given,
+            "band = {band}: drew {used} in {given} points"
+        );
+    }
+}
+
+/// The divider over the band, in the block it shares with it, is still the
+/// handle: dragged up it grows the band, down it shrinks it to its least.
+#[test]
+fn dragging_the_divider_over_the_band_resizes_it() {
+    use crate::graph::histogram::{BAND_HEIGHT, DIVIDER, MIN_BAND_HEIGHT};
+    let ctx = crate::app::styled_context();
+    ctx.enable_accesskit();
+    let tc = ThemeColors::new(true, ColorPreset::Default, &PaletteOverrides::default());
+    let mut g = graph_with_a_minute_of_data();
+    g.show_histogram = true;
+    // One frame too narrow for the strip; where the divider was drawn.
+    let frame = |g: &mut Graph, events: Vec<egui::Event>| {
+        let screen = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(454.0, 600.0));
+        let markers = crate::markers::Markers::default();
+        let out = headless_frame(&ctx, Some(screen), None, events, |ui| {
+            g.show(ui, &crate::l10n::english(), &tc, &markers, None, NO_DIGITS)
+        });
+        node_rect(&a11y(&out).0, |n| {
+            n.label() == Some("Resize the histogram (Up/Down to adjust)")
+        })
+    };
+    let drag = |g: &mut Graph, dy: f32| {
+        frame(g, vec![]);
+        let rect = frame(g, vec![]).expect("the divider is drawn and labelled");
+        assert_eq!(rect.height(), DIVIDER);
+        let (at, to) = (rect.center(), rect.center() + egui::vec2(0.0, dy));
+        let button = |pos, pressed| egui::Event::PointerButton {
+            pos,
+            button: egui::PointerButton::Primary,
+            pressed,
+            modifiers: egui::Modifiers::NONE,
+        };
+        frame(g, vec![egui::Event::PointerMoved(at)]);
+        frame(g, vec![button(at, true)]);
+        frame(g, vec![egui::Event::PointerMoved(to)]);
+        frame(g, vec![button(to, false)]);
+    };
+    drag(&mut g, -20.0);
+    assert_eq!(g.histogram_sizes.1, BAND_HEIGHT + 20.0);
+    drag(&mut g, 1000.0);
+    assert_eq!(g.histogram_sizes.1, MIN_BAND_HEIGHT);
+}

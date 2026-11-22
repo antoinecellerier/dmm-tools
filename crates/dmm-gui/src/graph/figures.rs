@@ -105,7 +105,7 @@ impl Graph {
     /// Not the height dragged, which [`histogram::place`] gives up to fit.
     pub(crate) fn histogram_band_height(&self, width: f32) -> f32 {
         if self.histogram_shown() && !histogram::docks_beside(strip_room(width)) {
-            histogram::MIN_BAND_HEIGHT + histogram::DIVIDER
+            histogram::band_block(histogram::MIN_BAND_HEIGHT)
         } else {
             0.0
         }

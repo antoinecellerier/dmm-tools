@@ -33,6 +33,12 @@ pub(crate) const MIN_BAND_HEIGHT: f32 = 50.0;
 /// Space between the plot and the strip, or the minimap and the band: the
 /// handle that resizes the pane.
 pub(super) const DIVIDER: f32 = 6.0;
+
+/// The height the band takes under the minimap at `size`: its divider, then
+/// the band. What the graph reserves for it and what it draws it in.
+pub(super) fn band_block(size: f32) -> f32 {
+    DIVIDER + size
+}
 /// The thinnest bar worth drawing, in points: fewer, wider bins below it.
 const MIN_BAR: f32 = 4.0;
 /// Bins kept at most, whatever the pane's size.
