@@ -576,24 +576,42 @@ impl App {
         let output = area.show_viewport(ui, |ui, viewport| {
             ui.spacing_mut().interact_size.y = line;
             ui.spacing_mut().button_padding.y = 0.0;
-            let narrow = ui.available_width() < NARROW_ROW_WIDTH;
             // A tag with room for three digits, so the notes line up.
             let number_width =
                 TAG_TIP + 2.0 * TAG_PAD + 3.0 * ui.fonts_mut(|f| f.glyph_width(&log_font(), '0'));
+            let width = ui.available_width();
+            let layout = LogLayout {
+                line,
+                number_width,
+                delete_width,
+                spacing,
+                row_spacing: ui.spacing().item_spacing.y,
+                gutter,
+                column: marker_column(
+                    width,
+                    reading_width,
+                    number_width,
+                    delete_width,
+                    spacing,
+                    gutter,
+                ),
+                flag,
+                flag_text,
+                weak,
+            };
             let marker_rows = rows.markers.iter().map(|&(row, _)| row);
             let geometry = RowGeometry::new(
                 pitch,
-                if narrow {
-                    marker_rows.clone().collect()
-                } else {
-                    Vec::new()
+                match layout.column {
+                    Some(_) => Vec::new(),
+                    None => marker_rows.clone().collect(),
                 },
             );
-            let height = geometry.top(rows.len()) - ui.spacing().item_spacing.y;
+            let height = geometry.top(rows.len()) - layout.row_spacing;
             // The rows are children placed by rect, which the content's own
             // rect doesn't grow to hold: it is set here, whole, as
             // `scroll_to_focus` checks a focused widget against it.
-            ui.set_min_size(egui::vec2(ui.available_width(), height.max(0.0)));
+            ui.set_min_size(egui::vec2(width, height.max(0.0)));
             // The rows at last frame's offset, which this frame is drawn at
             // — clamped, as a jump to the end asks for past it. While
             // following, the last screenful too: `stick_to_bottom` moves down
@@ -611,25 +629,6 @@ impl App {
             drawn.sort_unstable();
             drawn.dedup();
             let origin = ui.max_rect().min;
-            let width = ui.available_width();
-            // `LogLayout::fixed`'s terms, kept in this order: the column lands
-            // on the same pixel as it always has.
-            let column = reading_width
-                .min(width - number_width - delete_width - 3.0 * spacing - gutter - MIN_NOTE_WIDTH)
-                .max(0.0);
-            let layout = LogLayout {
-                line,
-                number_width,
-                delete_width,
-                spacing,
-                row_spacing: ui.spacing().item_spacing.y,
-                gutter,
-                column,
-                narrow,
-                flag,
-                flag_text,
-                weak,
-            };
             for r in drawn {
                 let row = rows.row(r);
                 let at = match row {
@@ -663,7 +662,7 @@ impl App {
                 let on_graph = graph.holds(at);
                 let (text, tag) = &labels[i];
                 // number, note, ×, in that order for Tab.
-                let mut marker_column = |ui: &mut Ui, note_width: f32| {
+                let mut controls = |ui: &mut Ui, note_width: f32| {
                     if number_tag(ui, &layout, &l10n, m, on_graph) {
                         reveal = Some(at);
                     }
@@ -673,18 +672,12 @@ impl App {
                     }
                     response
                 };
-                let response = if layout.narrow {
-                    reading_label(ui, &layout, text, tag.as_deref());
-                    ui.horizontal(|ui| {
-                        marker_column(ui, (ui.available_width() - layout.fixed()).max(40.0))
-                    })
-                    .inner
-                } else {
+                let response = if let Some(column) = layout.column {
                     ui.horizontal(|ui| {
                         // Its own rect, whatever the reading's text: a child
                         // ui would hand back only as much as its text took.
                         let (rect, _) = ui.allocate_exact_size(
-                            egui::vec2(layout.column, layout.line),
+                            egui::vec2(column, layout.line),
                             egui::Sense::hover(),
                         );
                         reading_label(
@@ -698,7 +691,13 @@ impl App {
                             tag.as_deref(),
                         );
                         let note_width = ui.available_width() - layout.fixed() + layout.spacing;
-                        marker_column(ui, note_width.max(MIN_NOTE_WIDTH))
+                        controls(ui, note_width.max(MIN_NOTE_WIDTH))
+                    })
+                    .inner
+                } else {
+                    reading_label(ui, &layout, text, tag.as_deref());
+                    ui.horizontal(|ui| {
+                        controls(ui, (ui.available_width() - layout.fixed()).max(40.0))
                     })
                     .inner
                 };
@@ -802,11 +801,10 @@ struct LogLayout {
     row_spacing: f32,
     /// What a floating scroll bar takes of the rows' right end.
     gutter: f32,
-    /// Where the marker column starts, the same on every row.
-    column: f32,
-    /// A panel too narrow for the marker column beside the reading, which
-    /// puts it on a line of its own.
-    narrow: bool,
+    /// Where the marker column starts beside the reading, the same on every
+    /// row. `None` in a panel too narrow for it there, which puts it on a
+    /// line of its own.
+    column: Option<f32>,
     /// A marker tag's fill, the graph's flag colour, and the faint `+` tag's
     /// outline.
     flag: egui::Color32,
@@ -822,6 +820,29 @@ impl LogLayout {
     fn fixed(&self) -> f32 {
         self.number_width + self.delete_width + 3.0 * self.spacing + self.gutter
     }
+}
+
+/// Where the marker column starts in rows `width` wide: past the widest of
+/// the marker rows' readings (`reading_width`), or as far short of it as
+/// leaves the note [`MIN_NOTE_WIDTH`] beside the number, the ×, their gaps
+/// and the scroll bar's gutter. `None` under [`NARROW_ROW_WIDTH`], where it
+/// goes on a line of its own; the breakpoint is the row's width alone, so a
+/// longer reading never moves the rows already there onto two lines.
+fn marker_column(
+    width: f32,
+    reading_width: f32,
+    number_width: f32,
+    delete_width: f32,
+    spacing: f32,
+    gutter: f32,
+) -> Option<f32> {
+    if width < NARROW_ROW_WIDTH {
+        return None;
+    }
+    // `LogLayout::fixed`'s terms, kept in this order: the column lands on the
+    // same pixel as it always has.
+    let room = width - number_width - delete_width - 3.0 * spacing - gutter - MIN_NOTE_WIDTH;
+    Some(reading_width.min(room).max(0.0))
 }
 
 /// A marker row's text, its wall time then its reading — the sample's line
@@ -906,7 +927,7 @@ fn sample_row(
     if !ui.rect_contains_pointer(pitch_rect) {
         return None;
     }
-    let column = if layout.narrow { 0.0 } else { layout.column };
+    let column = layout.column.unwrap_or(0.0);
     let x = (label.rect.width().max(column) + layout.spacing)
         .min(row_rect.width() - layout.number_width);
     let slot = egui::Rect::from_min_size(
@@ -1174,6 +1195,33 @@ mod tests {
         }
         assert_eq!(geometry.height(3), 20.0);
         assert_eq!(geometry.height(4), 10.0);
+    }
+
+    /// The marker column starts past the widest reading while the note keeps
+    /// its room, gives the reading less when it doesn't, and under 460 points
+    /// leaves the reading's line.
+    #[test]
+    fn the_marker_column_follows_the_row_width() {
+        // A 30-point number, an 18-point ×, 8-point gaps and no gutter: 72
+        // points beside the note's 120.
+        let column = |width, reading| marker_column(width, reading, 30.0, 18.0, 8.0, 0.0);
+        assert_eq!(column(900.0, 300.0), Some(300.0), "past the reading");
+        assert_eq!(column(492.0, 300.0), Some(300.0), "an exact fit");
+        assert_eq!(column(491.0, 300.0), Some(299.0), "the reading gives way");
+        assert_eq!(column(460.0, 300.0), Some(268.0), "at the breakpoint");
+        assert_eq!(column(459.5, 300.0), None, "under it, a line of its own");
+        assert_eq!(column(459.5, 10.0), None, "however short the reading");
+        assert_eq!(column(600.0, 0.0), Some(0.0), "no marker rows");
+        // A gutter is room the reading gives up too.
+        assert_eq!(
+            marker_column(491.0, 300.0, 30.0, 18.0, 8.0, 14.0),
+            Some(285.0)
+        );
+        // A number tag wider than the row leaves the reading nothing.
+        assert_eq!(
+            marker_column(480.0, 300.0, 400.0, 18.0, 8.0, 0.0),
+            Some(0.0)
+        );
     }
 
     /// Marking a reading that has a marker, from the log or the graph's
