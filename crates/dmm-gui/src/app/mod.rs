@@ -950,9 +950,6 @@ impl App {
     /// buttons under it — and, when the mode is `Off` and it is only the
     /// hidden panels that left the reading alone, the connection help, specs
     /// and statistics too.
-    ///
-    /// Its own method rather than a block in [`eframe::App::ui`] so a headless
-    /// test can drive exactly what a frame draws here.
     fn show_meter_only(&mut self, ui: &mut egui::Ui, ctx: &egui::Context, minimal: bool) {
         // Big meter mode: compute scale from window size, only recalculate
         // when the window is resized to avoid frame-to-frame oscillation.
@@ -1176,20 +1173,96 @@ impl App {
         self.toasts.push(Toast::error(message));
     }
 
-    /// Keep the window's minimum size, and its size, fitting what this frame
-    /// shows: `minimal` big meter, the meter alone, or the panels.
-    fn update_min_window_size(&mut self, ctx: &egui::Context, minimal: bool, meter_only: bool) {
-        // Reading dimensions come from cached ratios × minimum big meter
-        // font size; the top bar's minimum from the widths it last measured.
-        let bar_min_w = top_bar::min_width(ctx);
+    /// Draw the window under the overlays: the top bar, unless the big meter
+    /// is `Minimal`, then the one layout this frame shows — the meter alone,
+    /// the reading panel beside the graph column in a wide window, or a
+    /// single column in a narrow one. The window's minimum size follows the
+    /// choice before the layout is drawn.
+    ///
+    /// Returns where the toast hangs from, and the panels' page scrollers
+    /// (`None` with the meter alone).
+    fn show_window(
+        &mut self,
+        ui: &mut egui::Ui,
+        ctx: &egui::Context,
+    ) -> (f32, Option<layout::Columns>) {
+        let minimal = self.big_meter_mode == BigMeterMode::Minimal;
+        // Where the toast hangs from: under the bar (and under the settings
+        // rows it opens), at the window's top edge when there is no bar.
+        let mut toast_top = ctx.content_rect().top();
+        // The top bar and the wide layout's reading panel sit on the
+        // palette's Frame surface, around the graph column.
+        let frame_fill = self.settings.theme_colors(ui.visuals().dark_mode).frame();
+        if !minimal {
+            let top = egui::Panel::top("top_bar")
+                .frame(frame_panel(ui.style(), frame_fill))
+                .show(ui, |ui| {
+                    on_frame(ui, frame_fill);
+                    self.show_top_bar(ui, ctx);
+                    self.show_settings_panel(ui);
+                });
+            toast_top = top.response.rect.bottom();
+        }
 
-        let window_content = if minimal {
+        let wide = meter_fit::is_wide(ctx.content_rect().width());
+        // After the bar: its settings rows are where the panels are hidden.
+        let content = if minimal {
             WindowContent::ReadingOnly
-        } else if meter_only {
+        } else if self.meter_only() {
             WindowContent::Meter
         } else {
             WindowContent::Panels
         };
+        self.update_min_window_size(ctx, content);
+
+        let columns = match content {
+            WindowContent::ReadingOnly | WindowContent::Meter => {
+                self.show_meter_only(ui, ctx, minimal);
+                None
+            }
+            WindowContent::Panels if wide => {
+                // Left side panel for reading + stats (resizable)
+                let reading_panel = egui::Panel::left(layout::READING_PANEL)
+                    .default_size(self.settings.reading_panel_width)
+                    .size_range(SIDE_PANEL_MIN_WIDTH..=SIDE_PANEL_MAX_WIDTH)
+                    .resizable(true)
+                    .frame(frame_panel(ui.style(), frame_fill))
+                    .show(ui, |ui| {
+                        on_frame(ui, frame_fill);
+                        self.show_reading_column_scrolled(ui, ContentLayout::Wide)
+                    });
+                self.reading_panel_resize_a11y(ui, reading_panel.response.rect);
+
+                // Center panel for graph + recording
+                let graph = egui::CentralPanel::default().show(ui, |ui| self.show_graph_column(ui));
+                graph.response.a11y_role(egui::accesskit::Role::Main);
+                Some(layout::Columns {
+                    reading: reading_panel.inner,
+                    graph: Some(graph.inner),
+                })
+            }
+            WindowContent::Panels => {
+                // Single column
+                let reading = egui::CentralPanel::default().show(ui, |ui| {
+                    self.show_reading_column_scrolled(ui, ContentLayout::Narrow)
+                });
+                reading.response.a11y_role(egui::accesskit::Role::Main);
+                Some(layout::Columns {
+                    reading: reading.inner,
+                    graph: None,
+                })
+            }
+        };
+        (toast_top, columns)
+    }
+
+    /// Keep the window's minimum size, and its size, fitting what this frame
+    /// shows.
+    fn update_min_window_size(&mut self, ctx: &egui::Context, window_content: WindowContent) {
+        // Reading dimensions come from cached ratios × minimum big meter
+        // font size; the top bar's minimum from the widths it last measured.
+        let bar_min_w = top_bar::min_width(ctx);
+
         let min_size = self.meter_fit.min_window_size(window_content, bar_min_w);
         // Only when it changes. Its inputs — cached top-bar widths, meter
         // ratios, big-meter mode — are stable across the vast majority of
@@ -1400,62 +1473,7 @@ impl eframe::App for App {
             self.on_first_frame(&ctx);
         }
 
-        let minimal = self.big_meter_mode == BigMeterMode::Minimal;
-        // Where the toast hangs from: under the bar (and under the settings
-        // rows it opens), at the window's top edge when there is no bar.
-        let mut toast_top = ctx.content_rect().top();
-        // The top bar and the wide layout's reading panel sit on the
-        // palette's Frame surface, around the graph column.
-        let frame_fill = self.settings.theme_colors(ui.visuals().dark_mode).frame();
-        if !minimal {
-            let top = egui::Panel::top("top_bar")
-                .frame(frame_panel(ui.style(), frame_fill))
-                .show(ui, |ui| {
-                    on_frame(ui, frame_fill);
-                    self.show_top_bar(ui, &ctx);
-                    self.show_settings_panel(ui);
-                });
-            toast_top = top.response.rect.bottom();
-        }
-
-        // Determine layout mode before panels
-        let wide = meter_fit::is_wide(ctx.content_rect().width());
-
-        let meter_only = self.meter_only();
-
-        self.update_min_window_size(&ctx, minimal, meter_only);
-
-        if meter_only {
-            self.show_meter_only(ui, &ctx, minimal);
-        } else if wide {
-            // Wide: left side panel for reading + stats (resizable)
-            let reading_panel = egui::Panel::left(layout::READING_PANEL)
-                .default_size(self.settings.reading_panel_width)
-                .size_range(SIDE_PANEL_MIN_WIDTH..=SIDE_PANEL_MAX_WIDTH)
-                .resizable(true)
-                .frame(frame_panel(ui.style(), frame_fill))
-                .show(ui, |ui| {
-                    on_frame(ui, frame_fill);
-                    self.show_reading_column_scrolled(ui, ContentLayout::Wide);
-                });
-            self.reading_panel_resize_a11y(ui, reading_panel.response.rect);
-
-            // Wide: center panel for graph + recording
-            egui::CentralPanel::default()
-                .show(ui, |ui| {
-                    self.show_graph_column(ui);
-                })
-                .response
-                .a11y_role(egui::accesskit::Role::Main);
-        } else {
-            // Narrow: single column
-            egui::CentralPanel::default()
-                .show(ui, |ui| {
-                    self.show_reading_column_scrolled(ui, ContentLayout::Narrow);
-                })
-                .response
-                .a11y_role(egui::accesskit::Role::Main);
-        }
+        let (toast_top, _) = self.show_window(ui, &ctx);
 
         self.show_toast(&ctx, toast_top);
         self.show_shortcut_help(&ctx);
@@ -2418,16 +2436,11 @@ mod tests {
         nodes
     }
 
-    /// The meter-only branch in [`eframe::App::ui`]'s order: the top bar where
-    /// there is one, then the big meter.
+    /// The window of an app showing the meter alone, as a frame draws it.
     fn meter_nodes(app: &mut App, w: f32, h: f32) -> Vec<(NodeId, Node)> {
         frame_nodes(app, w, h, |app, ui| {
             let ctx = ui.ctx().clone();
-            let minimal = app.big_meter_mode == BigMeterMode::Minimal;
-            if !minimal {
-                egui::Panel::top("top_bar").show(ui, |ui| app.show_top_bar(ui, &ctx));
-            }
-            app.show_meter_only(ui, &ctx, minimal);
+            app.show_window(ui, &ctx);
         })
     }
 

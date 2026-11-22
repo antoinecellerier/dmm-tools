@@ -30,6 +30,7 @@ const WIDE_LAYOUT_MIN_WIDTH: f32 = 900.0;
 const MARGIN_FULL_AT: f32 = 300.0;
 
 /// What the window has to leave room for besides the reading.
+#[derive(Clone, Copy)]
 pub(super) enum WindowContent {
     /// Just the reading — no top bar, no buttons.
     ReadingOnly,

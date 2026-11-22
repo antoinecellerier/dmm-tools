@@ -39,6 +39,18 @@ pub(super) enum ContentLayout {
     Narrow,
 }
 
+/// The page scrollers one multi-panel layout ends up with: the wide layout
+/// has one per column, the narrow layout only the reading column (the graph
+/// is stacked inside it).
+#[cfg_attr(
+    not(test),
+    expect(dead_code, reason = "tests read whether a column had to scroll")
+)]
+pub(super) struct Columns {
+    pub(super) reading: egui::scroll_area::ScrollAreaOutput<()>,
+    pub(super) graph: Option<egui::scroll_area::ScrollAreaOutput<()>>,
+}
+
 impl App {
     /// The reading column inside the page scroller both multi-panel layouts
     /// wrap it in: in a window too short for the column, the stats — and in
@@ -380,9 +392,7 @@ impl App {
 mod tests {
     use super::*;
     use crate::app::test_support::{headless_frame, headless_run, test_app};
-    use crate::settings::{
-        SIDE_PANEL_DEFAULT_WIDTH, SIDE_PANEL_MAX_WIDTH, SIDE_PANEL_MIN_WIDTH, Settings,
-    };
+    use crate::settings::Settings;
     use eframe::egui::ViewportInfo;
     use eframe::egui::scroll_area::ScrollAreaOutput;
 
@@ -398,16 +408,8 @@ mod tests {
         assert!(!app.specs_shown());
     }
 
-    /// The page scrollers one multi-panel layout ends up with: the wide
-    /// layout has one per column, the narrow layout only the reading column
-    /// (the graph is stacked inside it).
-    struct Columns {
-        reading: ScrollAreaOutput<()>,
-        graph: Option<ScrollAreaOutput<()>>,
-    }
-
-    /// Lay the panels out at `width` x `height` the way `App::ui` does — top
-    /// bar pinned outside the scrollers, then the wide or narrow branch — and
+    /// Lay the window out at `width` x `height` as a frame does — top bar
+    /// pinned outside the scrollers, then the wide or narrow layout — and
     /// return the last frame's scrollers. Three frames because a scroll area
     /// sizes itself from the state the previous one left.
     fn run_layout(width: f32, height: f32) -> Columns {
@@ -472,47 +474,16 @@ mod tests {
 
         let ctx = crate::app::styled_context();
         let screen = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(width, height));
-        let wide = super::super::meter_fit::is_wide(width);
         let mut columns = None;
 
         for _ in 0..3 {
             headless_frame(&ctx, Some(screen), None, vec![], |ui| {
                 let ctx = ui.ctx().clone();
-                egui::Panel::top("top_bar").show(ui, |ui| {
-                    app.show_top_bar(ui, &ctx);
-                    app.show_settings_panel(ui);
-                });
-                columns = Some(if wide {
-                    let reading = egui::Panel::left(READING_PANEL)
-                        .default_size(SIDE_PANEL_DEFAULT_WIDTH)
-                        .size_range(SIDE_PANEL_MIN_WIDTH..=SIDE_PANEL_MAX_WIDTH)
-                        .resizable(true)
-                        .show(ui, |ui| {
-                            app.show_reading_column_scrolled(ui, ContentLayout::Wide)
-                        })
-                        .inner;
-                    let graph = egui::CentralPanel::default()
-                        .show(ui, |ui| app.show_graph_column(ui))
-                        .inner;
-                    Columns {
-                        reading,
-                        graph: Some(graph),
-                    }
-                } else {
-                    let reading = egui::CentralPanel::default()
-                        .show(ui, |ui| {
-                            app.show_reading_column_scrolled(ui, ContentLayout::Narrow)
-                        })
-                        .inner;
-                    Columns {
-                        reading,
-                        graph: None,
-                    }
-                });
+                columns = app.show_window(ui, &ctx).1;
             });
         }
 
-        columns.expect("the layout closure runs every frame")
+        columns.expect("the settings leave a panel beside the reading")
     }
 
     /// A column whose content is no taller than its viewport: egui raises a
