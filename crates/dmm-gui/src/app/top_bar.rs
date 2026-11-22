@@ -76,6 +76,11 @@ impl App {
             .map_or(0.0, |tag| text_width(ui, &tag.label(l10n)) + spacing);
         let one_row = cached_left + link_shown_w + cached_right + notice_w + spacing < available;
         let status_below = status_goes_below(cached_left + link_shown_w, available);
+        // Off the first row, the status shares its row with the right group
+        // where the two fit.
+        let status_id = egui::Id::unique("top_bar_status_w");
+        let cached_status: f32 = ui.data(|d| d.get_temp(status_id)).unwrap_or(150.0);
+        let joined = status_below && cached_status + spacing + cached_right + notice_w <= available;
         let mut status_width = 0.0;
         let mut row_width = 0.0;
         let mut link = (0.0, 0.0);
@@ -209,8 +214,12 @@ impl App {
         if status_below {
             narrow_row(ui, &mut |ui| {
                 status_width = self.show_status(ui, l10n, dot_color, &status_text, orange);
+                if joined {
+                    self.show_top_bar_right(ui, right_id);
+                }
             });
         }
+        ui.data_mut(|d| d.insert_temp(status_id, status_width));
         let (link_w, drawn) = link;
         let left_width = row_width + spacing + status_width - drawn;
         ui.data_mut(|d| {
@@ -219,7 +228,7 @@ impl App {
         });
 
         // If not wide enough, render right-side items on a second row
-        if !one_row {
+        if !one_row && !joined {
             narrow_row(ui, &mut |ui| self.show_top_bar_right(ui, right_id));
         }
     }

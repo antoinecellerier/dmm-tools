@@ -2492,6 +2492,48 @@ mod tests {
         );
     }
 
+    /// A window too narrow for the first row, with room for the status
+    /// beside the settings button: the two share the second row, the
+    /// status at its start and the button at its end.
+    #[test]
+    fn a_status_off_the_first_row_shares_the_right_groups_row() {
+        let mut app = crate::app::test_support::connected_to("ut181a");
+        let ctx = crate::app::styled_context();
+        ctx.enable_accesskit();
+        let mut frames = |width: f32| {
+            let screen = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(width, 400.0));
+            let mut nodes = Vec::new();
+            for _ in 0..6 {
+                let out = headless_frame(&ctx, Some(screen), None, vec![], |ui| {
+                    let ctx = ui.ctx().clone();
+                    egui::Panel::top("top_bar").show(ui, |ui| app.show_top_bar(ui, &ctx));
+                });
+                nodes = a11y(&out).0;
+            }
+            nodes
+        };
+        frames(900.0);
+        let row: f32 = ctx
+            .data(|d| d.get_temp(top_bar::left_width_id()))
+            .expect("the bar caches its first row's width");
+        let width = row + 16.0 - 30.0;
+        let nodes = frames(width);
+        let rect = |text: &str| {
+            crate::app::test_support::node_rect(&nodes, |n| node_text(n) == Some(text))
+                .unwrap_or_else(|| panic!("no {text:?} on the bar"))
+        };
+        let (button, status, settings) = (rect("Disconnect"), rect("Connected"), rect("Settings"));
+        assert!(
+            status.top() > button.bottom(),
+            "the status left the first row"
+        );
+        assert!(
+            (status.center().y - settings.center().y).abs() < status.height(),
+            "the status at {status:?} and Settings at {settings:?} are on two rows"
+        );
+        assert!(status.right() <= settings.left() && settings.right() <= width);
+    }
+
     /// The text AccessKit reports for a node: a plain label carries it as the
     /// node's value, a button or a link as its label.
     fn node_text(node: &Node) -> Option<&str> {
