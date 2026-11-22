@@ -2456,6 +2456,42 @@ mod tests {
         }
     }
 
+    /// A window at its minimum width is the first row's width and the
+    /// margins, less the fraction of a point the size is rounded by: the
+    /// status stays on the row with the buttons.
+    #[test]
+    fn a_window_at_its_minimum_width_keeps_the_status_on_the_first_row() {
+        let mut app = crate::app::test_support::test_app();
+        let ctx = crate::app::styled_context();
+        ctx.enable_accesskit();
+        let mut frames = |width: f32| {
+            let screen = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(width, 400.0));
+            let mut nodes = Vec::new();
+            for _ in 0..6 {
+                let out = headless_frame(&ctx, Some(screen), None, vec![], |ui| {
+                    let ctx = ui.ctx().clone();
+                    egui::Panel::top("top_bar").show(ui, |ui| app.show_top_bar(ui, &ctx));
+                });
+                nodes = a11y(&out).0;
+            }
+            nodes
+        };
+        frames(900.0);
+        let row: f32 = ctx
+            .data(|d| d.get_temp(top_bar::left_width_id()))
+            .expect("the bar caches its first row's width");
+        let nodes = frames(row + 16.0 - 0.4);
+        let rect = |text: &str| {
+            crate::app::test_support::node_rect(&nodes, |n| node_text(n) == Some(text))
+                .unwrap_or_else(|| panic!("no {text:?} on the bar"))
+        };
+        let (button, status) = (rect("Connect"), rect("Disconnected"));
+        assert!(
+            status.top() < button.bottom(),
+            "the status at {status:?} is below the button at {button:?}"
+        );
+    }
+
     /// The text AccessKit reports for a node: a plain label carries it as the
     /// node's value, a button or a link as its label.
     fn node_text(node: &Node) -> Option<&str> {

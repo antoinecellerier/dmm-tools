@@ -75,8 +75,7 @@ impl App {
             .notice(self.settings.check_for_updates)
             .map_or(0.0, |tag| text_width(ui, &tag.label(l10n)) + spacing);
         let one_row = cached_left + link_shown_w + cached_right + notice_w + spacing < available;
-        // The left group alone is wider than the window.
-        let status_below = cached_left + link_shown_w > available;
+        let status_below = status_goes_below(cached_left + link_shown_w, available);
         let mut status_width = 0.0;
         let mut row_width = 0.0;
         let mut link = (0.0, 0.0);
@@ -634,6 +633,18 @@ pub(super) fn right_width_id() -> egui::Id {
     egui::Id::unique("top_bar_right_w")
 }
 
+/// How far the first row may reach into the panel's margin before the status
+/// leaves it. The window's minimum width is this row's, sent only when it
+/// moves by half a point and rounded to whole pixels, so a window at its
+/// minimum is narrower than the row by a fraction of a point.
+const ROW_OVERHANG: f32 = 1.0;
+
+/// Whether the left group is wider than the window, so that the status takes
+/// a row of its own. `row` is what the group needs with the status on it.
+fn status_goes_below(row: f32, available: f32) -> bool {
+    row > available + ROW_OVERHANG
+}
+
 /// Whether the status row has room for the link as well.
 ///
 /// `row` is what the row needs without it, `link` what it would add, both as
@@ -678,7 +689,10 @@ fn badge_text(l10n: &Localizer, stability: Stability) -> Cow<'_, str> {
 
 #[cfg(test)]
 mod tests {
-    use super::{Link, Stability, badge_text, connected_status, fits_with_link, link_tooltip};
+    use super::{
+        Link, Stability, badge_text, connected_status, fits_with_link, link_tooltip,
+        status_goes_below,
+    };
 
     #[test]
     fn the_badge_says_the_level_in_capitals() {
@@ -719,6 +733,14 @@ mod tests {
             ),
             "UT61E+ \u{b7} USB cable (paused)"
         );
+    }
+
+    /// The fraction of a point a window at its minimum is short by leaves
+    /// the status on the row; a row really wider than the window does not.
+    #[test]
+    fn the_status_leaves_the_row_only_past_the_overhang() {
+        assert!(!status_goes_below(459.4, 459.0));
+        assert!(status_goes_below(461.0, 459.0));
     }
 
     /// A row with no room for the link drops it and keeps everything else —
