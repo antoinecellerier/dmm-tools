@@ -470,7 +470,7 @@ impl Graph {
         markers: &Markers,
     ) {
         if self.history.len() < 2 {
-            ui.allocate_space(egui::vec2(ui.available_width(), MINIMAP_HEIGHT));
+            ui.allocate_space(egui::vec2(ui.available_width(), STRIP_HEIGHT));
             return;
         }
 

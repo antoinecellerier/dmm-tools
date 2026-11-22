@@ -387,3 +387,30 @@ fn push_and_frame_cost_do_not_scale_with_history() {
     assert!(ratio(push_short, push_long) < 2.0, "push cost grew");
     assert!(ratio(frame_short, frame_long) < 2.0, "frame cost grew");
 }
+
+/// The graph keeps the strip's height under the plot whether or not there is
+/// anything to draw in it, so a strip with no samples must take as much: a
+/// shorter one lets everything below it sit higher until the trace appears.
+#[test]
+fn an_empty_minimap_takes_the_room_of_a_drawn_one() {
+    fn strip_height(g: &mut Graph) -> f32 {
+        let ctx = crate::app::styled_context();
+        let tc = ThemeColors::new(true, ColorPreset::Default, &PaletteOverrides::default());
+        let mut height = 0.0;
+        headless_frame(&ctx, Some(gesture_screen()), None, Vec::new(), |ui| {
+            let top = ui.cursor().top();
+            g.show_minimap(
+                ui,
+                &crate::l10n::english(),
+                &tc,
+                &crate::markers::Markers::default(),
+            );
+            height = ui.cursor().top() - top;
+        });
+        height
+    }
+
+    let empty = strip_height(&mut Graph::new());
+    let drawn = strip_height(&mut graph_with_a_minute_of_data());
+    assert_eq!(empty, drawn, "empty strip vs one with a trace");
+}

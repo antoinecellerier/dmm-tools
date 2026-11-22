@@ -10,6 +10,7 @@
 
 - **A marker's row in the log takes the lines a narrow panel needs** — a "not in the recording" note cut its reading short or put its number over the next row.
 - **A narrow window shows `OL` in the error colour** — and keeps the unit plain when a reading passes an alarm limit, as wider windows do.
+- **The recording panel keeps its place as a graph gets its first readings** — it sat higher on connect and after Clear, then dropped.
 
 ## v0.11.0 — Android Support
 
