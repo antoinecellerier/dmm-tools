@@ -47,8 +47,8 @@ impl App {
         let orange = tc.status_warning();
         let gray = tc.status_inactive();
 
-        // Cache left/right group widths from the previous frame to decide
-        // whether both fit on one row.
+        // The groups' widths as the previous frame drew them, to decide
+        // which row each takes.
         let left_id = left_width_id();
         let right_id = right_width_id();
         let link_id = egui::Id::unique("top_bar_link_w");
@@ -74,13 +74,21 @@ impl App {
             .update_check
             .notice(self.settings.check_for_updates)
             .map_or(0.0, |tag| text_width(ui, &tag.label(l10n)) + spacing);
-        let one_row = cached_left + link_shown_w + cached_right + notice_w + spacing < available;
-        let status_below = status_goes_below(cached_left + link_shown_w, available);
-        // Off the first row, the status shares its row with the right group
-        // where the two fit.
+        // The status without the link, as the left group's width is.
         let status_id = egui::Id::unique("top_bar_status_w");
         let cached_status: f32 = ui.data(|d| d.get_temp(status_id)).unwrap_or(150.0);
-        let joined = status_below && cached_status + spacing + cached_right + notice_w <= available;
+        // The bar's groups in order: the meter and its buttons, the status,
+        // then the version, help and settings.
+        let buttons_w = (cached_left - spacing - cached_status).max(0.0);
+        let [_, status_row, right_row] = pack_rows(
+            [
+                buttons_w,
+                cached_status + link_shown_w,
+                cached_right + notice_w,
+            ],
+            spacing,
+            available,
+        );
         let mut status_width = 0.0;
         let mut row_width = 0.0;
         let mut link = (0.0, 0.0);
@@ -169,10 +177,10 @@ impl App {
             };
 
             // The status on the row while the row has room for it; where it
-            // has not (a phone, a long name, a large zoom) it takes a row of
-            // its own below instead of running off the window's edge.
+            // has not (a phone, a long name, a large zoom) it moves to a row
+            // below instead of running off the window's edge.
             let buttons_right = ui.min_rect().right();
-            if !status_below {
+            if status_row == 0 {
                 status_width = self.show_status(ui, l10n, dot_color, &status_text, orange);
             }
 
@@ -196,8 +204,7 @@ impl App {
             row_width = buttons_right - left_start;
             link = (link_w, drawn);
 
-            // If wide enough, render right-side items on the same row
-            if one_row {
+            if right_row == 0 {
                 self.show_top_bar_right(ui, right_id);
             }
         });
@@ -211,26 +218,23 @@ impl App {
                 ui.horizontal(|ui| add(ui));
             });
         };
-        if status_below {
+        for row in 1..=right_row {
             narrow_row(ui, &mut |ui| {
-                status_width = self.show_status(ui, l10n, dot_color, &status_text, orange);
-                if joined {
+                if status_row == row {
+                    status_width = self.show_status(ui, l10n, dot_color, &status_text, orange);
+                }
+                if right_row == row {
                     self.show_top_bar_right(ui, right_id);
                 }
             });
         }
-        ui.data_mut(|d| d.insert_temp(status_id, status_width));
         let (link_w, drawn) = link;
-        let left_width = row_width + spacing + status_width - drawn;
+        let status_w = status_width - drawn;
         ui.data_mut(|d| {
-            d.insert_temp(left_id, left_width);
+            d.insert_temp(left_id, row_width + spacing + status_w);
+            d.insert_temp(status_id, status_w);
             d.insert_temp(link_id, link_w);
         });
-
-        // If not wide enough, render right-side items on a second row
-        if !one_row && !joined {
-            narrow_row(ui, &mut |ui| self.show_top_bar_right(ui, right_id));
-        }
     }
 
     /// The status: its dot, its text and the meter's stability badge.
@@ -642,16 +646,31 @@ pub(super) fn right_width_id() -> egui::Id {
     egui::Id::unique("top_bar_right_w")
 }
 
-/// How far the first row may reach into the panel's margin before the status
-/// leaves it. The window's minimum width is this row's, sent only when it
+/// How far a row may reach into the panel's margin and still count as
+/// fitting. The window's minimum width is the first row's, sent only when it
 /// moves by half a point and rounded to whole pixels, so a window at its
-/// minimum is narrower than the row by a fraction of a point.
+/// minimum is narrower than that row by a fraction of a point.
 const ROW_OVERHANG: f32 = 1.0;
 
-/// Whether the left group is wider than the window, so that the status takes
-/// a row of its own. `row` is what the group needs with the status on it.
-fn status_goes_below(row: f32, available: f32) -> bool {
-    row > available + ROW_OVERHANG
+/// The row each of the bar's groups takes, given their widths in order: a
+/// group joins the row of the one before it while the row has room, and
+/// starts the next row otherwise. A group wider than the window still gets a
+/// row, to itself.
+fn pack_rows<const N: usize>(widths: [f32; N], spacing: f32, available: f32) -> [usize; N] {
+    let mut rows = [0; N];
+    let (mut row, mut used) = (0, None::<f32>);
+    for (group, width) in widths.into_iter().enumerate() {
+        used = Some(match used.map(|used| used + spacing + width) {
+            Some(joined) if joined <= available + ROW_OVERHANG => joined,
+            Some(_) => {
+                row += 1;
+                width
+            }
+            None => width,
+        });
+        rows[group] = row;
+    }
+    rows
 }
 
 /// Whether the status row has room for the link as well.
@@ -699,8 +718,7 @@ fn badge_text(l10n: &Localizer, stability: Stability) -> Cow<'_, str> {
 #[cfg(test)]
 mod tests {
     use super::{
-        Link, Stability, badge_text, connected_status, fits_with_link, link_tooltip,
-        status_goes_below,
+        Link, Stability, badge_text, connected_status, fits_with_link, link_tooltip, pack_rows,
     };
 
     #[test]
@@ -744,12 +762,29 @@ mod tests {
         );
     }
 
+    /// Buttons, status and right group at 280, 160 and 190 points, 8 apart:
+    /// each group joins the row before it while that row has room.
+    #[test]
+    fn groups_fill_each_row_in_order() {
+        let rows = |available| pack_rows([280.0, 160.0, 190.0], 8.0, available);
+        assert_eq!(rows(700.0), [0, 0, 0], "all three fit");
+        assert_eq!(rows(500.0), [0, 0, 1], "the right group starts a row");
+        assert_eq!(rows(400.0), [0, 1, 1], "the status joins the right group");
+        assert_eq!(rows(300.0), [0, 1, 2], "a row each");
+        assert_eq!(
+            rows(100.0),
+            [0, 1, 2],
+            "too wide for the window, a row each"
+        );
+    }
+
     /// The fraction of a point a window at its minimum is short by leaves
     /// the status on the row; a row really wider than the window does not.
     #[test]
-    fn the_status_leaves_the_row_only_past_the_overhang() {
-        assert!(!status_goes_below(459.4, 459.0));
-        assert!(status_goes_below(461.0, 459.0));
+    fn a_row_fits_within_the_overhang() {
+        let status_row = |available| pack_rows([280.0, 160.0], 8.0, available)[1];
+        assert_eq!(status_row(447.6), 0);
+        assert_eq!(status_row(446.0), 1);
     }
 
     /// A row with no room for the link drops it and keeps everything else —
