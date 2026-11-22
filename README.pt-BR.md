@@ -1,4 +1,4 @@
-<!-- translated from README.md 8f9099d73366f65286dd5eb86fd88460fe72c98a -->
+<!-- translated from README.md 8cddcf8b15c4c17033f71b8ffea36d68d80196da -->
 # dmm-tools
 
 [![CI](https://github.com/antoinecellerier/dmm-tools/actions/workflows/ci.yml/badge.svg)](https://github.com/antoinecellerier/dmm-tools/actions/workflows/ci.yml)
