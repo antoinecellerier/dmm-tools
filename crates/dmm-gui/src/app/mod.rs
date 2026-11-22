@@ -987,6 +987,11 @@ impl App {
                     .last_measurement
                     .as_ref()
                     .map_or(0, |m| m.aux_values.len()),
+                badges: self
+                    .last_measurement
+                    .as_ref()
+                    .map(display::shown_badges)
+                    .unwrap_or_default(),
                 mode_offered: self.connection.readouts().mode_offered(),
                 range_offered: self.connection.choices.range_offered(),
                 show_stats: self.settings.show_stats,
@@ -1071,14 +1076,23 @@ impl App {
                     // drawn with what the one before measured. Each asks for
                     // the next frame: a paused meter sends no readings to
                     // draw one, and a fit left halfway can clip the buttons.
-                    if needs_recalc && scale > 0.0 {
-                        let total_below_reading = ui.cursor().top() - after_reading;
-                        self.meter_fit.record_pass(
-                            &fit_inputs,
-                            total_below_reading / scale,
-                            measured_ratios,
-                        );
-                        if self.meter_fit.needs_recalc(&fit_inputs) {
+                    // A settled fit is only ever raised, to a frame that
+                    // drew more than it was sized for (`MeterFit::grow`), and
+                    // only by a frame at the size of the one before it.
+                    if scale > 0.0 {
+                        let below_reading = (ui.cursor().top() - after_reading) / scale;
+                        let as_before = self.meter_fit.drawn_as_before(scale);
+                        let redraw = if needs_recalc {
+                            self.meter_fit
+                                .record_pass(&fit_inputs, below_reading, measured_ratios);
+                            self.meter_fit.needs_recalc(&fit_inputs)
+                        } else if as_before {
+                            self.meter_fit.grow(below_reading, &measured_ratios)
+                        } else {
+                            // Not a frame to measure: the next one is.
+                            true
+                        };
+                        if redraw {
                             ui.ctx().request_repaint();
                         }
                     }
@@ -2423,14 +2437,26 @@ mod tests {
         app: &mut App,
         w: f32,
         h: f32,
-        mut draw: impl FnMut(&mut App, &mut egui::Ui),
+        draw: impl FnMut(&mut App, &mut egui::Ui),
     ) -> Vec<(NodeId, Node)> {
         let ctx = crate::app::styled_context();
         ctx.enable_accesskit();
+        frame_nodes_on(&ctx, app, w, h, draw)
+    }
+
+    /// [`frame_nodes`] on a context the caller keeps, for a window followed
+    /// from one state to the next.
+    fn frame_nodes_on(
+        ctx: &egui::Context,
+        app: &mut App,
+        w: f32,
+        h: f32,
+        mut draw: impl FnMut(&mut App, &mut egui::Ui),
+    ) -> Vec<(NodeId, Node)> {
         let screen = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(w, h));
         let mut nodes = Vec::new();
         for _ in 0..6 {
-            let out = headless_frame(&ctx, Some(screen), None, vec![], |ui| draw(app, ui));
+            let out = headless_frame(ctx, Some(screen), None, vec![], |ui| draw(app, ui));
             nodes = a11y(&out).0;
         }
         nodes
@@ -2439,6 +2465,14 @@ mod tests {
     /// The window of an app showing the meter alone, as a frame draws it.
     fn meter_nodes(app: &mut App, w: f32, h: f32) -> Vec<(NodeId, Node)> {
         frame_nodes(app, w, h, |app, ui| {
+            let ctx = ui.ctx().clone();
+            app.show_window(ui, &ctx);
+        })
+    }
+
+    /// [`meter_nodes`] on a context the caller keeps.
+    fn meter_nodes_on(ctx: &egui::Context, app: &mut App, w: f32, h: f32) -> Vec<(NodeId, Node)> {
+        frame_nodes_on(ctx, app, w, h, |app, ui| {
             let ctx = ui.ctx().clone();
             app.show_window(ui, &ctx);
         })
@@ -2667,6 +2701,212 @@ mod tests {
                 );
             }
         }
+    }
+
+    /// A meter on its buttons in the big meter, `reading` on screen under
+    /// AUTO: a value's digits, its unit, the mode and the range.
+    fn big_meter_app(reading: [&'static str; 4]) -> App {
+        let mut app = crate::app::test_support::connected_to("ut61eplus");
+        app.big_meter_mode = BigMeterMode::Full;
+        show_reading(&mut app, reading);
+        app
+    }
+
+    /// Put `reading` on screen, as the meter's next frame would.
+    fn show_reading(app: &mut App, [digits, unit, mode, range]: [&'static str; 4]) {
+        let m = app.last_measurement.as_mut().expect("a reading");
+        m.flags.auto_range = true;
+        m.display_raw = Some(digits.to_string());
+        m.unit = unit.into();
+        m.mode = mode.into();
+        m.range_label = range.into();
+    }
+
+    /// Everything a frame drew that hangs out of `screen`, as text for a
+    /// failure message; empty when the window holds it all.
+    fn outside(nodes: &[(NodeId, Node)], screen: egui::Rect) -> Vec<String> {
+        nodes
+            .iter()
+            .filter_map(|(_, n)| Some((n, to_rect(n.bounds()?))))
+            .filter(|(_, rect)| !screen.expand(0.5).contains_rect(*rect))
+            .map(|(n, rect)| format!("{:?} at {rect:?}", node_text(n).unwrap_or("?")))
+            .collect()
+    }
+
+    /// The fit closes on what the reading showed then. A HOLD badge arriving
+    /// afterwards wraps the mode line of a narrow window and lengthens the
+    /// row of a wide one, which used to push the buttons under the bottom
+    /// edge or the badges past the right one. The badges are part of the
+    /// fit's key: the reading is fitted again with them, and again without
+    /// them when HOLD is released, which brings back the size it had.
+    #[test]
+    fn a_badge_arriving_after_the_fit_keeps_the_buttons_in_the_window() {
+        for (w, h) in [(454.0, 300.0), (700.0, 300.0)] {
+            let reading = [" 15.070", "\u{00B5}F", "Capacitance", "22\u{00B5}F"];
+            let mut app = big_meter_app(reading);
+            let ctx = crate::app::styled_context();
+            ctx.enable_accesskit();
+            let screen = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(w, h));
+            let value_height = |nodes: &[(NodeId, Node)]| {
+                label_exact(nodes, " 15.070")
+                    .expect("the value is drawn")
+                    .height()
+            };
+
+            let settled = meter_nodes_on(&ctx, &mut app, w, h);
+            assert_eq!(outside(&settled, screen), [""; 0], "{w}x{h}: settled");
+            assert!(label_exact(&settled, "HOLD").is_none(), "no badge yet");
+
+            app.last_measurement.as_mut().unwrap().flags.hold = true;
+            let held = meter_nodes_on(&ctx, &mut app, w, h);
+            assert!(label_exact(&held, "HOLD").is_some(), "the badge is drawn");
+            assert_eq!(outside(&held, screen), [""; 0], "{w}x{h}: with HOLD");
+
+            app.last_measurement.as_mut().unwrap().flags.hold = false;
+            let released = meter_nodes_on(&ctx, &mut app, w, h);
+            // To the pixel or two a fit settles within, that is: it is
+            // fitted afresh, not restored.
+            let (back, before) = (value_height(&released), value_height(&settled));
+            assert!(
+                (back - before).abs() <= 2.0,
+                "{w}x{h}: the reading came back {back} pt tall, from {before}"
+            );
+        }
+    }
+
+    /// What the fit's key does not name can still outgrow it: a resistance
+    /// auto-ranging from \u{03A9} to k\u{03A9} keeps its mode and gains a
+    /// character at the value's size, which used to run the unit past the
+    /// window's right edge. The fit grows to what the frame drew, and the
+    /// reading shrinks to fit.
+    #[test]
+    fn a_reading_that_outgrows_the_fit_stays_in_the_window() {
+        for (w, h) in [(400.0, 400.0), (600.0, 400.0)] {
+            let mut app = big_meter_app([" 118.26", "\u{03A9}", "\u{03A9}", "220\u{03A9}"]);
+            let ctx = crate::app::styled_context();
+            ctx.enable_accesskit();
+            let screen = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(w, h));
+
+            let settled = meter_nodes_on(&ctx, &mut app, w, h);
+            assert_eq!(outside(&settled, screen), [""; 0], "{w}x{h}: settled");
+
+            show_reading(
+                &mut app,
+                [" 1.1826", "k\u{03A9}", "\u{03A9}", "2.2k\u{03A9}"],
+            );
+            let ranged = meter_nodes_on(&ctx, &mut app, w, h);
+            assert_eq!(outside(&ranged, screen), [""; 0], "{w}x{h}: in k\u{03A9}");
+        }
+    }
+
+    /// The big meter on AC V with `frequency` and `period` under the
+    /// reading, each its digits and unit.
+    fn ac_volts_with(frequency: [&'static str; 2], period: [&'static str; 2]) -> App {
+        let mut app = big_meter_app([" 118.16", "V", "AC V Hz", "220V"]);
+        show_sub_values(&mut app, frequency, period);
+        app
+    }
+
+    /// Put `frequency` and `period` under the reading, as the meter's next
+    /// frame would.
+    fn show_sub_values(app: &mut App, frequency: [&'static str; 2], period: [&'static str; 2]) {
+        use dmm_lib::measurement::{AuxValue, MeasuredValue};
+        let row = |label: &'static str, [digits, unit]: [&'static str; 2]| AuxValue {
+            label: label.into(),
+            value: MeasuredValue::Normal(digits.trim().parse().unwrap_or(0.0)),
+            unit: unit.into(),
+            display_raw: Some(digits.to_string()),
+            elapsed_secs: None,
+        };
+        app.last_measurement.as_mut().expect("a reading").aux_values =
+            vec![row("Frequency", frequency), row("Period", period)];
+    }
+
+    /// The reading ratios a fit holds, for a test that it kept them.
+    fn fitted_ratios(app: &App) -> [f32; 4] {
+        let r = &app.meter_fit.reading_ratios;
+        [r.w, r.h, r.row_w, r.row_h]
+    }
+
+    /// AC V with its frequency and period beside the reading, the frequency
+    /// falling under 1 kHz: the sub-values' column loses a character. The
+    /// grid is drawn one more frame at the width it had, and the line used
+    /// to be measured as the row less the narrower grid, so the fit grew by
+    /// a character that was the grid's and the reading stayed smaller than
+    /// fits until the next resize.
+    #[test]
+    fn a_sub_value_losing_a_character_leaves_the_fit_alone() {
+        for (w, h) in [(1200.0, 190.0), (1998.0, 275.0)] {
+            let mut app = ac_volts_with(["1.0234", "kHz"], ["0.9771", "ms"]);
+            let ctx = crate::app::styled_context();
+            ctx.enable_accesskit();
+            let mut nodes = Vec::new();
+            for _ in 0..2 {
+                nodes = meter_nodes_on(&ctx, &mut app, w, h);
+            }
+            let (value, grid) = (
+                label_exact(&nodes, " 118.16").expect("the value is drawn"),
+                label_exact(&nodes, "Frequency").expect("the sub-values are drawn"),
+            );
+            assert!(
+                grid.left() > value.right(),
+                "{w}x{h}: not the beside layout"
+            );
+            let settled = fitted_ratios(&app);
+
+            show_sub_values(&mut app, ["999.51", "Hz"], ["1.0005", "ms"]);
+            meter_nodes_on(&ctx, &mut app, w, h);
+            assert_eq!(
+                fitted_ratios(&app),
+                settled,
+                "{w}x{h}: a narrower sub-value column grew the fit"
+            );
+        }
+    }
+
+    /// A fit that stops at the pass cap takes the larger of its measures, so
+    /// the frame after it can draw the reading much smaller than the last
+    /// pass did, around sub-values still laid out at that pass's size. That
+    /// frame is no measure of the fit, which used to grow by the oversized
+    /// grid; a still window keeps the fit it closed on.
+    #[test]
+    fn the_frame_after_a_capped_fit_does_not_raise_it() {
+        let mut app = ac_volts_with(["59.951", "Hz"], ["16.680", "ms"]);
+        app.big_meter_mode = BigMeterMode::Off;
+        app.settings.show_graph = false;
+        app.settings.show_recording = false;
+        let ctx = crate::app::styled_context();
+        ctx.enable_accesskit();
+        let mut raised = Vec::new();
+        for (w, h) in [
+            (459.0, 224.0),
+            (512.0, 224.0),
+            (565.0, 224.0),
+            (830.0, 224.0),
+            (936.0, 261.0),
+        ] {
+            let screen = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(w, h));
+            let frames = |app: &mut App, n: u8| {
+                for _ in 0..n {
+                    headless_frame(&ctx, Some(screen), None, vec![], |ui| {
+                        let ctx = ui.ctx().clone();
+                        app.show_window(ui, &ctx);
+                    });
+                }
+            };
+            // Closed by now, settled or at the cap.
+            frames(&mut app, meter_fit::MAX_RECALC_PASSES + 1);
+            let closed = fitted_ratios(&app);
+            frames(&mut app, 6);
+            if fitted_ratios(&app) != closed {
+                raised.push(format!("{w}x{h}: {closed:?} -> {:?}", fitted_ratios(&app)));
+            }
+        }
+        assert!(
+            raised.is_empty(),
+            "raised after closing:\n{}",
+            raised.join("\n")
+        );
     }
 
     #[test]

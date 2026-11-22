@@ -24,11 +24,8 @@ pub(crate) use readout::mode_switch_offered;
 use readout::{RangeAtRest, show_mode_readout, show_range_readout};
 pub use readout::{ReadoutChoices, ReadoutPick};
 use std::borrow::Cow;
-use text::{
-    badge_order, format_value_display, live_region_context, live_region_fingerprint,
-    live_region_label,
-};
-pub(crate) use text::{spoken_amount, spoken_unit};
+pub(crate) use text::{ShownBadges, shown_badges, spoken_amount, spoken_unit};
+use text::{format_value_display, live_region_context, live_region_fingerprint, live_region_label};
 
 /// Base font size for the primary reading in the wide (side panel) layout.
 pub(crate) const BASE_READING_FONT_SIZE: f32 = 36.0;
@@ -707,7 +704,7 @@ fn show_reading_beside(
     let value_h = ui.fonts_mut(|f| f.row_height(&FontId::monospace(value_size)));
     let spacing_y = ui.spacing().item_spacing.y;
     let gap = divider_gap(mode_size, choices.any_offered());
-    let (picked, line_h) = ui
+    let (picked, line_h, grid_w) = ui
         .horizontal(|ui| {
             ui.spacing_mut().item_spacing.x = gap;
             ui.set_min_height(value_h.max(grid.y));
@@ -729,11 +726,14 @@ fn show_reading_beside(
                 .response
                 .rect;
             ui.separator();
-            ui.allocate_ui_with_layout(
-                vec2(ui.available_width(), grid.y),
-                Layout::top_down(Align::Min),
-                |ui| show_aux_rows(ui, l10n, grid_id, m, mode_size, tc),
-            );
+            let grid_drawn = ui
+                .allocate_ui_with_layout(
+                    vec2(ui.available_width(), grid.y),
+                    Layout::top_down(Align::Min),
+                    |ui| show_aux_rows(ui, l10n, grid_id, m, mode_size, tc),
+                )
+                .response
+                .rect;
             ui.separator();
             // Past the dividers, the readouts space as the line under the
             // value spaces them.
@@ -747,10 +747,14 @@ fn show_reading_beside(
             } else {
                 value.height()
             };
-            (picked, line_h)
+            (picked, line_h, grid_drawn.width())
         })
         .inner;
-    let extra = beside_extra_width(grid.x, gap);
+    // The width the grid took on this row, not the one its text measures: an
+    // egui `Grid` draws at the column widths of the frame before, so on the
+    // frame a sub-value loses a character, or the reading changes size, the
+    // two differ, and the difference would be counted as the line's.
+    let extra = beside_extra_width(grid_w, gap);
     (
         picked,
         vec2(ui.min_rect().width() - extra, line_h + spacing_y),
@@ -936,17 +940,16 @@ fn show_flags(ui: &mut Ui, cx: &ReadingCtx<'_>, m: &Measurement, font_size: f32)
         ui.label(text(label, color));
     };
 
-    // `badge_order()` puts the hazard first, and `badge_tone` paints it in the
-    // error color rather than the generic warning one — this is the meter
-    // telling the user the probes are on a dangerous potential. Labels are
+    // `shown_badges` is the list, the one the big meter's fit is keyed on.
+    // It puts the hazard first, and `badge_tone` paints it in the error
+    // color rather than the generic warning one — this is the meter telling
+    // the user the probes are on a dangerous potential. Labels are
     // `Flag::label()`'s in the user's language, so in English the badge, the
-    // recording panel and the CSV flags column all say "HV!". `Flag::Dc` has
-    // no label and so paints no badge.
-    for (flag, label) in badge_order()
-        .filter(|f| m.flags.get(*f))
-        .filter_map(|f| l10n.flag(f).map(|l| (f, l)))
-    {
-        badge(ui, &label, badge_tone(flag, tc));
+    // recording panel and the CSV flags column all say "HV!".
+    for flag in shown_badges(m).iter() {
+        if let Some(label) = l10n.flag(flag) {
+            badge(ui, &label, badge_tone(flag, tc));
+        }
     }
     // After the meter's own badges, in the same accent as AUTO/HOLD: this is
     // the app's state, not the meter's, and it belongs at the end of the row

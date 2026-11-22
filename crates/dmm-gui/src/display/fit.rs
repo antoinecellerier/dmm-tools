@@ -32,11 +32,20 @@ impl ReadingRatios {
     /// Whether a re-measure agrees with these within 2%: text snaps to
     /// pixels, so the ratios never repeat exactly.
     pub(crate) fn settled(&self, measured: &Self) -> bool {
-        let near = |a: f32, b: f32| (a - b).abs() <= 0.02 * a.abs().max(b.abs());
         near(self.w, measured.w)
             && near(self.h, measured.h)
             && near(self.row_w, measured.row_w)
             && near(self.row_h, measured.row_h)
+    }
+
+    /// Whether a frame drew the reading larger than these, by more than a
+    /// re-measure may differ and still be [`settled`](Self::settled).
+    pub(crate) fn outgrown_by(&self, measured: &Self) -> bool {
+        let larger = |cached: f32, drawn: f32| drawn > cached && !near(cached, drawn);
+        larger(self.w, measured.w)
+            || larger(self.h, measured.h)
+            || larger(self.row_w, measured.row_w)
+            || larger(self.row_h, measured.row_h)
     }
 
     /// The larger of each ratio: a reading that size fits both measures.
@@ -48,6 +57,11 @@ impl ReadingRatios {
             row_h: self.row_h.max(other.row_h),
         }
     }
+}
+
+/// Whether two measures of one ratio agree within 2%.
+fn near(a: f32, b: f32) -> bool {
+    (a - b).abs() <= 0.02 * a.abs().max(b.abs())
 }
 
 impl Default for ReadingRatios {
@@ -116,8 +130,9 @@ impl GridFit {
 
 /// What the beside layout adds to the line's width, for a grid `grid_width`
 /// wide and `gap` either side of a divider: the grid, a second separator, and
-/// the spacing either side of it. The fit adds it to the line and the layout
-/// takes it off the row it drew, so the two must agree.
+/// the spacing either side of it. The fit adds it to the line, for the grid
+/// its text measures, and the layout takes it off the row it drew, for the
+/// grid as drawn there; on a still reading the two agree.
 pub(super) fn beside_extra_width(grid_width: f32, gap: f32) -> f32 {
     grid_width + SEPARATOR_WIDTH + 2.0 * gap
 }

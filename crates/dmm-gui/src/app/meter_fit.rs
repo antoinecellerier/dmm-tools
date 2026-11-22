@@ -20,7 +20,11 @@ const DEFAULT_METER_CONTENT_HEIGHT: f32 = 200.0;
 /// Re-measure passes before the fit is accepted as it stands. A button row
 /// that wraps differently at two neighbouring scales never converges, so the
 /// loop has to be capped rather than run to agreement.
-const MAX_RECALC_PASSES: u8 = 4;
+pub(super) const MAX_RECALC_PASSES: u8 = 4;
+
+/// How far apart two frames' scales may be and count as one size: a grid
+/// that far out moves a measure by a twentieth of what a fit settles within.
+const SAME_SCALE: f32 = 0.001;
 
 /// Width at which the reading moves into its own column beside the graph.
 const WIDE_LAYOUT_MIN_WIDTH: f32 = 900.0;
@@ -54,6 +58,8 @@ pub(super) struct MeterFit {
     pass_key: u64,
     /// Number of recalculation passes for `pass_key`.
     recalc_passes: u8,
+    /// The scale the frame before drew the reading at.
+    drawn_scale: f32,
 }
 
 impl MeterFit {
@@ -64,6 +70,7 @@ impl MeterFit {
             cache_key: 0,
             pass_key: 0,
             recalc_passes: 0,
+            drawn_scale: 0.0,
         }
     }
 
@@ -110,6 +117,51 @@ impl MeterFit {
         }
     }
 
+    /// Note the scale a frame drew the reading at; whether the frame before
+    /// drew it at the same one.
+    ///
+    /// The sub-values are an egui `Grid`, which draws at the column widths
+    /// and row heights of the frame before. On a frame that changes the
+    /// reading's size the grid is still the old size, and the frame is no
+    /// measure of what the new size takes: one that follows a larger size
+    /// would [`grow`](Self::grow) the fit for a grid that is not there the
+    /// frame after, and the reading would stay smaller than fits.
+    pub(super) fn drawn_as_before(&mut self, scale: f32) -> bool {
+        let before = std::mem::replace(&mut self.drawn_scale, scale);
+        (before - scale).abs() <= SAME_SCALE * scale
+    }
+
+    /// Raise a closed fit to what a frame drew, where that outgrew it.
+    /// Returns whether it did, for the caller to ask for the frame that
+    /// draws the reading at the size the raised fit gives.
+    ///
+    /// The key names what is known to move the reading's size. What it
+    /// leaves out still reaches the screen — a unit gaining a character as
+    /// the meter changes range — and the reading it widens or the rows it
+    /// wraps would hang out of the window until the next resize.
+    ///
+    /// Grow-only: it never lowers a value or re-opens the fit. A row that
+    /// wraps at one scale and not at the next would then be shrunk and
+    /// grown for ever, the loop `MAX_RECALC_PASSES` ends. So a reading
+    /// shrunk here stays smaller once its cause has gone, until a resize or
+    /// a mode change fits it afresh, and the window's minimum size rises
+    /// with the fit. A frame within the tolerance a pass settles by is no
+    /// growth, so raising the fit to a measurement leaves the same frame
+    /// nothing to raise.
+    pub(super) fn grow(
+        &mut self,
+        measured_content_height: f32,
+        measured_ratios: &ReadingRatios,
+    ) -> bool {
+        let outgrown = measured_content_height - self.content_height >= 1.0
+            || self.reading_ratios.outgrown_by(measured_ratios);
+        if outgrown {
+            self.content_height = self.content_height.max(measured_content_height);
+            self.reading_ratios = self.reading_ratios.max(measured_ratios);
+        }
+        outgrown
+    }
+
     /// Smallest window that still fits the reading, derived from the cached
     /// ratios at the minimum big-meter font size.
     ///
@@ -142,6 +194,10 @@ pub(super) struct FitInputs {
     /// word (a UT181A entering MIN/MAX), so the fitted font has to be
     /// re-measured.
     pub(super) aux_values: usize,
+    /// The meter's badges on the mode line (HOLD, REL): one more wraps the
+    /// line or lengthens the row, so the reading is a little smaller while
+    /// it shows and comes back when it goes.
+    pub(super) badges: display::ShownBadges,
     /// The mode and range selectors are framed controls, a little taller
     /// than the plain labels they replace.
     pub(super) mode_offered: bool,
@@ -250,6 +306,7 @@ mod tests {
             height: 600,
             mode_raw: 0,
             aux_values: 0,
+            badges: display::ShownBadges::default(),
             mode_offered: false,
             range_offered: false,
             show_stats: false,
@@ -478,6 +535,105 @@ mod tests {
         assert_eq!(fit.content_height, 400.0, "the larger height has to win");
     }
 
+    /// The badges of a reading on HOLD.
+    fn held() -> display::ShownBadges {
+        use dmm_lib::flags::StatusFlags;
+        use dmm_lib::measurement::{MeasuredValue, Measurement};
+        let flags = StatusFlags {
+            hold: true,
+            ..StatusFlags::default()
+        };
+        display::shown_badges(&Measurement::test_fixture(
+            MeasuredValue::Normal(1.0),
+            "V",
+            flags,
+        ))
+    }
+
+    /// A badge the meter lights after the fit has closed re-opens it, and
+    /// so does the badge going.
+    #[test]
+    fn a_badge_arriving_or_going_reopens_the_fit() {
+        let mut fit = MeterFit::new();
+        let plain = inputs();
+        fit.record_pass(&plain, fit.content_height, ReadingRatios::default());
+        let on_hold = FitInputs {
+            badges: held(),
+            ..inputs()
+        };
+        assert!(fit.needs_recalc(&on_hold), "HOLD never reached the fit");
+        fit.record_pass(&on_hold, fit.content_height, ReadingRatios::default());
+        assert!(fit.needs_recalc(&plain), "HOLD going never reached the fit");
+    }
+
+    /// A closed fit whose frame drew more than it assumed takes the larger
+    /// of each measure and stays closed; the same frame again changes
+    /// nothing, so the repaint it asked for is the last.
+    #[test]
+    fn a_frame_that_outgrows_the_fit_grows_it() {
+        let mut fit = MeterFit::new();
+        let inputs = inputs();
+        fit.record_pass(&inputs, 40.0, ratios(5.0));
+        fit.record_pass(&inputs, 40.0, ratios(5.0));
+        assert!(!fit.needs_recalc(&inputs));
+
+        // Within what a pass settles by: text snapping to pixels, not growth.
+        assert!(!fit.grow(40.5, &ratios(5.05)));
+        assert_eq!((fit.content_height, fit.reading_ratios.w), (40.0, 5.0));
+
+        // A wrapped button row, then a unit one character longer; the
+        // measure that did not grow keeps the larger value it had.
+        assert!(fit.grow(72.0, &ratios(5.0)));
+        assert!(fit.grow(41.0, &ratios(5.6)));
+        assert_eq!((fit.content_height, fit.reading_ratios.w), (72.0, 5.6));
+        assert!(!fit.needs_recalc(&inputs), "growing re-opened the fit");
+        assert!(
+            !fit.grow(72.0, &ratios(5.6)),
+            "the same frame grew it twice"
+        );
+    }
+
+    /// Growing is one-way. A fit that stopped at the pass cap holds the
+    /// larger of two measures that never agreed; a frame measuring the
+    /// smaller one must not lower it or re-open it, or the two would trade
+    /// places for ever.
+    #[test]
+    fn a_smaller_frame_never_reopens_a_capped_fit() {
+        let mut fit = MeterFit::new();
+        let inputs = inputs();
+        for i in 0..=MAX_RECALC_PASSES {
+            let (height, w) = if i % 2 == 0 {
+                (100.0, 5.0)
+            } else {
+                (400.0, 7.0)
+            };
+            fit.record_pass(&inputs, height, ratios(w));
+        }
+        assert!(!fit.needs_recalc(&inputs));
+        assert_eq!((fit.content_height, fit.reading_ratios.w), (400.0, 7.0));
+
+        assert!(!fit.grow(100.0, &ratios(5.0)));
+        assert!(
+            !fit.needs_recalc(&inputs),
+            "a smaller frame re-opened the fit"
+        );
+        assert_eq!((fit.content_height, fit.reading_ratios.w), (400.0, 7.0));
+    }
+
+    /// A frame that draws the reading at another size than the one before
+    /// is told apart from one that repeats it, so the caller can keep a
+    /// grid still laid out at the old size out of the fit; the float noise
+    /// of one size worked out twice is the same size.
+    #[test]
+    fn a_frame_at_a_new_size_is_told_from_one_that_repeats_it() {
+        let mut fit = MeterFit::new();
+        assert!(!fit.drawn_as_before(2.0), "the first frame follows none");
+        assert!(fit.drawn_as_before(2.0));
+        assert!(fit.drawn_as_before(2.0001));
+        assert!(!fit.drawn_as_before(1.9), "a twentieth smaller");
+        assert!(fit.drawn_as_before(1.9), "and then drawn again");
+    }
+
     /// Ratios as a pass measured them, `w` wide: the reading's width per
     /// point of font.
     fn ratios(w: f32) -> ReadingRatios {
@@ -544,6 +700,10 @@ mod tests {
         });
         mutations.push(FitInputs {
             aux_values: 1,
+            ..inputs()
+        });
+        mutations.push(FitInputs {
+            badges: held(),
             ..inputs()
         });
         mutations.push(FitInputs {

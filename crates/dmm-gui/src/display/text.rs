@@ -355,14 +355,47 @@ fn unit_name<'a>(
 }
 
 /// The single order the flags are presented in: `show_flags` paints the
-/// badges in it and `flag_phrases` speaks them in it, so the two cannot
-/// drift apart the way three hand-written lists did.
+/// badges in it ([`ShownBadges::iter`]) and `flag_phrases` speaks them in it,
+/// so the two cannot drift apart the way three hand-written lists did.
 ///
 /// `Flag::HvWarning` leads — see the hazard-first comment in `show_flags`.
 /// Everything else keeps [`Flag::ALL`] order, which is what the recording
 /// panel and the CSV flags column already use.
 pub(super) fn badge_order() -> impl Iterator<Item = Flag> {
     std::iter::once(Flag::HvWarning).chain(Flag::ALL.into_iter().filter(|f| *f != Flag::HvWarning))
+}
+
+/// The meter's badges on a reading: its set flags that have a label
+/// ([`Flag::label`]; `Flag::Dc` has none and paints no badge), a bit each.
+///
+/// `show_flags` paints these and the big meter's fit is keyed on them, so
+/// the fit cannot be left sized for a row of badges other than the one
+/// drawn. The app's own badges are not here: the scale's and the alarm's
+/// slot follow [`super::ReadingState`], which the fit keys on its own.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
+pub(crate) struct ShownBadges(u16);
+
+impl ShownBadges {
+    fn bit(flag: Flag) -> u16 {
+        // A seventeenth flag would shift straight out of the u16.
+        const _: () = assert!(StatusFlags::COUNT <= u16::BITS as usize);
+        1 << flag as u16
+    }
+
+    /// The badges in the order they are drawn: [`badge_order`]'s.
+    pub(super) fn iter(self) -> impl Iterator<Item = Flag> {
+        badge_order().filter(move |f| self.0 & Self::bit(*f) != 0)
+    }
+}
+
+/// The badges `m` shows; see [`ShownBadges`].
+pub(crate) fn shown_badges(m: &Measurement) -> ShownBadges {
+    ShownBadges(
+        Flag::ALL
+            .into_iter()
+            .filter(|f| m.flags.get(*f) && f.label().is_some())
+            .fold(0, |bits, f| bits | ShownBadges::bit(f)),
+    )
 }
 
 /// Spoken form of a flag for the screen-reader label.
