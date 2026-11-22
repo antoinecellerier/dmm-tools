@@ -524,7 +524,7 @@ fn main_plot(
         .reset()
         .custom_x_axes(vec![x_axis])
         .custom_y_axes(y_axes)
-        .y_axis_min_width(60.0)
+        .y_axis_min_width(super::LEFT_AXIS_ROOM)
         // The hover is ours, painted after `plot.show`: egui_plot's
         // snaps to the nearest drawn point and reads the height there, so
         // one number was a reading or a height with nothing to say which.
