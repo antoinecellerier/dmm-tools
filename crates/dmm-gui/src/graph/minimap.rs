@@ -427,8 +427,17 @@ fn paint_bracket(
     );
 }
 
+/// Least room between two time labels.
+const LABEL_GAP: f32 = 4.0;
+
 /// The time labels under the strip, each with a tick, at round steps from
 /// `data_min` to `data_max`.
+///
+/// A label is centred on its tick, and moved in where that would take it
+/// past an end of the strip: the first one starts at the left end, and the
+/// last stops at the right end until its tick is half its width in. Past
+/// the strip the painter cuts it ("1m" read "1n"). A label slides with its
+/// tick as the session grows, so it never jumps.
 fn paint_time_axis(
     painter: &egui::Painter,
     scale: &MinimapScale,
@@ -437,17 +446,10 @@ fn paint_time_axis(
     label_color: egui::Color32,
 ) {
     let nice_interval = nice_time_interval(scale.span());
+    let mut labels = Vec::new();
     let mut t = (data_min / nice_interval).ceil() * nice_interval;
     while t <= data_max {
         let x = scale.x_of(t);
-        let label = format_time_label(t);
-        painter.text(
-            egui::pos2(x, rect.bottom() + 2.0),
-            egui::Align2::CENTER_TOP,
-            label,
-            egui::FontId::proportional(11.0),
-            label_color,
-        );
         // Small tick mark
         painter.line_segment(
             [
@@ -456,7 +458,29 @@ fn paint_time_axis(
             ],
             egui::Stroke::new(1.0_f32, label_color),
         );
+        let galley = painter.layout_no_wrap(
+            format_time_label(t),
+            egui::FontId::proportional(11.0),
+            label_color,
+        );
+        let width = galley.size().x;
+        let left = (x - width / 2.0).min(rect.right() - width).max(rect.left());
+        labels.push((left, galley));
         t += nice_interval;
+    }
+
+    // Two labels never touch: the last keeps its place at the strip's end,
+    // and one too close to the label before it, or to the last, is left out.
+    let last = labels.len().saturating_sub(1);
+    let last_left = labels.last().map_or(f32::INFINITY, |(left, _)| *left);
+    let mut free_from = f32::NEG_INFINITY;
+    for (k, (left, galley)) in labels.into_iter().enumerate() {
+        let right = left + galley.size().x;
+        if left < free_from || (k < last && right + LABEL_GAP > last_left) {
+            continue;
+        }
+        free_from = right + LABEL_GAP;
+        painter.galley(egui::pos2(left, rect.bottom() + 2.0), galley, label_color);
     }
 }
 

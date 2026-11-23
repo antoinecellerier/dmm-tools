@@ -414,3 +414,54 @@ fn an_empty_minimap_takes_the_room_of_a_drawn_one() {
     let drawn = strip_height(&mut graph_with_a_minute_of_data());
     assert_eq!(empty, drawn, "empty strip vs one with a trace");
 }
+
+/// The strip's time labels stay inside it as the session grows: the painter
+/// cuts whatever passes its ends, the last label first ("1m" read "1n").
+/// No two touch, and the session's start keeps its label.
+#[test]
+fn the_minimaps_time_labels_stay_inside_the_strip() {
+    let ctx = crate::app::styled_context();
+    let tc = ThemeColors::new(true, ColorPreset::Default, &PaletteOverrides::default());
+    let markers = crate::markers::Markers::default();
+    let mut g = Graph::new();
+    let t0 = Instant::now();
+    g.push(1.0, t0, "DC V", "V", None);
+    for width in [396.0, 1000.0] {
+        let screen = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(width, 300.0));
+        // Past a minute, an hour and the steps of the labels' interval.
+        for secs in (2..400).chain((3500..3700).step_by(7)) {
+            g.push(1.0, t0 + Duration::from_secs(secs), "DC V", "V", None);
+            let mut strip = egui::Rect::NOTHING;
+            let out = headless_frame(&ctx, Some(screen), None, vec![], |ui| {
+                let top = ui.cursor().top();
+                g.show_minimap(ui, &crate::l10n::english(), &tc, &markers);
+                strip =
+                    egui::Rect::from_x_y_ranges(ui.max_rect().x_range(), top..=ui.cursor().top());
+            });
+            let mut labels: Vec<(String, egui::Rect)> = out
+                .shapes
+                .iter()
+                .filter_map(|clipped| match &clipped.shape {
+                    egui::Shape::Text(t) => Some((
+                        t.galley.text().to_string(),
+                        egui::Rect::from_min_size(t.pos, t.galley.size()),
+                    )),
+                    _ => None,
+                })
+                .collect();
+            labels.sort_by(|a, b| a.1.left().total_cmp(&b.1.left()));
+            let at = format!("{width} wide, {secs} s: {labels:?}");
+            assert_eq!(labels[0].0, "0s", "{at}");
+            assert!(labels.len() >= 2, "{at}");
+            for (_, rect) in &labels {
+                assert!(strip.x_range().contains(rect.left()), "{at}");
+                assert!(strip.x_range().contains(rect.right()), "{at}");
+            }
+            for pair in labels.windows(2) {
+                assert!(pair[0].1.right() < pair[1].1.left(), "{at}");
+            }
+        }
+        g.clear();
+        g.push(1.0, t0, "DC V", "V", None);
+    }
+}
