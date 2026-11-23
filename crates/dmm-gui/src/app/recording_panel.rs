@@ -832,8 +832,19 @@ impl App {
                 self.settings.recording_height = fit(self.settings.recording_height + delta);
             }
             crate::a11y::paint_focus_ring(ui, &sep_response);
+            // Lit while hovered or held, as egui lights the reading panel's
+            // edge and the histogram's divider: under a finger, with no
+            // cursor to change, the line is the only sign it moves.
             if sep_response.hovered() || sep_response.dragged() {
                 ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeVertical);
+                // On whole pixels, as egui sets the panel edge's: a line
+                // centred between two rows of pixels blurs over three and
+                // reads heavier than the same stroke there.
+                let stroke = ui.style().interact(&sep_response).fg_stroke;
+                let ppp = ui.ctx().pixels_per_point();
+                let half = 0.5 * stroke.width * ppp;
+                let y = ((sep.rect.center().y * ppp - half).round() + half) / ppp;
+                ui.painter().hline(sep.rect.x_range(), y, stroke);
             }
 
             self.show_recording_section(ui);
