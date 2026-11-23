@@ -19,7 +19,7 @@ use std::borrow::Cow;
 /// catches it, and a new colour can't be half-added.
 ///
 /// CLAUDE.md: "Prefer enums over string-typed status/state values."
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) enum PaletteField {
     Background,
     Frame,

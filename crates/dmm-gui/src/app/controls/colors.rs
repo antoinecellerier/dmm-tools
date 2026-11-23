@@ -556,7 +556,17 @@ fn color_edit(
         egui::Layout::left_to_right(egui::Align::Center),
         |ui| {
             ui.spacing_mut().item_spacing.x = gap;
-            let btn = ui.add(egui::Button::new("").fill(color).min_size(btn_size));
+            // A fixed id, the field's, not one counted from the widgets
+            // before it: the popup's and the hex field's ids are made from
+            // it, and a soft keyboard that shortens the window can change
+            // that count, which would drop the hex field's focus and the
+            // keyboard with it (`.claude/rules/gui.md`).
+            let swatch = egui::UiBuilder::new().scope_id(egui::Id::unique(("color_swatch", field)));
+            let btn = ui
+                .scope_builder(swatch, |ui| {
+                    ui.add(egui::Button::new("").fill(color).min_size(btn_size))
+                })
+                .inner;
             ui.add(egui::Label::new(text).wrap_mode(egui::TextWrapMode::Extend));
             btn
         },
