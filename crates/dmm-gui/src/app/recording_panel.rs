@@ -405,7 +405,8 @@ impl App {
 
         // An import under way counts: its recording is filling.
         let imported = self.source.is_import();
-        ui.horizontal(|ui| {
+        // Wrapped: on a phone the buttons and the count run past the edge.
+        ui.horizontal_wrapped(|ui| {
             // First, apart from the recording's own controls: an import
             // replaces the session, where the rest act on the recording and
             // Export… sits next to the count it saves.
