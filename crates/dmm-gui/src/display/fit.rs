@@ -48,6 +48,15 @@ impl ReadingRatios {
             || larger(self.row_h, measured.row_h)
     }
 
+    /// Whether any of `measured` is larger than these at all: what taking
+    /// the [`max`](Self::max) of the two would change.
+    pub(crate) fn raised_by(&self, measured: &Self) -> bool {
+        measured.w > self.w
+            || measured.h > self.h
+            || measured.row_w > self.row_w
+            || measured.row_h > self.row_h
+    }
+
     /// The larger of each ratio: a reading that size fits both measures.
     pub(crate) fn max(&self, other: &Self) -> Self {
         Self {

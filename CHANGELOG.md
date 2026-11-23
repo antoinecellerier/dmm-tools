@@ -18,7 +18,7 @@
 - **The recording panel keeps its place as a graph gets its first readings** — it sat higher on connect and after Clear, then dropped.
 - **A histogram under the graph fits the window** — with the recording panel hidden, its value labels were cut off and the window scrolled a few points.
 - **A narrow window's log fills a recording panel dragged taller** — it stayed five rows high over an empty panel.
-- **The big meter keeps its buttons in the window on HOLD** — a badge or a longer unit arriving in a tight window pushed them or the reading past the edge.
+- **The big meter keeps its buttons in the window on HOLD** — a badge, a longer unit or a longer range arriving in a tight window pushed them or the reading past the edge.
 - **The reading alone shrinks to fit connection help under it** — with both panels hidden, the help pushed the statistics below the window.
 - **The big meter's reading holds one size in a still window** — with sub-values, it kept changing size at some window sizes and kept the processor busy.
 

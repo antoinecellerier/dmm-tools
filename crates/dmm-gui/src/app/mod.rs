@@ -1015,6 +1015,11 @@ impl App {
                 width: size.width() as u32,
                 height: size.height() as u32,
                 mode_raw: self.last_measurement.as_ref().map_or(0, |m| m.mode_raw),
+                range_label: self
+                    .last_measurement
+                    .as_ref()
+                    .map(|m| m.range_label.clone())
+                    .unwrap_or_default(),
                 aux_values: self
                     .last_measurement
                     .as_ref()
@@ -1129,8 +1134,7 @@ impl App {
                         let as_before = self.meter_fit.drawn_as_before(scale);
                         let redraw = if needs_recalc {
                             self.meter_fit
-                                .record_pass(&fit_inputs, below_reading, measured_ratios);
-                            self.meter_fit.needs_recalc(&fit_inputs)
+                                .record_pass(&fit_inputs, below_reading, measured_ratios)
                         } else if as_before {
                             self.meter_fit.grow(below_reading, &measured_ratios)
                         } else {
@@ -2867,6 +2871,73 @@ mod tests {
             vec![row("Frequency", frequency), row("Period", period)];
     }
 
+    /// Make `app`'s meter one that lists its modes and its rungs, as the
+    /// simulated one does, so both readouts are dropdowns in every layout;
+    /// on HOLD in the first of `ranges`.
+    fn list_choices(app: &mut App, modes: [&'static str; 2], ranges: [&'static str; 2]) {
+        use dmm_lib::protocol::{Choice, Setting};
+        let listed = |labels: &[&'static str]| -> Vec<Choice> {
+            let choice = |(id, label): (usize, &&'static str)| Choice {
+                id: id as u16,
+                label: (*label).into(),
+                current: id == 0,
+            };
+            labels.iter().enumerate().map(choice).collect()
+        };
+        let choices = &mut app.connection.choices;
+        choices.set(Setting::Mode, listed(&modes));
+        choices.set(Setting::Range, listed(&["Auto", ranges[0], ranges[1]]));
+        let m = app.last_measurement.as_mut().expect("a reading");
+        m.flags.hold = true;
+        m.range_label = ranges[0].into();
+    }
+
+    /// A meter stepping up a range keeps its mode and its badges, and its
+    /// range gains a character on the mode line: 22 V to 220 V. That is less
+    /// than a frame must outgrow the fit by to raise it, so where the line
+    /// was as wide as the window its last badge hung out of the right edge
+    /// until the next resize. The range is part of the fit's key: the
+    /// reading is fitted again with the range the line now shows.
+    #[test]
+    fn a_range_gaining_a_character_keeps_the_mode_line_in_the_window() {
+        // A reading, the modes its meter lists and the two ranges.
+        type Reading = (fn() -> App, [&'static str; 2], [&'static str; 2]);
+        let capacitance: Reading = (
+            || big_meter_app([" 15.070", "\u{00B5}F", "Capacitance", "22\u{00B5}F"]),
+            ["Capacitance", "Diode"],
+            ["22\u{00B5}F", "220\u{00B5}F"],
+        );
+        let ac_volts: Reading = (
+            || ac_volts_with(["59.951", "Hz"], ["16.680", "ms"]),
+            ["AC V Hz", "AC V"],
+            ["22V", "220V"],
+        );
+        for ((make, modes, [range, next]), mode, w, h) in [
+            (capacitance, BigMeterMode::Full, 1390.0, 304.0),
+            (capacitance, BigMeterMode::Minimal, 1390.0, 157.0),
+            (ac_volts, BigMeterMode::Full, 1269.0, 206.0),
+        ] {
+            let case = format!("{mode:?} at {w}x{h}, {range} to {next}");
+            let mut app = make();
+            app.big_meter_mode = mode;
+            list_choices(&mut app, modes, [range, next]);
+            let ctx = crate::app::styled_context();
+            ctx.enable_accesskit();
+            let screen = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(w, h));
+
+            let settled = meter_nodes_on(&ctx, &mut app, w, h);
+            assert_eq!(outside(&settled, screen), [""; 0], "{case}: settled");
+
+            app.last_measurement
+                .as_mut()
+                .expect("a reading")
+                .range_label = next.into();
+            let ranged = meter_nodes_on(&ctx, &mut app, w, h);
+            assert!(shows_text(&ranged, next), "{case}: the range is drawn");
+            assert_eq!(outside(&ranged, screen), [""; 0], "{case}: ranged");
+        }
+    }
+
     /// The reading ratios a fit holds, for a test that it kept them.
     fn fitted_ratios(app: &App) -> [f32; 4] {
         let r = &app.meter_fit.reading_ratios;
@@ -3153,6 +3224,57 @@ mod tests {
                     "{case}: a resize left the reading {resized} pt tall, from {alone}"
                 );
             }
+        }
+    }
+
+    /// A range step fits the reading again, and the first pass can close
+    /// the fit on its own, raised: the line one character longer is within
+    /// what a pass settles by. The frame on screen was drawn before the
+    /// raise, with the line past the window's edge, and no other was asked
+    /// for until the meter's next reading, seconds away on a slow range.
+    /// Whenever the window goes idle, the frame it holds is inside it.
+    #[test]
+    fn the_frame_left_on_screen_after_a_range_step_is_in_the_window() {
+        for (mode, w, h) in [
+            (BigMeterMode::Full, 1390.0, 304.0),
+            (BigMeterMode::Minimal, 1390.0, 157.0),
+        ] {
+            let case = format!("{mode:?} at {w}x{h}");
+            let mut app = big_meter_app([" 15.070", "\u{00B5}F", "Capacitance", "22\u{00B5}F"]);
+            app.big_meter_mode = mode;
+            list_choices(
+                &mut app,
+                ["Capacitance", "Diode"],
+                ["22\u{00B5}F", "220\u{00B5}F"],
+            );
+            let ctx = crate::app::styled_context();
+            ctx.enable_accesskit();
+            let screen = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(w, h));
+            meter_nodes_on(&ctx, &mut app, w, h);
+
+            app.last_measurement
+                .as_mut()
+                .expect("a reading")
+                .range_label = "220\u{00B5}F".into();
+            let mut frames = 0;
+            let idle = loop {
+                let out = headless_frame(&ctx, Some(screen), None, vec![], |ui| {
+                    let ctx = ui.ctx().clone();
+                    app.show_window(ui, &ctx);
+                });
+                frames += 1;
+                let repaint = out.viewport_output[&egui::ViewportId::ROOT].repaint_delay;
+                if repaint > std::time::Duration::from_millis(100) {
+                    break a11y(&out).0;
+                }
+                assert!(frames < 12, "{case}: the window never went idle");
+            };
+            assert!(shows_text(&idle, "220\u{00B5}F"), "{case}: the range");
+            assert_eq!(
+                outside(&idle, screen),
+                [""; 0],
+                "{case}: idle after {frames} frames"
+            );
         }
     }
 

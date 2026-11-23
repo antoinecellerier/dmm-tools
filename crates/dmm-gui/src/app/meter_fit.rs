@@ -8,6 +8,7 @@
 //! without a display.
 
 use eframe::egui;
+use std::borrow::Cow;
 use std::hash::{Hash, Hasher};
 
 use super::BigMeterMode;
@@ -117,12 +118,18 @@ impl MeterFit {
     ///
     /// The cap counts passes for one set of inputs: a resize in the middle
     /// of a fit starts a new count rather than inheriting the old one's.
+    ///
+    /// Returns whether another frame is owed: the fit is still open, or it
+    /// closed on more than this frame was drawn with. A pass settles within
+    /// a tolerance, and a mode line one character longer is inside it: the
+    /// fit closes at once, raised, and the frame on screen is still the one
+    /// drawn before the raise.
     pub(super) fn record_pass(
         &mut self,
         inputs: &FitInputs,
         measured_content_height: f32,
         measured_ratios: ReadingRatios,
-    ) {
+    ) -> bool {
         let key = inputs.key();
         if key != self.pass_key {
             self.pass_key = key;
@@ -131,14 +138,18 @@ impl MeterFit {
         let settled = (self.content_height - measured_content_height).abs() < 1.0
             && self.reading_ratios.settled(&measured_ratios);
         if settled || self.recalc_passes >= MAX_RECALC_PASSES {
+            let raised = measured_content_height > self.content_height
+                || self.reading_ratios.raised_by(&measured_ratios);
             self.content_height = self.content_height.max(measured_content_height);
             self.reading_ratios = self.reading_ratios.max(&measured_ratios);
             self.cache_key = key;
             self.recalc_passes = 0;
+            raised
         } else {
             self.content_height = measured_content_height;
             self.reading_ratios = measured_ratios;
             self.recalc_passes += 1;
+            true
         }
     }
 
@@ -215,6 +226,12 @@ pub(super) struct FitInputs {
     pub(super) height: u32,
     /// The mode word, which the reading is laid out around.
     pub(super) mode_raw: u16,
+    /// The range the mode line shows. A meter stepping from 22 V to 220 V
+    /// keeps its mode word and its badges, and the character the line gains
+    /// is less than a frame must outgrow a closed fit by to raise it
+    /// ([`MeterFit::grow`]): a line as wide as the window would stay a
+    /// character past its edge.
+    pub(super) range_label: Cow<'static, str>,
     /// Sub-value rows change the reading's height without changing the mode
     /// word (a UT181A entering MIN/MAX), so the fitted font has to be
     /// re-measured.
@@ -344,6 +361,7 @@ mod tests {
             width: 800,
             height: 600,
             mode_raw: 0,
+            range_label: "22V".into(),
             aux_values: 0,
             badges: display::ShownBadges::default(),
             mode_offered: false,
@@ -596,6 +614,29 @@ mod tests {
         assert!(!key(&mut fit, resized(), false).0, "and back at that size");
     }
 
+    /// A pass that closes the fit on more than its frame was drawn with
+    /// owes the frame that draws it; one that closes on what it was drawn
+    /// with owes none, and an open fit always owes its next pass.
+    #[test]
+    fn a_pass_that_closes_raised_owes_another_frame() {
+        let mut fit = MeterFit::new();
+        let inputs = inputs();
+        assert!(fit.record_pass(&inputs, 40.0, ratios(5.0)), "still open");
+        assert!(
+            !fit.record_pass(&inputs, 40.0, ratios(5.0)),
+            "closed as drawn"
+        );
+
+        let ranged = FitInputs {
+            range_label: "220V".into(),
+            ..self::inputs()
+        };
+        // One character more on the line: within what a pass settles by.
+        assert!(fit.record_pass(&ranged, 40.0, ratios(5.05)));
+        assert!(!fit.needs_recalc(&ranged), "it settled");
+        assert_eq!(fit.reading_ratios.w, 5.05);
+    }
+
     /// A content height that keeps moving would re-measure forever. After
     /// the cap the largest height seen wins, so nothing is clipped.
     #[test]
@@ -773,6 +814,10 @@ mod tests {
         });
         mutations.push(FitInputs {
             mode_raw: 1,
+            ..inputs()
+        });
+        mutations.push(FitInputs {
+            range_label: "220V".into(),
             ..inputs()
         });
         mutations.push(FitInputs {
