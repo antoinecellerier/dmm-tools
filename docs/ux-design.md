@@ -12,6 +12,7 @@ Code paths below are under `crates/dmm-gui/src/`.
 3. **Readable** — large primary reading, clear hierarchy, good contrast in both themes
 4. **Configurable** — users choose which panels are visible via a settings gear menu
 5. **Responsive** — adapts between wide (side-by-side) and narrow (stacked) layouts
+6. **One behaviour everywhere** — the layout adapts to the room it has, from the window's size and the Density setting, never to the platform it runs on; per-platform layouts drift apart over time
 
 ## Command line
 
