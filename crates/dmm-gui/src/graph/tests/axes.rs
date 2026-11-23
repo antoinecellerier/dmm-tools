@@ -341,9 +341,13 @@ struct TickLabels {
     time: Vec<(String, egui::Rect)>,
 }
 
-/// One frame of the graph on a `screen`-sized window, and the tick labels
-/// it drew around its plot.
-fn frame_tick_labels(g: &mut Graph, ctx: &egui::Context, screen: egui::Vec2) -> TickLabels {
+/// One frame of the graph on a `screen`-sized window, and every text it
+/// drew with where.
+fn frame_texts(
+    g: &mut Graph,
+    ctx: &egui::Context,
+    screen: egui::Vec2,
+) -> Vec<(String, egui::Rect)> {
     fn walk(shape: &egui::Shape, found: &mut Vec<(String, egui::Rect)>) {
         match shape {
             egui::Shape::Text(t) => found.push((
@@ -364,6 +368,13 @@ fn frame_tick_labels(g: &mut Graph, ctx: &egui::Context, screen: egui::Vec2) -> 
     for clipped in &out.shapes {
         walk(&clipped.shape, &mut texts);
     }
+    texts
+}
+
+/// One frame of the graph on a `screen`-sized window, and the tick labels
+/// it drew around its plot.
+fn frame_tick_labels(g: &mut Graph, ctx: &egui::Context, screen: egui::Vec2) -> TickLabels {
+    let texts = frame_texts(g, ctx, screen);
     let plot = g.plot_rect.expect("the plot is drawn");
     // egui_plot hangs a time label from the plot's bottom edge and centres
     // a left one on its gridline, right of nothing but the plot.
@@ -380,22 +391,44 @@ fn frame_tick_labels(g: &mut Graph, ctx: &egui::Context, screen: egui::Vec2) -> 
 const NARROW: egui::Vec2 = egui::vec2(454.0, 600.0);
 
 /// A plot with no reading has no range on either axis: egui_plot draws one
-/// from -1 to 1, and neither axis labels it. The first readings bring the
-/// labels without moving the plot.
+/// from -1 to 1, and neither axis labels it. The time axis's row carries
+/// its origin alone, under the plot's left edge, where and as the axis
+/// writes its zero once readings come; they bring the labels without
+/// moving the plot. The first reading alone spans no time either, so the
+/// origin stays under it until the second.
 #[test]
-fn an_empty_plot_labels_neither_axis() {
+fn an_empty_plot_labels_only_the_time_axis_origin() {
     let ctx = crate::app::styled_context();
     let mut g = Graph::new();
     let mut labels = frame_tick_labels(&mut g, &ctx, NARROW);
     for _ in 0..2 {
         labels = frame_tick_labels(&mut g, &ctx, NARROW);
     }
-    assert!(labels.time.is_empty(), "time labels: {:?}", labels.time);
     assert!(labels.left.is_empty(), "left labels: {:?}", labels.left);
-    let empty_plot = g.plot_rect;
+    let [(text, origin)] = &labels.time[..] else {
+        panic!("time labels: {:?}", labels.time);
+    };
+    assert_eq!(text, "0 s");
+    let origin = *origin;
+    let plot = g.plot_rect.expect("drawn");
+    // Centred on the edge like any tick's label, its left half in the
+    // value axis's room: inside the window, and short of the plot's right.
+    assert!((origin.center().x - plot.left()).abs() < 0.5, "{origin:?}");
+    assert!(origin.left() >= 0.0 && origin.right() < plot.right());
 
     let t0 = Instant::now();
-    for i in 0..=50_u64 {
+    g.push(1.0, t0, "DC V", "V", None);
+    for _ in 0..2 {
+        labels = frame_tick_labels(&mut g, &ctx, NARROW);
+    }
+    let [(text, alone)] = &labels.time[..] else {
+        panic!("with one reading: {:?}", labels.time);
+    };
+    let left = g.plot_rect.expect("drawn").left();
+    assert_eq!(text, "0 s");
+    assert!((alone.center().x - left).abs() < 0.5, "{alone:?}");
+
+    for i in 1..=50_u64 {
         let at = t0 + Duration::from_millis(i * 100);
         g.push(1.0 + i as f64 * 0.01, at, "DC V", "V", None);
     }
@@ -407,12 +440,202 @@ fn an_empty_plot_labels_neither_axis() {
         "{:?}",
         labels.time
     );
+    let zeros: Vec<_> = labels.time.iter().filter(|(t, _)| t == "0 s").collect();
+    let [(_, zero)] = &zeros[..] else {
+        panic!("one zero: {:?}", labels.time);
+    };
+    assert!(
+        (zero.min - origin.min).length() < 0.5 && zero.size() == origin.size(),
+        "the axis's zero at {zero:?}, the empty plot's at {origin:?}"
+    );
     assert!(
         labels.left.iter().any(|(t, _)| t.contains(" V")),
         "{:?}",
         labels.left
     );
-    assert_eq!(g.plot_rect, empty_plot, "the labels' row was kept for them");
+    assert_eq!(g.plot_rect, Some(plot), "the labels' row was kept for them");
+}
+
+const NO_METER: &str = "Connect a meter to plot its readings";
+const WAITING: &str = "Waiting for the first reading";
+
+/// The sentences an empty plot can show, among `texts`.
+fn empty_sentences(texts: &[(String, egui::Rect)]) -> Vec<&(String, egui::Rect)> {
+    texts
+        .iter()
+        .filter(|(t, _)| t == NO_METER || t == WAITING)
+        .collect()
+}
+
+/// An empty plot says what will bring readings, in its middle and to a
+/// screen reader: connecting a meter, or waiting for one that is connected.
+/// Where neither is true it says nothing, and the first thing the meter
+/// sends takes the sentence away.
+#[test]
+fn an_empty_plot_says_what_brings_readings() {
+    let ctx = crate::app::styled_context();
+    for (feed, sentence) in [
+        (Feed::NoMeter, Some(NO_METER)),
+        (Feed::Expected, Some(WAITING)),
+        (Feed::Held, None),
+    ] {
+        let mut g = Graph::new();
+        g.feed = feed;
+        frame_texts(&mut g, &ctx, NARROW);
+        let texts = frame_texts(&mut g, &ctx, NARROW);
+        let shown = empty_sentences(&texts);
+        let plot = g.plot_rect.expect("drawn");
+        match sentence {
+            Some(sentence) => {
+                let [(text, rect)] = &shown[..] else {
+                    panic!("{feed:?}: {shown:?}");
+                };
+                assert_eq!(text, sentence);
+                assert!(plot.contains_rect(*rect), "{rect:?} in {plot:?}");
+                assert!((rect.center() - plot.center()).length() < 1.0);
+                assert!(
+                    g.a11y_label.ends_with(&format!("{sentence}.")),
+                    "{}",
+                    g.a11y_label
+                );
+            }
+            None => {
+                assert!(shown.is_empty(), "{feed:?}: {shown:?}");
+                assert!(g.a11y_label.ends_with("no data."), "{}", g.a11y_label);
+            }
+        }
+
+        g.push(1.0, Instant::now(), "DC V", "V", None);
+        let texts = frame_texts(&mut g, &ctx, NARROW);
+        assert!(
+            empty_sentences(&texts).is_empty(),
+            "{feed:?} with a reading"
+        );
+        assert!(g.a11y_label.contains("last reading"), "{}", g.a11y_label);
+    }
+
+    // Over range from the start is no reading plotted, and not a wait for
+    // one either.
+    let mut g = Graph::new();
+    g.feed = Feed::Expected;
+    push_overload(&mut g, Instant::now(), "DC V", "V");
+    frame_texts(&mut g, &ctx, NARROW);
+    let texts = frame_texts(&mut g, &ctx, NARROW);
+    assert!(empty_sentences(&texts).is_empty());
+}
+
+/// Out of live the view is a span of time whether or not anything was read
+/// in it, and the axis labels it, its zero included. The empty plot's own
+/// zero is for an axis without labels: here it was written a second time,
+/// on the axis's. The sentence stays, the plot being as empty.
+#[test]
+fn an_empty_plot_out_of_live_writes_its_zero_once() {
+    let ctx = crate::app::styled_context();
+    let mut g = Graph::new();
+    g.live = false;
+    let mut texts = Vec::new();
+    for _ in 0..3 {
+        texts = frame_texts(&mut g, &ctx, NARROW);
+    }
+    let labelled = |text: &str| texts.iter().filter(|(t, _)| t == text).count();
+    assert_eq!(labelled("0 s"), 1, "{texts:?}");
+    assert!(
+        texts.iter().any(|(t, _)| t.ends_with(" s") && t != "0 s"),
+        "the axis labels its span: {texts:?}"
+    );
+    assert_eq!(empty_sentences(&texts).len(), 1, "{texts:?}");
+}
+
+/// The sentence stands on a patch of the plot's background, which is there
+/// to keep the grid out of it. An empty plot still draws an alarm's limits,
+/// and one through its middle, as a limit of 0 is, says where the alarm
+/// trips: the patch used to be painted over the drawn plot and cut the
+/// line. It is drawn before every line and stands under the limit, clear of
+/// it, so both are whole.
+#[test]
+fn the_sentence_stands_clear_of_a_limit_line() {
+    fn flatten<'a>(shape: &'a egui::Shape, out: &mut Vec<&'a egui::Shape>) {
+        match shape {
+            egui::Shape::Vec(shapes) => shapes.iter().for_each(|s| flatten(s, out)),
+            shape => out.push(shape),
+        }
+    }
+    let ctx = crate::app::styled_context();
+    let tc = ThemeColors::new(true, ColorPreset::Default, &PaletteOverrides::default());
+    let markers = crate::markers::Markers::default();
+    let below_zero = crate::graph::WatchedLimits {
+        limits: dmm_lib::alarm::Limits::check(Some(0.0), None).expect("a low limit"),
+        unit: dmm_lib::alarm::LimitUnit::Base,
+    };
+    let mut g = Graph::new();
+    let screen = egui::Rect::from_min_size(egui::Pos2::ZERO, NARROW);
+    let mut out = None;
+    for _ in 0..2 {
+        out = Some(headless_frame(&ctx, Some(screen), None, vec![], |ui| {
+            let l10n = crate::l10n::english();
+            g.show(ui, &l10n, &tc, &markers, Some(below_zero), NO_DIGITS)
+        }));
+    }
+    let out = out.expect("a frame");
+    let mut shapes = Vec::new();
+    for clipped in &out.shapes {
+        flatten(&clipped.shape, &mut shapes);
+    }
+    let plot = g.plot_rect.expect("drawn");
+
+    let patches: Vec<(usize, egui::Rect)> = shapes
+        .iter()
+        .enumerate()
+        .filter_map(|(i, s)| match s {
+            egui::Shape::Rect(r)
+                if r.fill == tc.plot_background()
+                    && r.rect != plot
+                    && (r.rect.center().x - plot.center().x).abs() < 1.0 =>
+            {
+                Some((i, r.rect))
+            }
+            _ => None,
+        })
+        .collect();
+    let [(patch_at, patch)] = patches[..] else {
+        panic!("one patch: {patches:?}");
+    };
+    assert!(plot.contains_rect(patch), "{patch:?} in {plot:?}");
+    // The limit's dots, along the plot's middle.
+    let dots: Vec<(usize, egui::Pos2)> = shapes
+        .iter()
+        .enumerate()
+        .filter_map(|(i, s)| match s {
+            egui::Shape::Circle(dot) if dot.fill == tc.status_error() => Some((i, dot.center)),
+            _ => None,
+        })
+        .collect();
+    assert!(
+        dots.iter().any(|(_, at)| patch.x_range().contains(at.x)),
+        "no limit line over the patch: {dots:?}"
+    );
+    for (i, at) in dots {
+        assert!((at.y - plot.center().y).abs() < 1.0, "a limit at 0: {at:?}");
+        assert!(i > patch_at, "the patch is painted after the line");
+        assert!(
+            patch.top() > at.y + 2.0,
+            "the patch {patch:?} stands on the dot at {at:?}"
+        );
+    }
+}
+
+/// A plot narrower than the sentence goes without it rather than cut it or
+/// let it run over the axes; the origin label stays.
+#[test]
+fn a_plot_too_small_for_the_sentence_goes_without() {
+    let ctx = crate::app::styled_context();
+    let mut g = Graph::new();
+    let small = egui::vec2(220.0, 300.0);
+    frame_texts(&mut g, &ctx, small);
+    let texts = frame_texts(&mut g, &ctx, small);
+    assert!(g.plot_rect.expect("drawn").width() < 200.0);
+    assert!(empty_sentences(&texts).is_empty(), "{texts:?}");
+    assert!(texts.iter().any(|(t, _)| t == "0 s"), "{texts:?}");
 }
 
 /// A time label is centred on its tick, and one whose tick is too near the

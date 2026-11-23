@@ -1108,6 +1108,7 @@ fn a_decade_step_reaches_every_value_bearing_field() {
         hidden_overlays: _,
         main_hidden: _,
         solid_lines: _,
+        feed: _,
         time_window_secs: _,
         live: _,
         view_center: _,

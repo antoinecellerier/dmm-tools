@@ -10,12 +10,12 @@ use eframe::egui::{self, FocusDirection, Key, Modifiers, RichText, Ui};
 use log::info;
 use std::time::Instant;
 
-use super::App;
 use super::capture::CaptureLayout;
 use super::export::{ExportError, ExportFormat};
 use super::toast::Toast;
+use super::{App, ConnectionState};
 use crate::a11y::ResponseA11yExt;
-use crate::graph::MenuAction;
+use crate::graph::{Feed, MenuAction};
 use crate::recording::{BufferRole, Recording};
 use crate::settings::{GraphLines, MIN_RECORDING_HEIGHT};
 
@@ -724,12 +724,34 @@ impl App {
     /// and take what it asked of the app.
     fn show_graph(&mut self, ui: &mut Ui, tc: &crate::theme::ThemeColors) {
         self.update_cursor_readout();
+        let feed = self.graph_feed();
         let limits = self.watched_limits();
         let recording = &self.capture.recording;
         let digits = |at, label: Option<&str>| reading_digits(recording, at, label);
+        self.graph.feed = feed;
         self.graph
             .show(ui, &self.l10n, tc, &self.markers, limits, &digits);
         self.take_graph_actions(ui.ctx());
+    }
+
+    /// Whether readings are on their way to the graph, for what it says
+    /// while it is empty. A recording being played is no meter to connect,
+    /// and a paused or ended session waits for nothing, so the graph says
+    /// nothing of either.
+    pub(super) fn graph_feed(&self) -> Feed {
+        let connection = &self.connection;
+        if self.source.import_job.is_some() {
+            Feed::Expected
+        } else if connection.state == ConnectionState::Disconnected {
+            match self.source.replay {
+                Some(_) => Feed::Held,
+                None => Feed::NoMeter,
+            }
+        } else if connection.paused || connection.ended {
+            Feed::Held
+        } else {
+            Feed::Expected
+        }
     }
 
     fn show_graph_recording_split(&mut self, ui: &mut Ui) {
@@ -800,6 +822,40 @@ mod tests {
     };
     use eframe::egui::{Pos2, Rect, vec2};
     use std::time::Instant;
+
+    /// What the empty graph is told of its readings: a meter to connect,
+    /// readings due, or neither while paused, at a recording's end and in
+    /// a recording's session with nothing playing.
+    #[test]
+    fn the_graph_is_told_whether_readings_are_due() {
+        use crate::app::ConnectionState::{Connected, Connecting, Disconnected, Reconnecting};
+        let mut app = test_app();
+        assert_eq!(app.connection.state, Disconnected);
+        assert_eq!(app.graph_feed(), Feed::NoMeter);
+        for state in [Connecting, Connected, Reconnecting] {
+            app.connection.state = state;
+            assert_eq!(app.graph_feed(), Feed::Expected);
+        }
+        app.connection.paused = true;
+        assert_eq!(app.graph_feed(), Feed::Held);
+        app.connection.paused = false;
+        app.connection.ended = true;
+        assert_eq!(app.graph_feed(), Feed::Held);
+
+        let mut replay = test_app();
+        replay.source.replay = Some(crate::ReplaySource::fixture());
+        assert_eq!(replay.graph_feed(), Feed::Held);
+        replay.connection.state = Connected;
+        assert_eq!(replay.graph_feed(), Feed::Expected);
+
+        // A file on its way in is readings due, with no meter connected.
+        let mut importing = test_app();
+        let ctx = crate::app::styled_context();
+        importing.import_file(&ctx, std::path::PathBuf::from("no-such-file.csv"));
+        assert_eq!(importing.connection.state, Disconnected);
+        assert!(importing.source.import_job.is_some());
+        assert_eq!(importing.graph_feed(), Feed::Expected);
+    }
 
     /// A histogram band under the minimap raises the split's floor by its
     /// least height, so a short column scrolls rather than squash it, but not

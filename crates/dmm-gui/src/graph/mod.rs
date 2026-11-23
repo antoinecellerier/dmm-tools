@@ -27,6 +27,7 @@
 mod analysis;
 mod axes;
 mod breaks;
+mod empty;
 mod field;
 mod figures;
 pub(crate) mod histogram;
@@ -45,6 +46,7 @@ mod toolbar;
 mod view;
 mod view_state;
 
+pub(crate) use empty::Feed;
 pub(crate) use limits::{LimitSide, WatchedLimits};
 pub(crate) use menu::{MenuAction, ReadingDigits};
 pub(crate) use view_state::ViewState;
@@ -500,6 +502,9 @@ pub struct Graph {
     /// Sub-value lines drawn solid rather than dashed and dotted, as the
     /// user chose in Settings → Graph lines.
     pub(crate) solid_lines: bool,
+    /// Whether readings are on their way, for what an empty plot says: the
+    /// app's to set before each frame.
+    pub(crate) feed: Feed,
 
     // -- View --
     /// Time window width in seconds for the main view.
@@ -649,6 +654,7 @@ impl Graph {
             hidden_overlays: HashSet::new(),
             main_hidden: false,
             solid_lines: false,
+            feed: Feed::default(),
             time_window_secs: 60.0,
             live: true,
             view_center: 0.0,

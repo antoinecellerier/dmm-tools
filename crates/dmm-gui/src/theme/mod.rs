@@ -1106,10 +1106,8 @@ mod tests {
     ///   toolbar group frames in `graph.rs` use it.
     /// - `plot_background()` — the App assigns it to `extreme_bg_color`, which
     ///   is also the `TextEdit` background, and egui draws `hint_text` in the
-    ///   weak colour (the Y-axis / envelope / reference fields).
-    ///
-    /// The plot *area* itself is not a case: the cursor and overlay labels
-    /// use theme colours, so no weak text is painted there.
+    ///   weak colour (the Y-axis / envelope / reference fields); an empty
+    ///   plot's sentence stands on a patch of it too.
     #[test]
     fn weak_text_meets_wcag_aa_on_every_ground_it_lands_on() {
         for (label, dark, preset, base) in every_palette() {

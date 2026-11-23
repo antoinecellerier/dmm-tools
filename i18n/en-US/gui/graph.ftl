@@ -144,8 +144,19 @@ graph-cursors = Cursors
 # Small text after Cursors until both are placed.
 graph-cursors-hint = place cursors on the graph
 
-## The plot: the readout by the pointer, the labels on its lines, and the
-## flags of markers along its bottom edge.
+## The plot: what it says while it is empty, the readout by the pointer,
+## the labels on its lines, and the flags of markers along its bottom edge.
+
+# In the middle of the plot while it is empty and no meter is connected,
+# in small greyed text on one line: keep it short. .a11y is the same for a
+# screen reader, the last of the plot's sentences (see
+# graph-plot-a11y-no-data), with its full stop.
+graph-empty-no-meter = Connect a meter to plot its readings
+    .a11y = Connect a meter to plot its readings.
+# The same while a meter is connecting or connected and has sent no reading
+# yet, or after Clear.
+graph-empty-waiting = Waiting for the first reading
+    .a11y = Waiting for the first reading.
 
 # The × button on the readout of a crosshair that a tap on a touchscreen
 # left on the plot: it takes the crosshair and the readout away. Its name
@@ -220,7 +231,8 @@ graph-plot-a11y-state =
 graph-plot-a11y-reading = last reading { $value }.
 # The last sentence while the meter reads over range (shows OL).
 graph-plot-a11y-over-range = currently over range.
-# The last sentence before any reading.
+# The last sentence before any reading, where the plot shows neither
+# graph-empty-no-meter nor graph-empty-waiting.
 graph-plot-a11y-no-data = no data.
 
 ## The histogram, beside the plot or under the minimap.

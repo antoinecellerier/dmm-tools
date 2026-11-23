@@ -15,6 +15,7 @@ use std::cell::RefCell;
 use std::time::Instant;
 
 use super::axes::{self, AxisMap};
+use super::empty::{EmptyNote, paint_time_origin};
 use super::hover::{
     height_tags, hover_lines, paint_height_tags, paint_hover_dots, reading_near, show_hover_readout,
 };
@@ -254,6 +255,8 @@ struct MainFrame<'m> {
     levels: bool,
     /// The user chose solid sub-value lines.
     solid_lines: bool,
+    /// The sentence of a plot with nothing in it.
+    empty_note: Option<EmptyNote>,
 }
 
 impl MainFrame<'_> {
@@ -265,7 +268,7 @@ impl MainFrame<'_> {
     /// Draw the frame into the plot, back to front, with `overlay`'s lines
     /// over the data. The plotted series' segments as drawn.
     fn draw<'p>(
-        &self,
+        &mut self,
         plot_ui: &mut PlotUi<'p>,
         patterns: &Patterns<'p>,
         tc: &ThemeColors,
@@ -276,6 +279,10 @@ impl MainFrame<'_> {
             [self.view.0, self.y.0],
             [self.view.1, self.y.1],
         ));
+        // Under everything but the grid.
+        if let Some(note) = self.empty_note.take() {
+            plot_ui.add(note);
+        }
         self.draw_behind_trace(plot_ui, patterns, tc);
         let drawn = self.draw_trace(plot_ui, tc);
         self.draw_over_trace(plot_ui, tc, overlay);
@@ -959,7 +966,10 @@ impl Graph {
                     .min_thickness(column_width + RIGHT_AXIS_MARGIN),
             ));
         }
-        let x_axis = if view_max > view_min {
+        // A view no wider than its one reading, or than none, has no span
+        // of time to label: the axis's zero is painted in its row instead.
+        let time_labelled = view_max > view_min;
+        let x_axis = if time_labelled {
             self.time_axis(ui, &in_view, (view_min, view_max))
         } else {
             unlabelled(AxisHints::new_x())
@@ -1017,7 +1027,7 @@ impl Graph {
             cursor_color: tc.graph_cursor(),
             halo_color: tc.plot_background(),
         };
-        let frame = MainFrame {
+        let mut frame = MainFrame {
             view: (view_min, view_max),
             y: (y_min, y_max),
             envelope: self
@@ -1034,6 +1044,7 @@ impl Graph {
             bucket,
             levels: self.levels,
             solid_lines: self.solid_lines,
+            empty_note: self.empty_note(ui, l10n, tc, overlay.limit_lines.iter().map(|&(v, _)| v)),
         };
 
         // The plot's whole area, axes included, as egui_plot is about to
@@ -1087,6 +1098,9 @@ impl Graph {
             let stroke = egui::Stroke::new(1.0, tc.graph_crosshair());
             painter.vline(hover.at.x, body.y_range(), stroke);
             painter.hline(body.x_range(), hover.at.y, stroke);
+        }
+        if !time_labelled {
+            paint_time_origin(ui, body);
         }
         Self::paint_stacked_ticks(ui, body, &transform, &right.ticks, &right_labels);
 
@@ -1432,6 +1446,8 @@ impl Graph {
             self.current_series.as_deref().unwrap_or("").hash(&mut h);
             self.main_label.hash(&mut h);
             shown_labels.hash(&mut h);
+            // What an empty plot says, in place of a last reading.
+            self.empty_spoken(l10n).hash(&mut h);
             // Mode + display_raw drive the spoken last-reading; if either
             // changes (e.g. mode switch during paused playback) the label
             // must follow.
@@ -1505,7 +1521,9 @@ impl Graph {
                     let value = crate::display::spoken_amount(l10n, &value, unit);
                     tr!(l10n, "graph-plot-a11y-reading", value = value)
                 }
-                (None, None) => tr!(l10n, "graph-plot-a11y-no-data"),
+                (None, None) => self
+                    .empty_spoken(l10n)
+                    .unwrap_or_else(|| tr!(l10n, "graph-plot-a11y-no-data")),
             };
             // The plot draws several traces at once for a multi-display
             // meter, and which one the axis belongs to is otherwise purely
