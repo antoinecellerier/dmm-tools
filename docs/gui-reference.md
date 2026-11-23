@@ -584,6 +584,7 @@ Opened via the gear icon. Persisted to `~/.config/dmm-tools/settings.json` on Li
 | **Language** | System | **System** follows the computer's language ([how it is chosen](setup.md#language)); the other entries name each language in itself. Applies immediately. |
 | **Zoom** | 100% | UI scale (30%–300%). |
 | **Density** | Touch on Android, Compact elsewhere | **Touch** makes buttons, chips and drag handles finger-sized at any zoom; **Compact** fits more on screen. Text size stays Zoom's. |
+| **Full screen** | off | Android only, in place of the two window rows below: hides the status and navigation bars. |
 | **Hide window decorations** | off | Remove the title bar and window borders. On Linux, Alt+drag moves the window. |
 | **Always on top** | off | Keep the window above all other windows. Not available on Wayland (greyed out): right-click the title bar and use the window menu instead. |
 | **Check for new versions** | on | Only in downloaded builds. See [Update checks](#update-checks). |
