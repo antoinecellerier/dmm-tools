@@ -517,6 +517,14 @@ The macOS archive holds bare binaries, so Finder shows dmm-gui with the generic 
 
 Use cases: launching dmm-gui from Finder, Launchpad or the Dock like any other Mac app.
 
+### Folding a panel from its heading
+
+**Complexity:** Low-medium
+
+Making room means opening Settings and unticking Statistics, Recording or Specifications, which hides the whole panel. A fold control on each panel's heading, as Specifications already has, would fold it to that one line and back with a tap, remembered across launches like the Settings boxes. The graph's toolbar could fold the same way, to its first row. On a phone, where the Touch density makes every row taller, this is the quickest way to give the plot more height.
+
+Use cases: a phone in landscape, a small window beside other apps, hiding the statistics while watching the trace.
+
 ### Readings while the Android app is in the background
 
 **Complexity:** Medium
