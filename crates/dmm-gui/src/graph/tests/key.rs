@@ -511,6 +511,28 @@ fn the_show_group_takes_its_own_row_when_the_plot_row_is_full() {
     assert!(wrapped[1].right() <= room, "{wrapped:?} in {room}");
 }
 
+/// Measuring the **Show:** group lays it out a second time, unseen, and a
+/// screen reader still finds each chip once.
+#[test]
+fn a_screen_reader_finds_each_show_chip_once() {
+    let (ctx, tc) = themed_context(Settings::default());
+    ctx.enable_accesskit();
+    let mut g = graph_with_every_chip();
+    let screen = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1200.0, 400.0));
+    let mut frame = || {
+        headless_frame(&ctx, Some(screen), None, vec![], |ui| {
+            g.show_toolbar(ui, &crate::l10n::english(), &tc)
+        })
+    };
+    frame();
+    let (nodes, _) = a11y(&frame());
+    for series in ["Frequency", "Period", "Maximum", "Minimum"] {
+        let name = format!("Show {series} trace");
+        let named = nodes.iter().filter(|(_, n)| n.label() == Some(&name));
+        assert_eq!(named.count(), 1, "{name}");
+    }
+}
+
 /// With every chip it can have, the toolbar stays inside the width it is
 /// given down to the narrowest window the app allows, and a little under: a
 /// chip with its sample moves to the next row whole, and narrower costs

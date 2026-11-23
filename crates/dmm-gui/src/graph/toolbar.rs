@@ -72,49 +72,34 @@ fn group_frame(ui: &Ui) -> egui::Frame {
 /// AccessKit. Sizing it as a button would line it up too, but would announce a
 /// control that isn't one.
 fn group_caption(ui: &mut Ui, text: &str) {
-    let text = caption_text(ui, text);
+    let text = egui::RichText::new(text)
+        .strong()
+        .color(ui.visuals().weak_text_color());
     // Zero width: only the height is being imposed, the label keeps its own.
     let height = ui.spacing().interact_size.y;
     ui.add_sized(egui::vec2(0.0, height), egui::Label::new(text));
 }
 
-/// A group caption's text as [`group_caption`] draws it.
-fn caption_text(ui: &Ui, text: &str) -> egui::RichText {
-    egui::RichText::new(text)
-        .strong()
-        .color(ui.visuals().weak_text_color())
-}
-
-/// How wide a toolbar group is with its `caption` and all its `chips` on one
-/// row: each chip's label, and whether it carries a line sample.
+/// How wide what `add_group` draws is with a row of any length to itself.
 ///
-/// Known before the group is drawn, so that one the rest of the row can't
-/// hold starts a row of its own. Left where it is, a frame is handed what
-/// remains of the row and wraps its chips inside that: a column of them
-/// beside the group before it, taller than the plot in a narrow window.
-fn group_width(ui: &Ui, caption: &str, chips: &[(&str, bool)]) -> f32 {
-    let text_width = |text: egui::WidgetText, style: egui::TextStyle| {
-        text.into_galley(ui, Some(egui::TextWrapMode::Extend), f32::INFINITY, style)
-            .size()
-            .x
-    };
-    let spacing = ui.spacing();
-    let chips: f32 = chips
-        .iter()
-        .map(|&(label, sampled)| {
-            let sample = match sampled {
-                true => sample_size().x + spacing.icon_spacing,
-                false => 0.0,
-            };
-            spacing.item_spacing.x
-                + 2.0 * spacing.button_padding.x
-                + sample
-                + text_width(label.into(), egui::TextStyle::Button)
-        })
-        .sum();
-    group_frame(ui).total_margin().sum().x
-        + text_width(caption_text(ui, caption).into(), egui::TextStyle::Body)
-        + chips
+/// Known before the group is drawn for good, so that one the rest of the
+/// row can't hold starts a row of its own. Left where it is, a frame is
+/// handed what remains of the row and wraps its chips inside that: a column
+/// of them beside the group before it, taller than the plot in a narrow
+/// window.
+///
+/// Measured by laying the group out once more, so its width has the one
+/// definition: what egui makes of the widgets. The rehearsal leaves nothing
+/// behind. Invisible, it paints nothing, its widgets are disabled and egui
+/// keeps them out of the accessibility tree; and it stands far under the
+/// window, since a disabled widget still shows its hover text wherever the
+/// pointer is over its rect.
+fn width_on_one_row(ui: &mut Ui, add_group: impl FnOnce(&mut Ui)) -> f32 {
+    const FAR_BELOW: f32 = 1e6;
+    let row = egui::Rect::from_min_size(egui::pos2(0.0, FAR_BELOW), egui::vec2(f32::INFINITY, 0.0));
+    let mut rehearsal = ui.new_child(egui::UiBuilder::new().max_rect(row).invisible());
+    add_group(&mut rehearsal);
+    rehearsal.min_rect().width()
 }
 
 /// Accessible name for one **Plot:** chip. `None` is the main reading.
@@ -830,47 +815,42 @@ impl Graph {
             return;
         }
 
-        // Applied after the loop: the click handler would otherwise need a
-        // mutable borrow while the overlay list is being read.
-        let mut toggled: Option<String> = None;
-
-        let caption = tr!(l10n, "graph-show");
-        let with_units = self.series_in_several_units();
-        let labels: Vec<_> = self
-            .overlays
-            .iter()
-            .map(|o| self.series_text(l10n, &o.label))
-            .collect();
-        let texts: Vec<Cow<'_, str>> = self
-            .overlays
-            .iter()
-            .zip(&labels)
-            .map(|(o, label)| chip_text(l10n, label, &o.unit, with_units))
-            .collect();
-        let chips: Vec<_> = texts.iter().map(|text| (text.as_ref(), true)).collect();
         // Beside the **Plot:** group while it fits there whole, else on a
-        // row of its own ([`group_width`]).
-        let beside_plot = !self.series_options.is_empty();
-        if beside_plot {
+        // row of its own ([`width_on_one_row`]).
+        if !self.series_options.is_empty() {
             // The gap between the two groups, where they share a row: after
             // a **Plot:** group filling its row it would overhang the toolbar.
             const GROUP_GAP: f32 = 6.0;
-            let needed = GROUP_GAP + group_width(ui, &caption, &chips);
-            if needed > ui.available_size_before_wrap().x {
+            let group = width_on_one_row(ui, |ui| {
+                self.overlay_group(ui, l10n, tc);
+            });
+            if GROUP_GAP + group > ui.available_size_before_wrap().x {
                 ui.end_row();
             } else {
                 ui.add_space(GROUP_GAP);
             }
         }
 
-        let frame = group_frame(ui);
-        frame.show(ui, |ui| {
-            group_caption(ui, &caption);
+        // Applied once the group is drawn: the click handler would otherwise
+        // need a mutable borrow while the overlay list is being read.
+        if let Some(label) = self.overlay_group(ui, l10n, tc) {
+            self.click_overlay_chip(label);
+        }
+    }
+
+    /// The **Show:** group: its frame, its caption and a chip for each
+    /// trace. Returns the label of the trace whose chip was clicked.
+    fn overlay_group(&self, ui: &mut Ui, l10n: &Localizer, tc: &ThemeColors) -> Option<String> {
+        let mut toggled = None;
+        let with_units = self.series_in_several_units();
+        group_frame(ui).show(ui, |ui| {
+            group_caption(ui, &tr!(l10n, "graph-show"));
 
             let ground = tc.plot_background();
-            for (k, ((o, label), text)) in self.overlays.iter().zip(&labels).zip(&texts).enumerate()
-            {
+            for (k, o) in self.overlays.iter().enumerate() {
+                let label = self.series_text(l10n, &o.label);
                 let label = label.as_ref();
+                let text = chip_text(l10n, label, &o.unit, with_units);
                 let refusal = self.axis_refusal(o);
                 let full = refusal == Some(AxisRefusal::Full);
                 let shown = !full && !self.is_hidden(o);
@@ -892,7 +872,7 @@ impl Graph {
                 // in the accessible name here too.
                 let line = KeyStyle::Overlay(k).line(tc, self.solid_lines);
                 if ui
-                    .add_enabled(!full, sampled_chip(shown, text, ground, line))
+                    .add_enabled(!full, sampled_chip(shown, &text, ground, line))
                     .on_hover_text(hover.clone())
                     .on_disabled_hover_text(hover)
                     .a11y_label(&overlay_chip_label(l10n, label))
@@ -902,10 +882,7 @@ impl Graph {
                 }
             }
         });
-
-        if let Some(label) = toggled {
-            self.click_overlay_chip(label);
-        }
+        toggled
     }
 
     /// Flip the reference lines, taking the caret into the values field when
