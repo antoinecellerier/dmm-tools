@@ -414,3 +414,44 @@ fn an_empty_plot_labels_neither_axis() {
     );
     assert_eq!(g.plot_rect, empty_plot, "the labels' row was kept for them");
 }
+
+/// A time label is centred on its tick, and one whose tick is too near the
+/// plot's right edge to hold its half is left out: past the edge the window
+/// cuts it, or it runs under the right axes' labels. As the live view
+/// scrolls a label comes in once, on its tick, and stays.
+#[test]
+fn no_time_label_passes_the_plots_right_edge() {
+    let ctx = crate::app::styled_context();
+    let (mut g, t0) = graph_over(10);
+    for _ in 0..3 {
+        frame_tick_labels(&mut g, &ctx, NARROW);
+    }
+    let plot = g.plot_rect.expect("drawn");
+
+    // Scrolling on, the newest tick just inside the right edge at first:
+    // each label, once drawn, is drawn in every frame until its tick
+    // leaves on the left, and always centred on that tick.
+    let mut seen: Vec<(String, Vec<usize>)> = Vec::new();
+    for (frame, tenths) in (101..=160_u64).enumerate() {
+        let at = t0 + Duration::from_millis(tenths * 100);
+        g.push(1.0, at, "DC V", "V", None);
+        let labels = frame_tick_labels(&mut g, &ctx, NARROW);
+        let (view_min, view_max) = g.view_bounds();
+        for (text, rect) in labels.time {
+            assert!(rect.right() <= plot.right() + 0.5, "{text} at {rect:?}");
+            let secs: f64 = text.trim_end_matches(" s").parse().expect("seconds");
+            let tick = plot.left() as f64
+                + (secs - view_min) / (view_max - view_min) * plot.width() as f64;
+            assert!((f64::from(rect.center().x) - tick).abs() < 0.5, "{text}");
+            match seen.iter_mut().find(|(t, _)| *t == text) {
+                Some((_, frames)) => frames.push(frame),
+                None => seen.push((text, vec![frame])),
+            }
+        }
+    }
+    assert!(seen.iter().any(|(t, _)| t == "15 s"), "{seen:?}");
+    for (text, frames) in &seen {
+        let run = frames[frames.len() - 1] - frames[0] + 1;
+        assert_eq!(run, frames.len(), "{text} came and went: {frames:?}");
+    }
+}

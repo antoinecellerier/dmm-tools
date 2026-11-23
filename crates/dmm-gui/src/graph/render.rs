@@ -1241,49 +1241,44 @@ impl Graph {
         self.bin_histogram(l10n, key, visible);
     }
 
-    /// The time axis for `view`. The marker flags hang in its row, so the
-    /// time labels they would cover are left out. The formatter runs before
-    /// this frame's plot exists, so the flags are placed on last frame's.
+    /// The time axis for `view`. A label is centred on its tick, so one
+    /// whose half would pass the plot's right edge is left out: the window
+    /// cuts it there, or the right axes' labels stand in its way. Left out
+    /// rather than moved, so a label is only ever on its tick; the left end
+    /// has the value axis's room to run into. The marker flags hang in the
+    /// axis's row, so the time labels they would cover are left out too.
+    /// The formatter runs before this frame's plot exists, so both are
+    /// placed on last frame's.
     fn time_axis(
         &self,
         ui: &Ui,
         in_view: &[(f64, &crate::markers::Marker)],
         (view_min, view_max): (f64, f64),
     ) -> AxisHints<'static> {
-        let flag_spans: Vec<egui::Rangef> = match self.plot_rect {
-            Some(plot) if !in_view.is_empty() && view_max > view_min => {
-                let at: Vec<(f32, u32, &str)> = in_view
-                    .iter()
-                    .map(|&(t, m)| {
-                        let share = ((t - view_min) / (view_max - view_min)) as f32;
-                        (
-                            plot.left() + share * plot.width(),
-                            m.number,
-                            m.note.as_str(),
-                        )
-                    })
-                    .collect();
-                marker_flags(ui, &at, plot)
-                    .iter()
-                    .map(|f| f.rect.x_range().expand(FLAG_AIR))
-                    .collect()
-            }
-            _ => Vec::new(),
+        let Some(plot) = self.plot_rect else {
+            return AxisHints::new_x()
+                .formatter(|mark, _range| format_time_axis_label(mark.value, mark.step_size));
         };
-        let x_of = {
-            let plot = self.plot_rect.unwrap_or(egui::Rect::NOTHING);
-            move |t: f64| {
-                let share = ((t - view_min) / (view_max - view_min).max(f64::EPSILON)) as f32;
-                plot.left() + share * plot.width()
-            }
+        let x_of = move |t: f64| {
+            let share = ((t - view_min) / (view_max - view_min).max(f64::EPSILON)) as f32;
+            plot.left() + share * plot.width()
+        };
+        let flag_spans: Vec<egui::Rangef> = if in_view.is_empty() || view_max <= view_min {
+            Vec::new()
+        } else {
+            let at: Vec<(f32, u32, &str)> = in_view
+                .iter()
+                .map(|&(t, m)| (x_of(t), m.number, m.note.as_str()))
+                .collect();
+            marker_flags(ui, &at, plot)
+                .iter()
+                .map(|f| f.rect.x_range().expand(FLAG_AIR))
+                .collect()
         };
         let tick_font = egui::TextStyle::Body.resolve(ui.style());
         let ctx = ui.ctx().clone();
         AxisHints::new_x().formatter(move |mark, _range| {
             let text = format_time_axis_label(mark.value, mark.step_size);
-            if flag_spans.is_empty() {
-                return text;
-            }
             let width = ctx.fonts_mut(|f| {
                 f.layout_no_wrap(text.clone(), tick_font.clone(), egui::Color32::PLACEHOLDER)
                     .size()
@@ -1291,7 +1286,7 @@ impl Graph {
             });
             let x = x_of(mark.value);
             let label = egui::Rangef::new(x - width / 2.0, x + width / 2.0);
-            if flag_spans.iter().any(|f| f.intersects(label)) {
+            if label.max > plot.right() || flag_spans.iter().any(|f| f.intersects(label)) {
                 String::new()
             } else {
                 text
