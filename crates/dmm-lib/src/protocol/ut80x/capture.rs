@@ -57,19 +57,10 @@ pub(super) fn steps(model: Model) -> Vec<CaptureStep> {
     // °C/°F position for Hz and back. W sits between Ω and capacitance,
     // as on those two dials. Issue #16's reporter walked every UT804 step
     // by 2026-09-19; issue #22's UT71D every UT71C/D/E step but those
-    // `UT71CDE_OPEN` names, on 2026-11-18.
+    // `UT71CDE_OPEN` names, by 2026-11-22.
     const UT71CDE_OPEN: &[&str] = &[
         // No W position on a UT71D.
         "power",
-        // The tips never touched: 1.88 MΩ on the LCD.
-        "ohm_short",
-        // Taken on the A position, which has one range, not on DC V; the
-        // way back to AUTO from them stays with them.
-        "manual_range",
-        "max_min",
-        "auto_range",
-        // REL was still on when the output stopped: HOLD or EXIT.
-        "hold",
     ];
     const ALL: &[Model] = &[Ut803, Ut804, Ut71A, Ut71B, Ut71Cde, Vc920];
     const BENCH: &[Model] = &[Ut803, Ut804];
@@ -395,9 +386,9 @@ pub(super) fn steps(model: Model) -> Vec<CaptureStep> {
         // well, and SEND turns it back on. It names the outcome rather
         // than quoting the line, which capture prints in the run's
         // language. That outcome is the result the reporter confirmed on
-        // the UT804; the handhelds, whose HOLD nobody has run, get the
-        // same. There the step waits for Enter, as REL's clean-up before
-        // it leaves a state of its own.
+        // the UT804, and a UT71D's HOLD does the same (#22); the other
+        // handhelds get the same wording. There the step waits for Enter,
+        // as REL's clean-up before it leaves a state of its own.
         on(
             ALL,
             match model {

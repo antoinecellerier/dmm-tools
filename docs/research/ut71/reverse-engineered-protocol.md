@@ -259,6 +259,7 @@ sheet puts it in bit 3, also sends it in bit 2 (UT804 spec §3.6).
 sign; bits 1:0 `01` on auto-ranging functions, `10` once MAX MIN or REL
 turned AUTO off, `00` on functions with one range (mV, °C, °F, A,
 continuity, diode, 4-20 mA %), never `11`; byte 8 stayed within `0`-`6`.
+RANGE on DC V sends `10` too, at the range it was on.
 
 The app parses this byte as a decimal digit, so a value `A`-`F` (bit 3
 with bit 1 or 2) would fail; if the app works, the meter keeps byte 8
@@ -269,9 +270,9 @@ digit 3 [VENDOR]; Voltcraft's 2005 VC920/960 app has no duty case, and
 shows AUTO for any non-zero bits 1:0 (§4.3). HOLD, REL, MAX MIN, PEAK and low battery have no bit
 the app reads; the manuals do not say whether they change what is sent.
 On the UT804, HOLD stops the output and REL sends the relative reading with
-Manual set (UT804 spec §3.6, §4.2). A UT71D does the same on REL, and on
-MAX MIN sends Manual with no other mark [HARDWARE, #22]; HOLD and PEAK
-HOLD are [UNVERIFIED].
+Manual set (UT804 spec §3.6, §4.2). A UT71D does the same on HOLD and REL,
+and on MAX MIN sends Manual with no other mark [HARDWARE, #22]; PEAK HOLD is
+[UNVERIFIED].
 
 ### 3.5 Range Codes and Full Scales (Byte 5)
 
@@ -291,7 +292,7 @@ model; what differs is the full scale a code stands for.
 | µA (7) | 0: 400 µA, 1: 4000 µA | 200, 2000 µA | as C/D/E |
 | mA (8) | 0: 40 mA, 1: 400 mA | 20, 200 mA | as C/D/E |
 | A (9) | 0: 10 A | 10 A | 10 A |
-| Continuity (A) | 0, no full scale on the sheet; point after digit 3 | app chart 1000 | — |
+| Continuity (A) | 0, no full scale on the sheet; point after digit 3, `000.00 Ω` shorted on a UT71D [HARDWARE, #22] | app chart 1000 | — |
 | Diode (B) | 0, no full scale; point after digit 1 | app chart 20 | — |
 | Hz (C) | 0: 40 Hz, 1: 400 Hz, 2: 4 kHz, 3: 40 kHz, 4: 400 kHz, 5: 4 MHz, 6: 40 MHz, 7: 400 MHz | 20 Hz … 200 MHz | manual lists 4 kHz-400 MHz only |
 | °F (D) | 0: 1832 °F | B: 1832 °F | °F exists (blue key), no spec row |
@@ -318,7 +319,7 @@ model; what differs is the full scale a code stands for.
   and so does a UT71D on DC and AC A [HARDWARE, #22]. The point is after
   digit 2 for any code.
 - **[HARDWARE]** A UT71D (#22) sent these C/D/E codes: AC V 1, AC+DC V 1-4,
-  DC V 1, DC mV 0, Ω 2, 5 and 6, capacitance 1, µA 0 and 1, mA 0 and 1,
+  DC V 1, DC mV 0, Ω 1, 2, 5 and 6, capacitance 1, µA 0 and 1, mA 0 and 1,
   Hz 0, and 0 on °C, °F, continuity, diode and 4-20 mA %. In the
   blue-key 4000-count mode DC V kept range code 1 (§3.1); RANGE held at
   power-on has not been tried.
@@ -363,14 +364,16 @@ Data output:
   VC09 p.52). Store mode does the same (EN p.47).
 - RECALL + ▶ (HOLD) sends every stored reading and ends by itself; the
   software shows each reading's store time and value (EN p.48; CN p.24;
-  VC09 p.54). The app parses only the 11-byte packet of §2, so what
-  carries the time is [UNVERIFIED].
+  VC09 p.54). A UT71D sends them as the live packets of §2, back to back
+  at line speed (15 stored readings in about a second), with no store time,
+  index or other mark, then stops [HARDWARE, #22]: only the pace tells a
+  recall from live readings.
 - The primary display updates 2-3 times/s (EN p.56); the Voltcraft manual
   gives 3 measurements/s (VC09 p.57). A UT71D sends a packet every 652-688
   ms (median 656 ms, the UT804's rate, UT804 spec §4.2), and every 215 ms
   or so in the blue-key 4000-count mode [HARDWARE, #22].
 - Not stated in any manual: whether HOLD, REL or MAX MIN change what is
-  sent.
+  sent (§3.4 has what a UT71D does).
 
 UNI-T ships two apps, UT71A/B and UT71C/D/E [VENDOR]. They differ only in
 the count mode (A/B: 20000, limits ±20001; C/D/E: 40000), the A/B chart
@@ -468,8 +471,8 @@ Added after the independent analysis above; see the approach doc for the
 boundary. The sigrok column is libsigrok's `ut71x` parser and its device
 entries (read 2026-09-21, commit below). Nothing in §1-6 was changed
 because of it: every ✗, "new" and open question is for hardware to
-settle. A UT71D (#22) has since settled the line, the high nibble and the
-10 A code, and the rows say so.
+settle. A UT71D (#22) has since settled the line, the high nibble, the
+10 A code and continuity's point, and the rows say so.
 
 | Aspect | Our spec | sigrok | Agree? |
 |---|---|---|---|
@@ -480,7 +483,7 @@ settle. A UT71D (#22) has since settled the line, the high nibble and the
 | Overload, LO | Byte 0 = `A`: byte 1 = `C` is LO, anything else an overload; the apps ignore bytes 2-4 (§3.1) | Only `::0<:` (A A 0 C A, over limit) and `:<0::` (A C 0 A A, under limit); other non-digits rejected | ✓ on those two; other byte-0 `A` packets unknown |
 | Functions 1-9, B-D, F | §3.2 | Same meanings; F is loop current in % | ✓ |
 | Function 0 | `AC_mV`, sheet only: no dial position, the apps set no unit or point (§3.2) | AC mV, point after digit 3 | ✓ meaning; the point has no vendor source (2026-11-06); ever sent? |
-| Function A | Continuity, point after digit 3 (§3.2, §3.5) | Continuity, exponent −1: point after digit 4 | ✗ point |
+| Function A | Continuity, point after digit 3 (§3.2, §3.5) | Continuity, exponent −1: point after digit 4 | ✗ point; ours, by the UT71D |
 | Function E | Power in W, point after digit 4, UT71E and VC940 [DEDUCED] (§3.2) | Power in W, "Only available on UT71E (range 0-2500W)", exponent 0: no point | ✓ meaning; ✗ point |
 | Coupling | 0 OFF, 1 AC, 2 DC, 3 AC+DC (§3.3) | Bit 0 AC, bit 1 DC | ✓ |
 | Status | Sign in bit 2 (UT71 sheet, apps; the UT804 sends it there), in bit 3 on the Conrad and UT804 sheets; bits 1:0 `01` AUTO, `10` Manual (§3.4) | Bit 0 auto, bit 1 manual, bit 2 sign; calls the Conrad sheets' bit-3 sign a typo; single-range modes set neither; auto with manual rejected | ✓ |

@@ -1150,8 +1150,9 @@ mod tests {
         }
     }
 
-    /// Whether HOLD silences a UT71 or VC9x0 is open, so their HOLD step
-    /// words the answer as the UT804's does.
+    /// HOLD silences a UT71D (#22) as it does a UT804; the other UT71s and
+    /// the VC9x0 are unrun, so every handheld's HOLD step words the answer
+    /// as the UT804's does.
     #[test]
     fn the_handheld_hold_steps_say_no_response_is_an_answer() {
         for id in ["ut71a", "ut71b", "ut71cde", "vc920"] {

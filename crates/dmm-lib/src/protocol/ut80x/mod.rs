@@ -1023,11 +1023,10 @@ impl Ut80xProtocol {
         Self::new(Model::Ut71B, Stability::Experimental, 22)
     }
 
-    /// A UT71D has run every function it has (issue #22, 2026-11-18); the
-    /// UT71E's power position, HOLD, RANGE and MAX MIN on DC V and a shorted
-    /// Ω reading are unrun, so PartlyVerified.
+    /// A UT71D has run every function and button it has (issue #22,
+    /// 2026-11-22); the UT71E's power position is the one gap.
     pub(crate) fn new_ut71cde() -> Self {
-        Self::new(Model::Ut71Cde, Stability::PartlyVerified, 22)
+        Self::new(Model::Ut71Cde, Stability::Verified, 22)
     }
 
     pub(crate) fn new_vc920() -> Self {
@@ -1627,18 +1626,7 @@ mod tests {
             assert_eq!(ids, expected, "{name}");
             let open: Vec<&str> = steps.iter().filter(|s| !s.verified).map(|s| s.id).collect();
             if name == "ut71cde" {
-                assert_eq!(
-                    open,
-                    [
-                        "ohm_short",
-                        "power",
-                        "manual_range",
-                        "max_min",
-                        "auto_range",
-                        "hold"
-                    ],
-                    "{name}"
-                );
+                assert_eq!(open, ["power"], "{name}");
             } else {
                 assert_eq!(open, expected, "{name}");
             }

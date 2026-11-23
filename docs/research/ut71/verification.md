@@ -6,7 +6,8 @@ issues [#22](https://github.com/antoinecellerier/dmm-tools/issues/22) and
 What real meters have confirmed is tagged `[HARDWARE]` in the
 [spec](reverse-engineered-protocol.md); checks that span families are in the
 [verification backlog](../../verification-backlog.md). A UT71D has run
-every function it has (#22); no UT71A/B/C/E or VC9x0 has been read.
+every function and button it has (#22); no UT71A/B/C/E or VC9x0 has been
+read.
 
 ## Cables
 
@@ -27,9 +28,6 @@ every function it has (#22); no UT71A/B/C/E or VC9x0 has been read.
 - How a VC920/960 sends duty cycle: the 2005 VC app has no duty case (§4.3),
   a UT71D sends Hz with the sign bit (§3.4) — decides the override per
   model. Needs `duty` on a VC920/960. (#23)
-- Continuity's point, after digit 3 in the app (§3.5; community sources
-  differ, [§7][xref]) — decides the continuity row. Needs `cont` with the
-  probe tips touching; open leads only show the overload. (#22, #23)
 
 ## Ranges
 
@@ -50,15 +48,8 @@ every function it has (#22); no UT71A/B/C/E or VC9x0 has been read.
 
 ## Buttons
 
-- That RANGE on a ranged function sends Manual, `10` in bits 1:0, as MAX MIN
-  and REL do (§3.4) — settles §3.4 for RANGE. Needs `manual_range` and
-  `max_min` on DC V; #22's ran on A, which has one range. (#22, #23)
-- HOLD and PEAK HOLD on the wire (§3.4) — decides the flags and whether HOLD
-  silences the meter, as on a UT804. Needs `hold` with REL off; no step asks
-  for PEAK HOLD. (#22, #23)
-- What RECALL + ▶ sends, and how each reading's store time reaches the
-  software (§4.1) — decides whether a recall needs a decoder. Needs stored
-  readings on a UT71B-E or VC9x0 and a trace; no step asks for it. (#22, #23)
+- PEAK HOLD on the wire (§3.4) — decides its flag, if any. Needs PEAK HOLD
+  pressed on a ranged function and a trace; no step asks for it. (#22, #23)
 
 ## Capture steps
 

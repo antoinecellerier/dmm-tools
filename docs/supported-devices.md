@@ -108,15 +108,13 @@ turns it off.
 | UT71A | 20000 | 🧪 Experimental ([#22](https://github.com/antoinecellerier/dmm-tools/issues/22)) | no temperature or 4-20 mA %; SEND key |
 | UT71B | 20000 | 🧪 Experimental ([#22](https://github.com/antoinecellerier/dmm-tools/issues/22)) | adds °C/°F and 4-20 mA %; also sold as [Tenma 72-7730A](https://www.farnell.com/datasheets/1653479.pdf) |
 | UT71C | 40000 | 🧪 Experimental ([#22](https://github.com/antoinecellerier/dmm-tools/issues/22)) | |
-| UT71D | 40000 | 🟡 Partly verified ([#22](https://github.com/antoinecellerier/dmm-tools/issues/22)) | 9999 stored readings; also sold as [Tenma 72-7732A](https://www.farnell.com/datasheets/1653479.pdf) |
+| UT71D | 40000 | ✅ Verified ([#22](https://github.com/antoinecellerier/dmm-tools/issues/22)) | 9999 stored readings; also sold as [Tenma 72-7732A](https://www.farnell.com/datasheets/1653479.pdf) |
 | UT71E | 40000 | 🧪 Experimental ([#22](https://github.com/antoinecellerier/dmm-tools/issues/22)) | adds power (W); one V≂ position |
 | VC920 / VC960 | 40000 | 🧪 Experimental ([#23](https://github.com/antoinecellerier/dmm-tools/issues/23)) | resistance 4000 counts; AC V to 750 V |
 | VC940 | 40000 | 🧪 Experimental ([#23](https://github.com/antoinecellerier/dmm-tools/issues/23)) | as VC920, adds power (W) |
 
-A reporter's UT71D has confirmed every function on its dial and
-auto-detection; HOLD, manual ranging, MAX MIN and a shorted-leads
-resistance reading are still to confirm, and no other model has been run
-yet
+A reporter's UT71D has confirmed every function and button on it and
+auto-detection; no other model has been run yet
 ([open checks](research/ut71/verification.md)). Auto-detection
 reports these meters as a UT804: pick UT71A, UT71B, UT71C/D/E or Voltcraft
 VC920 as the device once (`--device ut71a`, `ut71b`, `ut71cde` or `vc920`).

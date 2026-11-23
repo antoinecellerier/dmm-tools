@@ -73,14 +73,14 @@ $ dmm-cli read --interval-ms 2500 --count 5
 | UNI-T UT61B+ | ✅ 已验证 | 🧪 实验性（适配器） | [#7](https://github.com/antoinecellerier/dmm-tools/issues/7) |
 | UNI-T UT161E | ✅ 已验证 | 🧪 实验性（适配器） | [#7](https://github.com/antoinecellerier/dmm-tools/issues/7) |
 | UNI-T UT61D+, UT161B/D | 🧪 实验性 | 🧪 实验性（适配器） | [#7](https://github.com/antoinecellerier/dmm-tools/issues/7) |
+| UNI-T UT71D | ✅ 已验证 | 🧪 实验性（适配器） | [#22](https://github.com/antoinecellerier/dmm-tools/issues/22) |
+| UNI-T UT71A/B, UT71C/E | 🧪 实验性 | 🧪 实验性（适配器） | [#22](https://github.com/antoinecellerier/dmm-tools/issues/22) |
 | UNI-T UT804 | ✅ 已验证 | — | [#16](https://github.com/antoinecellerier/dmm-tools/issues/16) |
 | UNI-T UT803 | 🧪 实验性 | — | [#15](https://github.com/antoinecellerier/dmm-tools/issues/15) |
 | UNI-T UT181A | 🟡 部分验证 | 🧪 实验性（适配器） | [#5](https://github.com/antoinecellerier/dmm-tools/issues/5) |
 | UNI-T UT171A/B/C | 🧪 实验性 | 🧪 实验性（适配器） | [#4](https://github.com/antoinecellerier/dmm-tools/issues/4) |
 | UNI-T UT60BT | — | 🧪 实验性（内置） | [#26](https://github.com/antoinecellerier/dmm-tools/issues/26) |
 | UNI-T UT202BT | — | 🧪 实验性（内置） | [#27](https://github.com/antoinecellerier/dmm-tools/issues/27) |
-| UNI-T UT71D | 🟡 部分验证 | 🧪 实验性（适配器） | [#22](https://github.com/antoinecellerier/dmm-tools/issues/22) |
-| UNI-T UT71A/B, UT71C/E | 🧪 实验性 | 🧪 实验性（适配器） | [#22](https://github.com/antoinecellerier/dmm-tools/issues/22) |
 | UNI-T UT8802, UT8802N | 🧪 实验性 | — | [#12](https://github.com/antoinecellerier/dmm-tools/issues/12) |
 | UNI-T UT8803, UT8803E | 🧪 实验性 | — | [#3](https://github.com/antoinecellerier/dmm-tools/issues/3) |
 | OWON CMS061 (UNI-T UT217A) | — | ✅ 已验证（内置） | [#45](https://github.com/antoinecellerier/dmm-tools/issues/45) |

@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Devices
+
+- **The UNI-T UT71D is verified** — thanks to [@wanthalf](https://github.com/wanthalf) for the retake and the recall trace ([#22](https://github.com/antoinecellerier/dmm-tools/issues/22)).
+
 ## v0.11.0 — Android Support
 
 dmm-gui runs on Android, over Bluetooth and USB cables. Reference values and alarm limits take a unit. The UNI-T UT71D is partly verified. Fixes make the graph, imported and replayed recordings, and reconnecting more dependable.
