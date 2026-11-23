@@ -170,6 +170,66 @@ fn chip(ui: &mut Ui, on: bool, label: &str, hover: &str) -> bool {
         .clicked()
 }
 
+/// How wide a chip showing `text` is, known before it is drawn, so a row
+/// can tell whether a group would wrap.
+fn chip_width(ui: &Ui, text: impl Into<egui::WidgetText>) -> f32 {
+    text.into()
+        .into_galley(
+            ui,
+            Some(egui::TextWrapMode::Extend),
+            f32::INFINITY,
+            egui::TextStyle::Button,
+        )
+        .size()
+        .x
+        + 2.0 * ui.spacing().button_padding.x
+}
+
+/// What the time-window list shows: the preset's own label, or for a span
+/// the minimap or a zoom set, that span as the time axis writes it, to a
+/// tenth of a second under ten.
+fn window_label(secs: f64, preset: Option<usize>) -> String {
+    match preset {
+        Some(i) => TIME_WINDOWS[i].1.to_string(),
+        None if secs < 10.0 => format!("{secs:.1}s"),
+        None => super::time::format_time_label(secs),
+    }
+}
+
+/// The gap between the first row's groups.
+const VIEW_GAP: f32 = 6.0;
+
+/// The width a run of widgets takes on one line, added up as they are drawn,
+/// whichever lines a narrow row wraps them onto.
+struct RowWidth {
+    width: f32,
+    spacing: f32,
+}
+
+impl RowWidth {
+    fn new(ui: &Ui) -> Self {
+        Self {
+            width: 0.0,
+            spacing: ui.spacing().item_spacing.x,
+        }
+    }
+
+    /// A widget, and the gap after it.
+    fn add(&mut self, response: &egui::Response) {
+        self.width += response.rect.width() + self.spacing;
+    }
+
+    /// Space added between widgets.
+    fn space(&mut self, width: f32) {
+        self.width += width;
+    }
+
+    /// The run's width, without the gap after its last widget.
+    fn width(&self) -> f32 {
+        (self.width - self.spacing).max(0.0)
+    }
+}
+
 /// Room a chip's line sample has around it on its ground, each side.
 const SAMPLE_PAD: egui::Vec2 = egui::vec2(4.0, 5.0);
 
@@ -387,26 +447,44 @@ impl Graph {
 
     /// The toolbar's first row: the time windows, LIVE, the Y axis's Auto or
     /// Fixed with its range, and Reset Zoom.
+    ///
+    /// While the row would wrap, the windows' chips collapse into one list.
+    /// Decided from the chips' text and the rest of the row as last frame
+    /// drew it, which the list leaves as it is: the choice never flips back
+    /// and forth.
     fn show_view_row(&mut self, ui: &mut Ui, l10n: &Localizer, tc: &ThemeColors) {
         let key = |k| graph_key(l10n, k);
         let cycle_keys = cycle_keys();
-        for &(secs, label) in TIME_WINDOWS {
-            let tooltip = tr!(
-                l10n,
-                "graph-window.hover",
-                window = label,
-                keys = &cycle_keys
-            );
-            if ui
-                .selectable_label((self.time_window_secs - secs).abs() < 0.1, label)
-                .on_hover_text(tooltip)
-                .clicked()
-            {
-                self.set_time_window(secs);
+        let spacing = ui.spacing().item_spacing.x;
+        let chips: f32 = TIME_WINDOWS
+            .iter()
+            .map(|&(_, label)| chip_width(ui, label) + spacing)
+            .sum();
+        let room = ui.available_size_before_wrap().x;
+        // The rest counts the gap it starts with.
+        if chips + self.view_row_rest > room {
+            self.show_window_list(ui, l10n, &cycle_keys);
+        } else {
+            for &(secs, label) in TIME_WINDOWS {
+                let tooltip = tr!(
+                    l10n,
+                    "graph-window.hover",
+                    window = label,
+                    keys = &cycle_keys
+                );
+                if ui
+                    .selectable_label((self.time_window_secs - secs).abs() < 0.1, label)
+                    .on_hover_text(tooltip)
+                    .clicked()
+                {
+                    self.set_time_window(secs);
+                }
             }
         }
+        let mut rest = RowWidth::new(ui);
 
-        ui.add_space(6.0);
+        ui.add_space(VIEW_GAP);
+        rest.space(VIEW_GAP);
 
         // On: the selected fill and text colour come from `selected`, like the
         // presets beside it. Off: dimmed text in a plain frame, so it still
@@ -420,6 +498,7 @@ impl Graph {
         let live_resp = ui
             .add(egui::Button::new(live_text).selected(self.live))
             .on_hover_text(tr!(l10n, "graph-live.hover", keys = key(egui::Key::End)));
+        rest.add(&live_resp);
         if live_resp.clicked() {
             if self.live {
                 self.leave_live();
@@ -428,7 +507,8 @@ impl Graph {
             }
         }
 
-        ui.add_space(6.0);
+        ui.add_space(VIEW_GAP);
+        rest.space(VIEW_GAP);
 
         let (y_label, y_tooltip) = if self.y_axis.fixed {
             (tr!(l10n, "graph-y-fixed"), tr!(l10n, "graph-y-fixed.hover"))
@@ -437,8 +517,15 @@ impl Graph {
         };
         // The chip has already flipped the flag, so `self.y_axis.fixed` below
         // reads "fixed mode was just switched on".
-        if toggle_chip(ui, &mut self.y_axis.fixed, &y_label, &y_tooltip) && self.y_axis.fixed {
-            self.pin_y_axes_to_view();
+        let y_chip = ui
+            .selectable_label(self.y_axis.fixed, y_label.as_ref())
+            .on_hover_text(y_tooltip.as_ref());
+        rest.add(&y_chip);
+        if y_chip.clicked() {
+            self.y_axis.fixed = !self.y_axis.fixed;
+            if self.y_axis.fixed {
+                self.pin_y_axes_to_view();
+            }
         }
         if self.y_axis.fixed {
             let field_width = 50.0;
@@ -452,7 +539,7 @@ impl Graph {
                 self.y_axis.max.flush();
             }
             let error = tc.status_error();
-            let changed_min = number_field(
+            let min = number_field(
                 ui,
                 ids.0,
                 self.y_axis.min.text_mut(),
@@ -461,14 +548,16 @@ impl Graph {
                 &tr!(l10n, "graph-y-min.hover"),
                 l10n,
                 error,
-            )
-            .changed();
-            ui.label(
-                egui::RichText::new("..")
-                    .small()
-                    .color(ui.visuals().weak_text_color()),
             );
-            let changed_max = number_field(
+            rest.add(&min);
+            rest.add(
+                &ui.label(
+                    egui::RichText::new("..")
+                        .small()
+                        .color(ui.visuals().weak_text_color()),
+                ),
+            );
+            let max = number_field(
                 ui,
                 ids.1,
                 self.y_axis.max.text_mut(),
@@ -477,15 +566,18 @@ impl Graph {
                 &tr!(l10n, "graph-y-max.hover"),
                 l10n,
                 error,
-            )
-            .changed();
+            );
+            rest.add(&max);
+            let (changed_min, changed_max) = (min.changed(), max.changed());
             // The unit the bounds are in, the plotted one: it moves a prefix
             // with an auto-range step, and the numbers with it.
             if let Some(unit) = self.plotted_unit_if_any().filter(|u| !u.is_empty()) {
-                ui.label(
-                    egui::RichText::new(unit)
-                        .small()
-                        .color(ui.visuals().weak_text_color()),
+                rest.add(
+                    &ui.label(
+                        egui::RichText::new(unit)
+                            .small()
+                            .color(ui.visuals().weak_text_color()),
+                    ),
                 );
             }
             if changed_min && self.y_axis.min.parse() {
@@ -496,16 +588,73 @@ impl Graph {
             }
         }
 
-        ui.add_space(6.0);
+        ui.add_space(VIEW_GAP);
+        rest.space(VIEW_GAP);
 
         let zoomed = self.is_view_zoomed();
-        if ui
+        let reset = ui
             .add_enabled(zoomed, egui::Button::new(tr!(l10n, "graph-reset-zoom")))
             .on_hover_text(tr!(l10n, "graph-reset-zoom.hover"))
-            .on_disabled_hover_text(tr!(l10n, "graph-reset-zoom.hover-disabled"))
-            .clicked()
-        {
+            .on_disabled_hover_text(tr!(l10n, "graph-reset-zoom.hover-disabled"));
+        rest.add(&reset);
+        if reset.clicked() {
             self.reset_view();
+        }
+        // Next frame's choice between the windows' chips and their list;
+        // drawn again at once when it moves, rather than at the next input.
+        let rest = rest.width();
+        if (rest - self.view_row_rest).abs() > 0.5 {
+            self.view_row_rest = rest;
+            ui.ctx().request_repaint();
+        }
+    }
+
+    /// The time windows as one list, for a row too narrow for their chips.
+    fn show_window_list(&mut self, ui: &mut Ui, l10n: &Localizer, cycle_keys: &str) {
+        let current = TIME_WINDOWS
+            .iter()
+            .position(|&(secs, _)| (self.time_window_secs - secs).abs() < 0.1);
+        let shown = window_label(self.time_window_secs, current);
+        let (response, picked) = ui
+            .scope(|ui| {
+                // The arrow at the text's height, not Touch's checkbox size,
+                // which would make the box taller than the chips beside it.
+                let text = ui.text_style_height(&egui::TextStyle::Button);
+                let spacing = ui.spacing_mut();
+                spacing.icon_width = spacing.icon_width.min(text);
+                crate::listbox::listbox_dropdown(
+                    ui,
+                    "graph-window-list",
+                    || 0,
+                    |combo| egui::ComboBox::width(combo, 0.0).selected_text(shown),
+                    |ui, was_open| {
+                        let mut picked = None;
+                        let mut entries = Vec::with_capacity(TIME_WINDOWS.len());
+                        for (i, &(_, label)) in TIME_WINDOWS.iter().enumerate() {
+                            let on = current == Some(i);
+                            // Marked as the readouts' lists mark theirs, not
+                            // by the fill alone.
+                            let entry = ui
+                                .selectable_label(on, crate::listbox::choice_entry_text(label, on));
+                            if !was_open && (on || (current.is_none() && i == 0)) {
+                                entry.request_focus();
+                            }
+                            if entry.clicked() {
+                                picked = Some(i);
+                            }
+                            entries.push(entry);
+                        }
+                        crate::listbox::navigate_choice_entries(ui.ctx(), &entries);
+                        picked
+                    },
+                )
+            })
+            .inner;
+        response
+            .on_hover_text(tr!(l10n, "graph-window-list.hover", keys = cycle_keys))
+            .a11y_label(&tr!(l10n, "graph-window-list.a11y"));
+        if let Some(i) = picked {
+            self.set_time_window(TIME_WINDOWS[i].0);
         }
     }
 
@@ -960,6 +1109,15 @@ impl Graph {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A span set off the presets reads as one in the list's box.
+    #[test]
+    fn the_window_list_names_a_span_off_the_presets() {
+        assert_eq!(window_label(60.0, Some(3)), TIME_WINDOWS[3].1);
+        assert_eq!(window_label(47.3, None), "47s");
+        assert_eq!(window_label(72.0, None), "1m12s");
+        assert_eq!(window_label(2.45, None), "2.5s");
+    }
 
     /// The keys a hover names keep their symbols: `[`, not "OpenBracket".
     #[test]

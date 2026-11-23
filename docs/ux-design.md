@@ -196,6 +196,15 @@ as it does on **Clear**.
 **Show:** groups get a row between the time window and the analysis toggles:
 inline, nothing told the controls apart (`show_toolbar` in `graph/toolbar.rs`).
 
+**Only the time windows fold.** Where the first row would wrap, its six
+window chips become one list: the windows are a pick-one choice the keys
+also step through. Overlays keep their chips and wrap, each one tap from on
+or off with its field beside it: folding them into a menu hid their state or
+listed them twice. **Plot:** wraps too: it rarely has more than three
+choices, and its chips are the graph's key, as **Show:**'s are. Rows that fit
+side by side stay apart, as chips under a finger would move with every
+toggle.
+
 **Each unit gets its own axis.** A sub-value in another unit is drawn
 against a Y axis of its own on the right, up to four units; a fifth's chip
 waits for one to be hidden. The right axes label the plotted unit's

@@ -1132,6 +1132,8 @@ fn a_decade_step_reaches_every_value_bearing_field() {
         box_zoom: _,
         menu_focus_pending: _,
         menu_by_touch: _,
+        // Widths in points: no plotted unit.
+        view_row_rest: _,
         // A point of one epoch, read only in that epoch
         // (`pin_on_screen`): the step leaves it behind.
         pin: _,

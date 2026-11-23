@@ -612,3 +612,47 @@ fn the_chips_samples_show_on_their_ground() {
         }
     }
 }
+
+/// The toolbar's accessible names, laid out in `width` under Touch or
+/// Compact; a few frames, so the first row's measured rest settles.
+fn toolbar_names(g: &mut Graph, width: f32, touch: bool) -> Vec<String> {
+    let ctx = if touch {
+        crate::app::styled_context_touch()
+    } else {
+        crate::app::styled_context()
+    };
+    ctx.enable_accesskit();
+    let (_, tc) = themed_context(Settings::default());
+    let screen = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(width, 400.0));
+    let mut out = None;
+    for _ in 0..3 {
+        out = Some(headless_frame(&ctx, Some(screen), None, vec![], |ui| {
+            g.show_toolbar(ui, &crate::l10n::english(), &tc);
+        }));
+    }
+    let (nodes, _) = a11y(&out.expect("drawn"));
+    nodes
+        .iter()
+        .filter_map(|(_, n)| n.label().map(str::to_string))
+        .collect()
+}
+
+/// The time windows keep their chips while the first row holds them and
+/// become one list where it would wrap: a phone in portrait under Touch.
+#[test]
+fn the_time_windows_collapse_only_where_their_row_would_wrap() {
+    let has = |names: &[String], name: &str| names.iter().any(|n| n == name);
+    let wide = toolbar_names(&mut Graph::new(), 1200.0, true);
+    assert!(has(&wide, "5s") && !has(&wide, "Time window"), "{wide:?}");
+    let phone = toolbar_names(&mut Graph::new(), 395.0, true);
+    assert!(
+        has(&phone, "Time window") && !has(&phone, "5s"),
+        "{phone:?}"
+    );
+    // Compact's row fits the same room: the room decides, not the density.
+    let compact = toolbar_names(&mut Graph::new(), 395.0, false);
+    assert!(
+        has(&compact, "5s") && !has(&compact, "Time window"),
+        "{compact:?}"
+    );
+}

@@ -194,6 +194,9 @@ in a narrow graph.
 | **Triggers** | Diamonds where the trace crosses a reference line (needs Ref) |
 | **Cursors** | Click to place cursor A, again for B; reads ΔT and Δ beside the chip, and the rest in [Statistics](#statistics)' **A–B** group, or beside the chip too while Statistics is hidden |
 
+In a graph too narrow for the time windows' chips on one row with the rest,
+they become one list.
+
 ![The same session with the boot sequence picked off the minimap instead of the live end: a diamond at each crossing of the 1 mA reference line, and a 60 s Min/Max envelope holding the boot's 108 mA peak](../assets/gui-graph-triggers.webp)
 
 ### Main Plot

@@ -20,6 +20,11 @@
 # e.g. 30s; $keys the two keys that step through them, e.g. [ / ].
 graph-window =
     .hover = Show the last { $window } of samples ({ $keys } to cycle)
+# The same choice as one list, in place of the chips on a row too narrow for
+# them. Its text is the window shown, e.g. 1m. $keys as above.
+graph-window-list =
+    .hover = How much time the graph shows ({ $keys } to cycle)
+    .a11y = Time window
 # A chip, lit while the graph follows the newest samples; dragging the graph
 # turns it off. Keep it short; it is set in small capitals.
 graph-live = LIVE

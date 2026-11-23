@@ -646,6 +646,9 @@ pub struct Graph {
     /// Whether a finger opened the open context menu, which then sits above
     /// the touch rather than under the hand.
     menu_by_touch: bool,
+    /// How wide the toolbar's first row is past the time windows, as last
+    /// drawn: whether their chips fit beside it.
+    view_row_rest: f32,
     /// The crosshair a tap left on the plot ([`hover::Pin`]).
     pin: Option<hover::Pin>,
 
@@ -730,6 +733,7 @@ impl Graph {
             menu: None,
             menu_focus_pending: false,
             menu_by_touch: false,
+            view_row_rest: 0.0,
             pin: None,
             trace_choice: None,
             clicked_marker: None,
