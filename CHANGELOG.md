@@ -17,6 +17,7 @@
 - **A narrow window shows `OL` in the error colour** — and keeps the unit plain when a reading passes an alarm limit, as wider windows do.
 - **The recording panel keeps its place as a graph gets its first readings** — it sat higher on connect and after Clear, then dropped.
 - **A histogram under the graph fits the window** — with the recording panel hidden, its value labels were cut off and the window scrolled a few points.
+- **A short plot keeps labels on its value axis** — between two round values it showed no scale at all.
 - **A narrow window's log fills a recording panel dragged taller** — it stayed five rows high over an empty panel.
 - **The big meter keeps its buttons in the window on HOLD** — a badge, a longer unit or a longer range arriving in a tight window pushed them or the reading past the edge.
 - **The reading alone shrinks to fit connection help under it** — with both panels hidden, the help pushed the statistics below the window.

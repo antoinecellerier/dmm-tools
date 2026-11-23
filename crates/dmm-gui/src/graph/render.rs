@@ -115,6 +115,10 @@ pub(super) fn thin_for_drawing(points: &[[f64; 2]], bucket_secs: f64) -> Vec<[f6
 /// share them: room for a label each, without crowding the grid.
 const AXIS_TICK_SPACING: f32 = 50.0;
 
+/// The finest round step a plot without right axes is gridded in: the six
+/// decimals egui_plot's own grid is labelled to at most.
+const FINEST_OWN_STEP: f64 = 1e-6;
+
 /// Points a right axis keeps beside its widest label: egui_plot's margin
 /// either side of the text, plus a pixel of air.
 const RIGHT_AXIS_MARGIN: f32 = 9.0;
@@ -130,10 +134,11 @@ const STACK_GAP: f32 = 6.0;
 /// One right axis's tick label at a height on the plot, and its colour.
 type RightAxisLabel = (Box<dyn Fn(f64) -> String>, egui::Color32);
 
-/// A frame's right axes: see [`Graph::right_axes`].
+/// A frame's grid of round steps and the right axes on it: see
+/// [`Graph::right_axes`].
 #[derive(Default)]
 struct RightAxes {
-    /// The plotted unit's grid step they share; `None` without any.
+    /// The plotted unit's grid step; `None` on egui_plot's own grid.
     step: Option<f64>,
     /// Each other unit's map onto the plot, in key order.
     maps: Vec<(String, AxisMap)>,
@@ -160,6 +165,21 @@ fn tick_color(ui: &Ui, series: egui::Color32) -> egui::Color32 {
 /// are painted in.
 fn unlabelled(axis: AxisHints<'static>) -> AxisHints<'static> {
     axis.formatter(|_, _| String::new())
+}
+
+/// `axis` with a label on every gridline its text fits beside, at full
+/// strength: for a grid whose step was chosen with room for them
+/// (`axes::primary_step`). egui_plot's own spacing is for its decades,
+/// which it fades in as they part.
+fn labelled_on_every_line(axis: AxisHints<'static>) -> AxisHints<'static> {
+    axis.label_spacing(egui::Rangef::point(0.0))
+}
+
+/// The spacing egui_plot's decade labels fade in over
+/// (`axes::DECADE_LABEL_FADE`).
+fn decade_label_fade() -> egui::Rangef {
+    let (none, full) = axes::DECADE_LABEL_FADE;
+    egui::Rangef::new(none, full)
 }
 
 /// The tick label a right axis writes at a height on the plot: the whole
@@ -510,8 +530,9 @@ struct Hover<'f> {
 }
 
 /// The main plot, configured: `height` tall, panned by a plain drag along
-/// X when `allow_x_drag`, with its axes, and a Y grid of whole numbers for
-/// `levels` or of `grid_step`s when right axes share one.
+/// X when `allow_x_drag`, with its axes, and a Y grid of `grid_step`s with
+/// fainter lines between them (`axes::round_grid_marks`), or without one
+/// egui_plot's decades, of whole numbers for `levels`.
 fn main_plot(
     height: f32,
     allow_x_drag: bool,
@@ -550,12 +571,18 @@ fn main_plot(
     plot = plot
         .grid_spacing(egui::Rangef::new(MIN_GRID_SPACING, 300.0))
         .x_grid_spacer(time_marks);
-    if levels {
+    if let Some(step) = grid_step {
+        let minor = axes::minor_step(step, if levels { 1.0 } else { 0.0 });
+        plot = plot.y_grid_spacer(move |input: GridInput| {
+            // Lines egui_plot would find too close to draw are not made.
+            let minor = minor.filter(|&m| m > input.base_step_size);
+            axes::round_grid_marks(input.bounds.0, input.bounds.1, step, minor)
+                .into_iter()
+                .map(|(value, step_size)| GridMark { value, step_size })
+                .collect()
+        });
+    } else if levels {
         plot = plot.y_grid_spacer(whole_number_marks);
-    } else if let Some(step) = grid_step {
-        plot = plot.y_grid_spacer(egui_plot::uniform_grid_spacer(move |_| {
-            [step, step * 10.0, step * 100.0]
-        }));
     }
     plot
 }
@@ -707,17 +734,22 @@ impl Graph {
         (tc.graph_overlay(index), style)
     }
 
-    /// The plotted unit's axis, on the left. On a grid shared with right axes
-    /// (`grid_step`) every tick is a whole step, written to the step's
-    /// decimals like theirs, and in the colour of the plotted line.
+    /// The plotted unit's axis, on the left. On a grid of round steps
+    /// (`grid_step`) every whole step carries a label, written
+    /// to the step's decimals like the right axes', and beside those in the
+    /// colour of the plotted line (`beside`).
     fn left_axis(
         &self,
         ui: &Ui,
         grid_step: Option<f64>,
-        line_color: egui::Color32,
+        beside: Option<egui::Color32>,
     ) -> AxisHints<'static> {
         let plotted = self.current_unit.clone();
         let axis = AxisHints::new_y().formatter(move |mark, range| {
+            // The lines between two steps (`axes::minor_step`) carry none.
+            if grid_step.is_some_and(|step| mark.step_size < step * (1.0 - 1e-9)) {
+                return String::new();
+            }
             let (value, step) = match grid_step {
                 Some(step) => ((mark.value / step).round() * step, step),
                 None => (mark.value, mark.step_size),
@@ -738,34 +770,62 @@ impl Graph {
                 format!("{val} {unit}  ")
             }
         });
-        match grid_step {
-            Some(_) => axis.tick_label_color(tick_color(ui, line_color)),
+        let axis = match grid_step {
+            Some(_) => labelled_on_every_line(axis),
+            None => axis.label_spacing(decade_label_fade()),
+        };
+        match beside {
+            Some(line_color) => axis.tick_label_color(tick_color(ui, line_color)),
             None => axis,
         }
     }
 
-    /// This frame's right axes: one per sub-value unit drawn beside the
-    /// plotted series, aligned on a grid of round steps of the plotted unit
-    /// (`axes.rs`). None — egui_plot's own grid, as a single unit always
-    /// has — on a level's whole-number grid, or on a flat or non-finite range
-    /// (a Y: Fixed of "inf"), which has no steps to share.
+    /// This frame's grid of round steps of the plotted unit, and the right
+    /// axes aligned on it (`axes.rs`): one per sub-value unit drawn beside
+    /// the plotted series. No step — egui_plot's own grid — where no right
+    /// axis needs one and its decades label two lines readably on a plot
+    /// `body_height` tall (`axes::takes_decades`, which keeps the grid of a
+    /// range near the line between the two), or on a flat or non-finite
+    /// range (a Y: Fixed of "inf"), which has no steps to share. A level's
+    /// whole-number grid has no right axes. A round step leaves each line
+    /// room for a label `label_height` tall.
     fn right_axes(
-        &self,
+        &mut self,
         ui: &Ui,
         (view_min, view_max): (f64, f64),
         (y_min, y_max): (f64, f64),
+        (body_height, label_height): (f32, f32),
     ) -> RightAxes {
-        let secondaries = self.secondary_targets(view_min, view_max);
-        let shareable = !self.levels && y_min.is_finite() && y_max.is_finite() && y_max > y_min;
-        if !shareable || secondaries.is_empty() {
+        let span = y_max - y_min;
+        if !(y_min.is_finite() && y_max.is_finite() && span > 0.0 && body_height > 0.0) {
             return RightAxes::default();
+        }
+        let secondaries = match self.levels {
+            true => Vec::new(),
+            false => self.secondary_targets(view_min, view_max),
+        };
+        // A level is a whole number, on either grid.
+        let finest = if self.levels { 1.0 } else { 0.0 };
+        if secondaries.is_empty() {
+            let decades = axes::takes_decades(span, body_height, finest, self.on_round_steps);
+            self.on_round_steps = !decades;
+            if decades {
+                return RightAxes::default();
+            }
         }
         // The stacked labels need a row each between gridlines.
         let rows = secondaries.len() as f32;
         let row_height = ui.text_style_height(&egui::TextStyle::Body);
         let spacing = AXIS_TICK_SPACING.max(rows * row_height + STACK_GAP);
         let max_ticks = (ui.available_height() / spacing).floor().clamp(2.0, 10.0);
-        let step = axes::primary_step(y_min, y_max, max_ticks as usize);
+        let label_room = span * f64::from((label_height + axes::LABEL_AIR) / body_height);
+        let step = axes::primary_step(y_min, y_max, max_ticks as usize, label_room.max(finest));
+        // A range collapsed around a flat trace keeps egui_plot's grid when
+        // it can: steps this fine take more decimals than a label has room
+        // for.
+        if secondaries.is_empty() && step < FINEST_OWN_STEP {
+            return RightAxes::default();
+        }
         RightAxes {
             step: Some(step),
             maps: secondaries
@@ -932,7 +992,26 @@ impl Graph {
         let (y_min, y_max) = y_range.unwrap_or((-1.0, 1.0));
         self.update_histogram(ui, l10n, vis_start..vis_end, (y_min, y_max));
 
-        let right = self.right_axes(ui, (view_min, view_max), (y_min, y_max));
+        // The time labels' row whether or not there are any: egui_plot sizes
+        // it from the previous frame's, and the plot would move with them. A
+        // label's own height, which is not quite the style's row height.
+        let font = egui::TextStyle::Body.resolve(ui.style());
+        let time_row = ui.fonts_mut(|f| {
+            f.layout_no_wrap("0 s".to_owned(), font, egui::Color32::PLACEHOLDER)
+                .size()
+                .y
+        });
+        // The plot's whole area, axes included, as egui_plot is about to
+        // allocate it, and the body the time axis leaves of it.
+        let plot_height = ui.available_height().max(super::MIN_PLOT_HEIGHT);
+        let body_height = plot_height - time_row;
+
+        let right = self.right_axes(
+            ui,
+            (view_min, view_max),
+            (y_min, y_max),
+            (body_height, time_row),
+        );
         self.axis_maps.clone_from(&right.maps);
         let grid_step = right.step;
         let map_of = |label: &str| right.map_of(self.overlay_unit(label));
@@ -953,7 +1032,10 @@ impl Graph {
         // wider than its one reading — is drawn from -1 to 1, on either
         // side of a zero nothing was read at: it carries no labels.
         let mut y_axes = vec![match y_range {
-            Some(_) => self.left_axis(ui, grid_step, tc.graph_line()),
+            Some(_) => {
+                let beside = (!right.maps.is_empty()).then(|| tc.graph_line());
+                self.left_axis(ui, grid_step, beside)
+            }
             None => unlabelled(AxisHints::new_y()),
         }];
         // The right axes share one column, their labels painted once the plot
@@ -974,16 +1056,7 @@ impl Graph {
         } else {
             unlabelled(AxisHints::new_x())
         };
-        // The labels' row whether or not there are any: egui_plot sizes it
-        // from the previous frame's, and the plot would move with them. A
-        // label's own height, which is not quite the style's row height.
-        let font = egui::TextStyle::Body.resolve(ui.style());
-        let row = ui.fonts_mut(|f| {
-            f.layout_no_wrap("0 s".to_owned(), font, egui::Color32::PLACEHOLDER)
-                .size()
-                .y
-        });
-        let x_axis = x_axis.min_thickness(row);
+        let x_axis = x_axis.min_thickness(time_row);
 
         let ref_values = self.ref_lines.values().to_vec();
         let ref_labels: Vec<String> = self.ref_lines.labels().map(str::to_string).collect();
@@ -1047,10 +1120,8 @@ impl Graph {
             empty_note: self.empty_note(ui, l10n, tc, overlay.limit_lines.iter().map(|&(v, _)| v)),
         };
 
-        // The plot's whole area, axes included, as egui_plot is about to
-        // allocate it: the axes' strips around the plot body take the menu's
-        // right-click too.
-        let plot_height = ui.available_height().max(super::MIN_PLOT_HEIGHT);
+        // The axes' strips around the plot body take the menu's right-click
+        // too.
         let complete_rect = egui::Rect::from_min_size(
             ui.cursor().min,
             egui::vec2(ui.available_size_before_wrap().x, plot_height),

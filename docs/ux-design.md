@@ -218,6 +218,12 @@ a sweep across a decade stays one trace, and the axis reads in the unit the
 meter shows. A copied reading carries its own unit, since the trace it sits on
 may be in another prefix by then.
 
+**A short plot takes round steps.** Decades are ten times apart, so a short
+plot's range can fall between two and show no value label. Where two decade
+lines can't carry readable labels the plot takes the right axes' round steps,
+fainter unlabelled lines between, and keeps that grid near the switch so a live
+trace's labels hold still (`graph/axes.rs`).
+
 **The histogram shares the plot's Y axis.** Each bar sits at the height of
 the readings it counts, so a second level or an outlier lines up with the
 stretch of trace that made it, and the view picks what is binned. Under a

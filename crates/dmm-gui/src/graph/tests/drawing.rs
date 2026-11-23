@@ -211,7 +211,7 @@ fn build_envelope_emits_the_point_before_its_range() {
 
 /// The main graph's shapes in `color` below `below`, clear of the key, each
 /// as its points: a dash's two ends, or a dot's centre.
-fn shapes_in(
+pub(super) fn shapes_in(
     out: &[egui::epaint::ClippedShape],
     color: egui::Color32,
     below: f32,

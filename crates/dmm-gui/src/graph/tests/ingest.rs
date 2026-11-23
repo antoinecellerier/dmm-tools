@@ -1123,6 +1123,8 @@ fn a_decade_step_reaches_every_value_bearing_field() {
         show_histogram: _,
         histogram_sizes: _,
         dash_phases: _,
+        // Which grid a range is drawn on is the same a thousand times over.
+        on_round_steps: _,
         // A gesture in screen space, or a request the app takes in the
         // frame it is made.
         minimap_drag: _,

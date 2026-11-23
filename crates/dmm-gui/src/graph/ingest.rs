@@ -602,5 +602,6 @@ impl Graph {
         self.minimap_level = None;
         self.restart_sequence();
         self.dash_phases = pattern::DashPhases::default();
+        self.on_round_steps = false;
     }
 }

@@ -567,6 +567,10 @@ pub struct Graph {
     /// Where the dashed and dotted lines' patterns stand, so they move with
     /// the data: see [`pattern`].
     dash_phases: pattern::DashPhases,
+    /// The plot's value grid was last one of round steps, for want of
+    /// decades to label: it keeps that grid while its range is near the
+    /// line between the two (`axes::takes_decades`).
+    on_round_steps: bool,
 
     /// The figures the toolbar writes after **Cursors**, each ending in its
     /// separator but the last: written by the app as Statistics writes the
@@ -676,6 +680,7 @@ impl Graph {
             plot_rect: None,
             plot_transform: None,
             dash_phases: pattern::DashPhases::default(),
+            on_round_steps: false,
             cursor_figures: None,
             cursor_readout: Vec::new(),
             visible_figures: None,
