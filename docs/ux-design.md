@@ -244,8 +244,16 @@ the hand covers what a mouse pointer leaves in view: the crosshair's readings,
 the histogram's and the menu a long press opens sit above the finger, not
 below it as for a pointer. A tap leaves the crosshair on its reading, as a
 lifted finger would otherwise take the readings with it; a mouse pins
-nothing, having a hover. Nothing else is laid out for touch: on a phone the
-window is the desktop's, controls at their desktop size.
+nothing, having a hover. A finger never brings up the marker log's `+` tag
+by hovering, so Touch density shows it on every row.
+
+**Density sizes targets, Zoom sizes text.** Touch sizes controls in dp,
+whatever the zoom, as a finger does not grow with the text, and pads them
+rather than raising egui's row height, which would space out every line of
+figures; a small control among text keeps its place and takes taps from an
+invisible reach around it (`Sizing` in `app/appearance.rs`). A setting with a
+platform default, not switched by the input seen: Firefox's and Office's
+automatic touch modes flip at the wrong moments.
 
 **Session choices are never saved, hidden traces are.** A scale or plotted
 series restored silently at the next launch would corrupt readings or plot a

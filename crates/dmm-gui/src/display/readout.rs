@@ -265,6 +265,7 @@ fn show_dropdown(
     let popup_size = size.clamp(MIN_AUX_FONT_SIZE, MAX_CHOICE_POPUP_FONT_SIZE);
     let ctx = ui.ctx().clone();
     let row_height = ctx.fonts_mut(|f| f.row_height(&FontId::proportional(size)));
+    let sizing = crate::app::Sizing::of(&ctx);
     let (response, picked) = ui
         .scope(|ui| {
             let widgets = &mut ui.visuals_mut().widgets;
@@ -283,8 +284,15 @@ fn show_dropdown(
             // so a big-meter readout stays centred beside its label. No
             // vertical padding: the box is the label's height, so it also
             // sits level in a wrapped row, which aligns tops.
-            spacing.button_padding.y = 0.0;
-            let box_height = row_height.max(spacing.icon_width);
+            // Under Touch the box is padded out to the control height
+            // instead: a finger needs the target more than the row its level.
+            let text_height = row_height.max(spacing.icon_width);
+            spacing.button_padding.y = if sizing.touch {
+                ((sizing.control - text_height) / 2.0).max(0.0)
+            } else {
+                0.0
+            };
+            let box_height = text_height + 2.0 * spacing.button_padding.y;
             spacing.interact_size.y = spacing.interact_size.y.max(box_height);
             // The interactive colour, not the label's weak one: this is a
             // control, and it has to clear the text contrast bar as one.

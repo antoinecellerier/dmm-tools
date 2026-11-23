@@ -280,6 +280,9 @@ pub(super) struct FitInputs {
     /// The Statistics columns' widths: one that widens can change the
     /// table's shape, and with it the height left for the reading.
     pub(super) stats_widths: [usize; 4],
+    /// The control height, in hundredths of a point: Touch's taller buttons
+    /// take room from the reading at the same window size.
+    pub(super) control_height: u32,
 }
 
 impl FitInputs {
@@ -378,6 +381,7 @@ mod tests {
             screen_only_note: false,
             language: "en-US",
             stats_widths: [7, 2, 3, 4],
+            control_height: 1800,
         }
     }
 
@@ -885,6 +889,10 @@ mod tests {
         });
         mutations.push(FitInputs {
             stats_widths: [8, 2, 3, 4],
+            ..inputs()
+        });
+        mutations.push(FitInputs {
+            control_height: 2800,
             ..inputs()
         });
         for (i, m) in mutations.iter().enumerate() {

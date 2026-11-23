@@ -56,9 +56,13 @@ pub(super) const ERROR_GLYPH: &str = "\u{26A0}";
 
 /// The × that closes a notice, a toast or one drawn in a panel.
 pub(super) fn dismiss_button(ui: &mut egui::Ui, l10n: &Localizer) -> egui::Response {
-    ui.add(egui::Button::new(RichText::new("\u{00D7}").small()).frame_when_inactive(false))
-        .on_hover_text(tr!(l10n, "connection-dismiss.hover"))
-        .a11y_label(&tr!(l10n, "connection-dismiss.a11y"))
+    ui.add(
+        egui::Button::new(RichText::new("\u{00D7}").small())
+            .frame_when_inactive(false)
+            .min_size(crate::app::Sizing::of(ui.ctx()).glyph()),
+    )
+    .on_hover_text(tr!(l10n, "connection-dismiss.hover"))
+    .a11y_label(&tr!(l10n, "connection-dismiss.a11y"))
 }
 
 /// How far the ring showing a toast's time left stands off its ×.

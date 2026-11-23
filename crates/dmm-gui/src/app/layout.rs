@@ -9,7 +9,7 @@ use dmm_shared::tr;
 use eframe::egui::{self, RichText, Ui};
 
 use super::stats_panel::StatsPlace;
-use super::{App, BigMeterMode};
+use super::{App, BigMeterMode, Sizing};
 use crate::a11y::ResponseA11yExt;
 use crate::display;
 use crate::settings::{DEFAULT_WINDOW_SIZE, SIDE_PANEL_MAX_WIDTH, SIDE_PANEL_MIN_WIDTH};
@@ -149,6 +149,7 @@ impl App {
             ui,
             Self::big_meter_toggle_icon(BigMeterMode::Off),
         )
+        .max(Sizing::of(ui.ctx()).glyph().x)
     }
 
     /// Icon of the big-meter toggle in `mode`: ⊞ while a press gives the
@@ -178,7 +179,7 @@ impl App {
         let mut child = ui.new_child(egui::UiBuilder::new().max_rect(rect));
         child.with_layout(egui::Layout::right_to_left(egui::Align::BOTTOM), |ui| {
             let color = ui.visuals().weak_text_color();
-            let btn = egui::Button::new(icon.color(color));
+            let btn = egui::Button::new(icon.color(color)).min_size(Sizing::of(ui.ctx()).glyph());
             let response = ui.add(btn).on_hover_text(&tooltip).a11y_label(&tooltip);
             // The same round as the shortcut, so the reading alone can be
             // reached, and left, without a keyboard.

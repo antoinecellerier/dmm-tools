@@ -67,9 +67,9 @@ What worked:
 - The GUI draws through eframe's `android-native-activity` and glow and
   follows the screen into landscape. Taps, drags and pinch zoom work on
   the graph, a tap leaves the crosshair on its reading, and the Settings
-  panel is usable; the controls keep their
-  desktop size, which is small for a finger. It survives being sent to the
-  background and brought back.
+  panel is usable; the Touch density, its default there, sizes the
+  controls for a finger. It survives being sent to the background and
+  brought back.
 - `btleplug::platform::init`, called from `android_main`, and the
   transport's blocking calls on the acquisition thread: scan, connect,
   profile choice, detection, the readings stream and its pairs notice.

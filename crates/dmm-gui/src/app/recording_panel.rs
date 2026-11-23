@@ -501,6 +501,25 @@ impl App {
         let l10n = self.l10n.clone();
         let (label_tooltip, arrow_tooltip) =
             export_tooltips(&l10n, ui.ctx(), self.capture.recording.role());
+        // The two halves wrap as one, measured before they are placed: in
+        // the scope below, the row's wrapping can no longer move the first.
+        let width = |ui: &Ui, text: &str| {
+            egui::WidgetText::from(text)
+                .into_galley(
+                    ui,
+                    Some(egui::TextWrapMode::Extend),
+                    f32::INFINITY,
+                    egui::TextStyle::Button,
+                )
+                .size()
+                .x
+                + 2.0 * ui.spacing().button_padding.x
+        };
+        let pair = width(ui, &tr!(l10n, "export-button"))
+            + width(ui, EXPORT_MENU_ARROW).max(crate::app::Sizing::of(ui.ctx()).glyph().x);
+        if pair > ui.available_size_before_wrap().x && pair <= ui.max_rect().width() {
+            ui.end_row();
+        }
         ui.scope(|ui| {
             // The two segments touch, and only the outer corners are round,
             // so they read as one button.
@@ -520,11 +539,13 @@ impl App {
             }
             let arrow = ui
                 .add(
-                    egui::Button::new(EXPORT_MENU_ARROW).corner_radius(egui::CornerRadius {
-                        nw: 0,
-                        sw: 0,
-                        ..radius
-                    }),
+                    egui::Button::new(EXPORT_MENU_ARROW)
+                        .min_size(crate::app::Sizing::of(ui.ctx()).glyph())
+                        .corner_radius(egui::CornerRadius {
+                            nw: 0,
+                            sw: 0,
+                            ..radius
+                        }),
                 )
                 .on_hover_text(arrow_tooltip)
                 .a11y_label(&tr!(l10n, "export-menu.a11y"));
@@ -571,47 +592,50 @@ impl App {
         let focus_again = std::mem::take(&mut self.recording_panel.export_menu_focus_pending);
         let l10n = self.l10n.clone();
         let mut picked = None;
-        egui::Popup::menu(arrow).id(popup_id).show(|ui| {
-            let csv = ui.button(tr!(l10n, "export-csv"));
-            if !was_open || focus_again {
-                csv.request_focus();
-            }
-            // Picks count from the next frame on: the Enter that opened the
-            // menu from the arrow is still "pressed" this frame, and egui
-            // reads a pressed Enter on a focused button as a click — the
-            // first entry took the focus just above.
-            if was_open && csv.clicked() {
-                picked = Some(ExportFormat::Csv);
-            }
-            let json = ui
-                .button(tr!(l10n, "export-json"))
-                .on_hover_text(tr!(l10n, "export-json.hover"));
-            if was_open && json.clicked() {
-                picked = Some(ExportFormat::Json);
-            }
-            let replay = ui
-                .add_enabled(
-                    replay_possible,
-                    egui::Button::new(tr!(l10n, "export-replay")),
-                )
-                .on_hover_text(tr!(l10n, "export-replay.hover"))
-                .on_disabled_hover_text(ExportError::NoWireFormat.text(&l10n));
-            if was_open && replay.clicked() {
-                picked = Some(ExportFormat::Replay);
-            }
-            // Menu entries have no frame, so egui's focus styling is a fill
-            // too faint to find; ring the focused one.
-            crate::a11y::paint_focus_ring(ui, &csv);
-            crate::a11y::paint_focus_ring(ui, &json);
-            crate::a11y::paint_focus_ring(ui, &replay);
-            // A disabled entry cannot take the focus, so it is not a stop
-            // for the arrows either: Down would strand the focus on it.
-            let entries: Vec<_> = [csv, json, replay]
-                .into_iter()
-                .filter(|entry| entry.enabled())
-                .collect();
-            crate::listbox::navigate_choice_entries(ui.ctx(), &entries);
-        });
+        egui::Popup::menu(arrow)
+            .style(crate::app::Sizing::menu_style(ui.ctx()))
+            .id(popup_id)
+            .show(|ui| {
+                let csv = ui.button(tr!(l10n, "export-csv"));
+                if !was_open || focus_again {
+                    csv.request_focus();
+                }
+                // Picks count from the next frame on: the Enter that opened the
+                // menu from the arrow is still "pressed" this frame, and egui
+                // reads a pressed Enter on a focused button as a click — the
+                // first entry took the focus just above.
+                if was_open && csv.clicked() {
+                    picked = Some(ExportFormat::Csv);
+                }
+                let json = ui
+                    .button(tr!(l10n, "export-json"))
+                    .on_hover_text(tr!(l10n, "export-json.hover"));
+                if was_open && json.clicked() {
+                    picked = Some(ExportFormat::Json);
+                }
+                let replay = ui
+                    .add_enabled(
+                        replay_possible,
+                        egui::Button::new(tr!(l10n, "export-replay")),
+                    )
+                    .on_hover_text(tr!(l10n, "export-replay.hover"))
+                    .on_disabled_hover_text(ExportError::NoWireFormat.text(&l10n));
+                if was_open && replay.clicked() {
+                    picked = Some(ExportFormat::Replay);
+                }
+                // Menu entries have no frame, so egui's focus styling is a fill
+                // too faint to find; ring the focused one.
+                crate::a11y::paint_focus_ring(ui, &csv);
+                crate::a11y::paint_focus_ring(ui, &json);
+                crate::a11y::paint_focus_ring(ui, &replay);
+                // A disabled entry cannot take the focus, so it is not a stop
+                // for the arrows either: Down would strand the focus on it.
+                let entries: Vec<_> = [csv, json, replay]
+                    .into_iter()
+                    .filter(|entry| entry.enabled())
+                    .collect();
+                crate::listbox::navigate_choice_entries(ui.ctx(), &entries);
+            });
 
         if let Some(format) = picked {
             // Enter and Space "click" without a pointer click, which is the
@@ -772,9 +796,15 @@ impl App {
 
             let sep = ui.separator();
             let sep_id = ui.scope_id().with("rec_resize");
+            // A finger's reach goes below the line only: above it is the
+            // minimap, which a drag pans.
+            let below = crate::app::Sizing::of(ui.ctx()).grab(4.0);
             let sep_response = ui
                 .interact(
-                    sep.rect.expand2(egui::vec2(0.0, 4.0)),
+                    egui::Rect::from_min_max(
+                        sep.rect.min - egui::vec2(0.0, 4.0),
+                        sep.rect.max + egui::vec2(0.0, below),
+                    ),
                     sep_id,
                     egui::Sense::drag(),
                 )

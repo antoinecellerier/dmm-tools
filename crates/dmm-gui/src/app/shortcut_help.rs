@@ -365,7 +365,10 @@ impl App {
                         // U+00D7: none of egui's bundled fonts has U+2715
                         // (MULTIPLICATION X), which drew a missing-glyph box.
                         let close_btn = ui
-                            .button("\u{00D7}")
+                            .add(
+                                egui::Button::new("\u{00D7}")
+                                    .min_size(crate::app::Sizing::of(ui.ctx()).glyph()),
+                            )
                             .a11y_label(&tr!(l10n, "shortcuts-close.a11y"));
                         // First focus stop: the close button. Tab/Shift+Tab
                         // walks from here through the (non-interactive) grid

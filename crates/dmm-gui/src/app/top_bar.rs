@@ -10,6 +10,7 @@ use dmm_shared::tr;
 use eframe::egui::{self, RichText, Ui};
 use std::borrow::Cow;
 
+use super::Sizing;
 use super::appearance::frame_panel;
 use super::shortcuts::Shortcut;
 use super::update_check::Tag;
@@ -48,6 +49,7 @@ impl App {
         let green = tc.status_ok();
         let orange = tc.status_warning();
         let gray = tc.status_inactive();
+        Sizing::rows_fit_controls(ui);
 
         // The groups' widths as the previous frame drew them, to decide
         // which row each takes.
@@ -530,7 +532,7 @@ impl App {
             .on_hover_text(tr!(l10n, "top-bar-project-link.hover"));
         let (keys, other) = Shortcut::help_keys(ui.ctx(), l10n);
         let shortcuts_btn = ui
-            .button("?")
+            .add(egui::Button::new("?").min_size(Sizing::of(ui.ctx()).glyph()))
             .on_hover_text(tr!(
                 l10n,
                 "top-bar-shortcuts.hover",
@@ -548,7 +550,7 @@ impl App {
         }
 
         let settings_btn = ui
-            .button("\u{2699}")
+            .add(egui::Button::new("\u{2699}").min_size(Sizing::of(ui.ctx()).glyph()))
             .on_hover_text(tr!(l10n, "top-bar-settings.hover"))
             .a11y_label(&tr!(l10n, "top-bar-settings.a11y"));
         if settings_btn.clicked() {

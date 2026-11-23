@@ -176,9 +176,11 @@ pub(super) fn round_to_pixel(y: f64, units_per_px: f64, levels: bool) -> f64 {
 
 /// Of `lines`, each with its distance from the pointer in screen pixels,
 /// the nearest, if near enough to be the one under it.
-fn under_pointer<T>(lines: impl Iterator<Item = (T, f32)>) -> Option<T> {
+///
+/// `near` is how close counts ([`NEAR_PX`], or a finger's reach).
+fn under_pointer<T>(lines: impl Iterator<Item = (T, f32)>, near: f32) -> Option<T> {
     lines
-        .filter(|&(_, distance)| distance <= NEAR_PX)
+        .filter(|&(_, distance)| distance <= near)
         .min_by(|a, b| a.1.total_cmp(&b.1))
         .map(|(line, _)| line)
 }
@@ -478,6 +480,7 @@ impl Graph {
         in_view: &[(f64, &Marker)],
         limit_lines: &[(f64, LimitSide)],
         digits: ReadingDigits,
+        near: f32,
     ) -> MenuPoint {
         let at = transform.value_from_position(pos);
         let units_per_px =
@@ -489,22 +492,28 @@ impl Graph {
                 .into_iter()
                 .flatten()
                 .map(|&v| (v, (screen_y(v) - pos.y).abs())),
+            near,
         );
         let limit = under_pointer(
             limit_lines
                 .iter()
                 .map(|&(v, side)| (side, (screen_y(v) - pos.y).abs())),
+            near,
         );
         let screen_x = |t: f64| transform.position_from_point(&PlotPoint::new(t, at.y)).x;
         let marker = under_pointer(
             in_view
                 .iter()
                 .map(|&(t, m)| (m.number, (screen_x(t) - pos.x).abs())),
+            near,
         );
-        let cursor = under_pointer([Cursor::A, Cursor::B].into_iter().filter_map(|c| {
-            let t = self.cursors.at(c)?;
-            Some((c, (screen_x(t) - pos.x).abs()))
-        }));
+        let cursor = under_pointer(
+            [Cursor::A, Cursor::B].into_iter().filter_map(|c| {
+                let t = self.cursors.at(c)?;
+                Some((c, (screen_x(t) - pos.x).abs()))
+            }),
+            near,
+        );
         // The series the history holds, which a sub-value just chosen
         // becomes only with its first reading.
         let plotted = self.current_series.as_deref();
@@ -586,7 +595,8 @@ impl Graph {
         if let Some(scope) = scope
             && let Some(pos) = ctx.pointer_interact_pos()
         {
-            let point = self.menu_point(pos, transform, in_view, limit_lines, digits);
+            let near = crate::app::Sizing::of(&ctx).grab(NEAR_PX);
+            let point = self.menu_point(pos, transform, in_view, limit_lines, digits, near);
             self.menu = Some(MenuPoint { scope, ..point });
         }
         if opened {
@@ -641,6 +651,7 @@ impl Graph {
             egui::RectAlign::LEFT_END,
         ];
         let mut popup = egui::Popup::menu(plot)
+            .style(crate::app::Sizing::menu_style(&ctx))
             .id(popup_id)
             .open_memory(open)
             .at_pointer_fixed();

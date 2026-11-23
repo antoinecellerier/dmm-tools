@@ -69,7 +69,10 @@ impl App {
                 if class == egui::ViewportClass::EmbeddedWindow {
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Min), |ui| {
                         close_requested |= ui
-                            .button("\u{00D7}")
+                            .add(
+                                egui::Button::new("\u{00D7}")
+                                    .min_size(crate::app::Sizing::of(ui.ctx()).glyph()),
+                            )
                             .a11y_label(&dmm_shared::tr!(l10n, "whats-new-close.a11y"))
                             .clicked();
                     });

@@ -69,9 +69,13 @@ fn tag_shape(slot: egui::Rect, label_width: f32) -> (egui::Rect, egui::Pos2) {
 }
 
 /// Where a tag in `body`, with its point at `tip`, takes a click: the body
-/// and the point's reach.
-fn tag_hit_rect(body: egui::Rect, tip: egui::Pos2) -> egui::Rect {
-    egui::Rect::from_min_max(egui::pos2(tip.x, body.top()), body.max)
+/// and the point's reach, over the whole height of its `slot` — a line of
+/// text, or under Touch the taller row the tag is centred on.
+fn tag_hit_rect(body: egui::Rect, tip: egui::Pos2, slot: egui::Rect) -> egui::Rect {
+    egui::Rect::from_min_max(
+        egui::pos2(tip.x, slot.top()),
+        egui::pos2(body.right(), slot.bottom()),
+    )
 }
 
 /// The list's own state, between frames.
@@ -508,10 +512,17 @@ impl App {
         }
 
         // Every row is one line of the log font tall, a marked one too, so
-        // the controls on a marker's row are sized down to it.
-        let line = ui.fonts_mut(|f| f.row_height(&log_font()));
+        // the controls on a marker's row are sized down to it. Under Touch a
+        // row is a control's height instead: each row offers its tag.
+        let sizing = crate::app::Sizing::of(ui.ctx());
+        let text = ui.fonts_mut(|f| f.row_height(&log_font()));
+        let line = if sizing.touch {
+            text.max(sizing.control)
+        } else {
+            text
+        };
         let pitch = line + ui.spacing().item_spacing.y;
-        let delete_width = ui.spacing().interact_size.y;
+        let delete_width = ui.spacing().interact_size.y.max(line);
         let weak = ui.visuals().weak_text_color();
         let first = recorded
             .end
@@ -603,6 +614,7 @@ impl App {
                 number_width + delete_width + 2.0 * spacing + gutter + MIN_NOTE_WIDTH;
             let layout = LogLayout {
                 line,
+                text,
                 number_width,
                 delete_width,
                 spacing,
@@ -783,9 +795,11 @@ impl MarkerList {
 /// What the log's rows are sized and coloured by, this frame.
 #[derive(Clone, Copy)]
 struct LogLayout {
-    /// One line of the log font: a row's height, and each line of a marker's
-    /// row.
+    /// A row's height, and each line of a marker's row: one line of the log
+    /// font, or under Touch a control's height.
     line: f32,
+    /// One line of the log font, which the tags are drawn at.
+    text: f32,
     /// A marker's number tag, with room for three digits.
     number_width: f32,
     /// The × that deletes a marker.
@@ -818,6 +832,11 @@ impl LogLayout {
                 .max_rect(egui::Rect::from_min_size(min, egui::vec2(width, self.line)))
                 .layout(egui::Layout::left_to_right(egui::Align::Center)),
         )
+    }
+
+    /// The part of `slot` a tag is drawn in: a line of text, centred on it.
+    fn text_slot(&self, slot: egui::Rect) -> egui::Rect {
+        egui::Rect::from_center_size(slot.center(), egui::vec2(slot.width(), self.text))
     }
 
     /// The note's width in controls `room` wide: what the number, the ×,
@@ -943,6 +962,8 @@ fn sample_row(
     // One line, cut short of the tag it may offer: a wrapped line would run
     // into the row below.
     ui.set_max_width((row_rect.width() - layout.number_width - layout.spacing).max(0.0));
+    // Level with the controls of a Touch row, which is taller than its text.
+    ui.add_space((layout.line - layout.text).max(0.0) / 2.0);
     let label = ui.add(
         egui::Label::new(
             RichText::new(format!("{time}  {}", log_line(l10n, &s.measurement))).font(log_font()),
@@ -952,8 +973,9 @@ fn sample_row(
     // A hovered row offers a marker: a faint tag where a marker's would be,
     // or past a longer reading. Over the row's share of the gaps too, so the
     // tag doesn't flicker off between rows.
+    // Under Touch every row shows it: a finger has no hover to bring it up.
     let pitch_rect = row_rect.expand2(egui::vec2(0.0, layout.row_spacing / 2.0));
-    if !ui.rect_contains_pointer(pitch_rect) {
+    if !crate::app::Sizing::of(ui.ctx()).touch && !ui.rect_contains_pointer(pitch_rect) {
         return None;
     }
     // Where the markers' numbers are, when those are on the reading's line.
@@ -971,11 +993,11 @@ fn sample_row(
     let plus = ui
         .painter()
         .layout_no_wrap("+".into(), log_font(), layout.flag);
-    let (body, tip) = tag_shape(slot, plus.size().x);
+    let (body, tip) = tag_shape(layout.text_slot(slot), plus.size().x);
     let add = tr!(l10n, "markers-add", time = time.to_string());
     let response = ui
         .interact(
-            tag_hit_rect(body, tip),
+            tag_hit_rect(body, tip, slot),
             egui::Id::unique(("marker_add", s.measurement.timestamp)),
             egui::Sense::CLICK,
         )
@@ -1027,9 +1049,9 @@ fn number_tag(
         let galley = ui
             .painter()
             .layout_no_wrap(number.to_string(), log_font(), layout.flag_text);
-        let (body, tip) = tag_shape(slot, galley.size().x);
+        let (body, tip) = tag_shape(layout.text_slot(slot), galley.size().x);
         let response = ui.interact(
-            tag_hit_rect(body, tip),
+            tag_hit_rect(body, tip, slot),
             egui::Id::unique(("marker_tag", at)),
             egui::Sense::click(),
         );

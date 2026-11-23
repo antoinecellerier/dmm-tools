@@ -7,7 +7,9 @@ use dmm_shared::tr;
 use eframe::egui::{self, RichText, Ui};
 use std::borrow::Cow;
 
-use crate::settings::{GraphLines, SpecFields, buffer_memory_estimate, format_sample_count};
+use crate::settings::{
+    Density, GraphLines, SpecFields, buffer_memory_estimate, format_sample_count,
+};
 
 use crate::app::{App, BigMeterMode};
 
@@ -32,11 +34,15 @@ fn checkbox_width(ui: &Ui, label: &str) -> f32 {
 fn wrapped_checkbox(ui: &mut Ui, enabled: bool, value: &mut bool, label: &str) -> egui::Response {
     let size = egui::vec2(
         checkbox_width(ui, label).min(ui.max_rect().width()),
-        ui.spacing().interact_size.y,
+        ui.spacing()
+            .interact_size
+            .y
+            .max(crate::app::Sizing::of(ui.ctx()).control),
     );
+    // Justified across, so the checkbox's target is the whole row's height.
     ui.allocate_ui_with_layout(
         size,
-        egui::Layout::left_to_right(egui::Align::Center),
+        egui::Layout::left_to_right(egui::Align::Center).with_cross_justify(true),
         |ui| ui.add_enabled(enabled, egui::Checkbox::new(value, label)),
     )
     .inner
@@ -170,15 +176,38 @@ const SETTINGS_RESERVE: f32 = 160.0;
 /// beside a sliver of content, and nothing can be found in it.
 const SETTINGS_MIN_HEIGHT: f32 = 96.0;
 
-/// How many frames the Zoom row is followed after a zoom change: the new
-/// scale applies from the next frame, and the panel takes its size from the
-/// frame before that.
+/// How many frames the Zoom or Density row is followed after it changes the
+/// sizes: the new ones apply from the next frame, and the panel takes its
+/// size from the frame before that.
 const ZOOM_FOLLOW_FRAMES: u8 = 3;
 
 /// The zoom last seen by the settings panel, and the frames left to follow
 /// the Zoom row for.
 fn zoom_follow_id() -> egui::Id {
     egui::Id::unique("settings_zoom_follow")
+}
+
+/// The same for the density and the Density row.
+fn density_follow_id() -> egui::Id {
+    egui::Id::unique("settings_density_follow")
+}
+
+/// Follow `row` into view for [`ZOOM_FOLLOW_FRAMES`] once `value` differs
+/// from the one last seen under `id`.
+fn keep_row_in_view(ui: &Ui, row: &egui::Response, id: egui::Id, value: u32) {
+    let (seen, frames) = ui
+        .data(|d| d.get_temp::<(u32, u8)>(id))
+        .unwrap_or((value, 0));
+    let frames = if seen != value {
+        ZOOM_FOLLOW_FRAMES
+    } else {
+        frames
+    };
+    if frames > 0 {
+        row.scroll_to_me(None);
+        ui.ctx().request_repaint();
+    }
+    ui.data_mut(|d| d.insert_temp(id, (value, frames.saturating_sub(1))));
 }
 
 /// How tall the scrolling settings rows may be, given the window height and
@@ -201,7 +230,10 @@ impl App {
         if !self.settings_open {
             // A zoom changed while the panel is closed is not followed into
             // view when it opens.
-            ui.data_mut(|d| d.remove::<(u32, u8)>(zoom_follow_id()));
+            ui.data_mut(|d| {
+                d.remove::<(u32, u8)>(zoom_follow_id());
+                d.remove::<(u32, u8)>(density_follow_id());
+            });
             return None;
         }
 
@@ -265,6 +297,8 @@ impl App {
     /// inside the scroll area that [`Self::show_settings_panel`] caps; the
     /// colour rows live in `colors.rs`.
     fn show_settings_rows(&mut self, ui: &mut Ui) {
+        // Every row leads with a caption: level with the chips after it.
+        crate::app::Sizing::rows_fit_controls(ui);
         self.show_meter_rows(ui);
         ui.separator();
         self.show_data_rows(ui);
@@ -606,6 +640,31 @@ impl App {
         });
         self.keep_zoom_row_in_view(ui, &zoom_row.response);
 
+        let density_row = ui.horizontal_wrapped(|ui| {
+            let hover = tr!(l10n, "settings-density.hover");
+            let density = self.settings.density();
+            let chips = [
+                (Density::Compact, tr!(l10n, "settings-density-compact")),
+                (Density::Touch, tr!(l10n, "settings-density-touch")),
+            ]
+            .map(|(value, label)| Chip {
+                value,
+                selected: density == value,
+                label: label.into_owned(),
+                tooltip: hover.clone().into_owned(),
+            });
+            let caption = tr!(l10n, "settings-density");
+            if let Some(picked) = chip_row(ui, &caption, chips) {
+                self.settings.density = Some(picked);
+            }
+        });
+        keep_row_in_view(
+            ui,
+            &density_row.response,
+            density_follow_id(),
+            self.settings.density() as u32,
+        );
+
         // Always on top last: its Wayland caption is a sentence that wraps
         // rather than running off the edge of a narrow window, and egui
         // can't line a widget up beside a wrapped label's last line.
@@ -681,20 +740,7 @@ impl App {
     /// and the Zoom row often lands out of view. Follow it for the frames the
     /// new scale takes to settle, so the row just used stays on screen.
     fn keep_zoom_row_in_view(&self, ui: &Ui, row: &egui::Response) {
-        let zoom = self.settings.zoom_pct;
-        let (seen, frames) = ui
-            .data(|d| d.get_temp::<(u32, u8)>(zoom_follow_id()))
-            .unwrap_or((zoom, 0));
-        let frames = if seen != zoom {
-            ZOOM_FOLLOW_FRAMES
-        } else {
-            frames
-        };
-        if frames > 0 {
-            row.scroll_to_me(None);
-            ui.ctx().request_repaint();
-        }
-        ui.data_mut(|d| d.insert_temp(zoom_follow_id(), (zoom, frames.saturating_sub(1))));
+        keep_row_in_view(ui, row, zoom_follow_id(), self.settings.zoom_pct);
     }
 
     /// **Theme**, **Colors**, **Customize colors** and **Graph lines**.

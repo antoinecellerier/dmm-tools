@@ -214,6 +214,7 @@ pub fn show_specs(
         } else {
             weak
         };
+
         ui.painter().add(egui::Shape::convex_polygon(
             fold_triangle(centre, size, expanded).to_vec(),
             color,
@@ -227,13 +228,16 @@ pub fn show_specs(
     } else {
         tr!(l10n, "specs-heading.hover-unfold")
     };
-    let toggled = response.on_hover_text(tooltip).clicked();
+    let response = response.on_hover_text(tooltip);
     if expanded {
         show_specs_body(ui, l10n, spec, mode_spec, manual_url, scale, fields);
     } else {
         show_specs_compact(ui, l10n, spec, manual_url, fields);
     }
-    toggled
+    // Under Touch a finger takes the row from the gaps either side of it
+    // too, but no further: the line below may end in the Manual link.
+    let reach = egui::vec2(rect.width(), rect.height() + ui.spacing().item_spacing.y);
+    response.clicked() || crate::app::Sizing::tapped_around(ui, &response, reach)
 }
 
 /// The triangle egui's `paint_default_icon` draws for a collapsing header

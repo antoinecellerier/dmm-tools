@@ -367,7 +367,12 @@ pub(super) fn show_hover_readout(
                     ui.label(time_label);
                     // U+00D7, as the other close buttons: the fonts have no
                     // U+2715.
-                    ui.button("\u{00D7}").a11y_label(name).clicked()
+                    ui.add(
+                        egui::Button::new("\u{00D7}")
+                            .min_size(crate::app::Sizing::of(ui.ctx()).glyph()),
+                    )
+                    .a11y_label(name)
+                    .clicked()
                 })
                 .inner
             }

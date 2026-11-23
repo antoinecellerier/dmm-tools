@@ -5,7 +5,7 @@
 use eframe::egui;
 
 use super::App;
-use crate::settings::ThemeMode;
+use crate::settings::{Density, ThemeMode};
 
 /// Memo key for [`App::apply_color_overrides`]: every colour it pins into
 /// egui's `Visuals`, plus whether the palette pins a Border and a selection
@@ -76,9 +76,152 @@ fn compact_corners(visuals: &mut egui::Visuals) {
     w.hovered.corner_radius = egui::CornerRadius::same(3);
 }
 
-/// Raise egui's small text style to the 11 pt floor, keep the compact
-/// button spacing and corners, let a popup be measured as tall as the
-/// window, and keep egui's theme off the native window.
+/// Touch targets, in native points: dp on Android, the desktop's logical
+/// pixels. `install_styles` divides them by the zoom factor, so a finger's
+/// target keeps its size whatever Zoom sets the text to.
+const TOUCH_CONTROL: f32 = 28.0;
+const TOUCH_GAP: f32 = 6.0;
+/// Between a split button's halves, which touch under Compact.
+const TOUCH_SPLIT: f32 = 4.0;
+const TOUCH_PADDING_X: f32 = 8.0;
+const TOUCH_CHECKBOX: f32 = 20.0;
+/// How far either side of a thin drag handle (a divider, a bracket, a line)
+/// a finger still takes it.
+const TOUCH_GRAB: f32 = 12.0;
+/// How far a finger may drift and still tap; Android's own slop is 8 dp,
+/// egui's 6 pt is tuned for a mouse.
+const TOUCH_CLICK_DIST: f32 = 10.0;
+/// Height of a line of 13 pt button text, which the padding pads out to the
+/// control height.
+const BUTTON_TEXT_ROW: f32 = 15.0;
+
+/// The sizes a density gives the controls that egui's `Style` has no field
+/// for: glyph-only buttons, the gaps rows set for themselves, drag handles.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct Sizing {
+    /// Height every control reaches, in points.
+    pub(crate) control: f32,
+    /// Least gap between neighbouring controls, in points.
+    gap: f32,
+    /// Least reach either side of a thin drag handle, in points.
+    grab: f32,
+    /// Least gap between a split button's halves, in points.
+    split: f32,
+    pub(crate) touch: bool,
+}
+
+impl Sizing {
+    const COMPACT: Self = Self {
+        control: ROW_HEIGHT,
+        gap: 0.0,
+        grab: 0.0,
+        split: 0.0,
+        touch: false,
+    };
+
+    fn new(density: Density, zoom: f32) -> Self {
+        match density {
+            Density::Compact => Self::COMPACT,
+            Density::Touch => Self {
+                control: (TOUCH_CONTROL / zoom).max(ROW_HEIGHT),
+                gap: TOUCH_GAP / zoom,
+                grab: TOUCH_GRAB / zoom,
+                split: TOUCH_SPLIT / zoom,
+                touch: true,
+            },
+        }
+    }
+
+    /// The sizes `install_styles` last put in force.
+    pub(crate) fn of(ctx: &egui::Context) -> Self {
+        ctx.data(|d| d.get_temp(sizing_id()))
+            .unwrap_or(Self::COMPACT)
+    }
+
+    /// How far either side of a thin handle a press still takes it: `compact`
+    /// under Compact, a finger's reach under Touch.
+    pub(crate) fn grab(&self, compact: f32) -> f32 {
+        compact.max(self.grab)
+    }
+
+    /// `compact`, widened to the density's least gap between a split
+    /// button's halves.
+    pub(crate) fn split(&self, compact: f32) -> f32 {
+        compact.max(self.split)
+    }
+
+    /// `compact`, widened to the density's least gap.
+    pub(crate) fn gap(&self, compact: f32) -> f32 {
+        compact.max(self.gap)
+    }
+
+    /// Start every row `ui` lays out at the control height. egui centres a
+    /// row's items against the height it has when each is placed, so a label
+    /// placed before a taller control would sit at the row's top; a row that
+    /// mixes captions and controls takes this before its first item.
+    pub(crate) fn rows_fit_controls(ui: &mut egui::Ui) {
+        let control = Self::of(ui.ctx()).control;
+        let row = &mut ui.spacing_mut().interact_size.y;
+        *row = row.max(control);
+    }
+
+    /// egui's menu style, which pads a menu's entries to nothing, but under
+    /// Touch with the controls' height kept: a menu's rows are targets too.
+    pub(crate) fn menu_style(ctx: &egui::Context) -> egui::style::StyleModifier {
+        let touch = Self::of(ctx).touch;
+        let padding_y = ctx.global_style().spacing.button_padding.y;
+        egui::style::StyleModifier::from(move |style: &mut egui::Style| {
+            egui::containers::menu::menu_style(style);
+            if touch {
+                style.spacing.button_padding.y = padding_y;
+            }
+        })
+    }
+
+    /// Under Touch, whether a tap landed within `reach` of `response`'s
+    /// centre (never less than the widget itself), for a small widget that
+    /// keeps its Compact place on screen. The reach is an invisible target
+    /// over its neighbours: call this after the last of them is placed, or
+    /// they take the taps first. Hidden from screen readers, which reach the
+    /// widget itself.
+    pub(crate) fn tapped_around(
+        ui: &egui::Ui,
+        response: &egui::Response,
+        reach: egui::Vec2,
+    ) -> bool {
+        if !Self::of(ui.ctx()).touch {
+            return false;
+        }
+        let rect =
+            egui::Rect::from_center_size(response.rect.center(), response.rect.size().max(reach));
+        let around = ui.interact(rect, response.id.with("touch_reach"), egui::Sense::CLICK);
+        crate::a11y::hide_from_screen_readers(ui, around.id);
+        around.clicked()
+    }
+
+    /// A glyph-only button's least size: square at the control height under
+    /// Touch, egui's own sizing under Compact.
+    pub(crate) fn glyph(&self) -> egui::Vec2 {
+        if self.touch {
+            egui::Vec2::splat(self.control)
+        } else {
+            egui::Vec2::ZERO
+        }
+    }
+}
+
+fn sizing_id() -> egui::Id {
+    egui::Id::unique("dmm-density-sizing")
+}
+
+/// Raise egui's small text style to the 11 pt floor, size the controls for
+/// `density` at `zoom`, keep the compact corners, let a popup be measured as
+/// tall as the window, and keep egui's theme off the native window.
+///
+/// Compact keeps the button spacing egui had before 0.37. Touch pads framed
+/// controls out to the control height rather than raising
+/// `interact_size.y`, which floors every horizontal row and grid cell —
+/// labels included — so the text between controls keeps its density.
 ///
 /// `all_styles_mut`, not `style_mut`: egui keeps a separate `Style` per
 /// theme, and `apply_theme` pins egui's theme with `set_theme` and then
@@ -90,21 +233,49 @@ fn compact_corners(visuals: &mut egui::Visuals) {
 /// window's. A window given a theme stops reporting the OS's theme changes
 /// on Windows and macOS, so `system_theme` would go stale and the System
 /// setting would stop following the OS.
-pub(super) fn install_styles(ctx: &egui::Context) {
-    ctx.options_mut(|o| o.sync_window_theme = false);
+pub(super) fn install_styles(ctx: &egui::Context, density: Density, zoom: f32) {
+    let sizing = Sizing::new(density, zoom);
+    // Compact keeps egui's own checkbox, row gap and click distance; Touch
+    // only ever raises them.
+    let egui_spacing = egui::style::Spacing::default();
+    let egui_click_dist = egui::InputOptions::default().max_click_dist;
+    let (padding, checkbox, click_dist) = if sizing.touch {
+        (
+            egui::vec2(
+                (TOUCH_PADDING_X / zoom).max(BUTTON_PADDING.x).round(),
+                ((sizing.control - BUTTON_TEXT_ROW) / 2.0)
+                    .max(BUTTON_PADDING.y)
+                    .round(),
+            ),
+            (TOUCH_CHECKBOX / zoom).max(egui_spacing.icon_width),
+            (TOUCH_CLICK_DIST / zoom).max(egui_click_dist),
+        )
+    } else {
+        (BUTTON_PADDING, egui_spacing.icon_width, egui_click_dist)
+    };
+    ctx.options_mut(|o| {
+        o.sync_window_theme = false;
+        o.input_options.max_click_dist = click_dist;
+    });
     ctx.all_styles_mut(|style| {
         style.text_styles.insert(
             egui::TextStyle::Small,
             egui::FontId::new(SMALL_TEXT_SIZE, egui::FontFamily::Proportional),
         );
-        style.spacing.button_padding = BUTTON_PADDING;
+        style.spacing.button_padding = padding;
         style.spacing.interact_size.y = ROW_HEIGHT;
+        style.spacing.icon_width = checkbox;
         // egui measures a popup's first frame in this size and keeps it, so
         // at its 400 pt the **Device** list's scroll area never grew past
         // that, whatever height it asked for. The window still bounds it.
         style.spacing.default_area_size.y = POPUP_MEASURE_HEIGHT;
+        // The reading panel's edge: egui's reach for a mouse, a finger's
+        // under Touch.
+        style.interaction.resize_grab_radius_side =
+            sizing.grab(egui::style::Interaction::default().resize_grab_radius_side);
         compact_corners(&mut style.visuals);
     });
+    ctx.data_mut(|d| d.insert_temp(sizing_id(), sizing));
 }
 
 /// Font definitions with the monospace face added to the proportional
@@ -446,6 +617,27 @@ impl App {
         if (ctx.zoom_factor() - zoom).abs() > 0.001 {
             ctx.set_zoom_factor(zoom);
         }
+    }
+
+    /// Size the controls for the density in effect. Touch sizes its targets
+    /// against the zoom, so a zoom change re-installs them; Compact does not
+    /// depend on it. Only on a change: the styles are egui's to keep.
+    pub(super) fn apply_density(&mut self, ctx: &egui::Context) {
+        let density = self.settings.density();
+        let zoom_pct = match density {
+            Density::Compact => 100,
+            Density::Touch => self.settings.zoom_pct,
+        };
+        if self.applied.density == Some((density, zoom_pct)) {
+            return;
+        }
+        install_styles(ctx, density, zoom_pct as f32 / 100.0);
+        // Rows that wrap or fit by last frame's widths (the top bar, grids)
+        // would lay out once at the old sizes.
+        if self.applied.density.is_some() {
+            ctx.request_discard("density changed");
+        }
+        self.applied.density = Some((density, zoom_pct));
     }
 
     pub(super) fn zoom_in(&mut self) {
@@ -980,13 +1172,111 @@ mod tests {
         }
     }
 
+    /// The heights a button and a chip come to on `ctx` at `zoom`, in
+    /// native points (dp on Android): the zoom applies from the next frame,
+    /// so the second of two frames is the one measured.
+    fn control_heights(ctx: &egui::Context, zoom: f32) -> [f32; 2] {
+        ctx.set_zoom_factor(zoom);
+        let mut heights = [0.0; 2];
+        for _ in 0..2 {
+            headless_run(ctx, egui::RawInput::default(), |ui| {
+                heights = [
+                    ui.button("HOLD").rect.height() * zoom,
+                    ui.selectable_label(true, "1m").rect.height() * zoom,
+                ];
+            });
+        }
+        heights
+    }
+
+    /// Touch's controls keep a finger's size whatever the zoom, down to the
+    /// point where zoomed text makes them bigger anyway; Compact's scale
+    /// with the zoom as they always did.
+    #[test]
+    fn touch_controls_keep_their_size_across_zoom_levels() {
+        for zoom in [0.67, 1.0, 1.5] {
+            let ctx = egui::Context::default();
+            install_styles(&ctx, Density::Touch, zoom);
+            let floor = TOUCH_CONTROL.max(ROW_HEIGHT * zoom);
+            for height in control_heights(&ctx, zoom) {
+                assert!(
+                    (height - floor).abs() <= 1.5,
+                    "zoom {zoom}: a control is {height} dp, not {floor}"
+                );
+            }
+            let glyph = Sizing::of(&ctx).glyph() * zoom;
+            assert!(
+                (glyph.x - TOUCH_CONTROL).abs() < 0.01,
+                "zoom {zoom}: {glyph:?}"
+            );
+        }
+        let ctx = egui::Context::default();
+        install_styles(&ctx, Density::Compact, 1.5);
+        for height in control_heights(&ctx, 1.5) {
+            assert!(
+                (height - ROW_HEIGHT * 1.5).abs() <= 1.5,
+                "Compact at 150%: {height}"
+            );
+        }
+        assert_eq!(Sizing::of(&ctx).glyph(), egui::Vec2::ZERO);
+    }
+
+    /// Back to Compact gives egui's own spacing and click distance back,
+    /// not Touch's.
+    #[test]
+    fn compact_after_touch_restores_the_mouse_sizes() {
+        let ctx = egui::Context::default();
+        install_styles(&ctx, Density::Touch, 1.0);
+        install_styles(&ctx, Density::Compact, 1.0);
+        let style = ctx.global_style();
+        assert_eq!(style.spacing.button_padding, BUTTON_PADDING);
+        assert_eq!(
+            style.spacing.icon_width,
+            egui::style::Spacing::default().icon_width
+        );
+        assert_eq!(
+            style.interaction.resize_grab_radius_side,
+            egui::style::Interaction::default().resize_grab_radius_side
+        );
+        assert_eq!(
+            ctx.options(|o| o.input_options.max_click_dist),
+            egui::InputOptions::default().max_click_dist
+        );
+        assert_eq!(Sizing::of(&ctx), Sizing::COMPACT);
+    }
+
+    /// Touch sizes its targets against the zoom, so a zoom step installs
+    /// them again; under Compact the zoom leaves the styles alone.
+    #[test]
+    fn a_zoom_change_resizes_touch_controls_only() {
+        let ctx = crate::app::styled_context();
+        let mut app = App::from_settings(
+            Settings {
+                density: Some(Density::Touch),
+                ..Settings::default()
+            },
+            dmm_lib::Clock::real(),
+        );
+        app.apply_density(&ctx);
+        let at_100 = Sizing::of(&ctx).control;
+        app.settings.zoom_pct = 150;
+        app.apply_density(&ctx);
+        assert!((Sizing::of(&ctx).control * 1.5 - at_100).abs() < 0.01);
+        app.settings.density = Some(Density::Compact);
+        app.apply_density(&ctx);
+        app.settings.zoom_pct = 200;
+        app.apply_density(&ctx);
+        assert_eq!(Sizing::of(&ctx), Sizing::COMPACT);
+        assert_eq!(app.applied.density, Some((Density::Compact, 100)));
+    }
+
     /// Both themes, because egui keeps a `Style` per theme and `apply_theme`
     /// swaps between them: raising only the active one would leave `.small()`
     /// at egui's 9 pt after the first theme switch.
     #[test]
     fn small_text_style_meets_the_font_size_floor_in_both_themes() {
         let ctx = egui::Context::default();
-        install_styles(&ctx);
+        install_styles(&ctx, Density::Compact, 1.0);
         for theme in [egui::Theme::Dark, egui::Theme::Light] {
             let style = ctx.style_of(theme);
             assert_eq!(

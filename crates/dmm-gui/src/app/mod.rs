@@ -59,6 +59,7 @@ use crate::settings::{
     DeferredSave, SIDE_PANEL_MAX_WIDTH, SIDE_PANEL_MIN_WIDTH, SaveDue, Settings, ThemeChoice,
     ThemeMode,
 };
+pub(crate) use appearance::Sizing;
 use appearance::{UiColorKey, font_definitions, frame_panel, install_styles, on_frame};
 use capture::Capture;
 use connection::RemoteCommand;
@@ -182,6 +183,8 @@ struct AppliedChrome {
     /// Window size and grow target of the last request sent while the window
     /// was below its minimum.
     grow_request: Option<(egui::Vec2, egui::Vec2)>,
+    /// Density and the zoom (in percent) its controls were sized at.
+    density: Option<(crate::settings::Density, u32)>,
 }
 
 /// The choice lists the readout dropdowns draw, one per setting the
@@ -579,7 +582,7 @@ impl App {
         cli: crate::CliOverrides,
         l10n: Arc<dmm_shared::l10n::Localizer>,
     ) -> Self {
-        install_styles(&cc.egui_ctx);
+        install_styles(&cc.egui_ctx, crate::settings::Density::Compact, 1.0);
         cc.egui_ctx.set_fonts(font_definitions());
         // Asked once, here: the display handle says which backend the window
         // actually got, where `WAYLAND_DISPLAY` only says which one is on
@@ -1043,6 +1046,7 @@ impl App {
                 screen_only_note: self.screen_only_note_shown(),
                 language: self.l10n.language().id,
                 stats_widths: self.stats_widths.fit_key(),
+                control_height: (Sizing::of(ctx).control * 100.0) as u32,
             };
             self.meter_fit.keep_line_room(&mut fit_inputs, line_drawn);
             let needs_recalc = self.meter_fit.needs_recalc(&fit_inputs);
@@ -1505,6 +1509,7 @@ impl eframe::App for App {
         self.apply_theme(&ctx);
         self.apply_color_overrides(&ctx);
         self.apply_zoom(&ctx);
+        self.apply_density(&ctx);
         self.handle_keyboard_shortcuts(&ctx);
         self.handle_shortcut_help_keys(&ctx);
         // Shortcuts first: `N` marks the reading the user saw, not one that
@@ -1589,7 +1594,15 @@ impl eframe::App for App {
 pub(crate) fn styled_context() -> egui::Context {
     let ctx = egui::Context::default();
     ctx.set_os(egui::os::OperatingSystem::Nix);
-    appearance::install_styles(&ctx);
+    appearance::install_styles(&ctx, crate::settings::Density::Compact, 1.0);
+    ctx
+}
+
+/// [`styled_context`] under Touch, at 100% zoom.
+#[cfg(test)]
+pub(crate) fn styled_context_touch() -> egui::Context {
+    let ctx = styled_context();
+    appearance::install_styles(&ctx, crate::settings::Density::Touch, 1.0);
     ctx
 }
 

@@ -144,7 +144,13 @@ pub(super) fn divider(ui: &Ui, l10n: &Localizer, rect: Rect, placement: Placemen
         ),
     };
     let id = ui.scope_id().with("histogram_resize");
-    let response = ui.interact(rect, id, Sense::drag()).a11y_label(&label);
+    // A finger takes the divider from a little either side of it.
+    let reach = crate::app::Sizing::of(ui.ctx()).grab(DIVIDER / 2.0) - DIVIDER / 2.0;
+    let grab = match placement.dock {
+        Dock::Side => rect.expand2(egui::vec2(reach, 0.0)),
+        Dock::Below => rect.expand2(egui::vec2(0.0, reach)),
+    };
+    let response = ui.interact(grab, id, Sense::drag()).a11y_label(&label);
     let keys = crate::a11y::arrow_resize(ui.ctx(), id, axis, 10.0);
     let growth = response.drag_delta().dot(toward_plot) + keys * key_growth;
     crate::a11y::paint_focus_ring(ui, &response);

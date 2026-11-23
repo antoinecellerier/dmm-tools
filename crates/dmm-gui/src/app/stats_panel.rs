@@ -1108,12 +1108,23 @@ impl App {
             ui.spacing_mut().item_spacing.x = 0.0;
             let first = label(ui, before, a11y);
             ui.add_space((reset_x - first.rect.width()).max(0.0));
-            self.reset_button(ui, m, first.rect.height());
+            let reset = self.reset_button(ui, m, first.rect.height());
             if !row.job.text.is_empty() {
                 // What a screen reader needs of the line is in the first
                 // galley's name.
                 let rest = label(ui, row.job, "");
                 crate::a11y::hide_from_screen_readers(ui, rest.id);
+            }
+            // Under Touch a finger takes Reset from a control's width, but
+            // only up to the gaps between the lines: a reach into the lines
+            // around it would start the statistics over on a tap meant for
+            // them.
+            let reach = egui::vec2(
+                crate::app::Sizing::of(ui.ctx()).control,
+                reset.rect.height() + ui.spacing().item_spacing.y,
+            );
+            if reset.clicked() || crate::app::Sizing::tapped_around(ui, &reset, reach) {
+                self.reset_session();
             }
         });
     }
@@ -1489,30 +1500,30 @@ impl App {
     /// beside the figures rather than one of them, and fits the line of the
     /// groups' names at any width the column layout takes. Named for a
     /// screen reader.
-    fn reset_button(&mut self, ui: &mut Ui, m: &Metrics, height: f32) {
+    fn reset_button(&mut self, ui: &mut Ui, m: &Metrics, height: f32) -> egui::Response {
         let weak = ui.visuals().weak_text_color();
         let name = tr!(self.l10n, "stats-reset").into_owned();
         // The line's height: a button any taller would push the line apart.
         let size = egui::vec2(m.reset_w, height);
-        if ui
-            .add_sized(
-                size,
-                egui::Button::new(
-                    egui::RichText::new(RESET_ICON)
-                        .font(m.icon.clone())
-                        .color(weak),
-                )
-                .small()
-                .frame_when_inactive(false),
+        ui.add_sized(
+            size,
+            egui::Button::new(
+                egui::RichText::new(RESET_ICON)
+                    .font(m.icon.clone())
+                    .color(weak),
             )
-            .on_hover_text(tr!(self.l10n, "stats-reset.hover").as_ref())
-            .a11y_label(&name)
-            .clicked()
-        {
-            self.capture.session.reset();
-            if let Some(alarm) = &mut self.alarm {
-                alarm.clear_counts();
-            }
+            .small()
+            .frame_when_inactive(false),
+        )
+        .on_hover_text(tr!(self.l10n, "stats-reset.hover").as_ref())
+        .a11y_label(&name)
+    }
+
+    /// Start the session's statistics over, and the alarm's counts with them.
+    fn reset_session(&mut self) {
+        self.capture.session.reset();
+        if let Some(alarm) = &mut self.alarm {
+            alarm.clear_counts();
         }
     }
 

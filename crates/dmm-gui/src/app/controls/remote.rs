@@ -9,7 +9,7 @@ use eframe::egui::{self, RichText, Ui};
 use crate::a11y::ResponseA11yExt;
 use crate::text_marks::{Judge, show_judged};
 
-use crate::app::App;
+use crate::app::{App, Sizing};
 
 /// A context key's tooltip: a press of the key, or the key's own words when
 /// that wouldn't be true.
@@ -80,6 +80,11 @@ pub(in crate::app) fn button_width(ui: &Ui, text: RichText) -> f32 {
         + 2.0 * ui.spacing().button_padding.x
 }
 
+/// Width of a glyph-only button showing `text`: square under Touch.
+fn glyph_width(ui: &Ui, text: RichText) -> f32 {
+    button_width(ui, text).max(Sizing::of(ui.ctx()).glyph().x)
+}
+
 /// The corners of a button and of the one `joined` to it, drawn as one shape:
 /// square where they meet across [`SPLIT_GAP`].
 fn split_corners(ui: &Ui, joined: bool) -> (egui::CornerRadius, egui::CornerRadius) {
@@ -144,7 +149,7 @@ impl SplitChip<'_> {
     pub(in crate::app) fn width(&self, ui: &Ui, font_size: f32) -> f32 {
         button_width(ui, self.body_label(font_size))
             + self.open.map_or(0.0, |open| {
-                SPLIT_GAP + button_width(ui, Self::caret_label(open, font_size))
+                split_gap(ui) + glyph_width(ui, Self::caret_label(open, font_size))
             })
     }
 
@@ -159,7 +164,7 @@ impl SplitChip<'_> {
         // caret follows it, and the caret, last, the row's own gap.
         let gap = ui.spacing().item_spacing.x;
         if self.open.is_some() {
-            ui.spacing_mut().item_spacing.x = SPLIT_GAP;
+            ui.spacing_mut().item_spacing.x = split_gap(ui);
         }
         // `selected` puts the state in the widget info for AT users, whom
         // the fill alone doesn't reach; the frame stays when off so the
@@ -178,6 +183,7 @@ impl SplitChip<'_> {
             let caret = ui
                 .add(
                     egui::Button::new(Self::caret_label(open, font_size))
+                        .min_size(Sizing::of(ui.ctx()).glyph())
                         .selected(self.active)
                         .corner_radius(caret_radius),
                 )
@@ -200,6 +206,11 @@ impl SplitChip<'_> {
 /// The hairline between a split chip's body and its caret, and between a
 /// MAX/MIN or PEAK button and its "x".
 const SPLIT_GAP: f32 = 1.0;
+/// The gap between a split chip's halves at the density in force: under
+/// Touch wide enough that the two read as two targets for a finger.
+fn split_gap(ui: &Ui) -> f32 {
+    Sizing::of(ui.ctx()).split(SPLIT_GAP)
+}
 
 /// Width of each field in a split chip's row, in points before zoom.
 const FIELD_WIDTH: f32 = 50.0;
@@ -295,7 +306,7 @@ impl App {
         use crate::app::ConnectionState;
 
         let font_size = 12.0 * scale;
-        let spacing = 3.0 * scale;
+        let spacing = Sizing::of(ui.ctx()).gap(3.0) * scale;
 
         // Only show controls when connected with measurement data and supported
         // commands, in a session that draws them.
@@ -416,14 +427,15 @@ impl App {
                     // The two wrap as one: a joined "x" alone on a line would read
                     // as belonging to nothing. Wider than a whole line, a new line
                     // wouldn't help, and would leave an empty one above them.
-                    let width = button_width(ui, body) + SPLIT_GAP + button_width(ui, exit.clone());
+                    let width =
+                        button_width(ui, body) + split_gap(ui) + glyph_width(ui, exit.clone());
                     if width > ui.available_size_before_wrap().x && width <= ui.max_rect().width() {
                         ui.end_row();
                     }
                     button = button.corner_radius(body_radius);
                     // As in `SplitChip::show`: the hairline only when the "x"
                     // follows, and the "x", last, takes the row's own gap.
-                    ui.spacing_mut().item_spacing.x = SPLIT_GAP;
+                    ui.spacing_mut().item_spacing.x = split_gap(ui);
                 }
                 let resp = ui
                     .add(button)
@@ -437,6 +449,7 @@ impl App {
                     let x_resp = ui
                         .add(
                             egui::Button::new(exit)
+                                .min_size(Sizing::of(ui.ctx()).glyph())
                                 .selected(true)
                                 .corner_radius(exit_radius),
                         )

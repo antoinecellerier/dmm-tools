@@ -17,6 +17,7 @@ use crate::text_marks::{self, MarkStyle, TextMark};
 
 /// The cursor readout's text size: the floor `.claude/rules/gui.md` sets.
 const READOUT_SIZE: f32 = 11.0;
+use crate::app::Sizing;
 use crate::theme::ThemeColors;
 
 /// Faint container for one labelled toolbar group (**Plot:**, **Show:**).
@@ -352,9 +353,18 @@ impl Graph {
     /// view → what is plotted → what is drawn over it. Each uses
     /// `horizontal_wrapped` so items wrap instead of clipping.
     pub fn show_toolbar(&mut self, ui: &mut Ui, l10n: &Localizer, tc: &ThemeColors) {
+        // Captions ("Plot:") and labels level with the chips beside them;
+        // the plot below keeps the column's own row height.
+        let row = ui.spacing().interact_size.y;
+        Sizing::rows_fit_controls(ui);
+        self.show_toolbar_rows(ui, l10n, tc);
+        ui.spacing_mut().interact_size.y = row;
+    }
+
+    fn show_toolbar_rows(&mut self, ui: &mut Ui, l10n: &Localizer, tc: &ThemeColors) {
         // Row 1
         ui.horizontal_wrapped(|ui| {
-            ui.spacing_mut().item_spacing.x = 2.0;
+            ui.spacing_mut().item_spacing.x = Sizing::of(ui.ctx()).gap(2.0);
             self.show_view_row(ui, l10n, tc);
         });
 
@@ -362,7 +372,7 @@ impl Graph {
         // entirely for single-display meters, which keep the two-row toolbar.
         if self.has_series_row() {
             ui.horizontal_wrapped(|ui| {
-                ui.spacing_mut().item_spacing.x = 2.0;
+                ui.spacing_mut().item_spacing.x = Sizing::of(ui.ctx()).gap(2.0);
                 self.show_series_selector(ui, l10n, tc);
                 self.show_overlay_toggles(ui, l10n, tc);
             });
@@ -370,7 +380,7 @@ impl Graph {
 
         // Row 3
         ui.horizontal_wrapped(|ui| {
-            ui.spacing_mut().item_spacing.x = 2.0;
+            ui.spacing_mut().item_spacing.x = Sizing::of(ui.ctx()).gap(2.0);
             self.show_analysis_row(ui, l10n, tc);
         });
     }

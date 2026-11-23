@@ -10,6 +10,7 @@ use super::time::{format_time_label, nice_time_interval};
 use super::view::pad_range;
 use super::{GapKind, Graph};
 use crate::a11y::ResponseA11yExt;
+use crate::app::Sizing;
 use crate::markers::Markers;
 use crate::theme::ThemeColors;
 
@@ -308,12 +309,14 @@ pub(super) enum Edge {
 /// positions from that same frame and stays consistent even if the brackets
 /// shift later (live data arriving, resize in progress). When the brackets
 /// are close together the nearest edge wins.
-pub(super) fn drag_target(origin_x: f32, vp_left: f32, vp_right: f32) -> MinimapDrag {
+///
+/// `reach` is how far either side of a bracket takes it ([`handle_reach`]).
+pub(super) fn drag_target(origin_x: f32, vp_left: f32, vp_right: f32, reach: f32) -> MinimapDrag {
     let dl = (origin_x - vp_left).abs();
     let dr = (origin_x - vp_right).abs();
-    if dl <= HANDLE_HALF && dl <= dr {
+    if dl <= reach && dl <= dr {
         MinimapDrag::ResizeLeft
-    } else if dr <= HANDLE_HALF {
+    } else if dr <= reach {
         MinimapDrag::ResizeRight
     } else {
         MinimapDrag::Pan
@@ -321,8 +324,17 @@ pub(super) fn drag_target(origin_x: f32, vp_left: f32, vp_right: f32) -> Minimap
 }
 
 /// Whether the pointer is close enough to a bracket for the resize cursor.
-pub(super) fn near_a_bracket(x: f32, vp_left: f32, vp_right: f32) -> bool {
-    (x - vp_left).abs() <= HANDLE_HALF || (x - vp_right).abs() <= HANDLE_HALF
+pub(super) fn near_a_bracket(x: f32, vp_left: f32, vp_right: f32, reach: f32) -> bool {
+    (x - vp_left).abs() <= reach || (x - vp_right).abs() <= reach
+}
+
+/// How far either side of a bracket a press takes it: wider for a finger,
+/// but never so wide that a narrow window between the brackets loses its
+/// middle third, which pans.
+pub(super) fn handle_reach(sizing: Sizing, vp_left: f32, vp_right: f32) -> f32 {
+    sizing
+        .grab(HANDLE_HALF)
+        .min(((vp_right - vp_left) / 3.0).max(HANDLE_HALF))
 }
 
 /// The view window after dragging one bracket by `drag_px`.
@@ -584,6 +596,7 @@ impl Graph {
         );
 
         // Handle click/drag navigation with bracket resize handles.
+        let reach = handle_reach(Sizing::of(ui.ctx()), vp_left, vp_right);
         //
         // Cursor feedback: force resize icon during active resize drag,
         // otherwise show it on hover near bracket edges.
@@ -593,7 +606,7 @@ impl Graph {
         ) {
             ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeHorizontal);
         } else if let Some(hover_pos) = pointer_response.hover_pos()
-            && near_a_bracket(hover_pos.x, vp_left, vp_right)
+            && near_a_bracket(hover_pos.x, vp_left, vp_right, reach)
         {
             ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeHorizontal);
         }
@@ -603,7 +616,7 @@ impl Graph {
             && pointer_response.is_pointer_button_down_on()
             && let Some(origin) = ui.input(|i| i.pointer.press_origin())
         {
-            self.minimap_drag = drag_target(origin.x, vp_left, vp_right);
+            self.minimap_drag = drag_target(origin.x, vp_left, vp_right, reach);
         }
 
         // Apply drag — resize uses per-frame delta, pan uses absolute position.
@@ -839,17 +852,31 @@ mod tests {
 
     #[test]
     fn a_press_grabs_the_bracket_it_lands_on_and_pans_elsewhere() {
-        assert!(drag_target(200.0, 200.0, 400.0) == MinimapDrag::ResizeLeft);
-        assert!(drag_target(406.0, 200.0, 400.0) == MinimapDrag::ResizeRight);
-        assert!(drag_target(300.0, 200.0, 400.0) == MinimapDrag::Pan);
+        assert!(drag_target(200.0, 200.0, 400.0, HANDLE_HALF) == MinimapDrag::ResizeLeft);
+        assert!(drag_target(406.0, 200.0, 400.0, HANDLE_HALF) == MinimapDrag::ResizeRight);
+        assert!(drag_target(300.0, 200.0, 400.0, HANDLE_HALF) == MinimapDrag::Pan);
         // Brackets on top of each other: the nearest edge wins, and a tie goes
         // to the left one.
-        assert!(drag_target(203.0, 200.0, 210.0) == MinimapDrag::ResizeLeft);
-        assert!(drag_target(207.0, 200.0, 210.0) == MinimapDrag::ResizeRight);
-        assert!(drag_target(205.0, 200.0, 210.0) == MinimapDrag::ResizeLeft);
+        assert!(drag_target(203.0, 200.0, 210.0, HANDLE_HALF) == MinimapDrag::ResizeLeft);
+        assert!(drag_target(207.0, 200.0, 210.0, HANDLE_HALF) == MinimapDrag::ResizeRight);
+        assert!(drag_target(205.0, 200.0, 210.0, HANDLE_HALF) == MinimapDrag::ResizeLeft);
 
-        assert!(near_a_bracket(408.0, 200.0, 400.0));
-        assert!(!near_a_bracket(300.0, 200.0, 400.0));
+        assert!(near_a_bracket(408.0, 200.0, 400.0, HANDLE_HALF));
+        assert!(!near_a_bracket(300.0, 200.0, 400.0, HANDLE_HALF));
+    }
+
+    /// Under Touch a bracket reaches further, but a narrow window keeps its
+    /// middle third to pan by.
+    #[test]
+    fn a_finger_reaches_further_but_a_narrow_window_still_pans() {
+        let touch = Sizing::of(&crate::app::styled_context_touch());
+        let compact = Sizing::of(&crate::app::styled_context());
+        assert_eq!(handle_reach(compact, 200.0, 400.0), HANDLE_HALF);
+        let wide = handle_reach(touch, 200.0, 400.0);
+        assert!(wide > HANDLE_HALF);
+        assert!(drag_target(200.0 - wide + 0.5, 200.0, 400.0, wide) == MinimapDrag::ResizeLeft);
+        let narrow = handle_reach(touch, 200.0, 230.0);
+        assert!(drag_target(215.0, 200.0, 230.0, narrow) == MinimapDrag::Pan);
     }
 
     #[test]

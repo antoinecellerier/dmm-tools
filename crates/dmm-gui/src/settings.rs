@@ -144,6 +144,14 @@ pub enum GraphLines {
     Solid,
 }
 
+/// How roomy the controls are: Compact fits more on screen, Touch gives
+/// bigger targets for fingers. Text stays as Zoom sets it either way.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Density {
+    Compact,
+    Touch,
+}
+
 /// A color that serializes as a hex string (`"#RRGGBB"` or `"#RRGGBBAA"`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct HexColor(pub Color32);
@@ -413,6 +421,10 @@ pub struct Settings {
     /// UI zoom level as a percentage of the scale of the monitor the window
     /// is on (100 = that monitor's scale).
     pub zoom_pct: u32,
+    /// The density the user picked; `None` until they pick one, so the
+    /// platform's default still applies (see [`Settings::density`]).
+    #[serde(default)]
+    pub density: Option<Density>,
     /// Delay between measurement requests in milliseconds (0 = fastest possible).
     pub sample_interval_ms: u32,
     /// Samples to keep, bounding the graph history and the sample buffer
@@ -555,6 +567,7 @@ impl Default for Settings {
             hide_decorations: false,
             full_screen: false,
             zoom_pct: 100,
+            density: None,
             sample_interval_ms: 0,
             max_samples: DEFAULT_MAX_SAMPLES,
             color_preset: ColorPreset::Default,
@@ -582,6 +595,16 @@ impl Default for Settings {
 }
 
 impl Settings {
+    /// The density in effect: the user's pick, else Touch on Android, where
+    /// a finger is the pointer, and Compact elsewhere.
+    pub(crate) fn density(&self) -> Density {
+        self.density.unwrap_or(if cfg!(target_os = "android") {
+            Density::Touch
+        } else {
+            Density::Compact
+        })
+    }
+
     /// Make `choice` the theme the user picked, for the file too: a mode
     /// sets the named theme aside, and a named theme brings its own mode,
     /// the fallback should its file go. Releases a `--theme` pin.
@@ -1068,6 +1091,23 @@ mod tests {
         assert!(!json.contains("hidden_series"), "{json}");
     }
 
+    /// Until the user picks, Touch on Android and Compact elsewhere; a pick
+    /// holds on either.
+    #[test]
+    fn density_follows_the_platform_until_picked() {
+        let mut s = Settings::default();
+        let platform = if cfg!(target_os = "android") {
+            Density::Touch
+        } else {
+            Density::Compact
+        };
+        assert_eq!(s.density(), platform);
+        for picked in [Density::Compact, Density::Touch] {
+            s.density = Some(picked);
+            assert_eq!(s.density(), picked);
+        }
+    }
+
     #[test]
     fn default_settings() {
         let s = Settings::default();
@@ -1157,6 +1197,7 @@ mod tests {
             hide_decorations: true,
             full_screen: true,
             zoom_pct: 150,
+            density: Some(Density::Touch),
             sample_interval_ms: 500,
             max_samples: 2_000_000,
             color_preset: ColorPreset::HighContrast,
@@ -1186,6 +1227,7 @@ mod tests {
         assert_eq!(deserialized.unknown, s.unknown);
         assert_eq!(deserialized.hidden_series, s.hidden_series);
         assert_eq!(deserialized.graph_lines, GraphLines::Solid);
+        assert_eq!(deserialized.density, Some(Density::Touch));
         assert_eq!(deserialized.theme, ThemeMode::Light);
         assert_eq!(deserialized.named_theme.as_deref(), Some("Desert"));
         assert!(!deserialized.show_graph);
@@ -1234,6 +1276,9 @@ mod tests {
         assert!(s.specs_expanded);
         assert_eq!(s.spec_fields, SpecFields::default());
         assert_eq!(s.zoom_pct, 100);
+        // One written before Density existed never picked one: the
+        // platform's default applies.
+        assert_eq!(s.density, None);
         assert_eq!(s.sample_interval_ms, 0);
         // One written before readings were paced announces every 5 s, not
         // never (a missing field is not a `null`).
