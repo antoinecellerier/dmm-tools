@@ -1303,6 +1303,7 @@ impl App {
                 // Center panel for graph + recording
                 let graph = egui::CentralPanel::default().show(ui, |ui| self.show_graph_column(ui));
                 graph.response.a11y_role(egui::accesskit::Role::Main);
+                Self::reading_panel_edge_on_top(ui, reading_panel.response.rect);
                 Some(layout::Columns {
                     reading: reading_panel.inner,
                     graph: Some(graph.inner),

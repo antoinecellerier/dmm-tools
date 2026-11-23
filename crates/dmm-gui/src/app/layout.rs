@@ -251,6 +251,27 @@ impl App {
     /// Left/Right to resize the panel and paints a focus ring, consistent
     /// with the recording-panel divider.
     ///
+    /// The reading panel's edge, lit again over the graph column while it is
+    /// hovered or held. egui lights it under the panels drawn after it
+    /// (its TODO on emilk/egui#1516), and the graph column covers half the
+    /// line: half as heavy as the recording and histogram dividers. Called
+    /// once the graph column is drawn; the stroke and place are egui's.
+    pub(super) fn reading_panel_edge_on_top(ui: &Ui, panel_rect: egui::Rect) {
+        let Some(edge) = ui.ctx().read_response(reading_panel_resize_id(ui)) else {
+            return;
+        };
+        let widgets = &ui.visuals().widgets;
+        let stroke = if edge.dragged() {
+            widgets.active.fg_stroke
+        } else if edge.hovered() {
+            widgets.hovered.fg_stroke
+        } else {
+            return;
+        };
+        let x = panel_rect.right() - 0.5 * stroke.width;
+        ui.painter().vline(x, panel_rect.y_range(), stroke);
+    }
+
     /// `ui` is the one the reading panel is shown in, whose id it is under;
     /// `panel_rect` is the panel's rect this frame.
     pub(super) fn reading_panel_resize_a11y(&self, ui: &Ui, panel_rect: egui::Rect) {
