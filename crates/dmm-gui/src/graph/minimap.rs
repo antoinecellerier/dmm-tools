@@ -13,8 +13,9 @@ use crate::a11y::ResponseA11yExt;
 use crate::markers::Markers;
 use crate::theme::ThemeColors;
 
-/// Height of the minimap's trace, in logical pixels.
-const MINIMAP_HEIGHT: f32 = 60.0;
+/// Height of the minimap's trace, in logical pixels, in a graph with room
+/// for it: a short graph draws it lower, see `share_heights`.
+pub(super) const TRACE_HEIGHT: f32 = 60.0;
 
 /// Height of the time labels under the trace.
 const LABEL_HEIGHT: f32 = 14.0;
@@ -22,9 +23,12 @@ const LABEL_HEIGHT: f32 = 14.0;
 /// Room around the trace for the bracket strokes at its edges.
 const MARGIN: f32 = 4.0;
 
-/// What a drawn minimap takes of the graph's height: the trace, its labels
-/// and the margin above and below.
-pub(super) const STRIP_HEIGHT: f32 = MINIMAP_HEIGHT + LABEL_HEIGHT + MARGIN * 2.0;
+/// What the minimap takes of the graph's height around a trace `trace`
+/// high, drawn or empty: the trace, its labels and the margin above and
+/// below.
+pub(super) const fn strip_height(trace: f32) -> f32 {
+    trace + LABEL_HEIGHT + MARGIN * 2.0
+}
 
 /// Half-width of a bracket's resize hit zone, in pixels.
 const HANDLE_HALF: f32 = 8.0;
@@ -485,33 +489,35 @@ fn paint_time_axis(
 }
 
 impl Graph {
-    /// Render the minimap showing full history with viewport indicator.
+    /// Render the minimap showing full history with viewport indicator, its
+    /// trace `trace_height` high. With nothing to draw it takes the same
+    /// height, so what is under it stays put when the trace appears.
     pub fn show_minimap(
         &mut self,
         ui: &mut Ui,
         l10n: &Localizer,
         tc: &ThemeColors,
         markers: &Markers,
+        trace_height: f32,
     ) {
+        let size = egui::vec2(ui.available_width(), strip_height(trace_height));
         if self.history.len() < 2 {
-            ui.allocate_space(egui::vec2(ui.available_width(), STRIP_HEIGHT));
+            ui.allocate_space(size);
             return;
         }
 
         let (data_min, data_max) = self.data_time_range();
         let (view_min, view_max) = self.view_bounds();
 
-        let (full_rect, pointer_response) = ui.allocate_exact_size(
-            egui::vec2(ui.available_width(), STRIP_HEIGHT),
-            egui::Sense::click_and_drag(),
-        );
+        let (full_rect, pointer_response) =
+            ui.allocate_exact_size(size, egui::Sense::click_and_drag());
         let pointer_response = pointer_response
             .on_hover_text(tr!(l10n, "graph-minimap.hover"))
             .a11y_label(&tr!(l10n, "graph-minimap.a11y"));
         // Inset the plot area so brackets at edges have room to render
         let rect = egui::Rect::from_min_size(
             egui::pos2(full_rect.left() + MARGIN, full_rect.top() + MARGIN),
-            egui::vec2(full_rect.width() - MARGIN * 2.0, MINIMAP_HEIGHT),
+            egui::vec2(full_rect.width() - MARGIN * 2.0, trace_height),
         );
 
         // Use full_rect painter so nothing gets clipped
@@ -710,7 +716,7 @@ impl Graph {
         // Deliberately the *auto* range, not the main plot's: a pinned Y range
         // (a Shift-drag box zoom, or a user-entered fixed range) is chosen to
         // frame a detail of the main view, and scaling full history by it puts
-        // most points far outside this 60px strip. They clip to a flat line
+        // most points far outside this low strip. They clip to a flat line
         // along the edges and overdraw the time axis below — the overview the
         // minimap exists to give disappears exactly when zooming in makes it
         // most useful.

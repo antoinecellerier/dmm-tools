@@ -1,7 +1,7 @@
 //! The minimap bucket level.
 
 use super::*;
-use crate::graph::minimap::{decimate_columns, level_polyline};
+use crate::graph::minimap::{TRACE_HEIGHT, decimate_columns, level_polyline};
 
 /// A deterministic LCG. The level's contract — appending equals rebuilding —
 /// only shows up over a long, messy stream, and a flaky one would be useless.
@@ -389,11 +389,12 @@ fn push_and_frame_cost_do_not_scale_with_history() {
 }
 
 /// The graph keeps the strip's height under the plot whether or not there is
-/// anything to draw in it, so a strip with no samples must take as much: a
-/// shorter one lets everything below it sit higher until the trace appears.
+/// anything to draw in it, so a strip with no samples must take as much, at
+/// every height its trace is given: a shorter one lets everything below it
+/// sit higher until the trace appears.
 #[test]
 fn an_empty_minimap_takes_the_room_of_a_drawn_one() {
-    fn strip_height(g: &mut Graph) -> f32 {
+    fn strip_height(g: &mut Graph, trace: f32) -> f32 {
         let ctx = crate::app::styled_context();
         let tc = ThemeColors::new(true, ColorPreset::Default, &PaletteOverrides::default());
         let mut height = 0.0;
@@ -404,15 +405,284 @@ fn an_empty_minimap_takes_the_room_of_a_drawn_one() {
                 &crate::l10n::english(),
                 &tc,
                 &crate::markers::Markers::default(),
+                trace,
             );
-            height = ui.cursor().top() - top;
+            height = ui.min_rect().bottom() - top;
         });
         height
     }
 
-    let empty = strip_height(&mut Graph::new());
-    let drawn = strip_height(&mut graph_with_a_minute_of_data());
-    assert_eq!(empty, drawn, "empty strip vs one with a trace");
+    for trace in [TRACE_HEIGHT, 47.5, 35.0] {
+        let empty = strip_height(&mut Graph::new(), trace);
+        let drawn = strip_height(&mut graph_with_a_minute_of_data(), trace);
+        assert_eq!(empty, drawn, "empty strip vs one with a {trace} trace");
+        let whole = crate::graph::minimap::strip_height(trace);
+        assert!((drawn - whole).abs() < 0.1, "{drawn} of {whole}");
+    }
+}
+
+/// With room for both, the minimap's trace keeps its height and the plot
+/// takes the rest; with less, the trace takes a third and the plot two. The
+/// two rules give the same heights where they meet, and the two heights are
+/// always the room they were given.
+#[test]
+fn a_short_graph_shares_its_room_two_to_one() {
+    assert_eq!(share_heights(180.0), (120.0, TRACE_HEIGHT));
+    assert_eq!(share_heights(105.0), (70.0, 35.0));
+    assert_eq!(share_heights(150.0), (100.0, 50.0));
+    assert_eq!(share_heights(181.0), (121.0, TRACE_HEIGHT));
+    assert_eq!(share_heights(600.0), (540.0, TRACE_HEIGHT));
+
+    let mut before = share_heights(60.0);
+    let mut room = 60.0_f32;
+    while room < 400.0 {
+        let (body, trace) = share_heights(room);
+        assert!(
+            (body + trace - room).abs() < 1e-3,
+            "{room}: {body} + {trace}"
+        );
+        if room < 180.0 {
+            assert!((body - 2.0 * trace).abs() < 1e-3, "{room}: {body}, {trace}");
+        } else {
+            assert_eq!(trace, TRACE_HEIGHT, "{room}");
+        }
+        // A quarter point of room moves neither by more than that.
+        assert!((0.0..=0.26).contains(&(body - before.0)), "{room}");
+        assert!((0.0..=0.26).contains(&(trace - before.1)), "{room}");
+        before = (body, trace);
+        room += 0.25;
+    }
+}
+
+/// The plot's and the trace's heights in a graph: with room, what is left
+/// over a full minimap and the histogram's band; at the least the graph is
+/// given, the same total as a 60-point plot over a full minimap took, shared
+/// two to one. The band's room comes out of the plot's and trace's, not the
+/// other way round.
+#[test]
+fn the_plot_and_trace_take_what_the_band_and_the_gaps_leave() {
+    const TIME_ROW: f32 = 15.0;
+    let fixed = under_plot(0.0);
+    assert_eq!(under_plot(TRACE_HEIGHT), fixed + TRACE_HEIGHT);
+
+    // Room for both: the plot over a full minimap.
+    for (height, band) in [(400.0, 0.0), (400.0, 56.0), (fixed + 195.0, 0.0)] {
+        let (plot, trace) = plot_and_trace_heights(height, band, TIME_ROW);
+        assert_eq!(trace, TRACE_HEIGHT, "{height}, {band}");
+        assert_eq!(plot, height - band - under_plot(TRACE_HEIGHT));
+    }
+    // Less: two to one between the plot's body and the trace.
+    let (plot, trace) = plot_and_trace_heights(fixed + 165.0, 0.0, TIME_ROW);
+    assert_eq!((plot, trace), (100.0 + TIME_ROW, 50.0));
+    let (plot, trace) = plot_and_trace_heights(fixed + 165.0 + 56.0, 56.0, TIME_ROW);
+    assert_eq!((plot, trace), (100.0 + TIME_ROW, 50.0));
+    // The floor, however little the graph is given.
+    for height in [0.0, 100.0, fixed + MIN_PLOT_AND_TRACE] {
+        let (plot, trace) = plot_and_trace_heights(height, 0.0, TIME_ROW);
+        assert_eq!((plot, trace), (70.0 + TIME_ROW, 35.0), "{height}");
+        assert_eq!(plot + trace, MIN_PLOT_HEIGHT + TRACE_HEIGHT);
+    }
+}
+
+/// What a frame of the whole graph drew in a `width` x `height` area: the
+/// plot's body, the minimap's strip when there is a trace in it, and where
+/// the graph ended.
+struct Column {
+    body: egui::Rect,
+    strip: Option<egui::Rect>,
+    bottom: f32,
+}
+
+fn column(g: &mut Graph, ctx: &egui::Context, width: f32, height: f32) -> Column {
+    let tc = ThemeColors::new(true, ColorPreset::Default, &PaletteOverrides::default());
+    let markers = crate::markers::Markers::default();
+    let screen = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(width, height + 100.0));
+    let mut bottom = 0.0;
+    let mut out = None;
+    // Twice: the plot's axes take their widths from the frame before.
+    for _ in 0..2 {
+        out = Some(headless_frame(ctx, Some(screen), None, vec![], |ui| {
+            let top = ui.cursor().top();
+            ui.allocate_ui(egui::vec2(width, height), |ui| {
+                g.show(ui, &crate::l10n::english(), &tc, &markers, None, NO_DIGITS);
+                bottom = ui.min_rect().bottom() - top;
+            });
+        }));
+    }
+    let (nodes, _) = a11y(&out.expect("drawn"));
+    Column {
+        body: g.plot_rect.expect("the plot is drawn"),
+        strip: node_rect(&nodes, |n| {
+            n.label().is_some_and(|l| l.starts_with("Graph minimap"))
+        }),
+        bottom,
+    }
+}
+
+/// The whole graph at heights from its least to roomy: under 180 points
+/// between them the plot's body is twice the minimap's trace, over it the
+/// trace keeps its 60; the graph ends inside the height it was given; and an
+/// empty graph ends where one with a trace does, so the recording panel's
+/// divider stays put when the readings arrive.
+#[test]
+fn a_short_graph_draws_its_plot_twice_as_high_as_its_minimap() {
+    let ctx = crate::app::styled_context();
+    ctx.enable_accesskit();
+    let mut g = graph_with_a_minute_of_data();
+    let mut empty = Graph::new();
+    let mut shared = 0;
+    for height in (150..=340).step_by(10).chain([153, 201, 222, 500]) {
+        let height = height as f32;
+        for width in [396.0, 1000.0] {
+            let at = format!("{width} x {height}");
+            let drawn = column(&mut g, &ctx, width, height);
+            let strip = drawn.strip.expect("the minimap is drawn");
+            let trace = strip.height() - crate::graph::minimap::strip_height(0.0);
+            let body = drawn.body.height();
+            if body + trace < 179.5 {
+                assert!((body - 2.0 * trace).abs() <= 1.0, "{at}: {body}, {trace}");
+                assert!(trace >= 34.5, "{at}: a {trace} trace");
+                shared += 1;
+            } else {
+                assert!((trace - TRACE_HEIGHT).abs() < 0.1, "{at}: a {trace} trace");
+                assert!(body >= 2.0 * trace - 1.0, "{at}: {body}, {trace}");
+            }
+            assert!(drawn.body.bottom() < strip.top(), "{at}");
+            // The toolbar's rows are the graph's own; under them the least
+            // the plot and minimap take is what a window this short scrolls.
+            let floor = drawn.body.top() + MIN_PLOT_AND_TRACE + under_plot(0.0);
+            assert!(
+                drawn.bottom <= height.max(floor) + 0.01,
+                "{at}: the graph ends at {}",
+                drawn.bottom
+            );
+            assert_eq!(
+                column(&mut empty, &ctx, width, height).bottom,
+                drawn.bottom,
+                "{at}: an empty graph against a drawn one"
+            );
+        }
+    }
+    assert!(shared >= 8, "only {shared} sizes shared the room");
+}
+
+/// The same with the histogram's band under the minimap: the band keeps its
+/// height out of what the plot and trace share, and the graph still ends
+/// inside its height.
+#[test]
+fn a_histogram_band_stays_out_of_the_plots_and_minimaps_share() {
+    let ctx = crate::app::styled_context();
+    ctx.enable_accesskit();
+    let mut g = graph_with_a_minute_of_data();
+    g.show_histogram = true;
+    for height in [260.0, 300.0, 340.0, 420.0] {
+        let drawn = column(&mut g, &ctx, 396.0, height);
+        let place = g.histogram_place.expect("a histogram");
+        assert_eq!(place.dock, histogram::Dock::Below, "{height}");
+        let strip = drawn.strip.expect("the minimap is drawn");
+        let trace = strip.height() - crate::graph::minimap::strip_height(0.0);
+        let body = drawn.body.height();
+        let band = histogram::band_block(place.size);
+        if body + trace < 179.5 {
+            assert!(
+                (body - 2.0 * trace).abs() <= 1.0,
+                "{height}: {body}, {trace}"
+            );
+        } else {
+            assert!((trace - TRACE_HEIGHT).abs() < 0.1, "{height}: {trace}");
+        }
+        assert!(
+            (drawn.bottom - (strip.bottom() + band)).abs() < 0.1,
+            "{height}: the band's {band} under the strip at {}, ending at {}",
+            strip.bottom(),
+            drawn.bottom
+        );
+        let floor = drawn.body.top() + MIN_PLOT_AND_TRACE + under_plot(0.0) + band;
+        assert!(drawn.bottom <= height.max(floor) + 0.01, "{height}");
+    }
+}
+
+/// The level is cut by the strip's width alone: a lower trace draws the
+/// buckets it has.
+#[test]
+fn a_lower_trace_does_not_recut_the_level() {
+    let ctx = crate::app::styled_context();
+    ctx.enable_accesskit();
+    let mut g = graph_with_a_minute_of_data();
+    column(&mut g, &ctx, 600.0, 500.0);
+    let width = g.minimap_level.as_ref().expect("a level").width();
+    for height in [150.0, 200.0, 260.0, 500.0] {
+        column(&mut g, &ctx, 600.0, height);
+        let level = g.minimap_level.as_ref().expect("a level");
+        assert_eq!(level.width(), width, "{height}");
+    }
+    column(&mut g, &ctx, 300.0, 500.0);
+    let level = g.minimap_level.as_ref().expect("a level");
+    assert!(level.width() > width, "a narrower strip is cut coarser");
+}
+
+/// At its lowest the strip works as it does at full height: everything it
+/// paints (the trace, the brackets, a marker's flag, the time labels) is
+/// inside it, a press on the trace takes the view there and a drag moves it.
+#[test]
+fn the_lowest_minimap_keeps_its_marks_and_gestures() {
+    const TRACE: f32 = 35.0;
+    let ctx = crate::app::styled_context();
+    let tc = ThemeColors::new(true, ColorPreset::Default, &PaletteOverrides::default());
+    let (mut g, t0) = graph_over(200);
+    let markers = marked(&[t0 + Duration::from_secs(50)]);
+    let frame = |g: &mut Graph, events: Vec<egui::Event>| {
+        let mut strip = egui::Rect::NOTHING;
+        let out = headless_frame(&ctx, Some(gesture_screen()), None, events, |ui| {
+            let top = ui.cursor().top();
+            g.show_minimap(ui, &crate::l10n::english(), &tc, &markers, TRACE);
+            let bottom = top + crate::graph::minimap::strip_height(TRACE);
+            assert!((ui.min_rect().bottom() - bottom).abs() < 0.1);
+            strip = egui::Rect::from_x_y_ranges(ui.max_rect().x_range(), top..=bottom);
+        });
+        (out, strip)
+    };
+
+    let (out, strip) = frame(&mut g, vec![]);
+    let mut texts = 0;
+    let mut flags = 0;
+    for clipped in &out.shapes {
+        let drawn = clipped.shape.visual_bounding_rect();
+        if !drawn.is_positive() {
+            continue;
+        }
+        assert!(
+            strip.expand(0.5).contains_rect(drawn),
+            "{drawn:?} outside the strip {strip:?}: {:?}",
+            clipped.shape
+        );
+        match &clipped.shape {
+            egui::Shape::Text(_) => texts += 1,
+            egui::Shape::Path(p) if p.closed => flags += 1,
+            _ => {}
+        }
+    }
+    assert!(texts >= 2, "{texts} time labels");
+    assert_eq!(flags, 1, "the marker's flag");
+
+    // A press in the middle of the trace, then a drag left.
+    assert!(g.live);
+    let press = |pos, pressed| egui::Event::PointerButton {
+        pos,
+        button: egui::PointerButton::Primary,
+        pressed,
+        modifiers: egui::Modifiers::NONE,
+    };
+    let at = egui::pos2(400.0, strip.top() + 4.0 + TRACE / 2.0);
+    frame(&mut g, vec![egui::Event::PointerMoved(at)]);
+    frame(&mut g, vec![press(at, true)]);
+    assert!(!g.live, "the press took the view off live");
+    assert!((g.view_center - 100.0).abs() < 2.0, "{}", g.view_center);
+    let to = egui::pos2(200.0, at.y);
+    frame(&mut g, vec![egui::Event::PointerMoved(to)]);
+    assert!((g.view_center - 50.0).abs() < 2.0, "{}", g.view_center);
+    frame(&mut g, vec![press(to, false)]);
+    assert!(g.minimap_drag == crate::graph::minimap::MinimapDrag::None);
 }
 
 /// The strip's time labels stay inside it as the session grows: the painter
@@ -434,7 +704,7 @@ fn the_minimaps_time_labels_stay_inside_the_strip() {
             let mut strip = egui::Rect::NOTHING;
             let out = headless_frame(&ctx, Some(screen), None, vec![], |ui| {
                 let top = ui.cursor().top();
-                g.show_minimap(ui, &crate::l10n::english(), &tc, &markers);
+                g.show_minimap(ui, &crate::l10n::english(), &tc, &markers, TRACE_HEIGHT);
                 strip =
                     egui::Rect::from_x_y_ranges(ui.max_rect().x_range(), top..=ui.cursor().top());
             });

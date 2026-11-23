@@ -113,8 +113,9 @@ fn discard_prompt(
 /// column that holds the split scrolls instead of shrinking it further.
 ///
 /// Room for the floors the split and its two halves enforce: the graph's
-/// toolbar on one row, the plot's `MIN_PLOT_HEIGHT` and the minimap's
-/// `UNDER_PLOT` (both in `crate::graph`), the drag divider and the recording
+/// toolbar on one row, the plot and minimap's `MIN_PLOT_AND_TRACE` and what
+/// the minimap keeps around its trace (`under_plot`, both in
+/// `crate::graph`), the drag divider and the recording
 /// panel's [`MIN_RECORDING_HEIGHT`], plus the item spacing between them. An
 /// estimate rather than their sum: the toolbar's height is only known once
 /// it is drawn.

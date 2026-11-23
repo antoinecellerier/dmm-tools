@@ -160,6 +160,18 @@ fn tick_color(ui: &Ui, series: egui::Color32) -> egui::Color32 {
     crate::theme::legible_on(series, ui.visuals().panel_fill).unwrap_or(ui.visuals().text_color())
 }
 
+/// The height of the plot's time axis: the row its labels take, kept whether
+/// or not there are any. A label's own height, which is not quite the
+/// style's row height.
+pub(super) fn time_row_height(ui: &Ui) -> f32 {
+    let font = egui::TextStyle::Body.resolve(ui.style());
+    ui.fonts_mut(|f| {
+        f.layout_no_wrap("0 s".to_owned(), font, egui::Color32::PLACEHOLDER)
+            .size()
+            .y
+    })
+}
+
 /// `axis` with no tick labels: for a range nothing was read on, which
 /// egui_plot draws from -1 to 1, and for the column the right axes' labels
 /// are painted in.
@@ -993,17 +1005,11 @@ impl Graph {
         self.update_histogram(ui, l10n, vis_start..vis_end, (y_min, y_max));
 
         // The time labels' row whether or not there are any: egui_plot sizes
-        // it from the previous frame's, and the plot would move with them. A
-        // label's own height, which is not quite the style's row height.
-        let font = egui::TextStyle::Body.resolve(ui.style());
-        let time_row = ui.fonts_mut(|f| {
-            f.layout_no_wrap("0 s".to_owned(), font, egui::Color32::PLACEHOLDER)
-                .size()
-                .y
-        });
+        // it from the previous frame's, and the plot would move with them.
+        let time_row = time_row_height(ui);
         // The plot's whole area, axes included, as egui_plot is about to
         // allocate it, and the body the time axis leaves of it.
-        let plot_height = ui.available_height().max(super::MIN_PLOT_HEIGHT);
+        let plot_height = ui.available_height();
         let body_height = plot_height - time_row;
 
         let right = self.right_axes(

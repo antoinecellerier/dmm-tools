@@ -117,8 +117,10 @@ const MIN_PLOT_BESIDE_STRIP: f32 = 400.0;
 // A plot roomy enough for the strip leaves the right axes their column.
 const _: () = assert!(MIN_PLOT_BESIDE_STRIP >= MIN_PLOT_WIDTH + RIGHT_AXIS_ROOM);
 
-/// The least height the plot is drawn at, its time axis included, however
-/// little the graph is given.
+/// The plot's part, its time axis included, of the least the graph gives
+/// the plot and the minimap's trace between them ([`MIN_PLOT_AND_TRACE`]):
+/// what the plot kept over a full minimap. It is drawn taller than this
+/// now, the two sharing that least two to one ([`share_heights`]).
 const MIN_PLOT_HEIGHT: f32 = 60.0;
 /// The space between the plot and the minimap.
 const MINIMAP_GAP: f32 = 4.0;
@@ -126,8 +128,42 @@ const MINIMAP_GAP: f32 = 4.0;
 /// the pieces: egui's item spacing after the plot (3 points in the app's
 /// style) and a point to spare.
 const UNDER_PLOT_SLACK: f32 = 4.0;
-/// What the graph keeps under the plot for the minimap.
-const UNDER_PLOT: f32 = minimap::STRIP_HEIGHT + MINIMAP_GAP + UNDER_PLOT_SLACK;
+/// What the graph keeps under the plot for a minimap whose trace is `trace`
+/// high.
+const fn under_plot(trace: f32) -> f32 {
+    minimap::strip_height(trace) + MINIMAP_GAP + UNDER_PLOT_SLACK
+}
+/// The least the plot, its time axis included, and the minimap's trace are
+/// given between them, however little the graph is given: the column the
+/// graph sits in scrolls rather than squeeze them further.
+const MIN_PLOT_AND_TRACE: f32 = MIN_PLOT_HEIGHT + minimap::TRACE_HEIGHT;
+
+/// The heights of the plot's body and of the minimap's trace, in the `room`
+/// the two drawing areas have between them: the plot's time axis, the
+/// minimap's labels and the gaps are outside it.
+///
+/// The trace keeps [`minimap::TRACE_HEIGHT`] and the plot takes the rest
+/// while that leaves the plot twice the trace; with less room the trace takes
+/// a third and the plot two, so a short graph's overview never stands taller
+/// than its plot. The two rules meet where the room is three times the
+/// trace's height, and nothing jumps as a window is resized through it.
+fn share_heights(room: f32) -> (f32, f32) {
+    let trace = (room / 3.0).min(minimap::TRACE_HEIGHT);
+    (room - trace, trace)
+}
+
+/// The heights of the plot, its time axis of `time_row` included, and of the
+/// minimap's trace, in a graph with `height` under its toolbar, `band_room`
+/// of it the histogram's band. The one place the two are worked out: the
+/// plot is allocated the first and the minimap drawn at the second, empty or
+/// not.
+fn plot_and_trace_heights(height: f32, band_room: f32, time_row: f32) -> (f32, f32) {
+    let between = (height - band_room - under_plot(0.0)).max(MIN_PLOT_AND_TRACE);
+    let (_, trace) = share_heights(between - time_row);
+    // Not the body with the time axis added back: with room for a full
+    // minimap that would land a rounding off the height the plot had.
+    (between - trace, trace)
+}
 
 /// Why a sub-value's unit gets no Y axis: see [`Graph::axis_refusal`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1210,7 +1246,10 @@ impl Graph {
         let width = ui.available_width();
         self.fit_axes_to(width);
         self.show_toolbar(ui, l10n, tc);
-        let room = ui.available_height() - UNDER_PLOT;
+        let height = ui.available_height();
+        // What the band may grow into is reckoned over a minimap at its full
+        // height, so the band's size does not follow the plot's share.
+        let room = height - under_plot(minimap::TRACE_HEIGHT);
         // After the toolbar, so a click on the Histogram chip lays the pane
         // out in the frame it lands in.
         self.histogram_place = self
@@ -1221,7 +1260,8 @@ impl Graph {
             Some(p) if p.dock == histogram::Dock::Below => histogram::band_block(p.size),
             _ => 0.0,
         };
-        let main_height = (room - band_room).max(MIN_PLOT_HEIGHT);
+        let (main_height, trace_height) =
+            plot_and_trace_heights(height, band_room, render::time_row_height(ui));
         if let Some(p) = place.filter(|p| p.dock == histogram::Dock::Side) {
             let area = ui
                 .horizontal_top(|ui| {
@@ -1254,7 +1294,7 @@ impl Graph {
         // room reserved for the band above is all it takes.
         ui.scope(|ui| {
             ui.spacing_mut().item_spacing.y = 0.0;
-            self.show_minimap(ui, l10n, tc, markers);
+            self.show_minimap(ui, l10n, tc, markers, trace_height);
             if let Some(p) = place.filter(|p| p.dock == histogram::Dock::Below) {
                 let (block, _) = ui.allocate_exact_size(
                     egui::vec2(ui.available_width(), histogram::band_block(p.size)),

@@ -864,7 +864,8 @@ fn a_short_plot_keeps_a_label_on_its_value_axis() {
                     }
                 }
             }
-            assert!(least < 50.0, "the least plot was {least} pt tall");
+            // The graph's least: two thirds of what it shares with the minimap.
+            assert!(least < 75.0, "the least plot was {least} pt tall");
         }
     }
     assert!(failures.is_empty(), "{}", failures.join("\n"));

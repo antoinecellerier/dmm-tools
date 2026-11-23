@@ -237,6 +237,7 @@ fn strip_frame_at(g: &mut Graph, ctx: &egui::Context, pointer: egui::Pos2, event
             &crate::l10n::english(),
             &tc,
             &crate::markers::Markers::default(),
+            crate::graph::minimap::TRACE_HEIGHT,
         )
     });
 }
