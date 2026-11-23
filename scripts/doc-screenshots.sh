@@ -45,8 +45,9 @@ ASSETS="$ROOT/assets"
 #   dcma-boot-refresh-autorange
 #                         the thermometer cycle on AUTO, with 22 ↔ 220 mA hops
 #                         and an OL blip at each boot and refresh; unused
-#   ut181a-temp-t1-t2     a UT181A frame with two temperature readings,
-#                         T1 the value and T2 its sub-value
+#   ut181a-temp-t1-t2     one frame from a UT181A golden fixture, repeated:
+#                         two temperature readings, T1 the value and T2 its
+#                         sub-value
 #   acv-mains             a UT61E+ on a mains outlet in AC V for 97 s,
 #                         sagging to about 238.6 V at 10–30 s and peaking
 #                         near 240 V at 45–65 s
