@@ -1065,12 +1065,11 @@ impl Graph {
         }
         Self::paint_stacked_ticks(ui, body, &transform, &right.ticks, &right_labels);
 
-        // The key and the flags first: the labels lay themselves out around
-        // them.
-        let mut taken: Vec<egui::Rect> =
-            Self::paint_plot_key(ui, body, &key_entries, tc, self.solid_lines)
-                .into_iter()
-                .collect();
+        // The key's place and the flags first: the labels lay themselves
+        // out around them.
+        let (key_rect, key_shapes) = Self::plot_key(ui, body, &key_entries, tc, self.solid_lines)
+            .map_or((None, Vec::new()), |(rect, shapes)| (Some(rect), shapes));
+        let mut taken: Vec<egui::Rect> = key_rect.into_iter().collect();
         // Before the flags, which sit in the time axis's row and must stay
         // on top of it for their clicks.
         let mut openers = Self::axis_strips(ui, complete_rect, body);
@@ -1091,20 +1090,36 @@ impl Graph {
             .map(|(number, _)| number);
         taken.extend(flags);
         Self::paint_overlay_labels(ui, l10n, body, &transform, &overlay, &inner, taken);
-        // The dots, the height's tags and the readout over everything else.
-        if let Some(Hover {
-            at,
-            y,
-            t,
-            overload,
-            series,
-            pinned,
-        }) = hover
-        {
-            let rows = hover_lines(l10n, &series, t, overload, &|s, point| {
+        // The dots under the key, as the crosshair they sit on is: a dot
+        // over it would hide a name.
+        let rows = hover.as_ref().map(|hover| {
+            let rows = hover_lines(l10n, &hover.series, hover.t, hover.overload, &|s, point| {
                 self.hover_value(s, point, digits)
             });
-            paint_hover_dots(ui, body, &transform, &series, &rows, tc.plot_background());
+            paint_hover_dots(
+                ui,
+                body,
+                &transform,
+                &hover.series,
+                &rows,
+                tc.plot_background(),
+            );
+            rows
+        });
+        ui.painter().with_clip_rect(body).extend(key_shapes);
+        // The height's tags and the readout over everything else.
+        if let (
+            Some(Hover {
+                at,
+                y,
+                t,
+                series,
+                pinned,
+                ..
+            }),
+            Some(rows),
+        ) = (hover, rows)
+        {
             let per_point = transform.dvalue_dpos()[1].abs();
             let max_decimals = if self.levels {
                 overlay.other_decimals

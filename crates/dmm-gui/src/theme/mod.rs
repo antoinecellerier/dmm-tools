@@ -1108,7 +1108,7 @@ mod tests {
     ///   is also the `TextEdit` background, and egui draws `hint_text` in the
     ///   weak colour (the Y-axis / envelope / reference fields).
     ///
-    /// The plot *area* itself is not a case: `paint_plot_key` uses
+    /// The plot *area* itself is not a case: `plot_key` uses
     /// `text_color()` and the cursor and overlay labels use theme colours, so
     /// no weak text is painted there.
     #[test]

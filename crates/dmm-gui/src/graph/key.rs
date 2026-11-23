@@ -130,24 +130,24 @@ impl Graph {
         entries
     }
 
-    /// Paint the plot key in the top-left of the plot area, in the shape
-    /// [`key_layout`] finds room for.
+    /// The plot key for the top-left of the plot area, in the shape
+    /// [`key_layout`] finds room for: its rect, which the overlay labels
+    /// keep off, and its shapes, for the caller to paint over the lines, the
+    /// crosshair and the hover dots. `None` when there is no key, for want
+    /// of entries or of room.
     ///
     /// A key, not a control: egui_plot's own `Legend` renders show/hide
     /// checkboxes, but `Plot::reset()` — which pins the view every frame while
     /// keeping pointer events — also clears the plot's `hidden_items`, so a
     /// click on one had no effect past the frame it happened in. The **Show:**
     /// chips in the toolbar are the control instead.
-    ///
-    /// Returns the key's rect, which the overlay labels keep off: `None`
-    /// when no key is drawn, for want of entries or of room.
-    pub(super) fn paint_plot_key(
+    pub(super) fn plot_key(
         ui: &Ui,
         plot_rect: egui::Rect,
         entries: &[(String, KeyStyle)],
         tc: &ThemeColors,
         solid: bool,
-    ) -> Option<egui::Rect> {
+    ) -> Option<(egui::Rect, Vec<egui::Shape>)> {
         if entries.is_empty() {
             return None;
         }
@@ -155,7 +155,7 @@ impl Graph {
         font.size = font.size.max(MIN_KEY_FONT_SIZE);
 
         let text_color = ui.visuals().text_color();
-        let painter = ui.painter_at(plot_rect);
+        let painter = ui.painter();
 
         let galleys: Vec<_> = entries
             .iter()
@@ -174,13 +174,15 @@ impl Graph {
         // theme pairs with `text_color`, so the names keep their normal
         // contrast, and 85% alpha keeps the grid faintly readable underneath
         // instead of punching a hole in the plot.
-        painter.rect_filled(rect, 4.0, ui.visuals().window_fill.gamma_multiply(0.85));
-        painter.rect_stroke(
-            rect,
-            4.0,
-            ui.visuals().widgets.noninteractive.bg_stroke,
-            egui::StrokeKind::Inside,
-        );
+        let mut shapes = vec![
+            egui::Shape::rect_filled(rect, 4.0, ui.visuals().window_fill.gamma_multiply(0.85)),
+            egui::Shape::rect_stroke(
+                rect,
+                4.0,
+                ui.visuals().widgets.noninteractive.bg_stroke,
+                egui::StrokeKind::Inside,
+            ),
+        ];
 
         let mut left = rect.left() + PAD;
         for (i, ((_, style), galley)) in entries.iter().zip(&galleys).enumerate() {
@@ -191,21 +193,21 @@ impl Graph {
                 KeyStyle::Plotted => (tc.graph_line(), egui_plot::LineStyle::Solid),
                 KeyStyle::Overlay(k) => Self::overlay_color_and_style(tc, *k, solid),
             };
-            painter.extend(styled_line(
+            shapes.extend(styled_line(
                 egui::pos2(left, mid),
                 egui::pos2(left + KEY_SAMPLE_WIDTH, mid),
                 egui::Stroke::new(1.5, color),
                 line_style,
             ));
-            painter.galley(
+            shapes.push(egui::Shape::galley(
                 egui::pos2(left + KEY_SAMPLE_WIDTH + GAP, top),
                 galley.clone(),
                 text_color,
-            );
+            ));
             if in_row {
                 left += KEY_SAMPLE_WIDTH + GAP + text_widths[i] + ENTRY_GAP;
             }
         }
-        Some(rect)
+        Some((rect, shapes))
     }
 }

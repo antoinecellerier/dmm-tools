@@ -226,8 +226,8 @@ count: a period shorter than the view would draw as a sliver, and one longer
 or apart from it would overflow.
 
 **The plot key is a key.** It toggles nothing: egui_plot's legend loses its
-show/hide state while the view is pinned every frame (`paint_plot_key` in
-`graph/key.rs`), so the **Show:** chips are the control.
+show/hide state while the view is pinned every frame (`graph/key.rs`), so
+the **Show:** chips are the control.
 
 **Under a finger, readouts and menus go above it.** A touch has no hover, and
 the hand covers what a mouse pointer leaves in view: the crosshair's readings,
