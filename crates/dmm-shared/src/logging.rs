@@ -6,6 +6,9 @@
 //! user asking for it; what the apps word themselves (data it does not
 //! recognise, a cable it had to pick among several) it logs at INFO. A set `RUST_LOG` is used as it is: a
 //! `dmm_lib` directive beside it would outrank a global `RUST_LOG=trace`.
+//!
+//! Timestamps carry milliseconds: a meter's packets are tens to hundreds of
+//! ms apart, and a trace is often the only record of that spacing.
 
 use log::LevelFilter;
 use std::ffi::OsStr;
@@ -13,6 +16,7 @@ use std::ffi::OsStr;
 /// Install the logger. Call once in `main`, before anything logs.
 pub fn init() {
     let mut builder = env_logger::Builder::from_default_env();
+    builder.format_timestamp_millis();
     default_unless_set(
         &mut builder,
         std::env::var_os(env_logger::DEFAULT_FILTER_ENV).as_deref(),
