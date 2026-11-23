@@ -9,6 +9,7 @@
 ### GUI
 
 - **The graph's Plot: and Show: chips carry a sample of each line** — they replace the key over the plot, which covered the traces and lost entries in a short plot.
+- **The big meter names a connection problem under the reading** — a reading on screen stayed when the link failed, with nothing to say so.
 
 ### Bug fixes
 

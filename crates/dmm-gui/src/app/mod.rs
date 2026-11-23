@@ -951,16 +951,20 @@ impl App {
     ///
     /// The meter alone draws its notice under the buttons and fits the
     /// reading to what is left, so a notice that arrives re-opens the fit
-    /// and one that goes re-opens it again. A read timeout is a couple of
-    /// seconds, and a slow range or a mode change can take that long: fitted
-    /// from the first, the notice shrank the reading and everything under
-    /// it, and the next reading grew them back. It is neither drawn nor
-    /// fitted until a second read is missed, which keeps the reading still
-    /// and the statistics in the window. A meter that has yet to answer has
-    /// no reading to keep still, and is waited for from the first.
+    /// and one that goes re-opens it again; the big meter draws its title
+    /// under the reading, which makes room for the line the first time. A
+    /// read timeout is a couple of seconds, and a slow range or a mode
+    /// change can take that long: fitted from the first, the notice shrank
+    /// the reading and everything under it, and the next reading grew them
+    /// back. It is neither drawn nor fitted until a second read is missed,
+    /// which keeps the reading still and the statistics in the window. A meter that has yet to answer has no reading to keep
+    /// still, and is waited for from the first; so is one whose reading was
+    /// cleared off the screen, where the placeholder would say "No reading"
+    /// of a meter that is being waited for.
     fn is_one_missed_read(&self, notice: &connection_issue::ConnectionNotice) -> bool {
         notice.kind == connection_issue::NoticeKind::Waiting
             && self.connection.has_read
+            && self.last_measurement.is_some()
             && self.connection.waiting_timeouts < 2
     }
 
@@ -983,11 +987,12 @@ impl App {
         // the closure that borrows `self` mutably.
         let notice = self
             .connection_notice()
-            .filter(|n| self.big_meter_mode != BigMeterMode::Off || !self.is_one_missed_read(n));
+            .filter(|n| !self.is_one_missed_read(n));
         // Full and Minimal fill the window with the reading, leaving nowhere
-        // to draw the connection help: the issue takes the reading's place
-        // instead, and the steps become its hover text. With the mode `Off`
-        // the whole help is drawn under the buttons.
+        // to draw the connection help: the issue's title takes the reading's
+        // place, or a line under a reading still on screen, and the steps
+        // become its hover text. With the mode `Off` the whole help is drawn
+        // under the buttons.
         let in_readout = notice
             .as_ref()
             .filter(|_| self.big_meter_mode != BigMeterMode::Off);
@@ -1001,9 +1006,12 @@ impl App {
             dmm_shared::tr!(self.l10n, "reading-big-meter-hint", keys = keys).into_owned()
         });
 
+        // A notice's line under a reading still on screen.
+        let line_drawn = in_readout.is_some() && self.last_measurement.is_some();
+
         let main = egui::CentralPanel::default().frame(frame).show(ui, |ui| {
             let size = ctx.content_rect();
-            let fit_inputs = FitInputs {
+            let mut fit_inputs = FitInputs {
                 width: size.width() as u32,
                 height: size.height() as u32,
                 mode_raw: self.last_measurement.as_ref().map_or(0, |m| m.mode_raw),
@@ -1024,20 +1032,23 @@ impl App {
                 big_meter_mode: self.big_meter_mode,
                 transform_is_identity: self.transform.is_identity(),
                 alarm_set: self.alarm.is_some(),
-                notice_kind: notice.as_ref().map(|n| n.kind),
+                notice_kind: notice.as_ref().filter(|_| !line_drawn).map(|n| n.kind),
+                notice_line: line_drawn,
                 late_readings_note: self.late_readings_note_shown(),
                 screen_only_note: self.screen_only_note_shown(),
                 language: self.l10n.language().id,
                 stats_widths: self.stats_widths.fit_key(),
             };
+            self.meter_fit.keep_line_room(&mut fit_inputs, line_drawn);
             let needs_recalc = self.meter_fit.needs_recalc(&fit_inputs);
 
             let panel_rect = ui.max_rect();
             let mut add_content = |ui: &mut egui::Ui| {
                 ui.vertical(|ui| {
-                    // In minimal mode there's nothing below the reading,
-                    // so pass 0 to let the reading fill all available space.
-                    let content_h = if minimal {
+                    // In minimal mode there's nothing below the reading but
+                    // a notice's line, so without room held for one pass 0
+                    // to let the reading fill all available space.
+                    let content_h = if minimal && !fit_inputs.notice_line {
                         0.0
                     } else {
                         self.meter_fit.content_height
@@ -1072,6 +1083,11 @@ impl App {
                         self.apply_pick(pick);
                     }
                     let after_reading = ui.cursor().top();
+                    // Under the reading and measured with what is below it,
+                    // so the fit makes room for the line as for the buttons.
+                    if line_drawn {
+                        no_reading.show_under_reading(ui, scale);
+                    }
 
                     if !minimal {
                         // The big-meter toggle sits in the panel corner
@@ -1084,8 +1100,9 @@ impl App {
 
                     if self.big_meter_mode == BigMeterMode::Off {
                         // Only here: in Full and Minimal the notice is
-                        // already in the readout, and the help drawn under a
-                        // window-filling reading would land off-screen.
+                        // already in or under the readout, and the help
+                        // drawn under a window-filling reading would land
+                        // off-screen.
                         if let Some(notice) = &notice {
                             self.show_notice_help(ui, notice);
                         }
@@ -2995,6 +3012,208 @@ mod tests {
             (back - before).abs() <= 2.0,
             "the reading came back {back} pt tall, from {before}"
         );
+    }
+
+    /// The big meter with a reading on screen and the link failing under it.
+    /// The notice used to reach the screen only in place of a reading, so a
+    /// reading already there stayed, with nothing to say it was no longer the
+    /// meter's. Its title now takes a line under the reading, fitted with
+    /// it: the line and the buttons stay in the window, at every shape and
+    /// with the longest title, and the reading keeps the size it was given
+    /// beside the line once readings come back.
+    #[test]
+    fn the_big_meter_names_the_connection_issue_under_a_reading() {
+        use dmm_lib::error::Error;
+        let issues = [
+            (Error::Timeout, "No response from meter"),
+            (
+                Error::ChecksumMismatch {
+                    expected: 0x01a3,
+                    actual: 0x0003,
+                },
+                "Meter sent data that could not be read",
+            ),
+        ];
+        for mode in [BigMeterMode::Full, BigMeterMode::Minimal] {
+            for (w, h) in [(1000.0, 540.0), (454.0, 300.0), (1200.0, 190.0)] {
+                for (error, title) in &issues {
+                    let case = format!("{mode:?} at {w}x{h}, {title:?}");
+                    let mut app = ac_volts_with(["59.951", "Hz"], ["16.680", "ms"]);
+                    app.big_meter_mode = mode;
+                    let ctx = crate::app::styled_context();
+                    ctx.enable_accesskit();
+                    let screen = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(w, h));
+                    let value = |nodes: &[(NodeId, Node)]| {
+                        label_exact(nodes, " 118.16").expect("the value is drawn")
+                    };
+
+                    let settled = meter_nodes_on(&ctx, &mut app, w, h);
+                    assert_eq!(outside(&settled, screen), [""; 0], "{case}: settled");
+                    assert!(label_exact(&settled, title).is_none(), "no notice yet");
+
+                    let issue = match error {
+                        Error::Timeout => Error::Timeout,
+                        _ => Error::ChecksumMismatch {
+                            expected: 0x01a3,
+                            actual: 0x0003,
+                        },
+                    };
+                    app.connection.last_error = Some(ConnectionIssue::of(issue));
+                    let failing = meter_nodes_on(&ctx, &mut app, w, h);
+                    let line = label_exact(&failing, title)
+                        .unwrap_or_else(|| panic!("{case}: nothing names the issue"));
+                    assert!(
+                        screen.contains_rect(line),
+                        "{case}: the notice at {line:?} hangs out of {screen:?}"
+                    );
+                    assert!(
+                        line.top() >= value(&failing).bottom() - 0.5,
+                        "{case}: the notice at {line:?} is not under the reading"
+                    );
+                    assert_eq!(outside(&failing, screen), [""; 0], "{case}: failing");
+                    if mode == BigMeterMode::Full {
+                        let button = text_bounds(&failing, "HOLD").expect("the buttons");
+                        assert!(
+                            button.top() >= line.bottom() - 0.5,
+                            "{case}: the notice at {line:?} is not above the buttons"
+                        );
+                    }
+
+                    app.connection.last_error = None;
+                    let cleared = meter_nodes_on(&ctx, &mut app, w, h);
+                    assert!(label_exact(&cleared, title).is_none(), "{case}: cleared");
+                    assert_eq!(
+                        value(&cleared).height(),
+                        value(&failing).height(),
+                        "{case}: the reading changed size as the line went"
+                    );
+                }
+            }
+        }
+    }
+
+    /// A notice that comes and goes under the big meter's reading: a meter
+    /// missing two reads now and then, a reconnect, the gaps of a recording.
+    /// The reading used to be fitted with the line as it came and without
+    /// it as it went, shrinking and growing back each time. The line's room
+    /// is kept once it has shown, so the reading changes size once, however
+    /// often the notice returns and whichever it is; a resize fits the
+    /// reading afresh, and without a line gives the room back.
+    #[test]
+    fn a_notice_that_comes_and_goes_resizes_the_big_meter_once() {
+        use dmm_lib::error::Error;
+        for mode in [BigMeterMode::Full, BigMeterMode::Minimal] {
+            for (w, h) in [(1000.0, 540.0), (454.0, 300.0)] {
+                let case = format!("{mode:?} at {w}x{h}");
+                let mut app = ac_volts_with(["59.951", "Hz"], ["16.680", "ms"]);
+                app.big_meter_mode = mode;
+                let ctx = crate::app::styled_context();
+                ctx.enable_accesskit();
+                let screen = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(w, h));
+                let height = |app: &mut App, (w, h): (f32, f32)| {
+                    let nodes = meter_nodes_on(&ctx, app, w, h);
+                    if (w, h) == screen.size().into() {
+                        assert_eq!(outside(&nodes, screen), [""; 0], "{case}");
+                    }
+                    label_exact(&nodes, " 118.16")
+                        .expect("the value is drawn")
+                        .height()
+                };
+                let alone = height(&mut app, (w, h));
+
+                app.connection.last_error = Some(ConnectionIssue::of(Error::Timeout));
+                let with_line = height(&mut app, (w, h));
+                assert!(
+                    with_line < alone,
+                    "{case}: the reading made no room for the line: {alone} to {with_line}"
+                );
+                let checksum = Error::ChecksumMismatch {
+                    expected: 0x01a3,
+                    actual: 0x0003,
+                };
+                for (step, issue) in [
+                    ("cleared", None),
+                    ("back", Some(Error::Timeout)),
+                    ("cleared again", None),
+                    ("another notice", Some(checksum)),
+                    ("cleared for good", None),
+                ] {
+                    app.connection.last_error = issue.map(ConnectionIssue::of);
+                    assert_eq!(
+                        height(&mut app, (w, h)),
+                        with_line,
+                        "{case}: the reading changed size, notice {step}"
+                    );
+                }
+
+                height(&mut app, (w + 40.0, h + 20.0));
+                let resized = height(&mut app, (w, h));
+                assert!(
+                    (resized - alone).abs() <= 2.0,
+                    "{case}: a resize left the reading {resized} pt tall, from {alone}"
+                );
+            }
+        }
+    }
+
+    /// Clear takes the reading off the screen and leaves the meter read.
+    /// With no reading to keep still, the first missed read is waited for
+    /// in the placeholder, which used to say "No reading" for a timeout
+    /// first; in the big meter and with the meter alone.
+    #[test]
+    fn a_missed_read_with_no_reading_on_screen_is_waited_for_at_once() {
+        for mode in [BigMeterMode::Full, BigMeterMode::Minimal, BigMeterMode::Off] {
+            let mut app = big_meter_app([" 15.070", "\u{00B5}F", "Capacitance", "22\u{00B5}F"]);
+            app.big_meter_mode = mode;
+            app.settings.show_graph = false;
+            app.settings.show_recording = false;
+            app.connection.has_read = true;
+            app.clear_session();
+            assert!(app.connection.has_read, "Clear forgot the meter answered");
+
+            app.connection.waiting_timeouts = 1;
+            let nodes = meter_nodes(&mut app, 1000.0, 540.0);
+            assert!(
+                shows_text(&nodes, "Waiting for meter"),
+                "{mode:?}: the first missed read says nothing"
+            );
+        }
+    }
+
+    /// One missed read draws no line under the big meter's reading, which
+    /// would shrink it and grow it back at every slow range change; the
+    /// second in a row does.
+    #[test]
+    fn one_missed_read_draws_no_line_under_the_big_meter() {
+        for mode in [BigMeterMode::Full, BigMeterMode::Minimal] {
+            let (w, h) = (1000.0, 540.0);
+            let mut app = big_meter_app([" 15.070", "\u{00B5}F", "Capacitance", "22\u{00B5}F"]);
+            app.big_meter_mode = mode;
+            app.connection.has_read = true;
+            let ctx = crate::app::styled_context();
+            ctx.enable_accesskit();
+            let settled = meter_nodes_on(&ctx, &mut app, w, h);
+            let value = |nodes: &[(NodeId, Node)]| label_exact(nodes, " 15.070").expect("a value");
+
+            app.connection.waiting_timeouts = 1;
+            let missed = meter_nodes_on(&ctx, &mut app, w, h);
+            assert!(
+                !shows_text(&missed, "Waiting for meter"),
+                "{mode:?}: one missed read is on screen"
+            );
+            assert_eq!(
+                value(&missed),
+                value(&settled),
+                "{mode:?}: the reading moved"
+            );
+
+            app.connection.waiting_timeouts = 2;
+            let waiting = meter_nodes_on(&ctx, &mut app, w, h);
+            assert!(
+                shows_text(&waiting, "Waiting for meter"),
+                "{mode:?}: a second missed read says nothing"
+            );
+        }
     }
 
     /// A meter that misses one read is waited for under the reading's own

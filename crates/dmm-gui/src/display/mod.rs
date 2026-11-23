@@ -481,6 +481,54 @@ impl<'a> NoReadingText<'a> {
             block.on_hover_text(*tooltip);
         }
     }
+
+    /// Draw a notice's title as one line under a reading that is still on
+    /// screen, with the help body as its hover text; nothing for the plain
+    /// placeholder. The reading stays as the meter last sent it, so this
+    /// line is all that says it is no longer live.
+    ///
+    /// `scale` is the big meter's, and the line is the mode line's size at
+    /// it. A title wider than the room it has is drawn smaller until it
+    /// fits, and from the floor down it wraps: it never widens the reading
+    /// nor runs past the window's edge. No hint line: the hover is said by
+    /// the placeholder, and a second line here is the reading's to lose.
+    pub(crate) fn show_under_reading(&self, ui: &mut Ui, scale: f32) {
+        let Self::Notice {
+            title,
+            tooltip,
+            color,
+            ..
+        } = self
+        else {
+            return;
+        };
+        let mode_size = (BASE_READING_FONT_SIZE * MODE_SIZE_RATIO * scale).max(MIN_AUX_FONT_SIZE);
+        let width = ui
+            .painter()
+            .layout_no_wrap(
+                (*title).to_string(),
+                FontId::proportional(mode_size),
+                *color,
+            )
+            .size()
+            .x;
+        let room = ui.available_width();
+        let size = if width > room {
+            // A little under the exact ratio: text does not scale to the
+            // pixel, and a title a pixel too wide would wrap its last word.
+            (mode_size * room / width * 0.98).max(MIN_AUX_FONT_SIZE)
+        } else {
+            mode_size
+        };
+        let line = ui.label(
+            RichText::new(*title)
+                .font(FontId::proportional(size))
+                .color(*color),
+        );
+        if !tooltip.is_empty() {
+            line.on_hover_text(*tooltip);
+        }
+    }
 }
 
 /// The dashes that stand in for a value, then the placeholder's text at the

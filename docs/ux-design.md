@@ -109,9 +109,11 @@ there is no width breakpoint (`pick_layout` in `display/fit.rs`). Beside the
 value, the sub-values come before the mode. They are readings and the mode is a
 control.
 
-**Nothing below a window-sized reading.** In big meter and minimal mode a
-connection problem replaces the reading's placeholder with its title, and the
-steps go in its hover text.
+**Under a window-sized reading, one line at most.** In big meter and minimal
+mode a connection problem shows its title, with the steps in its hover text:
+in place of a missing reading, or under one still on screen, which would
+otherwise pass for live. The reading keeps the line's room once it has shown,
+so a notice that comes and goes resizes it once.
 
 **Statistics is one table that takes the shape its width allows.** Each
 caption is written once over every group, so a figure is read across

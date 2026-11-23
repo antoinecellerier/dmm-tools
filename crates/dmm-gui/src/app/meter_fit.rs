@@ -60,6 +60,9 @@ pub(super) struct MeterFit {
     recalc_passes: u8,
     /// The scale the frame before drew the reading at.
     drawn_scale: f32,
+    /// The other inputs a notice's line was last drawn under a reading
+    /// with, by their key: the room it took is kept while they stand.
+    line_drawn_with: Option<u64>,
 }
 
 impl MeterFit {
@@ -71,7 +74,29 @@ impl MeterFit {
             pass_key: 0,
             recalc_passes: 0,
             drawn_scale: 0.0,
+            line_drawn_with: None,
         }
+    }
+
+    /// Settle whether the fit holds room for a notice's line under the
+    /// reading, in `inputs.notice_line`: while one is drawn there, and from
+    /// then on until another input moves.
+    ///
+    /// A notice comes and goes: a meter that misses two reads and answers
+    /// the third, a reconnect, a gap in a recording. Fitted with the line
+    /// and again without it, the reading shrank and grew back each time.
+    /// The room stays instead, so the reading changes size once, and a
+    /// resize or anything else that fits it afresh gives the room back.
+    /// The fit's key and the frame both read the answer from `inputs`.
+    pub(super) fn keep_line_room(&mut self, inputs: &mut FitInputs, drawn: bool) {
+        inputs.notice_line = false;
+        let others = inputs.key();
+        if drawn {
+            self.line_drawn_with = Some(others);
+        } else if self.line_drawn_with != Some(others) {
+            self.line_drawn_with = None;
+        }
+        inputs.notice_line = self.line_drawn_with.is_some();
     }
 
     /// Whether the fit has to be re-measured for these inputs.
@@ -213,12 +238,20 @@ pub(super) struct FitInputs {
     /// A set alarm reserves the limit badge's slot by the reading and adds
     /// the Alarms line to the statistics.
     pub(super) alarm_set: bool,
-    /// Which connection notice, if any, is on screen. Its title takes the
-    /// readout's place in the big-meter modes and the titles differ in
+    /// Which connection notice, if any, is on screen, but for one that is a
+    /// line under the big meter's reading (`notice_line`). In the big-meter
+    /// modes its title takes the readout's place, and the titles differ in
     /// length; with the mode `Off` its whole help is drawn under the
     /// buttons. Either way the reading is fitted again when one arrives,
     /// goes or replaces another.
     pub(super) notice_kind: Option<NoticeKind>,
+    /// Whether room is held under the big meter's reading for a notice's
+    /// line: [`MeterFit::keep_line_room`] sets it, whatever it is built
+    /// with. Whichever notice the line names, the fit counts one line that
+    /// scales with the reading: a title too wide for its room is drawn
+    /// smaller, and one at the smallest font wraps instead
+    /// (`NoReadingText::show_under_reading`), which the fit doesn't see.
+    pub(super) notice_line: bool,
     /// The late-readings notice and the screen-only line, drawn under the
     /// buttons with the mode `Off`: each takes room from the reading while
     /// it shows.
@@ -322,6 +355,7 @@ mod tests {
             transform_is_identity: true,
             alarm_set: false,
             notice_kind: None,
+            notice_line: false,
             late_readings_note: false,
             screen_only_note: false,
             language: "en-US",
@@ -525,6 +559,41 @@ mod tests {
             }),
             "one notice replacing another never reached the fit"
         );
+    }
+
+    /// A line under the reading opens the fit when it first shows, and its
+    /// room is kept from then on: the line going, coming back and going
+    /// again leave the key alone. Another input moving gives the room back,
+    /// unless the line is on screen then.
+    #[test]
+    fn a_line_under_the_reading_keeps_its_room_until_another_input_moves() {
+        let mut fit = MeterFit::new();
+        let key = |fit: &mut MeterFit, mut inputs: FitInputs, drawn: bool| {
+            fit.keep_line_room(&mut inputs, drawn);
+            (inputs.notice_line, inputs.key())
+        };
+        let (room, quiet) = key(&mut fit, inputs(), false);
+        assert!(!room, "room before any line");
+
+        let (room, with_line) = key(&mut fit, inputs(), true);
+        assert!(room);
+        assert_ne!(with_line, quiet, "the line never reached the fit");
+        for drawn in [false, true, false] {
+            assert_eq!(
+                key(&mut fit, inputs(), drawn),
+                (true, with_line),
+                "the line {} moved the fit",
+                if drawn { "coming back" } else { "going" }
+            );
+        }
+
+        let resized = || FitInputs {
+            width: 801,
+            ..inputs()
+        };
+        assert!(key(&mut fit, resized(), true).0, "a resize under the line");
+        assert!(!key(&mut fit, inputs(), false).0, "kept through a resize");
+        assert!(!key(&mut fit, resized(), false).0, "and back at that size");
     }
 
     /// A content height that keeps moving would re-measure forever. After
@@ -751,6 +820,10 @@ mod tests {
         });
         mutations.push(FitInputs {
             notice_kind: Some(NoticeKind::NoResponse),
+            ..inputs()
+        });
+        mutations.push(FitInputs {
+            notice_line: true,
             ..inputs()
         });
         mutations.push(FitInputs {
