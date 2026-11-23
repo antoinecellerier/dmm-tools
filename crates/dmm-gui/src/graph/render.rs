@@ -154,6 +154,13 @@ fn tick_color(ui: &Ui, series: egui::Color32) -> egui::Color32 {
     crate::theme::legible_on(series, ui.visuals().panel_fill).unwrap_or(ui.visuals().text_color())
 }
 
+/// `axis` with no tick labels: for a range nothing was read on, which
+/// egui_plot draws from -1 to 1, and for the column the right axes' labels
+/// are painted in.
+fn unlabelled(axis: AxisHints<'static>) -> AxisHints<'static> {
+    axis.formatter(|_, _| String::new())
+}
+
 /// The tick label a right axis writes at a height on the plot: the whole
 /// step of its unit there, then the unit — or nothing on a gridline it
 /// leaves unlabelled.
@@ -914,9 +921,8 @@ impl Graph {
             .collect();
 
         // Compute Y bounds from visible data
-        let (y_min, y_max) = self
-            .y_range_for_view(view_min, view_max, true)
-            .unwrap_or((-1.0, 1.0));
+        let y_range = self.y_range_for_view(view_min, view_max, true);
+        let (y_min, y_max) = y_range.unwrap_or((-1.0, 1.0));
         self.update_histogram(ui, l10n, vis_start..vis_end, (y_min, y_max));
 
         let right = self.right_axes(ui, (view_min, view_max), (y_min, y_max));
@@ -936,19 +942,38 @@ impl Graph {
             .map(|(_, label, _)| map_of(label))
             .collect();
 
-        let mut y_axes = vec![self.left_axis(ui, grid_step, tc.graph_line())];
+        // An axis with nothing to span — no reading in view, or a view no
+        // wider than its one reading — is drawn from -1 to 1, on either
+        // side of a zero nothing was read at: it carries no labels.
+        let mut y_axes = vec![match y_range {
+            Some(_) => self.left_axis(ui, grid_step, tc.graph_line()),
+            None => unlabelled(AxisHints::new_y()),
+        }];
         // The right axes share one column, their labels painted once the plot
         // is drawn (`paint_stacked_ticks`); egui_plot only keeps its width.
         let (right_labels, column_width) = self.right_axis_labels(ui, tc, &right, &overlay_traces);
         if !right_labels.is_empty() {
-            y_axes.push(
+            y_axes.push(unlabelled(
                 AxisHints::new_y()
                     .placement(egui_plot::HPlacement::Right)
-                    .min_thickness(column_width + RIGHT_AXIS_MARGIN)
-                    .formatter(|_, _| String::new()),
-            );
+                    .min_thickness(column_width + RIGHT_AXIS_MARGIN),
+            ));
         }
-        let x_axis = self.time_axis(ui, &in_view, (view_min, view_max));
+        let x_axis = if view_max > view_min {
+            self.time_axis(ui, &in_view, (view_min, view_max))
+        } else {
+            unlabelled(AxisHints::new_x())
+        };
+        // The labels' row whether or not there are any: egui_plot sizes it
+        // from the previous frame's, and the plot would move with them. A
+        // label's own height, which is not quite the style's row height.
+        let font = egui::TextStyle::Body.resolve(ui.style());
+        let row = ui.fonts_mut(|f| {
+            f.layout_no_wrap("0 s".to_owned(), font, egui::Color32::PLACEHOLDER)
+                .size()
+                .y
+        });
+        let x_axis = x_axis.min_thickness(row);
 
         let ref_values = self.ref_lines.values().to_vec();
         let ref_labels: Vec<String> = self.ref_lines.labels().map(str::to_string).collect();

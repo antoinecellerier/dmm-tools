@@ -1,4 +1,5 @@
-//! The right axes: one per sub-value unit, their room and their pins.
+//! The axes: the tick labels the plot's own two carry, and the right axes,
+//! one per sub-value unit, their room and their pins.
 
 use super::*;
 use crate::graph::render::stacks_that_fit;
@@ -331,4 +332,85 @@ fn a_swap_into_another_unit_releases_every_pin() {
     );
     assert!(!g.y_axis.fixed);
     assert!(g.y_axis.pins.is_empty());
+}
+
+/// The tick labels of the main plot's left axis and of its time axis, by
+/// where they are drawn around `plot`.
+struct TickLabels {
+    left: Vec<(String, egui::Rect)>,
+    time: Vec<(String, egui::Rect)>,
+}
+
+/// One frame of the graph on a `screen`-sized window, and the tick labels
+/// it drew around its plot.
+fn frame_tick_labels(g: &mut Graph, ctx: &egui::Context, screen: egui::Vec2) -> TickLabels {
+    fn walk(shape: &egui::Shape, found: &mut Vec<(String, egui::Rect)>) {
+        match shape {
+            egui::Shape::Text(t) => found.push((
+                t.galley.text().to_string(),
+                egui::Rect::from_min_size(t.pos, t.galley.size()),
+            )),
+            egui::Shape::Vec(shapes) => shapes.iter().for_each(|s| walk(s, found)),
+            _ => {}
+        }
+    }
+    let tc = ThemeColors::new(true, ColorPreset::Default, &PaletteOverrides::default());
+    let markers = crate::markers::Markers::default();
+    let screen = egui::Rect::from_min_size(egui::Pos2::ZERO, screen);
+    let out = headless_frame(ctx, Some(screen), None, vec![], |ui| {
+        g.show(ui, &crate::l10n::english(), &tc, &markers, None, NO_DIGITS)
+    });
+    let mut texts = Vec::new();
+    for clipped in &out.shapes {
+        walk(&clipped.shape, &mut texts);
+    }
+    let plot = g.plot_rect.expect("the plot is drawn");
+    // egui_plot hangs a time label from the plot's bottom edge and centres
+    // a left one on its gridline, right of nothing but the plot.
+    let (time, rest): (Vec<_>, Vec<_>) = texts
+        .into_iter()
+        .partition(|(_, r)| (r.top() - plot.bottom()).abs() < 1.0);
+    let left = rest
+        .into_iter()
+        .filter(|(_, r)| r.right() <= plot.left() && plot.y_range().contains(r.center().y))
+        .collect();
+    TickLabels { left, time }
+}
+
+const NARROW: egui::Vec2 = egui::vec2(454.0, 600.0);
+
+/// A plot with no reading has no range on either axis: egui_plot draws one
+/// from -1 to 1, and neither axis labels it. The first readings bring the
+/// labels without moving the plot.
+#[test]
+fn an_empty_plot_labels_neither_axis() {
+    let ctx = crate::app::styled_context();
+    let mut g = Graph::new();
+    let mut labels = frame_tick_labels(&mut g, &ctx, NARROW);
+    for _ in 0..2 {
+        labels = frame_tick_labels(&mut g, &ctx, NARROW);
+    }
+    assert!(labels.time.is_empty(), "time labels: {:?}", labels.time);
+    assert!(labels.left.is_empty(), "left labels: {:?}", labels.left);
+    let empty_plot = g.plot_rect;
+
+    let t0 = Instant::now();
+    for i in 0..=50_u64 {
+        let at = t0 + Duration::from_millis(i * 100);
+        g.push(1.0 + i as f64 * 0.01, at, "DC V", "V", None);
+    }
+    for _ in 0..3 {
+        labels = frame_tick_labels(&mut g, &ctx, NARROW);
+    }
+    assert!(
+        labels.time.iter().any(|(t, _)| t == "2 s"),
+        "{:?}",
+        labels.time
+    );
+    assert!(
+        labels.left.iter().any(|(t, _)| t.contains(" V")),
+        "{:?}",
+        labels.left
+    );
+    assert_eq!(g.plot_rect, empty_plot, "the labels' row was kept for them");
 }
