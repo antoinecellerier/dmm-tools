@@ -14,6 +14,18 @@ pub(crate) fn test_app() -> App {
     App::from_settings(Settings::default(), dmm_lib::Clock::real())
 }
 
+/// A context wearing `settings`' theme and colours as the app's first frame
+/// leaves them in `Visuals`, and those colours.
+pub(crate) fn themed_context(settings: Settings) -> (egui::Context, crate::theme::ThemeColors) {
+    let mut app = App::from_settings(settings, dmm_lib::Clock::real());
+    let ctx = super::styled_context();
+    app.apply_theme(&ctx);
+    app.apply_color_overrides(&ctx);
+    let dark = ctx.global_style().visuals.dark_mode;
+    let colors = app.settings.theme_colors(dark);
+    (ctx, colors)
+}
+
 /// The app connected to a meter offering `commands`, a 1.234 reading in
 /// `unit` on screen. The connected state is set by hand: no acquisition
 /// thread runs.

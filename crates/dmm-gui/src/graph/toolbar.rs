@@ -10,6 +10,7 @@ use dmm_shared::{input, tr};
 use eframe::egui::{self, Ui};
 
 use super::field::{Mark, Undrawn};
+use super::key::{KeyStyle, SAMPLE_STROKE, SAMPLE_WIDTH, line_sample};
 use super::{AxisRefusal, Graph, MAX_AXES, SeriesOption, TIME_WINDOWS};
 use crate::a11y::ResponseA11yExt;
 use crate::text_marks::{self, MarkStyle, TextMark};
@@ -71,12 +72,49 @@ fn group_frame(ui: &Ui) -> egui::Frame {
 /// AccessKit. Sizing it as a button would line it up too, but would announce a
 /// control that isn't one.
 fn group_caption(ui: &mut Ui, text: &str) {
-    let text = egui::RichText::new(text)
-        .strong()
-        .color(ui.visuals().weak_text_color());
+    let text = caption_text(ui, text);
     // Zero width: only the height is being imposed, the label keeps its own.
     let height = ui.spacing().interact_size.y;
     ui.add_sized(egui::vec2(0.0, height), egui::Label::new(text));
+}
+
+/// A group caption's text as [`group_caption`] draws it.
+fn caption_text(ui: &Ui, text: &str) -> egui::RichText {
+    egui::RichText::new(text)
+        .strong()
+        .color(ui.visuals().weak_text_color())
+}
+
+/// How wide a toolbar group is with its `caption` and all its `chips` on one
+/// row: each chip's label, and whether it carries a line sample.
+///
+/// Known before the group is drawn, so that one the rest of the row can't
+/// hold starts a row of its own. Left where it is, a frame is handed what
+/// remains of the row and wraps its chips inside that: a column of them
+/// beside the group before it, taller than the plot in a narrow window.
+fn group_width(ui: &Ui, caption: &str, chips: &[(&str, bool)]) -> f32 {
+    let text_width = |text: egui::WidgetText, style: egui::TextStyle| {
+        text.into_galley(ui, Some(egui::TextWrapMode::Extend), f32::INFINITY, style)
+            .size()
+            .x
+    };
+    let spacing = ui.spacing();
+    let chips: f32 = chips
+        .iter()
+        .map(|&(label, sampled)| {
+            let sample = match sampled {
+                true => sample_size().x + spacing.icon_spacing,
+                false => 0.0,
+            };
+            spacing.item_spacing.x
+                + 2.0 * spacing.button_padding.x
+                + sample
+                + text_width(label.into(), egui::TextStyle::Button)
+        })
+        .sum();
+    group_frame(ui).total_margin().sum().x
+        + text_width(caption_text(ui, caption).into(), egui::TextStyle::Body)
+        + chips
 }
 
 /// Accessible name for one **Plot:** chip. `None` is the main reading.
@@ -98,6 +136,23 @@ pub(super) fn series_chip_label<'a>(l10n: &'a Localizer, series: Option<&str>) -
 /// Accessible name for one **Show:** chip. See [`series_chip_label`].
 pub(super) fn overlay_chip_label<'a>(l10n: &'a Localizer, label: &str) -> Cow<'a, str> {
     tr!(l10n, "graph-show-chip.a11y", series = label)
+}
+
+/// What a **Plot:** or **Show:** chip reads: its series' `label`, with its
+/// `unit` where the meter's series are in more than one (`with_units`). The
+/// **Plot:** chips then say which one plots hertz, and a **Show:** chip
+/// ties its line to an axis, where two traces share one.
+pub(super) fn chip_text<'a>(
+    l10n: &'a Localizer,
+    label: &'a str,
+    unit: &str,
+    with_units: bool,
+) -> Cow<'a, str> {
+    if with_units && !unit.is_empty() {
+        tr!(l10n, "graph-chip-with-unit", series = label, unit = unit)
+    } else {
+        Cow::Borrowed(label)
+    }
 }
 
 /// A graph key as the hovers that name one write it: `M`, `[`, `End`.
@@ -127,6 +182,42 @@ fn chip(ui: &mut Ui, on: bool, label: &str, hover: &str) -> bool {
     ui.selectable_label(on, label)
         .on_hover_text(hover)
         .clicked()
+}
+
+/// Room a chip's line sample has around it on its ground, each side.
+const SAMPLE_PAD: egui::Vec2 = egui::vec2(4.0, 5.0);
+
+/// A chip's line sample with its ground.
+fn sample_size() -> egui::Vec2 {
+    egui::vec2(SAMPLE_WIDTH, SAMPLE_STROKE) + 2.0 * SAMPLE_PAD
+}
+
+/// A **Plot:** or **Show:** chip carrying a sample of its trace's line left
+/// of its `label`, so the chips are the graph's key.
+///
+/// The sample lies on a patch of the plot's background, not on the chip's
+/// fill: a line's colour is picked to show on the plot, and against a
+/// selected chip's fill most of them fall under the 3:1 a graphic needs —
+/// the default dark theme's plotted line among them. On its own ground the
+/// sample is the line as the plot draws it, whatever the chip's state and
+/// the palette.
+///
+/// One `Button` with the sample as a painted atom, not a row of two
+/// widgets: it wraps in the toolbar as one unit, and its accessible name is
+/// its text alone.
+fn sampled_chip<'a>(
+    selected: bool,
+    label: &'a str,
+    ground: egui::Color32,
+    (color, style): (egui::Color32, egui_plot::LineStyle),
+) -> egui::Button<'a> {
+    let sample = egui::Atom::paint(sample_size(), move |ui, args| {
+        let painter = ui.painter();
+        painter.rect_filled(args.rect, 2.0, ground);
+        let left = args.rect.left_center() + egui::vec2(SAMPLE_PAD.x, 0.0);
+        painter.extend(line_sample(left, color, style));
+    });
+    egui::Button::selectable(selected, (sample, label))
 }
 
 /// A [`chip`] over a plain flag, flipped in place when clicked.
@@ -287,8 +378,8 @@ impl Graph {
         if self.has_series_row() {
             ui.horizontal_wrapped(|ui| {
                 ui.spacing_mut().item_spacing.x = 2.0;
-                self.show_series_selector(ui, l10n);
-                self.show_overlay_toggles(ui, l10n);
+                self.show_series_selector(ui, l10n, tc);
+                self.show_overlay_toggles(ui, l10n, tc);
             });
         }
 
@@ -589,6 +680,31 @@ impl Graph {
         }
     }
 
+    /// The main reading's unit, where the graph knows it: it is plotted, or
+    /// kept beside the plotted series. Empty otherwise.
+    fn main_unit(&self) -> &str {
+        if self.current_series.is_none() {
+            return &self.current_unit;
+        }
+        let main = self.main_name();
+        self.overlays
+            .iter()
+            .find(|o| o.label == main)
+            .map_or("", |o| o.unit.as_str())
+    }
+
+    /// Whether the meter's series are in more than one unit, so that a chip
+    /// has to say which is its own ([`chip_text`]).
+    pub(super) fn series_in_several_units(&self) -> bool {
+        let mut units = std::iter::once(self.current_unit.as_str())
+            .chain(self.series_options.iter().map(|s| s.unit.as_str()))
+            .chain(self.overlays.iter().map(|o| o.unit.as_str()))
+            .filter(|unit| !unit.is_empty());
+        units
+            .next()
+            .is_some_and(|first| units.any(|unit| unit != first))
+    }
+
     /// Chips choosing which series the graph plots: the meter's main reading
     /// or any sub-value it is currently sending.
     ///
@@ -596,7 +712,12 @@ impl Graph {
     /// meters see the toolbar exactly as before. `selectable_label` rather
     /// than a combo box because that is the toolbar's idiom throughout — and
     /// with at most five choices the chips stay readable.
-    fn show_series_selector(&mut self, ui: &mut Ui, l10n: &Localizer) {
+    ///
+    /// The chip of the series drawn as the plotted line carries its sample:
+    /// it is the only thing naming that line. The others carry none: picking
+    /// one doesn't draw the line its series has now, and a series drawn
+    /// beside the plotted one has its sample on its **Show:** chip.
+    fn show_series_selector(&mut self, ui: &mut Ui, l10n: &Localizer, tc: &ThemeColors) {
         if self.series_options.is_empty() {
             return;
         }
@@ -609,20 +730,41 @@ impl Graph {
         let frame = group_frame(ui);
         frame.show(ui, |ui| {
             group_caption(ui, &tr!(l10n, "graph-plot"));
+            let plotted = KeyStyle::Plotted.line(tc, self.solid_lines);
+            let look = (tc.plot_background(), plotted);
+            // The sample goes with the series drawn, the selected look with
+            // the one chosen: they part while a choice waits for its first
+            // reading, as it does while paused.
+            fn chip(
+                (selected, drawn): (bool, bool),
+                text: &str,
+                (ground, plotted): (egui::Color32, (egui::Color32, egui_plot::LineStyle)),
+            ) -> egui::Button<'_> {
+                match drawn {
+                    true => sampled_chip(selected, text, ground, plotted),
+                    false => egui::Button::selectable(selected, text),
+                }
+            }
 
             // `Role::RadioButton` rather than the default button role: exactly
             // one chip is selected at a time, and egui maps its own radio
             // widgets to that role with a toggled state, so AT handling of the
             // pairing is proven.
+            let with_units = self.series_in_several_units();
             let main_selected = self.selected_series.is_none();
             let main_text = self.main_text(l10n);
+            let main_chip = chip_text(l10n, &main_text, self.main_unit(), with_units);
             let named = self.main_label.is_some().then_some(main_text.as_ref());
             let main_hover = match named {
                 Some(name) => tr!(l10n, "graph-plot-main-named.hover", series = name),
                 None => tr!(l10n, "graph-plot-main.hover"),
             };
             if ui
-                .selectable_label(main_selected, main_text.as_ref())
+                .add(chip(
+                    (main_selected, self.current_series.is_none()),
+                    main_chip.as_ref(),
+                    look,
+                ))
                 .on_hover_text(main_hover)
                 .a11y_label(&series_chip_label(l10n, named))
                 .a11y_role(egui::accesskit::Role::RadioButton)
@@ -635,7 +777,14 @@ impl Graph {
                 let selected = self.selected_series.as_deref() == Some(label.as_str());
                 let text = l10n.label(TextKind::Aux, label);
                 if ui
-                    .selectable_label(selected, text.as_ref())
+                    .add(chip(
+                        (
+                            selected,
+                            self.current_series.as_deref() == Some(label.as_str()),
+                        ),
+                        chip_text(l10n, &text, unit, with_units).as_ref(),
+                        look,
+                    ))
                     .on_hover_text(tr!(
                         l10n,
                         "graph-plot-series.hover",
@@ -664,21 +813,19 @@ impl Graph {
             self.swap_to_selected();
             ui.ctx().request_repaint();
         }
-
-        ui.add_space(6.0);
     }
 
     /// Chips choosing which sub-value traces are drawn beside the plotted
     /// series, in its unit or on an axis of their own.
     ///
-    /// The plot key is a key, not a control (`Plot::reset()` wipes egui_plot's
-    /// own legend state every frame), so the show/hide affordance lives here
-    /// in the toolbar with the rest of them. Hiding a trace stops it being
-    /// drawn but not recorded — turning it back on brings its history with it.
+    /// Each chip carries its trace's line sample, shown or not: the chip
+    /// says which line a click hides, or which one it will draw. Hiding a
+    /// trace stops it being drawn but not recorded — turning it back on
+    /// brings its history with it.
     /// A trace whose unit can't have an axis says why: with every axis taken
     /// its chip is unlit and disabled, while one shed for width stays as the
     /// user left it.
-    fn show_overlay_toggles(&mut self, ui: &mut Ui, l10n: &Localizer) {
+    fn show_overlay_toggles(&mut self, ui: &mut Ui, l10n: &Localizer, tc: &ThemeColors) {
         if self.overlays.is_empty() {
             return;
         }
@@ -687,12 +834,42 @@ impl Graph {
         // mutable borrow while the overlay list is being read.
         let mut toggled: Option<String> = None;
 
+        let caption = tr!(l10n, "graph-show");
+        let with_units = self.series_in_several_units();
+        let labels: Vec<_> = self
+            .overlays
+            .iter()
+            .map(|o| self.series_text(l10n, &o.label))
+            .collect();
+        let texts: Vec<Cow<'_, str>> = self
+            .overlays
+            .iter()
+            .zip(&labels)
+            .map(|(o, label)| chip_text(l10n, label, &o.unit, with_units))
+            .collect();
+        let chips: Vec<_> = texts.iter().map(|text| (text.as_ref(), true)).collect();
+        // Beside the **Plot:** group while it fits there whole, else on a
+        // row of its own ([`group_width`]).
+        let beside_plot = !self.series_options.is_empty();
+        if beside_plot {
+            // The gap between the two groups, where they share a row: after
+            // a **Plot:** group filling its row it would overhang the toolbar.
+            const GROUP_GAP: f32 = 6.0;
+            let needed = GROUP_GAP + group_width(ui, &caption, &chips);
+            if needed > ui.available_size_before_wrap().x {
+                ui.end_row();
+            } else {
+                ui.add_space(GROUP_GAP);
+            }
+        }
+
         let frame = group_frame(ui);
         frame.show(ui, |ui| {
-            group_caption(ui, &tr!(l10n, "graph-show"));
+            group_caption(ui, &caption);
 
-            for o in &self.overlays {
-                let label = self.series_text(l10n, &o.label);
+            let ground = tc.plot_background();
+            for (k, ((o, label), text)) in self.overlays.iter().zip(&labels).zip(&texts).enumerate()
+            {
                 let label = label.as_ref();
                 let refusal = self.axis_refusal(o);
                 let full = refusal == Some(AxisRefusal::Full);
@@ -713,8 +890,9 @@ impl Graph {
                 // Toggle buttons, unlike the mutually exclusive **Plot:**
                 // chips — but with the same naming problem, so the group goes
                 // in the accessible name here too.
+                let line = KeyStyle::Overlay(k).line(tc, self.solid_lines);
                 if ui
-                    .add_enabled(!full, egui::Button::selectable(shown, label))
+                    .add_enabled(!full, sampled_chip(shown, text, ground, line))
                     .on_hover_text(hover.clone())
                     .on_disabled_hover_text(hover)
                     .a11y_label(&overlay_chip_label(l10n, label))
@@ -728,8 +906,6 @@ impl Graph {
         if let Some(label) = toggled {
             self.click_overlay_chip(label);
         }
-
-        ui.add_space(6.0);
     }
 
     /// Flip the reference lines, taking the caret into the values field when

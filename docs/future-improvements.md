@@ -216,7 +216,7 @@ Use cases: Home Assistant, Node-RED, InfluxDB/Grafana pipelines, multi-meter agg
 
 **Complexity:** Medium
 
-An import replaces the session. Overlaying a saved run on the live graph instead — a reference boot sequence against today's, say — needs a second trace with its own time alignment (start, a marker, a threshold crossing) and its own entry in the plot key, and leaves the live session's statistics and recording alone.
+An import replaces the session. Overlaying a saved run on the live graph instead — a reference boot sequence against today's, say — needs a second trace with its own time alignment (start, a marker, a threshold crossing) and its own chip in the toolbar, and leaves the live session's statistics and recording alone.
 
 Use cases: checking a board's power-up against a known-good capture; regression testing a firmware change.
 

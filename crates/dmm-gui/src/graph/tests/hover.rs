@@ -10,7 +10,7 @@ fn one_decimal(s: &HoverSeries, point: [f64; 2]) -> (String, String) {
     (format!("{:.1}", point[1]), s.unit.clone())
 }
 
-/// The hover lists every series at its time in the key's order, named
+/// The hover lists every series at its time in the chips' order, named
 /// when there are several, and leaves out one in a break.
 #[test]
 fn the_hover_lists_every_series_at_its_time() {
@@ -318,7 +318,7 @@ fn the_hover_reads_one_series_and_tags_the_height() {
     assert!(tag.is_some(), "no height tag above 3 V: {texts:?}");
 }
 
-/// Several series: a named row each in the key's order, and a tag on each
+/// Several series: a named row each in the chips' order, and a tag on each
 /// right axis.
 #[test]
 fn the_hover_lists_every_series_and_tags_every_axis() {
@@ -334,7 +334,7 @@ fn the_hover_lists_every_series_and_tags_every_axis() {
     );
     assert!(
         main < hz && hz < period,
-        "rows out of the key's order: {texts:?}"
+        "rows out of the chips' order: {texts:?}"
     );
     assert!(
         texts

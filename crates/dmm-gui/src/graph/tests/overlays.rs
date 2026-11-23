@@ -66,7 +66,7 @@ fn alternating_component_frames_draw_two_unbroken_traces() {
     );
     assert!(g.visible_gaps().is_empty());
     assert_eq!(
-        key_names(&g),
+        drawn_names(&g),
         vec!["DC", "AC"],
         "the meter's name for its reading"
     );
@@ -94,7 +94,7 @@ fn switching_between_same_unit_series_keeps_their_past() {
         g.overlay_segments("DC"),
         vec![vec![[0.0, 1.6112], [1.334, 1.6111], [2.667, 1.611]]]
     );
-    assert_eq!(key_names(&g), vec!["AC", "DC"]);
+    assert_eq!(drawn_names(&g), vec!["AC", "DC"]);
     assert_eq!(g.origin, Some(t0), "the time axis stays where it was");
 
     push_acdc_plotting_ac(&mut g, at(3334), None, Some(0.0031));
@@ -160,7 +160,7 @@ fn a_stream_of_overlay_only_frames_is_drawn_and_followed() {
     assert_eq!(g.overlay_segments("AC").len(), 1);
     assert_eq!(g.data_time_range(), (0.0, 3.0));
     assert_eq!(g.first_point_time(), Some(t0));
-    assert_eq!(key_names(&g), vec!["AC"]);
+    assert_eq!(drawn_names(&g), vec!["AC"]);
     assert_eq!(
         g.y_min_max_padded(0.0, 3.0, true),
         Some(pad_range(0.0092, 0.0092))
@@ -460,8 +460,8 @@ fn a_series_change_to_another_unit_swaps_the_traces() {
         push_vac_hz(&mut g, at(i), None, 230.0 + i as f64, (50.0, "Hz"));
     }
     assert_eq!(
-        key_names(&g),
-        vec!["Main (V)", "Frequency (Hz)", "Period (ms)"],
+        drawn_names(&g),
+        vec!["Main", "Frequency", "Period"],
         "Hz and ms on axes of their own"
     );
     g.y_axis.fixed = true;
@@ -479,8 +479,8 @@ fn a_series_change_to_another_unit_swaps_the_traces() {
         vec![Some(230.0), Some(231.0), Some(232.0), Some(233.0)]
     );
     assert_eq!(
-        key_names(&g),
-        vec!["Frequency (Hz)", "Main (V)", "Period (ms)"],
+        drawn_names(&g),
+        vec!["Frequency", "Main", "Period"],
         "the volts take Frequency's place, on a right axis"
     );
     assert_eq!(g.origin, Some(t0), "the time axis stays where it was");

@@ -2,7 +2,9 @@
 
 use super::view::pad_range;
 use super::*;
-use crate::app::test_support::{a11y, click_frames, headless_frame, key_tap, node_rect};
+use crate::app::test_support::{
+    a11y, click_frames, headless_frame, key_tap, node_rect, themed_context,
+};
 use crate::settings::{ColorPreset, PaletteOverrides};
 use std::time::Duration;
 
@@ -134,17 +136,11 @@ fn graph_with_hz() -> Graph {
     g
 }
 
-/// Names in the key, in the order they are painted.
-fn key_names(g: &Graph) -> Vec<String> {
-    let drawn = g.visible_overlay_traces(f64::NEG_INFINITY, f64::INFINITY);
-    g.key_entries(
-        &crate::l10n::english(),
-        &drawn,
-        !g.all_segments().is_empty(),
-    )
-    .into_iter()
-    .map(|(name, _)| name)
-    .collect()
+/// Names of the series drawn: the plotted one, when it has a line, then
+/// each sub-value trace.
+fn drawn_names(g: &Graph) -> Vec<String> {
+    let plotted = (!g.all_segments().is_empty()).then(|| g.plotted_series_name());
+    plotted.into_iter().chain(drawn_overlay_labels(g)).collect()
 }
 
 /// Labels of the traces that are actually drawn.

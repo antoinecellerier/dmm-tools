@@ -270,7 +270,7 @@ mod tests {
 
     /// The App picks which series make the cut, so it must hand the graph no
     /// more than the graph will register — `push_sample` drops the surplus
-    /// silently, which would show as a series vanishing from the key.
+    /// silently, which would show as a series vanishing from the chips.
     #[test]
     fn same_unit_sub_values_past_the_cap_are_dropped_here_not_by_the_graph() {
         let aux_values = ["A1", "A2", "A3", "A4", "A5", "A6"]
@@ -338,7 +338,7 @@ mod tests {
     }
 
     /// Beside a plotted AC component, the UT61E+'s AC+DC V reading is drawn
-    /// under its own name, the one the key and the **Plot:** chip give it.
+    /// under its own name, the one its chips give it.
     #[test]
     fn a_named_main_reading_is_drawn_under_its_name() {
         let mut m = meter(1.6112, "V", vec![]);

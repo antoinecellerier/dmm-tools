@@ -1108,9 +1108,8 @@ mod tests {
     ///   is also the `TextEdit` background, and egui draws `hint_text` in the
     ///   weak colour (the Y-axis / envelope / reference fields).
     ///
-    /// The plot *area* itself is not a case: `plot_key` uses
-    /// `text_color()` and the cursor and overlay labels use theme colours, so
-    /// no weak text is painted there.
+    /// The plot *area* itself is not a case: the cursor and overlay labels
+    /// use theme colours, so no weak text is painted there.
     #[test]
     fn weak_text_meets_wcag_aa_on_every_ground_it_lands_on() {
         for (label, dark, preset, base) in every_palette() {

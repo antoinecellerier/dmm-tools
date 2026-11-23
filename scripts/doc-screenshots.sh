@@ -589,7 +589,7 @@ scene_histogram() {
 
 # A meter sending two parts of one reading, so the graph draws two traces:
 # the UT61E+ in AC+DC V across a 1.6 V cell, DC plotted and AC beside it, with
-# the series chips and the key. The preseed puts the 1m window over the second
+# the series chips, which are its key. The preseed puts the 1m window over the second
 # lead lift (65–76 s), where DC falls to nothing and AC picks up the pickup.
 scene_series() {
 	write_settings

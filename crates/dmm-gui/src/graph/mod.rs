@@ -6,7 +6,7 @@
 //! in), [`view`] (what slice is shown and the gestures that move it),
 //! [`view_state`] (the view as an export saves it), [`toolbar`], [`render`]
 //! (the main plot), [`hover`] (the readings under the pointer), [`labels`]
-//! (the text painted over the plot), [`key`] (the plot key), [`menu`] (the
+//! (the text painted over the plot), [`key`] (the line samples on the toolbar's chips), [`menu`] (the
 //! right-click menu), [`limits`] (the alarm limits drawn), [`minimap`],
 //! [`analysis`] (visible-slice statistics) and [`figures`] (the caches the
 //! statistics and the histogram read). These hold types and functions of
@@ -87,8 +87,8 @@ pub(crate) const MAX_OVERLAYS: usize = 4;
 pub(crate) const MAX_AXES: usize = 4;
 
 /// What the meter's main reading is called when the meter gives it no name
-/// of its own: on the **Plot:** chip, in the key, and as the trace drawn
-/// beside a plotted sub-value. The graph's key for that trace, in English
+/// of its own: on the **Plot:** chip, and on the **Show:** chip of its trace
+/// drawn beside a plotted sub-value. The graph's key for that trace, in English
 /// whatever the language: what is drawn is [`Graph::series_text`].
 pub(crate) const MAIN_SERIES: &str = "Main";
 
@@ -701,6 +701,14 @@ impl Graph {
     /// [`MAIN_SERIES`].
     pub(crate) fn main_name(&self) -> &'static str {
         self.main_label.map_or(MAIN_SERIES, MainLabel::as_str)
+    }
+
+    /// Name the plotted series goes by: a sub-value's label, or
+    /// [`Graph::main_name`].
+    pub(super) fn plotted_series_name(&self) -> String {
+        self.current_series
+            .clone()
+            .unwrap_or_else(|| self.main_name().to_string())
     }
 
     /// What the main reading is called on screen: [`Graph::main_name`] in

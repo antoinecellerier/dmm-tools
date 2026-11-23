@@ -29,13 +29,15 @@ use crate::theme::ThemeColors;
 
 /// One sub-value trace ready to draw: (overlay index, name, segments).
 ///
-/// The index — not a colour — because it is what both the trace and its key
-/// row derive their colour and line style from, so the two cannot drift.
+/// The index — not a colour — because it is what both the trace and the
+/// sample on its chip derive their colour and line style from, so the two
+/// cannot drift.
 pub(super) type OverlayTrace = (usize, String, Vec<Vec<[f64; 2]>>);
 
 /// Shapes for a line from `a` to `b`, matching how `egui_plot` renders the
-/// same `LineStyle` on the plot — otherwise the plot key, or the histogram a
-/// line crosses, would promise a dash pattern the plot doesn't use.
+/// same `LineStyle` on the plot — otherwise a chip's line sample, or the
+/// histogram a line crosses, would promise a dash pattern the plot doesn't
+/// use.
 pub(super) fn styled_line(
     a: egui::Pos2,
     b: egui::Pos2,
@@ -658,8 +660,7 @@ impl Graph {
     /// The sub-value traces actually drawn over `[x_min, x_max]`.
     ///
     /// Leaves out the ones the user switched off, and the ones with no points
-    /// in this window — an overlay that isn't drawn must not appear in the key
-    /// either.
+    /// in this window.
     pub(super) fn visible_overlay_traces(&self, x_min: f64, x_max: f64) -> Vec<OverlayTrace> {
         self.shown_overlays()
             .filter_map(|(k, o)| {
@@ -934,7 +935,6 @@ impl Graph {
             .iter()
             .map(|(_, label, _)| map_of(label))
             .collect();
-        let key_entries = self.key_entries(l10n, &overlay_traces, !visible_segments.is_empty());
 
         let mut y_axes = vec![self.left_axis(ui, grid_step, tc.graph_line())];
         // The right axes share one column, their labels painted once the plot
@@ -1065,11 +1065,6 @@ impl Graph {
         }
         Self::paint_stacked_ticks(ui, body, &transform, &right.ticks, &right_labels);
 
-        // The key's place and the flags first: the labels lay themselves
-        // out around them.
-        let (key_rect, key_shapes) = Self::plot_key(ui, body, &key_entries, tc, self.solid_lines)
-            .map_or((None, Vec::new()), |(rect, shapes)| (Some(rect), shapes));
-        let mut taken: Vec<egui::Rect> = key_rect.into_iter().collect();
         // Before the flags, which sit in the time axis's row and must stay
         // on top of it for their clicks.
         let mut openers = Self::axis_strips(ui, complete_rect, body);
@@ -1088,10 +1083,8 @@ impl Graph {
         openers.flag = flag_click
             .filter(|&(_, button)| button == egui::PointerButton::Secondary)
             .map(|(number, _)| number);
-        taken.extend(flags);
-        Self::paint_overlay_labels(ui, l10n, body, &transform, &overlay, &inner, taken);
-        // The dots under the key, as the crosshair they sit on is: a dot
-        // over it would hide a name.
+        // The flags first: the labels lay themselves out around them.
+        Self::paint_overlay_labels(ui, l10n, body, &transform, &overlay, &inner, flags);
         let rows = hover.as_ref().map(|hover| {
             let rows = hover_lines(l10n, &hover.series, hover.t, hover.overload, &|s, point| {
                 self.hover_value(s, point, digits)
@@ -1106,7 +1099,6 @@ impl Graph {
             );
             rows
         });
-        ui.painter().with_clip_rect(body).extend(key_shapes);
         // The height's tags and the readout over everything else.
         if let (
             Some(Hover {
@@ -1497,7 +1489,7 @@ impl Graph {
             };
             // The plot draws several traces at once for a multi-display
             // meter, and which one the axis belongs to is otherwise purely
-            // visual — the key painted in its corner.
+            // visual — the sample on its **Plot:** chip.
             let series = match (self.current_series.as_deref(), self.main_label) {
                 (Some(series), _) => Some(l10n.label(TextKind::Aux, series)),
                 (None, Some(label)) => Some(l10n.main_label(label)),

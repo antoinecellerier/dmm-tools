@@ -53,9 +53,9 @@ graph-reset-zoom = Redefinir zoom
 # The caption at the start of the first box.
 graph-plot = Plotar:
 # The Plot: chip for the meter's main reading while the meter has no name
-# for it; its text also names that reading's trace in the plot's key, the
-# hover and the Show: chip. .a11y is the chip's name for a screen reader,
-# which tells it apart from the Show: chip of the same series.
+# for it; its text also names that reading's trace in the hover and on the
+# Show: chip. .a11y is the chip's name for a screen reader, which tells it
+# apart from the Show: chip of the same series.
 graph-plot-main = Principal
     .hover = Plotar a leitura principal do multímetro
     .a11y = Plotar a leitura principal

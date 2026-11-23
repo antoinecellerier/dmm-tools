@@ -225,7 +225,7 @@ it, and several dropouts between the same two readings collapse into one gap.
 
 #### Several Series
 
-![A UT61E+ in AC+DC V across a 1.6 V cell with one lead lifted: the DC reading plotted, its AC component dashed beside it, named in the key, and the Plot: and Show: chips above](../assets/gui-graph-series.webp)
+![A UT61E+ in AC+DC V across a 1.6 V cell with one lead lifted: the DC reading plotted, its AC component dashed beside it, and the Plot: and Show: chips above](../assets/gui-graph-series.webp)
 
 Meters that send sub-values (such as the UT181A, the UT171 and the UT61E+ in
 AC+DC V) get two more toolbar groups:
@@ -241,14 +241,15 @@ AC+DC V) get two more toolbar groups:
   the plotted series. Up to four units are drawn at once; a chip past that is
   greyed out until another unit is hidden. Hidden traces are still recorded,
   and stay hidden at the next launch.
-- Sub-values are drawn as dashed or dotted lines, named in a key in the plot's
-  top-left corner. A short plot lays the key out in one row, and a plot too
-  small for the row draws no key. Each keeps going where the plotted series is
-  over range.
+- The chips are the graph's key: the selected **Plot:** chip and every
+  **Show:** chip carry a sample of their line, and every chip names its
+  unit when the series are in more than one.
+- Sub-values are drawn as dashed or dotted lines. Each keeps going where the
+  plotted series is over range.
 - A sub-value in another unit, such as a UT181A's frequency and period beside
-  its AC voltage, gets a Y axis of its own on the right, and the key names
-  every unit. Two or more right axes share one column. A narrow window drops
-  the right axes until it is widened.
+  its AC voltage, gets a Y axis of its own on the right, its labels in the
+  unit. Two or more right axes share one column. A narrow window drops the
+  right axes until it is widened.
 - The minimap, the cursors, the Mean/Min/Max/Ref overlays, the histogram and
   the visible-window statistics follow the plotted series, on the left axis.
 
@@ -589,7 +590,7 @@ Opened via the gear icon. Persisted to `~/.config/dmm-tools/settings.json` on Li
 | **Only while the reading has focus** | off | Speak the reading only while the screen reader is on it, at the **Screen reader updates** pace. Makes the reading a Tab stop. |
 | **Theme** | Dark | Dark, Light, or System (follows the desktop's light/dark setting, falling back to Dark if it reports none), or a [named theme](#color-customization), which brings its own colors and mode. |
 | **Colors** | Default | Color preset for Dark, Light and System: Default, High Contrast, Colorblind. See [Color Customization](#color-customization) below. |
-| **Graph lines** | Patterned | How sub-value lines are drawn: **Patterned** dashes and dots them so they can be told apart without colour; **Solid** draws them continuous, told apart by colour and the plot key (a fourth sub-value, sharing the first one's colour, keeps its dashes). Mean, reference, envelope, cursor, marker and data-loss lines keep their patterns. |
+| **Graph lines** | Patterned | How sub-value lines are drawn: **Patterned** dashes and dots them so they can be told apart without colour; **Solid** draws them continuous, told apart by colour (a fourth sub-value, sharing the first one's colour, keeps its dashes). Mean, reference, envelope, cursor, marker and data-loss lines keep their patterns. |
 
 ### Update checks
 

@@ -167,7 +167,7 @@ pub(super) type HoverRow = (usize, String, Option<[f64; 2]>);
 pub(super) type ValueText<'f> = &'f dyn Fn(&HoverSeries, [f64; 2]) -> (String, String);
 
 /// The rows of the hover readout, after the time: every series with a value
-/// at `t` in its own unit, in the key's order, each named when there are
+/// at `t` in its own unit, in the chips' order, each named when there are
 /// several — with one series the number alone says it. The plotted series (first in
 /// `series`) reads "overload" inside its band.
 pub(super) fn hover_lines(
@@ -455,7 +455,7 @@ pub(super) fn paint_height_tags(
 }
 
 impl Graph {
-    /// The series the hover lists, in the key's order: the plotted one,
+    /// The series the hover lists, in the chips' order: the plotted one,
     /// named `main_name`, then each drawn trace with its right axis
     /// (`maps`, by trace), every one with its unit and by its name on
     /// screen.

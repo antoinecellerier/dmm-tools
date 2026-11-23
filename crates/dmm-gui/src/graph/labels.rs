@@ -554,7 +554,7 @@ impl Graph {
     /// Paint text labels for overlays (mean, reference lines, cursors) using the
     /// UI painter so they render outside the plot's clip rect.
     ///
-    /// Each label keeps off `taken` — the key and the marker flags — and off
+    /// Each label keeps off `taken` — the marker flags — and off
     /// the labels placed before it. The cursor readouts go first, as they
     /// have only four corners to choose from; the mean and reference labels
     /// then form one column around them (see [`level_label_rects`]).

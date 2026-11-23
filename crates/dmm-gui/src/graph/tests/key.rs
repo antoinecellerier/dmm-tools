@@ -1,8 +1,10 @@
-//! The plot key and the **Show:** toggles.
+//! The **Plot:** and **Show:** chips: the graph's key, and its toggles.
 
 use super::*;
-use crate::graph::key::{KeyLayout, KeyStyle, key_layout};
+use crate::graph::key::{KeyStyle, SAMPLE_WIDTH};
 use crate::graph::toolbar::{overlay_chip_label, series_chip_label};
+use crate::settings::{Settings, ThemeMode};
+use crate::theme::contrast;
 
 /// The two chip rows show the same sub-value names, so their accessible
 /// names have to say which group they belong to — otherwise a screen
@@ -45,52 +47,29 @@ fn graph_with_two_overlays() -> Graph {
 }
 
 /// A single-display meter must look exactly as it did before sub-values
-/// existed: no key painted over the plot at all.
+/// existed: one line, and no chips to name it.
 #[test]
-fn no_key_without_overlays() {
+fn a_meter_without_sub_values_has_no_chips() {
     let mut g = Graph::new();
     let t0 = Instant::now();
     for i in 0..3 {
         g.push(20.0, t0 + Duration::from_secs(i), "DC V", "V", None);
     }
-    assert!(key_names(&g).is_empty());
+    assert!(!g.has_series_row());
+    assert!(drawn_overlay_labels(&g).is_empty());
 }
 
-/// The key names the plotted series first, then each drawn overlay in
-/// the order the meter offered them.
+/// Hiding a trace from the Show: chips must take it off the plot and out of
+/// the Y range — the axis stretching to frame a trace that isn't drawn would
+/// flatten the one that is.
 #[test]
-fn the_key_names_the_plotted_series_then_its_overlays() {
-    let g = graph_with_two_overlays();
-    assert_eq!(key_names(&g), vec!["Main", "T2", "T3"]);
-
-    let drawn = g.visible_overlay_traces(f64::NEG_INFINITY, f64::INFINITY);
-    let styles: Vec<KeyStyle> = g
-        .key_entries(&crate::l10n::english(), &drawn, true)
-        .into_iter()
-        .map(|(_, style)| style)
-        .collect();
-    assert_eq!(
-        styles,
-        vec![
-            KeyStyle::Plotted,
-            KeyStyle::Overlay(0),
-            KeyStyle::Overlay(1)
-        ]
-    );
-}
-
-/// Hiding a trace from the Show: chips must take it off the plot, out of
-/// the key, and out of the Y range — the axis stretching to frame a trace
-/// that isn't drawn would flatten the one that is.
-#[test]
-fn hiding_an_overlay_drops_it_from_the_key_the_plot_and_the_y_range() {
+fn hiding_an_overlay_drops_it_from_the_plot_and_the_y_range() {
     let mut g = graph_with_two_overlays();
     let (_, hi) = g.y_min_max_padded(0.0, 2.0, true).expect("range");
     assert!(hi >= 60.0, "both overlays framed to start with: {hi}");
 
     g.toggle_overlay_hidden("T3".to_string());
 
-    assert_eq!(key_names(&g), vec!["Main", "T2"]);
     assert_eq!(drawn_overlay_labels(&g), vec!["T2"]);
     let (_, hi) = g.y_min_max_padded(0.0, 2.0, true).expect("range");
     assert!(hi < 60.0, "hidden overlay still stretching the axis: {hi}");
@@ -209,13 +188,13 @@ fn remembered_hidden_traces_start_hidden() {
     assert_eq!(drawn_overlay_labels(&g), vec!["T2"]);
 }
 
-/// Every overlay hidden is the same as no overlay drawn: no key.
+/// Every overlay hidden leaves the plotted series alone on the plot.
 #[test]
-fn hiding_every_overlay_removes_the_key() {
+fn hiding_every_overlay_draws_none() {
     let mut g = graph_with_two_overlays();
     g.hidden_overlays.insert("T2".to_string());
     g.hidden_overlays.insert("T3".to_string());
-    assert!(key_names(&g).is_empty());
+    assert_eq!(drawn_names(&g), vec!["Main"]);
     assert!(drawn_overlay_labels(&g).is_empty());
 }
 
@@ -306,148 +285,308 @@ fn clear_drops_the_overlays_but_keeps_the_selection() {
     assert_eq!(g.selected_series(), Some("T2"));
 }
 
-/// A plot body `width` by `height`, away from the origin as a real one is.
-fn body(width: f32, height: f32) -> egui::Rect {
-    egui::Rect::from_min_size(egui::pos2(70.0, 100.0), egui::vec2(width, height))
-}
-
-/// Name widths of a three-entry key, and the height of one entry.
-const WIDTHS: [f32; 3] = [55.0, 95.0, 75.0];
-const ROW_HEIGHT: f32 = 16.0;
-
-/// With room for it the key is the column it always was: 6 points in from
-/// the plot's corner, as wide as its widest entry, a row per entry.
-#[test]
-fn the_key_is_a_column_where_it_fits() {
-    assert_eq!(
-        key_layout(body(600.0, 300.0), &WIDTHS, ROW_HEIGHT),
-        KeyLayout::Column(egui::Rect::from_min_size(
-            egui::pos2(76.0, 106.0),
-            egui::vec2(12.0 + 24.0 + 6.0 + 95.0, 12.0 + 3.0 * 16.0),
-        ))
-    );
-}
-
-/// A plot at its minimum height is shorter than three entries stacked: the
-/// key lays them side by side instead of being cut at the plot's edge.
-#[test]
-fn the_key_takes_one_row_in_a_short_plot() {
-    let body = body(600.0, 47.0);
-    let KeyLayout::Row(rect) = key_layout(body, &WIDTHS, ROW_HEIGHT) else {
-        panic!("not a row: {:?}", key_layout(body, &WIDTHS, ROW_HEIGHT));
-    };
-    assert_eq!(rect.left_top(), egui::pos2(76.0, 106.0), "the same corner");
-    assert_eq!(rect.height(), 12.0 + 16.0, "one entry high");
-    assert!(
-        rect.width() >= 12.0 + WIDTHS.iter().map(|w| 24.0 + 6.0 + w).sum::<f32>(),
-        "every entry in it: {rect:?}"
-    );
-    assert!(body.contains_rect(rect));
-}
-
-/// Too short for the column and too narrow for the row, or too short for
-/// one entry: no key, rather than part of one.
-#[test]
-fn a_key_that_fits_no_way_is_not_drawn() {
-    assert_eq!(
-        key_layout(body(300.0, 47.0), &WIDTHS, ROW_HEIGHT),
-        KeyLayout::Hidden
-    );
-    assert_eq!(
-        key_layout(body(600.0, 30.0), &WIDTHS, ROW_HEIGHT),
-        KeyLayout::Hidden
-    );
-}
-
-/// Whatever the plot's size and however many entries, a key that is drawn
-/// lies inside the plot, a margin from its edges.
-#[test]
-fn the_key_stays_inside_the_plot() {
-    let all = [55.0, 95.0, 75.0, 120.0, 40.0];
-    for width in [200.0, 420.0, 900.0] {
-        for height in (30..=300).step_by(3) {
-            for n in 1..=all.len() {
-                let body = body(width, height as f32);
-                let layout = key_layout(body, &all[..n], ROW_HEIGHT);
-                let (KeyLayout::Column(rect) | KeyLayout::Row(rect)) = layout else {
-                    continue;
-                };
-                assert!(
-                    body.shrink(6.0).contains_rect(rect),
-                    "{n} entries in {body:?}: {layout:?}"
-                );
-            }
-        }
-    }
-}
-
-/// Where a frame of the graph on a `screen`-sized window draws each of the
-/// key's names, and the plot's body.
-fn painted_key(g: &mut Graph, screen: egui::Vec2) -> (Vec<egui::Rect>, egui::Rect) {
-    fn walk(shape: &egui::Shape, names: &[String], found: &mut Vec<egui::Rect>) {
-        match shape {
-            egui::Shape::Text(t) if names.iter().any(|n| n == t.galley.text()) => {
-                found.push(egui::Rect::from_min_size(t.pos, t.galley.size()));
-            }
-            egui::Shape::Vec(shapes) => shapes.iter().for_each(|s| walk(s, names, found)),
-            _ => {}
-        }
-    }
-    let names = key_names(g);
-    let ctx = crate::app::styled_context();
-    let tc = ThemeColors::new(true, ColorPreset::Default, &PaletteOverrides::default());
-    let screen = egui::Rect::from_min_size(egui::Pos2::ZERO, screen);
-    let mut found = Vec::new();
-    // The plot's rect settles on the second frame.
-    for _ in 0..2 {
-        let out = headless_frame(&ctx, Some(screen), None, vec![], |ui| {
-            g.show(
-                ui,
-                &crate::l10n::english(),
-                &tc,
-                &crate::markers::Markers::default(),
-                None,
-                NO_DIGITS,
-            )
+/// A graph with a main trace and four sub-values in units of their own:
+/// the most chips the toolbar draws, five under **Plot:** and four under
+/// **Show:**.
+fn graph_with_four_overlays() -> Graph {
+    let mut g = Graph::new();
+    let t0 = Instant::now();
+    for i in 0..3 {
+        g.push_sample(PlotSample {
+            value: Some(230.0),
+            timestamp: t0 + Duration::from_secs(i),
+            mode: "V AC",
+            unit: "V",
+            display_raw: None,
+            series: None,
+            main_label: None,
+            levels: false,
+            overlays: &[
+                ("Frequency", "Hz", Some(50.0)),
+                ("Period", "ms", Some(20.0)),
+                ("Maximum", "V", Some(231.0)),
+                ("Minimum", "V", Some(229.0)),
+            ],
         });
-        found.clear();
-        for clipped in &out.shapes {
-            walk(&clipped.shape, &names, &mut found);
+    }
+    g
+}
+
+/// One frame of the toolbar alone in a `width`-wide window: the rect it
+/// took, the width it was given, and what it painted.
+fn toolbar_frame(
+    g: &mut Graph,
+    ctx: &egui::Context,
+    tc: &ThemeColors,
+    width: f32,
+) -> (egui::Rect, f32, Vec<egui::Shape>) {
+    fn flatten(shape: egui::Shape, out: &mut Vec<egui::Shape>) {
+        match shape {
+            egui::Shape::Vec(shapes) => shapes.into_iter().for_each(|s| flatten(s, out)),
+            shape => out.push(shape),
         }
     }
-    (found, g.plot_rect.expect("a plot was drawn"))
+    let screen = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(width, 400.0));
+    let mut taken = (egui::Rect::NOTHING, 0.0);
+    let mut shapes = Vec::new();
+    // The second frame: the first lays out the fonts.
+    for _ in 0..2 {
+        let out = headless_frame(ctx, Some(screen), None, vec![], |ui| {
+            let room = ui.available_width();
+            let rect = ui
+                .scope(|ui| g.show_toolbar(ui, &crate::l10n::english(), tc))
+                .response
+                .rect;
+            taken = (rect, room);
+        });
+        shapes.clear();
+        for clipped in out.shapes {
+            flatten(clipped.shape, &mut shapes);
+        }
+    }
+    (taken.0, taken.1, shapes)
 }
 
-/// The whole graph drawn in a short window: the key's three names share a
-/// line inside the plot. In a tall one they are stacked as before.
-#[test]
-fn a_short_graph_draws_its_key_in_one_row() {
-    let (names, body) = painted_key(&mut graph_with_hz(), egui::vec2(800.0, 200.0));
-    assert_eq!(names.len(), 3, "{names:?}");
-    assert!(names.iter().all(|r| r.top() == names[0].top()), "{names:?}");
-    assert!(names.windows(2).all(|w| w[0].right() < w[1].left()));
-    assert!(
-        names.iter().all(|r| body.contains_rect(*r)),
-        "{names:?} in {body:?}"
-    );
-
-    let (names, body) = painted_key(&mut graph_with_hz(), egui::vec2(800.0, 600.0));
-    assert_eq!(names.len(), 3, "{names:?}");
-    assert!(names.windows(2).all(|w| w[0].bottom() <= w[1].top()));
-    assert!(
-        names.iter().all(|r| r.left() == names[0].left()),
-        "{names:?}"
-    );
-    assert!(
-        names.iter().all(|r| body.contains_rect(*r)),
-        "{names:?} in {body:?}"
-    );
+/// How many dashes or dots of a line sample in `color` the frame painted.
+fn sample_marks(shapes: &[egui::Shape], color: egui::Color32) -> usize {
+    shapes
+        .iter()
+        .filter(|shape| match shape {
+            egui::Shape::LineSegment { points, stroke } => {
+                stroke.color == color
+                    && points[0].y == points[1].y
+                    && (points[1].x - points[0].x).abs() <= SAMPLE_WIDTH
+            }
+            egui::Shape::Circle(dot) => dot.fill == color,
+            _ => false,
+        })
+        .count()
 }
 
-/// A graph too narrow for the row and too short for the column draws no
-/// key.
+/// The chips are the graph's key: the selected **Plot:** chip carries the
+/// plotted line's sample, each **Show:** chip its trace's, switched off or
+/// on, and no other **Plot:** chip carries one.
 #[test]
-fn a_short_narrow_graph_draws_no_key() {
-    let (names, body) = painted_key(&mut graph_with_hz(), egui::vec2(460.0, 200.0));
-    assert!(names.is_empty(), "{names:?} in {body:?}");
+fn the_chips_carry_their_lines_samples() {
+    let (ctx, tc) = themed_context(Settings::default());
+    let mut g = graph_with_two_overlays();
+    g.set_series_options(&[("T2", "\u{00B0}C"), ("T3", "\u{00B0}C")], Instant::now());
+    let lines = [
+        KeyStyle::Plotted.line(&tc, false).0,
+        KeyStyle::Overlay(0).line(&tc, false).0,
+        KeyStyle::Overlay(1).line(&tc, false).0,
+    ];
+    let marks = |g: &mut Graph| {
+        let (_, _, shapes) = toolbar_frame(g, &ctx, &tc, 800.0);
+        lines.map(|color| sample_marks(&shapes, color))
+    };
+    let on = marks(&mut g);
+    assert_eq!(on[0], 1, "one solid sample, on the selected Plot: chip");
+    assert!(
+        on[1] >= 2 && on[2] >= 2,
+        "a pattern on each Show: chip: {on:?}"
+    );
+
+    g.toggle_overlay_hidden("T3".to_string());
+    assert_eq!(marks(&mut g), on, "a chip switched off keeps its sample");
+}
+
+/// A chip names its unit only where the meter's series are in several.
+#[test]
+fn a_chip_names_its_unit_where_the_series_have_several() {
+    use crate::graph::toolbar::chip_text;
+    let l10n = crate::l10n::english();
+    assert_eq!(chip_text(&l10n, "Frequency", "Hz", true), "Frequency (Hz)");
+    assert_eq!(chip_text(&l10n, "T2", "\u{00B0}C", false), "T2");
+    assert_eq!(chip_text(&l10n, "Duty", "", true), "Duty");
+
+    let mut g = graph_with_two_overlays();
+    g.set_series_options(&[("T2", "\u{00B0}C"), ("T3", "\u{00B0}C")], Instant::now());
+    assert!(!g.series_in_several_units(), "every series in one unit");
+    g.set_series_options(&[("T2", "\u{00B0}C"), ("Frequency", "Hz")], Instant::now());
+    assert!(g.series_in_several_units());
+}
+
+/// A choice the graph can't draw yet, as while paused, leaves the sample on
+/// the chip of the series the plotted line still is.
+#[test]
+fn the_plotted_lines_sample_stays_on_the_series_drawn() {
+    let (ctx, tc) = themed_context(Settings::default());
+    let mut g = graph_with_two_overlays();
+    g.set_series_options(
+        &[("T2", "\u{00B0}C"), ("Late", "\u{00B0}C")],
+        Instant::now(),
+    );
+    let plotted = KeyStyle::Plotted.line(&tc, false).0;
+    let sample_left = |g: &mut Graph| {
+        let (_, _, shapes) = toolbar_frame(g, &ctx, &tc, 800.0);
+        shapes
+            .iter()
+            .find_map(|shape| match shape {
+                egui::Shape::LineSegment { points, stroke } if stroke.color == plotted => {
+                    Some(points[0].x)
+                }
+                _ => None,
+            })
+            .expect("a plotted sample")
+    };
+    let on_main = sample_left(&mut g);
+
+    // "Late" has no trace kept beside the plotted one: nothing to swap to.
+    g.selected_series = Some("Late".to_string());
+    assert!(!g.swap_to_selected());
+    assert_eq!(g.current_series, None);
+    assert_eq!(sample_left(&mut g), on_main);
+}
+
+/// The solid-lines setting reaches the chips as it does the plot.
+#[test]
+fn the_chips_samples_follow_the_solid_lines_setting() {
+    let (ctx, tc) = themed_context(Settings::default());
+    let mut g = graph_with_two_overlays();
+    g.solid_lines = true;
+    let (_, _, shapes) = toolbar_frame(&mut g, &ctx, &tc, 800.0);
+    for k in 0..2 {
+        let (color, style) = KeyStyle::Overlay(k).line(&tc, true);
+        assert_eq!(style, egui_plot::LineStyle::Solid);
+        assert_eq!(sample_marks(&shapes, color), 1, "overlay {k}");
+    }
+}
+
+/// The two groups' frames in a frame's shapes, **Plot:** first.
+fn group_frames(ctx: &egui::Context, shapes: &[egui::Shape]) -> Vec<egui::Rect> {
+    let fill = ctx.global_style().visuals.faint_bg_color;
+    shapes
+        .iter()
+        .filter_map(|shape| match shape {
+            egui::Shape::Rect(rect) if rect.fill == fill => Some(rect.rect),
+            _ => None,
+        })
+        .collect()
+}
+
+/// The four sub-values of [`graph_with_four_overlays`], offered under
+/// **Plot:** too.
+fn graph_with_every_chip() -> Graph {
+    let mut g = graph_with_four_overlays();
+    g.set_series_options(
+        &[
+            ("Frequency", "Hz"),
+            ("Period", "ms"),
+            ("Maximum", "V"),
+            ("Minimum", "V"),
+        ],
+        Instant::now(),
+    );
+    g
+}
+
+/// The **Show:** group sits beside **Plot:** while the row holds both whole,
+/// to the point: one more than the two frames and the gap between them. A
+/// point narrower it has a row to itself, and is no wider than it was — not
+/// squeezed into what **Plot:** left.
+#[test]
+fn the_show_group_takes_its_own_row_when_the_plot_row_is_full() {
+    let (ctx, tc) = themed_context(Settings::default());
+    let frames = |width: f32| {
+        let (_, room, shapes) = toolbar_frame(&mut graph_with_every_chip(), &ctx, &tc, width);
+        (group_frames(&ctx, &shapes), room)
+    };
+    let (wide, _) = frames(1200.0);
+    let [plot, show] = wide[..] else {
+        panic!("two groups: {wide:?}");
+    };
+    assert_eq!(plot.top(), show.top(), "one row while there is room");
+    let both = show.right() - plot.left();
+
+    let margins = 1200.0 - frames(1200.0).1;
+    let (fits, _) = frames((both + margins).ceil());
+    assert_eq!(fits[0].top(), fits[1].top(), "{fits:?}");
+    assert_eq!(fits[1].width(), show.width(), "{fits:?}");
+
+    let (wrapped, room) = frames((both + margins).ceil() - 2.0);
+    assert!(wrapped[0].bottom() <= wrapped[1].top(), "{wrapped:?}");
+    assert_eq!(wrapped[1].left(), wrapped[0].left(), "{wrapped:?}");
+    assert_eq!(wrapped[1].width(), show.width(), "{wrapped:?}");
+    assert!(wrapped[1].right() <= room, "{wrapped:?} in {room}");
+}
+
+/// With every chip it can have, the toolbar stays inside the width it is
+/// given down to the narrowest window the app allows, and a little under: a
+/// chip with its sample moves to the next row whole, and narrower costs
+/// rows, a few of them.
+#[test]
+fn the_toolbar_with_sampled_chips_wraps_inside_its_width() {
+    let (_, tc) = themed_context(Settings::default());
+    let mut heights = Vec::new();
+    for width in [1200.0, 600.0, 454.0, 396.0, 380.0] {
+        // A context each: an overflow would widen the next frames' rows.
+        let (ctx, _) = themed_context(Settings::default());
+        let (rect, room, shapes) = toolbar_frame(&mut graph_with_every_chip(), &ctx, &tc, width);
+        assert!(
+            rect.width() <= room,
+            "{width}: the toolbar took {} of {room}",
+            rect.width()
+        );
+        for group in group_frames(&ctx, &shapes) {
+            assert!(group.right() <= room + 0.5, "{width}: {group:?} in {room}");
+        }
+        heights.push(rect.height());
+    }
+    assert!(
+        heights.windows(2).all(|w| w[0] <= w[1]),
+        "narrower costs rows, never width: {heights:?}"
+    );
+    let row = heights[1] - heights[0];
+    assert!(row > 0.0, "{heights:?}");
+    assert!(heights[4] <= heights[0] + 3.0 * row, "{heights:?}");
+}
+
+/// Every built-in palette: the three presets in both modes, and the named
+/// themes.
+fn every_palette() -> Vec<(String, Settings)> {
+    let presets = [
+        ColorPreset::Default,
+        ColorPreset::HighContrast,
+        ColorPreset::ColorblindSafe,
+    ]
+    .into_iter()
+    .flat_map(|color_preset| {
+        [ThemeMode::Dark, ThemeMode::Light].map(|theme| {
+            let settings = Settings {
+                theme,
+                color_preset,
+                ..Settings::default()
+            };
+            (format!("{color_preset:?} {theme:?}"), settings)
+        })
+    });
+    let themes = crate::theme::named::builtin().iter().map(|theme| {
+        let settings = Settings {
+            named_theme: Some(theme.name.clone()),
+            ..Settings::default()
+        };
+        (theme.name.clone(), settings)
+    });
+    presets.chain(themes).collect()
+}
+
+/// A chip's sample shows on its ground, the plot's background, at the 3:1
+/// a graphic needs under every built-in palette — whatever fill the chip's
+/// state gives it. `cargo test chips_samples_show -- --nocapture` lists each
+/// ratio.
+#[test]
+fn the_chips_samples_show_on_their_ground() {
+    for (name, settings) in every_palette() {
+        let (_, tc) = themed_context(settings);
+        let ground = tc.plot_background();
+        let lines = [KeyStyle::Plotted]
+            .into_iter()
+            .chain((0..3).map(KeyStyle::Overlay));
+        for line in lines {
+            let ratio = contrast(line.line(&tc, false).0, ground);
+            println!("{name:22} {line:?}: {ratio:.2}:1");
+            assert!(ratio >= 3.0, "{name}, {line:?}: {ratio:.2}:1");
+        }
+    }
 }

@@ -225,9 +225,11 @@ on the same bins, each bar its share of its own readings rather than a
 count: a period shorter than the view would draw as a sliver, and one longer
 or apart from it would overflow.
 
-**The plot key is a key.** It toggles nothing: egui_plot's legend loses its
-show/hide state while the view is pinned every frame (`graph/key.rs`), so
-the **Show:** chips are the control.
+**The chips are the key.** The selected **Plot:** chip and each **Show:**
+chip carry their line's sample, so the control that hides a line is what
+names it, and nothing is painted over the traces. egui_plot's legend can't
+be that control: it loses its show/hide state while the view is pinned every
+frame (`graph/key.rs`).
 
 **Under a finger, readouts and menus go above it.** A touch has no hover, and
 the hand covers what a mouse pointer leaves in view: the crosshair's readings,
