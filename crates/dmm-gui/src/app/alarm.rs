@@ -357,6 +357,7 @@ impl App {
                 scale,
                 &mut editor.low,
                 RowField {
+                    id: "alarm-low-field",
                     caption: &tr!(l10n, "alarm-low"),
                     hint: &none,
                     focus,
@@ -372,6 +373,7 @@ impl App {
                 scale,
                 &mut editor.high,
                 RowField {
+                    id: "alarm-high-field",
                     caption: &tr!(l10n, "alarm-high"),
                     hint: &none,
                     focus: false,
@@ -393,6 +395,7 @@ impl App {
                 scale,
                 &mut editor.band,
                 RowField {
+                    id: "alarm-band-field",
                     caption: "\u{b1}",
                     hint: &tr!(l10n, "alarm-band"),
                     focus: false,

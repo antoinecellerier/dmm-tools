@@ -217,6 +217,10 @@ const FIELD_WIDTH: f32 = 50.0;
 
 /// What a [`row_field`] shows beside the text typed into it.
 pub(in crate::app) struct RowField<'a> {
+    /// The field's own id. Fixed rather than counted from the widgets
+    /// before it, which can change while the soft keyboard comes up: a
+    /// field whose id moved loses the focus, and the keyboard with it.
+    pub(in crate::app) id: &'static str,
     /// The caption before the field ("Low", "×").
     pub(in crate::app) caption: &'a str,
     /// The placeholder while the field is empty.
@@ -272,7 +276,12 @@ pub(in crate::app) fn row_field(
     let (output, why) = show_judged(
         ui,
         text,
-        |edit| edit.desired_width(width).font(font.clone()).hint_text(hint),
+        |edit| {
+            edit.id(egui::Id::unique(field.id))
+                .desired_width(width)
+                .font(font.clone())
+                .hint_text(hint)
+        },
         font,
         field.error,
         field.judge,
@@ -565,6 +574,48 @@ mod tests {
     use dmm_lib::measurement::{MeasuredValue, Measurement};
     use dmm_lib::protocol::{DeviceFamily, DeviceProfile, registry};
     use std::collections::BTreeMap;
+
+    /// A focused row field keeps its focus when more widgets come before it
+    /// than last frame: a soft keyboard that shortens the window can lay
+    /// the column out that way, and a field that lost its focus closed the
+    /// keyboard as it opened.
+    #[test]
+    fn a_row_field_keeps_its_focus_when_the_layout_before_it_changes() {
+        let ctx = crate::app::styled_context();
+        let font = egui::FontId::proportional(12.0);
+        let mut text = String::new();
+        let mut frame = |before: usize, focus: bool| {
+            headless_frame(&ctx, None, None, vec![], |ui| {
+                for _ in 0..before {
+                    ui.label("above");
+                }
+                ui.horizontal_wrapped(|ui| {
+                    row_field(
+                        ui,
+                        &font,
+                        1.0,
+                        &mut text,
+                        RowField {
+                            id: "test-row-field",
+                            caption: "×",
+                            hint: "factor",
+                            focus,
+                            hover: None,
+                            judge: &|_| None,
+                            error: egui::Color32::RED,
+                        },
+                    );
+                });
+            });
+        };
+        frame(1, true);
+        frame(1, false);
+        let focused = ctx.memory(|m| m.focused());
+        assert!(focused.is_some(), "the field took the focus");
+        frame(2, false);
+        frame(2, false);
+        assert_eq!(ctx.memory(|m| m.focused()), focused, "focus kept");
+    }
 
     /// The carets draw from the bundled fonts, not as the replacement box
     /// (`Fonts::has_glyph` can't tell; see `.claude/rules/gui.md`).

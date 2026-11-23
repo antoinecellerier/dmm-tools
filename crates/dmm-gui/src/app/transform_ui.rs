@@ -220,6 +220,7 @@ impl App {
                 scale,
                 &mut editor.scale,
                 RowField {
+                    id: "scale-factor-field",
                     caption: "\u{D7}",
                     hint: &tr!(l10n, "scale-factor"),
                     focus,
@@ -235,6 +236,7 @@ impl App {
                 scale,
                 &mut editor.offset,
                 RowField {
+                    id: "scale-offset-field",
                     caption: "+",
                     hint: &tr!(l10n, "scale-offset"),
                     focus: false,
@@ -250,6 +252,7 @@ impl App {
                 scale,
                 &mut editor.unit,
                 RowField {
+                    id: "scale-unit-field",
                     caption: "\u{2192}",
                     hint: &tr!(l10n, "scale-unit"),
                     focus: false,
