@@ -295,3 +295,18 @@ Bugs a reader can reproduce: symptom, cause, and the fix where known.
   (`show_meter_only`) and the window's minimum size (`min_window_size`) count
   it as shrinking with the reading. Fix, untried: measure the help apart from
   the scaled content. A cable whose meter is switched off.
+- **The big meter's notice line can be pushed out of the smallest window.**
+  Under a reading, a notice's title wider than the panel or at the smallest
+  font stops shrinking with the reading, and at that font wraps
+  (`show_under_reading`), while the fit and the window's minimum size count it
+  as one line that shrinks. Read from the code, not seen. Fix, untried: the
+  one above's. A meter that stops answering in the big-meter view, at the
+  smallest window.
+- **A narrow plot drops its extra lines while their Show: chips stay lit.**
+  At 396 wide with `--mock-mode acv-hz` the Frequency and Period traces are
+  not drawn, yet their chips look selected and carry their samples. Cause not
+  traced. Fix, untried: draw such a chip as it draws one whose axis is refused.
+- **Some one-point resizes leave the layout a frame behind.** After the
+  window changes size by a point the content can be laid out for the previous
+  size until the next repaint. Cause not traced; a panel's content rect is the
+  last frame's (`.claude/rules/gui.md`). Any live mock, resized point by point.
