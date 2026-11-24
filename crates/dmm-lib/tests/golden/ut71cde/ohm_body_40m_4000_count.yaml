@@ -1,0 +1,9 @@
+# Resistance through the body at 4000 counts, the blue key held at power-on - fifth digit blank, 40MΩ range: 09.34 MΩ, matched on the LCD.
+# Captured 2026-11-23 from a UT71D over CH9325 (issue #22, @wanthalf, 0.11.0-dev 8c359bf report, step ohm_4000_body).
+raw_hex: "B0 B9 B3 34 BA B6 34 B0 31 0D 8A"
+mode: "Ω"
+value: "9.34"
+unit: "MΩ"
+range_label: "40MΩ"
+flags:
+  auto_range: true

@@ -1,0 +1,9 @@
+# Resistance with the probe tips shorted at 4000 counts, the blue key held at power-on - fifth digit blank, 400Ω range: 000.0 Ω, matched on the LCD.
+# Captured 2026-11-23 from a UT71D over CH9325 (issue #22, @wanthalf, 0.11.0-dev 8c359bf report, step ohm_4000_short).
+raw_hex: "B0 B0 B0 B0 BA 31 34 B0 31 0D 8A"
+mode: "Ω"
+value: "0"
+unit: "Ω"
+range_label: "400Ω"
+flags:
+  auto_range: true

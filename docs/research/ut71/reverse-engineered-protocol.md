@@ -167,7 +167,8 @@ against its LCD: `A A 0 C A`, an overload, on open-lead resistance
 `A C 0 A A`, LO, on 4-20 mA % with nothing connected (`L0. %`). The UT804
 sends the same bytes in the same states (UT804 spec §3.3). The blue key
 held at power-on blanked the fifth digit: byte 4 = `A`, DC V range code 1,
-`0.000 V`. No `B`, `D`-`F` or HI pattern was sent.
+`0.000 V`; and on Ω, `09.34 MΩ` at 40 MΩ and `000.0 Ω` at 400 Ω, the overload
+unchanged. No `B`, `D`-`F` or HI pattern was sent.
 
 The decimal point is not sent: the function and range codes place it
 (§3.5). The UT71E's power position also shows VA and cos φ on the
@@ -321,8 +322,9 @@ model; what differs is the full scale a code stands for.
 - **[HARDWARE]** A UT71D (#22) sent these C/D/E codes: AC V 1, AC+DC V 1-4,
   DC V 1, DC mV 0, Ω 1, 2, 5 and 6, capacitance 1, µA 0 and 1, mA 0 and 1,
   Hz 0, and 0 on °C, °F, continuity, diode and 4-20 mA %. In the
-  blue-key 4000-count mode DC V kept range code 1 (§3.1); RANGE held at
-  power-on has not been tried.
+  blue-key 4000-count mode DC V kept range code 1 and Ω sent codes 1-6, the
+  ranges of the 40000-count display (§3.1); RANGE held at power-on has not
+  been tried.
 
 ### 3.6 Unlisted Functions and Ranges — [VENDOR]
 
@@ -370,8 +372,9 @@ Data output:
   recall from live readings.
 - The primary display updates 2-3 times/s (EN p.56); the Voltcraft manual
   gives 3 measurements/s (VC09 p.57). A UT71D sends a packet every 652-688
-  ms (median 656 ms, the UT804's rate, UT804 spec §4.2), and every 215 ms
-  or so in the blue-key 4000-count mode [HARDWARE, #22].
+  ms (median 656 ms, the UT804's rate, UT804 spec §4.2), and in the
+  blue-key 4000-count mode about every 110 ms on DC V and 130-140 ms on Ω,
+  7-9 a second [HARDWARE, #22].
 - Not stated in any manual: whether HOLD, REL or MAX MIN change what is
   sent (§3.4 has what a UT71D does).
 
@@ -451,7 +454,7 @@ Wire facts a decoder meets:
   overload or LO packet (§3.1).
 - The sign is bit 2 of byte 8; in Hz mode it marks duty cycle (§3.4).
 - Code E carries power in W from a UT71E or VC940 [DEDUCED] (§3.2).
-- Packets come every 656 ms at 40000 counts, every ~215 ms at 4000
+- Packets come every 656 ms at 40000 counts, every 110-140 ms at 4000
   (§4.1), not at the display's 2-3 updates a second.
 - The first packet after a change of function can carry the previous
   function's coupling (§3.3).
