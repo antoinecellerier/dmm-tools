@@ -248,9 +248,9 @@ mod tests {
     fn start() -> SystemTime {
         jiff::civil::date(2026, 9, 15)
             .at(14, 30, 5, 0)
-            .to_zoned(jiff::tz::TimeZone::system())
+            .to_zoned_datetime(jiff::tz::TimeZone::system())
+            .and_then(SystemTime::try_from)
             .expect("a date in range")
-            .into()
     }
 
     #[test]

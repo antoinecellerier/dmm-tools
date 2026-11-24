@@ -775,9 +775,9 @@ mod tests {
     fn each_format_names_its_own_file() {
         let start = jiff::civil::date(2026, 9, 15)
             .at(14, 30, 5, 0)
-            .to_zoned(jiff::tz::TimeZone::system())
-            .expect("a date in range")
-            .into();
+            .to_zoned_datetime(jiff::tz::TimeZone::system())
+            .and_then(SystemTime::try_from)
+            .expect("a date in range");
         assert_eq!(
             ExportFormat::Csv.default_name("UT61E+", Some("DC V"), start),
             "measurements-UT61E+-DC-V-2026-09-15_14-30-05.csv"

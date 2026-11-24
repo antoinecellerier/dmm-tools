@@ -4,13 +4,13 @@
 
 use jiff::fmt::temporal::DateTimePrinter;
 use jiff::tz::{Offset, TimeZone};
-use jiff::{Timestamp, Zoned};
+use jiff::{Timestamp, ZonedDateTime};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::SystemTime;
 
-/// `t` in the system's time zone, to format with [`Zoned::strftime`].
-pub fn local(t: SystemTime) -> Zoned {
-    timestamp(t).to_zoned(zone())
+/// `t` in the system's time zone, to format with [`ZonedDateTime::strftime`].
+pub fn local(t: SystemTime) -> ZonedDateTime {
+    timestamp(t).to_zoned_datetime(zone())
 }
 
 /// `t` in RFC 3339 at the local offset, its fraction of a second in as many
@@ -29,9 +29,10 @@ pub fn rfc3339_millis(t: SystemTime) -> String {
 }
 
 /// An RFC 3339 time, as the writers above put it or any offset, `Z`
-/// included, gives it.
+/// included, gives it. One this platform's `SystemTime` cannot hold (before
+/// 1601 on Windows) is refused.
 pub fn parse(text: &str) -> Result<SystemTime, jiff::Error> {
-    text.parse::<Timestamp>().map(SystemTime::from)
+    text.parse::<Timestamp>().and_then(SystemTime::try_from)
 }
 
 /// The system's time zone. One that cannot be found, from a `TZ` jiff
