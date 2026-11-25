@@ -1115,6 +1115,9 @@ fn note_field(ui: &mut Ui, l10n: &Localizer, m: &mut Marker, width: f32) -> egui
             .hint_text(RichText::new(tr!(l10n, "markers-note")).font(log_font()))
             .font(log_font())
             .margin(egui::Margin::symmetric(4, 0))
+            // Centred on a Touch row, which is taller than its text; egui
+            // puts a text field's text at the top.
+            .align(egui::Align2::LEFT_CENTER)
             .char_limit(NOTE_MAX_CHARS)
             .desired_width(width),
     )
