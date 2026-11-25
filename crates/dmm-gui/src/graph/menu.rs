@@ -641,25 +641,13 @@ impl Graph {
         } else {
             None
         };
-        // Under a mouse pointer the menu drops from it; opened by a long
-        // press it goes above the finger, or beside it where there is no
-        // room above.
-        const ABOVE: [egui::RectAlign; 4] = [
-            egui::RectAlign::TOP_START,
-            egui::RectAlign::TOP_END,
-            egui::RectAlign::RIGHT_END,
-            egui::RectAlign::LEFT_END,
-        ];
         let mut popup = egui::Popup::menu(plot)
             .style(crate::app::Sizing::menu_style(&ctx))
             .id(popup_id)
             .open_memory(open)
             .at_pointer_fixed();
         if self.menu_by_touch {
-            popup = popup
-                .align(ABOVE[0])
-                .align_alternatives(&ABOVE)
-                .gap(super::hover::FINGER_GAP);
+            popup = crate::app::Sizing::above_the_finger(popup);
         }
         popup.show(|ui| {
             let entries = add_entries(ui, l10n, &menu, &unit, cursors, reading_secs);

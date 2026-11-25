@@ -199,6 +199,22 @@ impl Sizing {
         around.clicked()
     }
 
+    /// `popup`, a menu a long press opened, placed above the finger, or
+    /// beside it where there is no room above: a mouse pointer's menu drops
+    /// from it, where the fingertip would cover it.
+    pub(crate) fn above_the_finger(popup: egui::Popup<'_>) -> egui::Popup<'_> {
+        const ABOVE: [egui::RectAlign; 4] = [
+            egui::RectAlign::TOP_START,
+            egui::RectAlign::TOP_END,
+            egui::RectAlign::RIGHT_END,
+            egui::RectAlign::LEFT_END,
+        ];
+        popup
+            .align(ABOVE[0])
+            .align_alternatives(&ABOVE)
+            .gap(FINGER_GAP)
+    }
+
     /// A glyph-only button's least size: square at the control height under
     /// Touch, egui's own sizing under Compact.
     pub(crate) fn glyph(&self) -> egui::Vec2 {
@@ -209,6 +225,10 @@ impl Sizing {
         }
     }
 }
+
+/// The gap between a finger and a menu opened above it, in points: the
+/// fingertip's half.
+const FINGER_GAP: f32 = 24.0;
 
 fn sizing_id() -> egui::Id {
     egui::Id::unique("dmm-density-sizing")

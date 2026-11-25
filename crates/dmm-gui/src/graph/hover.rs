@@ -266,10 +266,6 @@ pub(super) fn height_tags(
 /// view.
 const FINGER_CLEARANCE: f32 = 48.0;
 
-/// The gap between a finger and a menu opened above it, in points: the
-/// fingertip's half.
-pub(super) const FINGER_GAP: f32 = 24.0;
-
 /// Where a tap on a touchscreen left the crosshair: a finger has no hover,
 /// so the readings it showed would go as it lifts. A point of the plot, in
 /// the history's `epoch` (`Graph::history_epoch`): a restart or a rescale
