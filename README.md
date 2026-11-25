@@ -147,7 +147,7 @@ For contributors: [CONTRIBUTING.md](CONTRIBUTING.md) for bug reports, protocol c
 
 ## Feedback
 
-Bugs, ideas, questions, or something in the app or the docs that confused you: [open an issue](https://github.com/antoinecellerier/dmm-tools/issues/new). How a meter in the [device table](#supported-devices) works for you goes on its row's issue. [What to include in a bug report](CONTRIBUTING.md#bug-reports).
+Feedback is welcome! Please [open an issue](https://github.com/antoinecellerier/dmm-tools/issues/new) if you hit bugs, have ideas for improvements, questions, or were confused by something in the app or the docs. For device specific feedback, please use its dedicated issue in the [device table](#supported-devices) or open a new one if it's missing.
 
 ## License
 
