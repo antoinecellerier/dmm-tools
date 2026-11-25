@@ -88,8 +88,11 @@ pub(super) struct MarkerList {
     editing: Option<NoteEdit>,
     /// Whether the log was scrolled to its newest row last frame.
     following: bool,
-    /// Scroll the log back to its newest row on the next frame.
+    /// Scroll the log back to its newest row, from the next frame until it
+    /// is there.
     refollow: bool,
+    /// The log's offset at its end, last frame.
+    end: f32,
 }
 
 /// A note being edited.
@@ -101,8 +104,8 @@ struct NoteEdit {
     /// Whether this edit has brought the marker into view yet.
     revealed: bool,
     /// Whether the log was following its newest row when editing began. The
-    /// text field keeps its cursor in view while typing, which stops the log
-    /// following; once the edit ends, it follows again.
+    /// log holds still while a note is edited; once the edit ends, it
+    /// follows again.
     following: bool,
 }
 
@@ -594,12 +597,19 @@ impl App {
             // panel it is in when that is short.
             .min_scrolled_height(max_height)
             .auto_shrink([false, true])
-            .stick_to_bottom(true);
-        if std::mem::take(&mut list.refollow) {
-            // Past any log's height, clamped to the end, where
-            // `stick_to_bottom` takes over again. Not infinity: egui does
-            // arithmetic with it before clamping.
-            area = area.vertical_scroll_offset(1.0e9);
+            // Not under a note being edited: a note on the newest row needs
+            // no scroll to be in view, so nothing would unstick the log, and
+            // the readings after it would push it out of a log that a phone's
+            // keyboard has cut down to a row or two.
+            .stick_to_bottom(list.editing.is_none());
+        let mut refollowing = None;
+        if list.refollow {
+            // Last frame's end, where `stick_to_bottom` takes over again once
+            // a frame brings no new row. Not past it: egui springs an offset
+            // past the end back over the next seconds, and the spring's
+            // speed later carries the log off its end.
+            area = area.vertical_scroll_offset(list.end);
+            refollowing = Some(list.end);
         }
         let output = area.show_viewport(ui, |ui, viewport| {
             ui.spacing_mut().interact_size.y = line;
@@ -718,6 +728,12 @@ impl App {
         });
         list.following = output.state.clamped_offset().y + output.inner_rect.height()
             >= output.content_size.y - 1.0;
+        list.end = (output.content_size.y - output.inner_rect.height()).max(0.0);
+        // Until the log is there, or the user scrolls it away from where the
+        // refollow put it.
+        let scrolled_away =
+            refollowing.is_some_and(|end| output.state.clamped_offset().y < end - 1.0);
+        list.refollow &= !list.following && !scrolled_away;
 
         if let Some(at) = reveal {
             self.graph.reveal(at);
@@ -1633,6 +1649,8 @@ mod tests {
         app: App,
         ctx: egui::Context,
         seconds: f64,
+        /// Seconds between frames.
+        step: f64,
     }
 
     impl Run {
@@ -1643,6 +1661,7 @@ mod tests {
                 app,
                 ctx: crate::app::styled_context(),
                 seconds: 0.0,
+                step: 1.0,
             }
         }
 
@@ -1673,7 +1692,7 @@ mod tests {
 
         /// One frame, the keys pressed in it left held down.
         fn frame_held(&mut self, events: Vec<Event>) {
-            self.seconds += 1.0;
+            self.seconds += self.step;
             let app = &mut self.app;
             let screen = Rect::from_min_size(Pos2::ZERO, vec2(800.0, 400.0));
             headless_frame(&self.ctx, Some(screen), Some(self.seconds), events, |ui| {
@@ -1861,5 +1880,47 @@ mod tests {
         run.frame(vec![]);
         assert_eq!(run.note_focused(), Some(2));
         assert_eq!(run.note(1), "load on");
+    }
+
+    /// A note being edited holds the log still, so readings arriving don't
+    /// push its row away; once the edit ends, the log follows the newest
+    /// readings again.
+    #[test]
+    fn the_log_holds_still_while_a_note_is_edited() {
+        let mut run = Run::new();
+        let now = run.app.clock.now();
+        run.app.capture.recording.toggle(now);
+        for _ in 0..40 {
+            run.reading();
+        }
+        run.frame(vec![]);
+        run.frame(vec![]);
+        assert!(run.app.marker_list.following, "following before");
+        run.frame(vec![key(Key::N, Modifiers::COMMAND, false)]);
+        run.frame(vec![]);
+        assert_eq!(run.note_focused(), Some(1));
+        for _ in 0..20 {
+            run.reading();
+            run.frame(vec![]);
+        }
+        assert!(
+            !run.app.marker_list.following,
+            "held while the note is edited"
+        );
+        run.frame(vec![key(Key::Enter, Modifiers::NONE, false)]);
+        assert_eq!(run.note_focused(), None);
+        // At a screen's frame rate, a reading every 6 frames: the log stays
+        // with the newest row.
+        run.step = 1.0 / 60.0;
+        for i in 0..300 {
+            if i % 6 == 0 {
+                run.reading();
+            }
+            run.frame(vec![]);
+            assert!(
+                i < 2 || run.app.marker_list.following,
+                "following again, frame {i}"
+            );
+        }
     }
 }

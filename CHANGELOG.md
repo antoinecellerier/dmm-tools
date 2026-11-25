@@ -19,6 +19,7 @@
 - **A marker's row in the log takes the lines a narrow panel needs** — a "not in the recording" note cut its reading short or put its number over the next row.
 - **A narrow window shows `OL` in the error colour** — and keeps the unit plain when a reading passes an alarm limit, as wider windows do.
 - **Scale's and Alarm's fields keep the soft keyboard open on Android in full screen** — it closed as soon as it opened.
+- **The recording log holds still during a note edit, then follows again** — it scrolled on under the note, and stopped following a few seconds after.
 - **The recording panel keeps its place as a graph gets its first readings** — it sat higher on connect and after Clear, then dropped.
 - **A histogram under the graph fits the window** — with the recording panel hidden, its value labels were cut off and the window scrolled a few points.
 - **A short plot keeps labels on its value axis** — between two round values it showed no scale at all.
