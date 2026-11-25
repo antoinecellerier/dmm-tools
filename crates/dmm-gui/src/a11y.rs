@@ -468,6 +468,31 @@ fn resized_id() -> egui::Id {
     egui::Id::unique("window_height_changed")
 }
 
+/// Ask this pass's scrollers to bring the focused control into view, as
+/// [`scroll_to_focus`] does when it takes the focus: one asked for again
+/// while it has it, and the user has scrolled it away since.
+pub(crate) fn bring_focus_into_view(ctx: &egui::Context) {
+    let pass = ctx.cumulative_pass_nr();
+    ctx.data_mut(|d| d.insert_temp(asked_id(), pass));
+}
+
+fn asked_id() -> egui::Id {
+    egui::Id::unique("bring_focus_into_view")
+}
+
+/// Whether some of the focused control was out of view last frame: cut by
+/// a scroller or past the window's content.
+pub(crate) fn focus_cut_off(ctx: &egui::Context) -> bool {
+    let Some(id) = ctx.memory(|m| m.focused()) else {
+        return false;
+    };
+    let content = ctx.content_rect();
+    ctx.viewport(|v| v.prev_pass.widgets.get(id).copied())
+        .is_some_and(|w| {
+            !content.contains_rect(w.rect) || w.interact_rect.height() < w.rect.height() - 0.5
+        })
+}
+
 /// Bring the control that just took keyboard focus into view, and again
 /// when the window changes height under it ([`window_height_changed`]).
 ///
@@ -485,12 +510,27 @@ fn resized_id() -> egui::Id {
 /// widget this frame (a caret click opening its row with the cursor in the
 /// first field lost the cursor in the same frame).
 pub(crate) fn scroll_to_focus(ui: &Ui) {
+    scroll_to_focus_within(ui, None);
+}
+
+/// [`scroll_to_focus`] for a scroller inside another, whose own view is
+/// `viewport`, in screen points: the outer scroller can cut that view down
+/// further, to a sliver or nothing. The focused control is brought into
+/// `viewport`, not into the sliver, and the outer scroller, called after
+/// this one in the same pass, brings where it lands into view in turn.
+pub(crate) fn scroll_to_focus_nested(ui: &Ui, viewport: egui::Rect) {
+    scroll_to_focus_within(ui, Some(viewport));
+}
+
+fn scroll_to_focus_within(ui: &Ui, viewport: Option<egui::Rect>) {
     let ctx = ui.ctx();
     let resized = ctx.data(|d| d.get_temp(resized_id()).unwrap_or(false));
+    let pass = ctx.cumulative_pass_nr();
+    let asked = ctx.data(|d| d.get_temp::<u64>(asked_id())) == Some(pass);
     // `Response::gained_focus`, without the `Response`.
     let Some(id) = ctx.memory(|m| {
         m.focused()
-            .filter(|&id| resized || !m.had_focus_last_frame(id))
+            .filter(|&id| resized || asked || !m.had_focus_last_frame(id))
     }) else {
         return;
     };
@@ -506,16 +546,46 @@ pub(crate) fn scroll_to_focus(ui: &Ui) {
     }) else {
         return;
     };
+    // Where a scroller inside this one is bringing the control, this pass:
+    // its rect now may be far outside, scrolled away in the inner one.
+    let rect = ctx
+        .data(|d| d.get_temp::<(egui::Id, u64, egui::Rect)>(landing_id()))
+        .filter(|&(landing, nr, _)| landing == id && nr == pass)
+        .map_or(widget.rect, |(_, _, rect)| rect);
     // Only when the widget isn't already in view: a scroll that moves
     // nothing still unsticks a `stick_to_bottom` scroller from its end.
     // The layer too: an open popup's entry can sit over the scroller's
     // rect without being in it.
-    if widget.layer_id == ui.layer_id()
-        && ui.min_rect().contains_rect(widget.rect)
-        && !ui.clip_rect().contains_rect(widget.rect)
-    {
-        ui.scroll_to_rect_animation(widget.rect, None, ctx.global_style().scroll_animation);
+    // Within a point: a field on the last row can end a fraction past the
+    // content's rect.
+    if widget.layer_id != ui.layer_id() || !ui.min_rect().expand(1.0).contains_rect(rect) {
+        return;
     }
+    let animation = ctx.global_style().scroll_animation;
+    let Some(view) = viewport else {
+        if !ui.clip_rect().contains_rect(rect) {
+            ui.scroll_to_rect_animation(rect, None, animation);
+        }
+        return;
+    };
+    // By a delta: egui aims a scroll to a rect at the scroller's clip, the
+    // sliver the outer scroller leaves of it.
+    let dy = if rect.top() < view.top() {
+        view.top() - rect.top()
+    } else if rect.bottom() > view.bottom() {
+        (view.bottom() - rect.bottom()).max(view.top() - rect.top())
+    } else {
+        0.0
+    };
+    if dy != 0.0 {
+        ui.scroll_with_delta_animation(egui::vec2(0.0, dy), animation);
+    }
+    let landed = rect.translate(egui::vec2(0.0, dy));
+    ctx.data_mut(|d| d.insert_temp(landing_id(), (id, pass, landed)));
+}
+
+fn landing_id() -> egui::Id {
+    egui::Id::unique("scroll_to_focus_landing")
 }
 
 #[cfg(test)]

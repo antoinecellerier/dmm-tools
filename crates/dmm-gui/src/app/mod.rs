@@ -563,6 +563,10 @@ pub struct App {
     /// Frames left in which to do so: the panels take a few to settle at
     /// the new height, and the field's place is last frame's.
     resettle_frames: u8,
+    /// When the content last changed height, in input seconds: the panels
+    /// keep bringing the focused field back for [`RESETTLE_SECS`] after,
+    /// while some of it is still out of view.
+    resized_at: Option<f64>,
     /// The focused text field and what it last told the system's keyboard
     /// ([`App::keep_the_keyboard_as_it_is`]).
     last_ime: Option<(egui::Id, egui::output::IMEOutput)>,
@@ -742,6 +746,7 @@ impl App {
             safe_area: None,
             content_height: 0.0,
             resettle_frames: 0,
+            resized_at: None,
             last_ime: None,
             shortcut_help: ShortcutHelp::default(),
             whats_new: WhatsNew::default(),
@@ -1407,6 +1412,31 @@ impl App {
 }
 
 impl App {
+    /// Whether the panels should bring the focused field back into view this
+    /// frame, the window's content having changed height under it: for a
+    /// few frames, and while some of the field is still out of view, for
+    /// up to [`RESETTLE_SECS`] or until the user presses or scrolls. The panels can take more than a few frames
+    /// to settle — a recording panel keeping its log's rows grows the
+    /// column over a frame or two after the keyboard comes up.
+    pub(super) fn settle_after_resize(&mut self, ctx: &egui::Context) -> bool {
+        let height = ctx.content_rect().height();
+        let now = ctx.input(|i| i.time);
+        if (height - self.content_height).abs() > 0.5 {
+            self.resettle_frames = 4;
+            self.resized_at = Some(now);
+        }
+        self.content_height = height;
+        if ctx.input(|i| i.pointer.any_pressed() || i.is_scrolling()) {
+            // The view is the user's from their first press or scroll: a
+            // panel scrolling back to the focus would fight them.
+            self.resized_at = None;
+        }
+        let recent = self
+            .resized_at
+            .is_some_and(|at| (0.0..RESETTLE_SECS).contains(&(now - at)));
+        self.resettle_frames > 0 || recent && crate::a11y::focus_cut_off(ctx)
+    }
+
     /// Keep telling the system what the focused text field last told it
     /// while that field is out of view.
     ///
@@ -1438,6 +1468,10 @@ impl App {
         }
     }
 }
+
+/// How long after the window's content changes height the panels keep
+/// bringing a focused field that is still partly out of view back.
+const RESETTLE_SECS: f64 = 1.0;
 
 impl eframe::App for App {
     fn raw_input_hook(&mut self, ctx: &egui::Context, raw_input: &mut egui::RawInput) {
@@ -1472,15 +1506,16 @@ impl eframe::App for App {
         // and the panels fill the ui they are shown in: with insets
         // (`raw_input_hook`) they go in a child laid over what is left.
         let content = ctx.content_rect();
-        if (content.height() - self.content_height).abs() > 0.5 {
-            self.resettle_frames = 4;
-        }
-        self.content_height = content.height();
+        let settling = self.settle_after_resize(&ctx);
         // A phone's window changes height under the user only for the soft
         // keyboard or the system's bars; on a desktop the user is dragging
         // its edge, and a panel scrolling back to the focus would fight
         // them.
-        let resettling = cfg!(target_os = "android") && self.resettle_frames > 0;
+        let resettling = cfg!(target_os = "android") && settling;
+        if resettling {
+            // A frame each until the panels settle: nothing else may ask.
+            ctx.request_repaint();
+        }
         crate::a11y::window_height_changed(&ctx, resettling);
         let mut inset;
         let ui = if content == root.max_rect() {

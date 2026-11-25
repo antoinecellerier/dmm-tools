@@ -47,6 +47,12 @@ const SQUEEZED_NOTE_WIDTH: f32 = 40.0;
 /// shows no more rows than fit in it.
 const LOG_MAX_HEIGHT: f32 = 16_777_216.0;
 
+/// The rows the log keeps in a column that can scroll: a column too short
+/// for the graph and the log both scrolls rather than squeeze the log below
+/// them — a phone's keyboard took it down to less than the row being
+/// written in.
+const LOG_LEAST_ROWS: f32 = 3.0;
+
 /// Space between a marker tag's edge and its number.
 const TAG_PAD: f32 = 3.0;
 /// How far a marker tag's point reaches out towards its reading.
@@ -93,6 +99,36 @@ pub(super) struct MarkerList {
     refollow: bool,
     /// The log's offset at its end, last frame.
     end: f32,
+    /// What the log lacked of [`LOG_LEAST_ROWS`] this frame, or less than
+    /// nothing for what it had to spare; `None` while it isn't drawn.
+    short: Option<f32>,
+    /// How much taller than its least the narrow layout draws the graph and
+    /// recording split, for the log's rows.
+    extra: f32,
+}
+
+impl MarkerList {
+    /// What the split in a scrolling column adds to its least height for the
+    /// log: last frame's, before the log is drawn again.
+    pub(super) fn split_extra(&mut self) -> f32 {
+        self.short = None;
+        self.extra
+    }
+
+    /// The log has been drawn, or not: grow the extra by what the log
+    /// lacked while the recording panel had less than its height
+    /// (`squeezed`), and give back what the log had to spare. A panel at its
+    /// height has the log the user sized it to. Whether the extra changed,
+    /// and needs another frame to show.
+    pub(super) fn settle_split_extra(&mut self, squeezed: bool) -> bool {
+        let before = self.extra;
+        self.extra = match self.short {
+            Some(short) if squeezed => (before + short).max(0.0),
+            Some(short) => (before + short.min(0.0)).max(0.0),
+            None => 0.0,
+        };
+        (self.extra - before).abs() > 0.5
+    }
 }
 
 /// A note being edited.
@@ -546,6 +582,7 @@ impl App {
         }
         // The rest of the panel, floored: past it, the column scrolls.
         let max_height = ui.available_height().max(0.0).floor();
+        self.marker_list.short = Some(LOG_LEAST_ROWS * pitch - max_height);
         // A panel squeezed below one row has nowhere to show the note Ctrl+N
         // opened: say so rather than type into a row no one can see.
         if max_height < line
@@ -723,8 +760,10 @@ impl App {
                 }
             }
             // Tab and Shift+Tab reach every row, drawn or scrolled out of
-            // sight, and bring the one they land on into view.
-            crate::a11y::scroll_to_focus(ui);
+            // sight, and bring the one they land on into view: into the
+            // log's own, which the narrow layout's column can cut short.
+            let own = egui::Rect::from_min_size(origin + viewport.min.to_vec2(), viewport.size());
+            crate::a11y::scroll_to_focus_nested(ui, own);
         });
         list.following = output.state.clamped_offset().y + output.inner_rect.height()
             >= output.content_size.y - 1.0;
@@ -765,12 +804,10 @@ impl MarkerList {
         note: &mut String,
     ) -> bool {
         if self.focus == Some(number) {
+            // Brought into view by the log's `scroll_to_focus_nested`: as it
+            // takes the focus, or asked for again while it has it.
             response.request_focus();
-            // Only when out of view: a scroll that isn't needed would unstick
-            // the log from its newest row.
-            if !ui.clip_rect().contains_rect(response.rect) {
-                response.scroll_to_me(None);
-            }
+            crate::a11y::bring_focus_into_view(ui.ctx());
             // Asked again next frame after a click — a marker's flag, the
             // row's +: egui takes the focus back from a note on a click
             // outside it, the next time it reads the note.
@@ -1922,5 +1959,187 @@ mod tests {
                 "following again, frame {i}"
             );
         }
+    }
+
+    /// A note asked for again while it has the focus — its flag clicked
+    /// after the log was scrolled away from it — is brought back into view.
+    #[test]
+    fn a_focused_note_asked_for_again_comes_back_into_view() {
+        let mut run = Run::new();
+        let now = run.app.clock.now();
+        run.app.capture.recording.toggle(now);
+        for _ in 0..60 {
+            run.reading();
+        }
+        let at = run
+            .app
+            .capture
+            .recording
+            .recording_samples()
+            .nth(5)
+            .expect("samples")
+            .measurement
+            .timestamp;
+        let number = run
+            .app
+            .markers
+            .add(at, std::time::SystemTime::now(), "1.234 V".into())
+            .expect("a new marker");
+        let shown = |run: &Run| {
+            let id = egui::Id::unique(("marker_note", at));
+            run.ctx
+                .viewport(|v| v.this_pass.widgets.get(id).copied())
+                .is_some_and(|w| w.interact_rect.height() >= w.rect.height() - 0.5)
+        };
+        // The log at its newest rows, far below the marker.
+        run.frame(vec![]);
+        run.frame(vec![]);
+        run.app.open_marker_note(number);
+        for _ in 0..10 {
+            run.frame(vec![]);
+        }
+        assert_eq!(run.note_focused(), Some(number));
+        assert!(shown(&run), "in view as it takes the focus");
+        // Back to the newest row, the note keeping the focus.
+        run.app.marker_list.refollow = true;
+        for _ in 0..10 {
+            run.frame(vec![]);
+        }
+        assert_eq!(run.note_focused(), Some(number), "still focused");
+        assert!(!shown(&run), "scrolled away");
+        run.app.open_marker_note(number);
+        for _ in 0..10 {
+            run.frame(vec![]);
+        }
+        assert!(shown(&run), "back in view");
+    }
+
+    /// The phone's soft keyboard shortens the window under a focused note,
+    /// on a phone in portrait (the narrow layout, Touch density): the page
+    /// and the log bring the note back into view and keep it there. In a
+    /// window where the column scrolls under the keyboard and in a taller one
+    /// where the graph and the recording fit above it unscrolled, with
+    /// the recording panel at its default height or dragged taller, the note
+    /// on the newest reading or an older one, readings arriving or not.
+    #[test]
+    fn a_focused_note_stays_in_view_as_the_keyboard_opens() {
+        let mut failures = Vec::new();
+        for width in [457.0, 400.0] {
+            for full in [940.0, 1140.0] {
+                for recording_height in [120.0, 406.7] {
+                    for newest in [true, false] {
+                        for live in [false, true] {
+                            if let Err(e) =
+                                note_with_keyboard(width, full, recording_height, newest, live)
+                            {
+                                let case =
+                                    format!("{width} x {full}, recording {recording_height}");
+                                failures.push(format!("{case}, newest {newest}, live {live}: {e}"));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        assert!(failures.is_empty(), "{}", failures.join("\n"));
+    }
+
+    /// One case of [`a_focused_note_stays_in_view_as_the_keyboard_opens`]:
+    /// a window `width` x `full` pt, as an S8+ in portrait is 457 x 940, the
+    /// keyboard taking 371 pt of it.
+    fn note_with_keyboard(
+        width: f32,
+        full: f32,
+        recording_height: f32,
+        newest: bool,
+        live: bool,
+    ) -> Result<(), String> {
+        const KEYBOARD: f32 = 371.0;
+        let settings = crate::settings::Settings {
+            auto_connect: false,
+            density: Some(crate::settings::Density::Touch),
+            recording_height,
+            ..crate::settings::Settings::default()
+        };
+        let mut app = App::from_settings(settings, dmm_lib::Clock::real());
+        let ctx = crate::app::styled_context();
+        app.apply_density(&ctx);
+        app.capture.recording.toggle(app.clock.now());
+        let t0 = Instant::now();
+        let mut sent = 0u64;
+        let mut reading = |app: &mut App| {
+            send(app, "DC V", t0 + Duration::from_millis(100 * sent));
+            sent += 1;
+        };
+        for _ in 0..60 {
+            reading(&mut app);
+        }
+        let row = if newest { 59 } else { 45 };
+        let at = t0 + Duration::from_millis(100 * row);
+        let number = app
+            .markers
+            .add(at, std::time::SystemTime::now(), "1.234 V".into())
+            .expect("a new marker");
+        app.marker_list.focus = Some(number);
+        let note = egui::Id::unique(("marker_note", at));
+
+        let mut time = 0.0;
+        // The keyboard as a phone reports it: the window keeps its size and
+        // the system's insets take its height off the bottom, the panels laid
+        // out over what is left, as `App::ui` lays them.
+        let mut frame = |app: &mut App, height: f32| {
+            time += 1.0 / 60.0;
+            let raw = egui::RawInput {
+                screen_rect: Some(Rect::from_min_size(Pos2::ZERO, vec2(width, full))),
+                time: Some(time),
+                safe_area_insets: Some(egui::SafeAreaInsets(egui::epaint::MarginF32 {
+                    bottom: full - height,
+                    ..Default::default()
+                })),
+                ..Default::default()
+            };
+            crate::app::test_support::headless_run(&ctx, raw, |root| {
+                let ctx = root.ctx().clone();
+                // As `App::ui` decides on a phone.
+                let settling = app.settle_after_resize(&ctx);
+                crate::a11y::window_height_changed(&ctx, settling);
+                let mut inset = root.new_child(egui::UiBuilder::new().max_rect(ctx.content_rect()));
+                app.show_window(&mut inset, &ctx);
+            });
+        };
+        // Where the note is, and whether all of it shows in a window
+        // `height` tall.
+        let shown = |height: f32| -> Result<(), String> {
+            if ctx.memory(|m| m.focused()) != Some(note) {
+                return Err("the note lost the focus".into());
+            }
+            let w = ctx
+                .viewport(|v| v.this_pass.widgets.get(note).copied())
+                .ok_or("the note wasn't drawn")?;
+            let window = Rect::from_min_size(Pos2::ZERO, vec2(width, height));
+            if !window.contains_rect(w.rect) || w.interact_rect.height() < w.rect.height() - 0.5 {
+                return Err(format!(
+                    "the note at {:?} shows {:?} of it",
+                    w.rect, w.interact_rect
+                ));
+            }
+            Ok(())
+        };
+
+        for i in 0..60 {
+            if live && i % 6 == 0 {
+                reading(&mut app);
+            }
+            frame(&mut app, full);
+        }
+        shown(full).map_err(|e| format!("before the keyboard, {e}"))?;
+        // The keyboard comes up: the window's content is shorter at once.
+        for i in 0..240 {
+            if live && i % 6 == 0 {
+                reading(&mut app);
+            }
+            frame(&mut app, full - KEYBOARD);
+        }
+        shown(full - KEYBOARD).map_err(|e| format!("with the keyboard, {e}"))
     }
 }

@@ -685,14 +685,22 @@ impl App {
     /// usable and the column scrolls instead. `floor()` keeps a fractional
     /// viewport from spilling the content a hair past it and raising a
     /// scrollbar on a window that fits.
+    ///
+    /// The least height also keeps the recording's log a few rows: the
+    /// graph can be drawn taller than the part of the split it is given, and
+    /// the log takes what is left. What it lacked this frame is added the
+    /// next.
     pub(super) fn show_split_in_scroller(&mut self, ui: &mut Ui) {
-        let height = ui
-            .available_height()
-            .max(self.min_split_height(ui.available_width()))
-            .floor();
-        ui.allocate_ui(egui::vec2(ui.available_width(), height), |ui| {
-            self.show_graph_recording_split(ui);
-        });
+        let least = self.min_split_height(ui.available_width()) + self.marker_list.split_extra();
+        let height = ui.available_height().max(least).floor();
+        let squeezed = ui
+            .allocate_ui(egui::vec2(ui.available_width(), height), |ui| {
+                self.show_graph_recording_split(ui)
+            })
+            .inner;
+        if self.marker_list.settle_split_extra(squeezed) {
+            ui.ctx().request_repaint();
+        }
     }
 
     /// The least height the graph + recording split takes in a column
@@ -780,7 +788,9 @@ impl App {
         }
     }
 
-    fn show_graph_recording_split(&mut self, ui: &mut Ui) {
+    /// Whether the recording panel had less room than its height: the graph
+    /// drew taller than its share, as it does in a short split.
+    fn show_graph_recording_split(&mut self, ui: &mut Ui) -> bool {
         // Built before `self.graph` is borrowed mutably below: the palette
         // reads `self.settings`, which the borrow checker would otherwise
         // see as overlapping.
@@ -790,7 +800,7 @@ impl App {
             let total = ui.available_height();
             let graph_height = (total - self.settings.recording_height).max(MIN_GRAPH_HEIGHT);
 
-            ui.allocate_ui(egui::vec2(ui.available_width(), graph_height), |ui| {
+            let graph = ui.allocate_ui(egui::vec2(ui.available_width(), graph_height), |ui| {
                 self.show_graph(ui, &tc);
             });
 
@@ -848,10 +858,16 @@ impl App {
             }
 
             self.show_recording_section(ui);
+            graph.response.rect.height() > graph_height + 0.5
         } else if self.settings.show_graph {
             self.show_graph(ui, &tc);
+            false
         } else if self.settings.show_recording {
+            // The panel alone: the split is all it has.
             self.show_recording_section(ui);
+            true
+        } else {
+            false
         }
     }
 }
