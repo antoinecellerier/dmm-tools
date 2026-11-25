@@ -9,6 +9,7 @@
 ### GUI
 
 - **A Density setting gives buttons finger-sized targets** — Touch, the default on Android; Compact keeps the desktop's sizes.
+- **A finger can mark a row of the recording log** — tap it twice, or long-press it for **Mark**; a right-click opens the same menu.
 - **A narrow graph puts its time windows in a list** — their chips wrapped the toolbar onto another row.
 - **The graph's Plot: and Show: chips carry a sample of each line** — they replace the key over the plot, which covered the traces and lost entries in a short plot.
 - **The big meter names a connection problem under the reading** — a reading on screen stayed when the link failed, with nothing to say so.

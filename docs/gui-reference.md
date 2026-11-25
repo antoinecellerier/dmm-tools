@@ -364,12 +364,13 @@ there are (`1m 49s #1103`).
   recorded, it lists the markers alone
 - **Markers** — **Mark**, or `N`, marks the reading on screen, `Ctrl+N` marks
   it and puts the cursor in its note, and clicking a marker's flag on the
-  graph opens its note. To mark an earlier reading, hover its row and click the `+` that
-  appears, or use the plot's right-click menu. A marker's row ends with its
-  number, note and `×` to delete it (or right-click its line on the plot);
-  `Enter` keeps a note, `Esc` puts back
-  what it said before. Pressing the number, or clicking or typing in the
-  note, scrolls the graph to the marker
+  graph opens its note. To mark an earlier reading, hover its row and click
+  the `+` that appears (by touch, tap the row, then tap it again), right-click
+  or long-press the row for **Mark**, or use the plot's right-click menu. A
+  marker's row ends with its number, note and `×` to delete it (or right-click
+  its line on the plot); `Enter` keeps a note, `Esc` puts back what it said
+  before. Pressing the number, or clicking or typing in the note, scrolls the
+  graph to the marker
 - The graph's readings and a recording each hold up to the configured
   [buffer size](#settings). Recording auto-stops when it is full.
 

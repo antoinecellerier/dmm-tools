@@ -477,31 +477,8 @@ fn plot_output(
 /// the touch beside the pointer events it is translated into. Then frames
 /// with no pointer, for the readout to size itself and show.
 fn tap(g: &mut Graph, ctx: &egui::Context, pos: egui::Pos2) -> Vec<String> {
-    let touch = |phase| egui::Event::Touch {
-        device_id: egui::TouchDeviceId(0),
-        id: egui::TouchId(0),
-        phase,
-        pos,
-        force: None,
-    };
-    let button = |pressed| egui::Event::PointerButton {
-        pos,
-        button: egui::PointerButton::Primary,
-        pressed,
-        modifiers: egui::Modifiers::NONE,
-    };
-    let down = vec![
-        touch(egui::TouchPhase::Start),
-        egui::Event::PointerMoved(pos),
-        button(true),
-    ];
-    let up = vec![
-        touch(egui::TouchPhase::End),
-        button(false),
-        egui::Event::PointerGone,
-    ];
-    plot_frame(g, ctx, down);
-    plot_frame(g, ctx, up);
+    plot_frame(g, ctx, crate::app::test_support::finger_down(pos));
+    plot_frame(g, ctx, crate::app::test_support::finger_up(pos));
     plot_frame(g, ctx, vec![]);
     plot_frame(g, ctx, vec![])
 }

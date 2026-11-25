@@ -166,6 +166,44 @@ pub(crate) fn to_rect(b: egui::accesskit::Rect) -> egui::Rect {
     )
 }
 
+/// A finger put down at `pos`, as egui-winit reports it: the touch beside
+/// the pointer events it is translated into.
+pub(crate) fn finger_down(pos: egui::Pos2) -> Vec<egui::Event> {
+    vec![
+        finger(pos, egui::TouchPhase::Start),
+        egui::Event::PointerMoved(pos),
+        finger_button(pos, true),
+    ]
+}
+
+/// The finger [`finger_down`] put down at `pos`, lifted there.
+pub(crate) fn finger_up(pos: egui::Pos2) -> Vec<egui::Event> {
+    vec![
+        finger(pos, egui::TouchPhase::End),
+        finger_button(pos, false),
+        egui::Event::PointerGone,
+    ]
+}
+
+fn finger(pos: egui::Pos2, phase: egui::TouchPhase) -> egui::Event {
+    egui::Event::Touch {
+        device_id: egui::TouchDeviceId(0),
+        id: egui::TouchId(0),
+        phase,
+        pos,
+        force: None,
+    }
+}
+
+fn finger_button(pos: egui::Pos2, pressed: bool) -> egui::Event {
+    egui::Event::PointerButton {
+        pos,
+        button: egui::PointerButton::Primary,
+        pressed,
+        modifiers: egui::Modifiers::NONE,
+    }
+}
+
 /// A click of `button` at `pos` as a mouse sends it, a frame each: the
 /// pointer moves there, the button goes down, it comes up.
 pub(crate) fn click_frames(pos: egui::Pos2, button: egui::PointerButton) -> [Vec<egui::Event>; 3] {

@@ -876,8 +876,8 @@ impl App {
 mod tests {
     use super::*;
     use crate::app::test_support::{
-        a11y, click_frames, focused_rect, headless_frame, key_tap, key_tap_with, node_rect,
-        test_app, to_rect,
+        a11y, click_frames, finger_down, finger_up, focused_rect, headless_frame, key_tap,
+        key_tap_with, node_rect, test_app, to_rect,
     };
     use eframe::egui::{Pos2, Rect, vec2};
     use std::time::Instant;
@@ -2205,6 +2205,348 @@ mod tests {
         run.frame(1.0, vec![egui::Event::PointerMoved(row.center())]);
         run.frame(1.0, vec![egui::Event::PointerMoved(row.center())]);
         assert!(!run.shows_widget(&format!("Add a marker at {time}")));
+    }
+
+    /// Sample `n` of `run`'s recording: when it was taken, and the name of
+    /// the tag that marks it.
+    fn row_at(run: &MenuRun, n: usize) -> (Instant, String) {
+        let sample = run
+            .app
+            .capture
+            .recording
+            .recording_samples()
+            .nth(n)
+            .expect("samples");
+        let time = dmm_shared::wall_time::local(sample.wall_time)
+            .strftime("%H:%M:%S%.3f")
+            .to_string();
+        (
+            sample.measurement.timestamp,
+            format!("Add a marker at {time}"),
+        )
+    }
+
+    /// A finger put down at `pos` and lifted, then a frame to settle.
+    fn tap(run: &mut MenuRun, pos: Pos2) {
+        run.frame(0.05, finger_down(pos));
+        run.frame(0.05, finger_up(pos));
+        run.frame(0.05, vec![]);
+    }
+
+    /// A finger has no hover to bring a row's tag up: its tap selects the
+    /// row, which keeps the tag, and a second tap marks it and puts the
+    /// cursor in its note.
+    #[test]
+    fn a_tapped_row_keeps_its_tag_and_a_second_tap_marks_it() {
+        let mut run = run_with_markers(300, &[], true);
+        let (at, add) = row_at(&run, 295);
+        let row = sample_rect(&run, at);
+        tap(&mut run, row.center());
+        assert!(
+            run.shows_widget(&add),
+            "the tag stays once the finger lifts"
+        );
+        assert!(run.app.markers.is_empty(), "the first tap only selects");
+        let row = sample_rect(&run, at);
+        tap(&mut run, row.center());
+        let marker = run.app.markers.iter().next().expect("a marker");
+        assert_eq!(marker.at, at, "on the row tapped");
+        assert_eq!(focused_label(&run).as_deref(), Some("Note for marker 1"));
+    }
+
+    /// A mouse's click on a row's line is the text's: it selects nothing,
+    /// and the tag shows only under the pointer, as before.
+    #[test]
+    fn a_clicked_row_is_not_selected() {
+        let mut run = run_with_markers(300, &[], true);
+        let (at, add) = row_at(&run, 295);
+        run.click(sample_rect(&run, at).center());
+        assert!(run.shows_widget(&add), "under the pointer");
+        run.frame(1.0, vec![egui::Event::PointerGone]);
+        run.frame(1.0, vec![]);
+        assert!(!run.shows_widget(&add), "gone with the pointer");
+        assert!(run.app.markers.is_empty());
+    }
+
+    /// A long press on a row opens a menu above the finger whose entry marks
+    /// the row; a right-click opens it too, and Escape closes it, leaving
+    /// nothing selected.
+    #[test]
+    fn a_long_press_or_a_right_click_opens_a_row_menu() {
+        let mut run = run_with_markers(300, &[], true);
+        let (at, _) = row_at(&run, 295);
+        let row = sample_rect(&run, at).center();
+        run.frame(0.05, finger_down(row));
+        for _ in 0..10 {
+            run.frame(0.1, vec![]);
+        }
+        run.frame(0.05, finger_up(row));
+        run.frame(0.05, vec![]);
+        let time = row_at(&run, 295).1.replace("Add a marker at ", "");
+        let mark = format!("Mark the reading at {time}");
+        let entry = run.node_rect(&mark);
+        assert!(entry.bottom() <= row.y, "above the finger");
+        assert_eq!(focused_label(&run).as_deref(), Some(mark.as_str()));
+        assert!(
+            run.app.markers.is_empty(),
+            "a long press only opens the menu"
+        );
+        tap(&mut run, entry.center());
+        let marker = run.app.markers.iter().next().expect("a marker");
+        assert_eq!(marker.at, at, "on the row pressed");
+
+        let mut run = run_with_markers(300, &[], true);
+        let (at, add) = row_at(&run, 295);
+        let time = add.replace("Add a marker at ", "");
+        let row = sample_rect(&run, at).center();
+        let [moved, pressed, released] = click_frames(row, egui::PointerButton::Secondary);
+        run.frame(1.0, moved);
+        run.frame(1.0, pressed);
+        run.frame(0.1, released);
+        run.frame(1.0, vec![]);
+        let mark = format!("Mark the reading at {time}");
+        assert!(run.shows_widget(&mark), "open from a right-click");
+        assert_eq!(focused_label(&run).as_deref(), Some(mark.as_str()));
+        run.key(Key::Escape);
+        assert!(!run.shows_widget(&mark), "closed by Escape");
+        assert_eq!(run.app.marker_list.selected(), None);
+        assert!(run.app.markers.is_empty());
+    }
+
+    /// A long press held on a row for its menu.
+    fn long_press(run: &mut MenuRun, pos: Pos2) {
+        run.frame(0.05, finger_down(pos));
+        for _ in 0..10 {
+            run.frame(0.1, vec![]);
+        }
+        run.frame(0.05, finger_up(pos));
+        run.frame(0.05, vec![]);
+    }
+
+    /// A tap on the row whose menu is open closes the menu, marking nothing.
+    #[test]
+    fn a_tap_on_a_menus_row_only_closes_it() {
+        let mut run = run_with_markers(300, &[], true);
+        let (at, add) = row_at(&run, 295);
+        let mark = format!(
+            "Mark the reading at {}",
+            add.replace("Add a marker at ", "")
+        );
+        let row = sample_rect(&run, at).center();
+        long_press(&mut run, row);
+        assert!(run.shows_widget(&mark), "open");
+        tap(&mut run, row);
+        assert!(!run.shows_widget(&mark), "closed");
+        assert!(run.app.markers.is_empty(), "nothing marked");
+        assert_eq!(run.app.marker_list.selected(), None);
+    }
+
+    /// A second row's menu, opened while the first one's is, selects the
+    /// second row.
+    #[test]
+    fn a_second_rows_menu_selects_its_row() {
+        let mut run = run_with_markers(300, &[], true);
+        let (first, _) = row_at(&run, 290);
+        let (second, _) = row_at(&run, 295);
+        let right_click = |run: &mut MenuRun, pos| {
+            let [moved, pressed, released] = click_frames(pos, egui::PointerButton::Secondary);
+            run.frame(1.0, moved);
+            run.frame(1.0, pressed);
+            run.frame(0.1, released);
+            run.frame(1.0, vec![]);
+        };
+        let pos = sample_rect(&run, first).center();
+        right_click(&mut run, pos);
+        assert_eq!(run.app.marker_list.selected(), Some(first));
+        let pos = sample_rect(&run, second).center();
+        right_click(&mut run, pos);
+        assert_eq!(run.app.marker_list.selected(), Some(second));
+    }
+
+    /// A finger's drag of the log while it is on its way back to its newest
+    /// row, after a note, leaves it where the finger left it.
+    #[test]
+    fn a_drag_after_a_note_stays_where_it_was_dragged() {
+        let mut run = run_with_markers(300, &[], true);
+        let (at, _) = row_at(&run, 295);
+        let row = sample_rect(&run, at);
+        tap(&mut run, row.center());
+        tap(&mut run, row.center());
+        assert_eq!(focused_label(&run).as_deref(), Some("Note for marker 1"));
+        let t0 = run
+            .app
+            .last_measurement
+            .as_ref()
+            .expect("a reading")
+            .timestamp;
+        for i in 1..=10 {
+            push_reading(&mut run, t0 + std::time::Duration::from_secs(i));
+            run.frame(0.1, vec![]);
+        }
+        // A reading every frame from here, as a phone draws one a reading:
+        // the log stays short of its end, on its way back, as a finger
+        // drags it down to earlier rows.
+        let mut next = 11;
+        let mut frame = |run: &mut MenuRun, events| {
+            push_reading(run, t0 + std::time::Duration::from_secs(next));
+            next += 1;
+            run.frame(0.05, events);
+        };
+        frame(&mut run, key_tap(Key::Enter));
+        let start = row.center();
+        frame(&mut run, finger_down(start));
+        for step in 1..=10 {
+            let pos = start + vec2(0.0, 12.0 * step as f32);
+            frame(
+                &mut run,
+                vec![
+                    egui::Event::Touch {
+                        device_id: egui::TouchDeviceId(0),
+                        id: egui::TouchId(0),
+                        phase: egui::TouchPhase::Move,
+                        pos,
+                        force: None,
+                    },
+                    egui::Event::PointerMoved(pos),
+                ],
+            );
+        }
+        run.frame(0.05, finger_up(start + vec2(0.0, 120.0)));
+        for _ in 0..20 {
+            run.frame(0.05, vec![]);
+        }
+        assert!(!run.app.marker_list.following(), "where the finger left it");
+    }
+
+    /// The log holds still under a selected row while readings arrive, and
+    /// follows the newest ones again once a tap elsewhere ends the selection.
+    #[test]
+    fn the_log_holds_still_under_a_selected_row() {
+        let mut run = run_with_markers(300, &[], true);
+        let (at, _) = row_at(&run, 295);
+        assert!(run.app.marker_list.following(), "following before");
+        let row = sample_rect(&run, at);
+        tap(&mut run, row.center());
+        let t0 = run
+            .app
+            .last_measurement
+            .as_ref()
+            .expect("a reading")
+            .timestamp;
+        for i in 1..=20 {
+            push_reading(&mut run, t0 + std::time::Duration::from_secs(i));
+            run.frame(0.1, vec![]);
+        }
+        assert!(!run.app.marker_list.following(), "held");
+        assert!(
+            run.shows_widget(&row_at(&run, 295).1),
+            "the row still in view"
+        );
+        let elsewhere = Pos2::new(run.width - 4.0, 4.0);
+        tap(&mut run, elsewhere);
+        assert_eq!(run.app.marker_list.selected(), None, "ended by the tap");
+        run.frame(0.1, vec![]);
+        run.frame(0.1, vec![]);
+        assert!(run.app.marker_list.following(), "following again");
+    }
+
+    /// A finger's press holds the log still: readings arriving while it is
+    /// down slide no other row under it, so the row selected is the one it
+    /// pressed, where it pressed it.
+    #[test]
+    fn a_pressed_row_stays_under_the_finger() {
+        let mut run = run_with_markers(300, &[], true);
+        let (at, _) = row_at(&run, 295);
+        let row = sample_rect(&run, at);
+        let t0 = run
+            .app
+            .last_measurement
+            .as_ref()
+            .expect("a reading")
+            .timestamp;
+        run.frame(0.05, finger_down(row.center()));
+        for i in 1..=3 {
+            push_reading(&mut run, t0 + std::time::Duration::from_secs(i));
+            run.frame(0.05, vec![]);
+        }
+        run.frame(0.05, finger_up(row.center()));
+        run.frame(0.05, vec![]);
+        assert_eq!(run.app.marker_list.selected(), Some(at));
+        assert_eq!(sample_rect(&run, at), row, "still under the finger");
+    }
+
+    /// A quick tap, down and up within one frame as a phone can report it,
+    /// holds the log where it was on screen: the row tapped stays under the
+    /// finger for the second tap, though the frame on screen had taken a
+    /// reading the log had yet to move on to.
+    #[test]
+    fn a_quick_tap_leaves_its_row_under_the_finger() {
+        let mut run = run_with_markers(300, &[], true);
+        let (at, _) = row_at(&run, 295);
+        let t0 = run
+            .app
+            .last_measurement
+            .as_ref()
+            .expect("a reading")
+            .timestamp;
+        // The frame on screen as the finger lands took a reading: it was
+        // drawn before the log moved on to its newest row.
+        push_reading(&mut run, t0 + std::time::Duration::from_secs(1));
+        run.frame(0.05, vec![]);
+        let row = sample_rect(&run, at);
+        let mut both = finger_down(row.center());
+        both.extend(finger_up(row.center()));
+        run.frame(0.05, both);
+        run.frame(0.05, vec![]);
+        assert_eq!(run.app.marker_list.selected(), Some(at));
+        assert_eq!(sample_rect(&run, at), row, "still under the finger");
+    }
+
+    /// A selected row marked by a second tap hands its hold to the note's
+    /// edit: the log stays still while the note is written, and follows the
+    /// newest readings again once it is done.
+    #[test]
+    fn the_log_follows_again_after_a_tapped_rows_note() {
+        let mut run = run_with_markers(300, &[], true);
+        let (at, _) = row_at(&run, 295);
+        let row = sample_rect(&run, at);
+        let t0 = run
+            .app
+            .last_measurement
+            .as_ref()
+            .expect("a reading")
+            .timestamp;
+        // A finger seen before, as on a phone: the line's text then gives a
+        // finger's drag to the log, to scroll it.
+        let elsewhere = Pos2::new(run.width - 4.0, 4.0);
+        tap(&mut run, elsewhere);
+        // A reading arrives while the finger is down: the press starts a
+        // drag of the log, which stops it following before the tap is one.
+        run.frame(0.05, finger_down(row.center()));
+        push_reading(&mut run, t0 + std::time::Duration::from_millis(500));
+        run.frame(0.05, vec![]);
+        run.frame(0.05, finger_up(row.center()));
+        run.frame(0.05, vec![]);
+        let mut next = 1;
+        let mut readings = |run: &mut MenuRun, n: u64| {
+            for _ in 0..n {
+                push_reading(run, t0 + std::time::Duration::from_secs(next));
+                next += 1;
+                run.frame(0.1, vec![]);
+            }
+        };
+        readings(&mut run, 10);
+        let row = sample_rect(&run, at);
+        tap(&mut run, row.center());
+        assert_eq!(focused_label(&run).as_deref(), Some("Note for marker 1"));
+        readings(&mut run, 10);
+        assert!(
+            !run.app.marker_list.following(),
+            "held while the note is written"
+        );
+        run.key(Key::Enter);
+        readings(&mut run, 3);
+        assert!(run.app.marker_list.following(), "following again");
     }
 
     /// N places no marker under the discard prompt: the prompt would be

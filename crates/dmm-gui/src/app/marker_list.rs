@@ -94,6 +94,10 @@ pub(super) struct MarkerList {
     editing: Option<NoteEdit>,
     /// Whether the log was scrolled to its newest row last frame.
     following: bool,
+    /// Whether it was, the last frame no pointer was down: a finger's press
+    /// on the log starts a drag of it, which stops it following before the
+    /// press turns out to be a tap.
+    rest_following: bool,
     /// Scroll the log back to its newest row, from the next frame until it
     /// is there.
     refollow: bool,
@@ -105,6 +109,24 @@ pub(super) struct MarkerList {
     /// How much taller than its least the narrow layout draws the graph and
     /// recording split, for the log's rows.
     extra: f32,
+    /// The sample row a finger tapped, or a long press or a right-click
+    /// opened the menu of: it keeps its tag, and the log holds still under
+    /// it.
+    selected: Option<Instant>,
+    /// Whether the log was following its newest row when the selection
+    /// began: it follows again once the selection, or the note it leads to,
+    /// ends.
+    held: Option<bool>,
+    /// The menu of the selected row.
+    row_menu: RowMenu,
+    /// Whether that menu was open last frame.
+    menu_open: bool,
+    /// Where the log was on screen last frame: a finger pressing it holds it
+    /// still.
+    view: Option<egui::Rect>,
+    /// The offset last frame's rows were drawn at, and whether a finger was
+    /// on the log then.
+    drawn: (f32, bool),
 }
 
 impl MarkerList {
@@ -113,6 +135,34 @@ impl MarkerList {
     pub(super) fn split_extra(&mut self) -> f32 {
         self.short = None;
         self.extra
+    }
+
+    /// The sample row selected, for the recording panel's tests.
+    #[cfg(test)]
+    pub(super) fn selected(&self) -> Option<Instant> {
+        self.selected
+    }
+
+    /// Whether the log was at its newest row last frame, for the recording
+    /// panel's tests.
+    #[cfg(test)]
+    pub(super) fn following(&self) -> bool {
+        self.following
+    }
+
+    /// Select the sample row taken at `at`, holding the log still.
+    fn select(&mut self, at: Instant) {
+        if self.selected.is_none() {
+            self.held = Some(self.rest_following);
+        }
+        self.selected = Some(at);
+    }
+
+    /// End the selection, and follow again if the log was following.
+    fn deselect(&mut self) {
+        if self.selected.take().is_some() {
+            self.refollow |= self.held.take().unwrap_or(false);
+        }
     }
 
     /// The log has been drawn, or not: grow the extra by what the log
@@ -549,6 +599,12 @@ impl App {
             // Trimmed away before its row was drawn.
             self.marker_list.focus = None;
         }
+        if let Some(at) = self.marker_list.selected
+            && self.capture.recording.sample_at(at).is_none()
+        {
+            // Its sample is gone from the buffer.
+            self.marker_list.deselect();
+        }
 
         // Every row is one line of the log font tall, a marked one too, so
         // the controls on a marker's row are sized down to it. Under Touch a
@@ -626,7 +682,19 @@ impl App {
         let mut reveal = None;
         let mut delete = None;
         let mut mark = None;
+        let mut select = None;
+        let mut menu_open = false;
 
+        // A finger on the log holds it still, so the row it pressed stays
+        // under it until it lifts, and where it tapped: a quick tap comes
+        // down and up within one frame.
+        let on_log = |p: egui::Pos2| list.view.is_some_and(|view| view.contains(p));
+        let touched = ui.input(|i| {
+            i.any_touches() && i.pointer.press_origin().is_some_and(on_log)
+                || i.events
+                    .iter()
+                    .any(|e| matches!(e, egui::Event::Touch { pos, .. } if on_log(*pos)))
+        });
         let mut area = egui::ScrollArea::vertical()
             .id_salt("recording_log")
             .max_height(max_height)
@@ -638,9 +706,14 @@ impl App {
             // no scroll to be in view, so nothing would unstick the log, and
             // the readings after it would push it out of a log that a phone's
             // keyboard has cut down to a row or two.
-            .stick_to_bottom(list.editing.is_none());
+            .stick_to_bottom(list.editing.is_none() && list.selected.is_none() && !touched);
         let mut refollowing = None;
-        if list.refollow {
+        if touched && !list.drawn.1 {
+            // Where the rows were drawn, under the finger as it came down:
+            // following, the log has moved on since to a reading that
+            // frame took.
+            area = area.vertical_scroll_offset(list.drawn.0);
+        } else if list.refollow {
             // Last frame's end, where `stick_to_bottom` takes over again once
             // a frame brings no new row. Not past it: egui springs an offset
             // past the end back over the next seconds, and the spring's
@@ -688,6 +761,7 @@ impl App {
                 geometry.row_at(top).saturating_sub(1)
                     ..(geometry.row_at(top + viewport.height()) + 2).min(rows.len())
             };
+            list.drawn = (viewport.min.y, touched);
             let last = (height - viewport.height()).max(0.0);
             let in_view = screen(viewport.min.y.min(last));
             let newest = if list.following { screen(last) } else { 0..0 };
@@ -716,9 +790,21 @@ impl App {
                 );
                 let i = match row {
                     Row::Sample(k) => {
-                        if let Some(offered) = sample_row(ui, &layout, &l10n, &samples[k]) {
-                            mark = Some(offered);
+                        let s = &samples[k];
+                        let at = s.measurement.timestamp;
+                        let selected = list.selected == Some(at);
+                        let asks = sample_row(ui, &layout, &l10n, s, selected, &mut list.row_menu);
+                        // A tap while a row's menu is open only closes it.
+                        let tapped = asks.tapped && !list.menu_open;
+                        if asks.mark || tapped && selected {
+                            mark = Some((at, log_line(&l10n, &s.measurement)));
+                        } else if tapped || asks.menu_opened {
+                            // A long press or a right-click selects the row
+                            // too, for the log to hold it still under its
+                            // menu.
+                            select = Some(at);
                         }
+                        menu_open |= asks.menu_open;
                         continue;
                     }
                     Row::Marker(i) | Row::Marked(_, i) => i,
@@ -768,11 +854,44 @@ impl App {
         list.following = output.state.clamped_offset().y + output.inner_rect.height()
             >= output.content_size.y - 1.0;
         list.end = (output.content_size.y - output.inner_rect.height()).max(0.0);
+        list.view = Some(output.inner_rect);
         // Until the log is there, or the user scrolls it away from where the
         // refollow put it.
         let scrolled_away =
             refollowing.is_some_and(|end| output.state.clamped_offset().y < end - 1.0);
         list.refollow &= !list.following && !scrolled_away;
+        // A selection ends at a click anywhere else, as its menu closes, or as
+        // its row is marked, where the note's edit takes over its hold.
+        let menu_closed = list.menu_open && !menu_open;
+        list.menu_open = menu_open;
+        if let Some(at) = select {
+            list.select(at);
+        } else if mark.is_some() {
+            list.selected = None;
+        } else if menu_closed || ui.input(|i| i.pointer.any_click()) && !menu_open {
+            list.deselect();
+            // A finger's tap that started no selection, mark or note gives
+            // back the hold its press took.
+            let finger = ui.input(|i| {
+                i.events
+                    .iter()
+                    .any(|e| matches!(e, egui::Event::Touch { .. }))
+            });
+            if finger && list.editing.is_none() {
+                list.refollow |= list.rest_following;
+            }
+        }
+        if mark.is_none()
+            && list.selected.is_none()
+            && list.focus.is_none()
+            && list.editing.is_none()
+        {
+            // A mark that opened no note leaves no hold for a later one.
+            list.held = None;
+        }
+        if ui.input(|i| !i.pointer.any_down() && !i.pointer.any_released()) {
+            list.rest_following = list.following;
+        }
 
         if let Some(at) = reveal {
             self.graph.reveal(at);
@@ -820,7 +939,7 @@ impl MarkerList {
                 number,
                 before: note.clone(),
                 revealed: false,
-                following: self.following,
+                following: self.held.take().unwrap_or(self.rest_following),
             });
         }
         // Acting on a note brings its marker into view: a click, or the first
@@ -1001,17 +1120,56 @@ fn marker_text_widths(
     })
 }
 
-/// A sample's row: its line, and while the pointer is on the row, a faint
-/// tag where a marker's would be that marks it. The reading to mark when
-/// the tag was clicked.
+/// What a sample's row was asked for this frame.
+#[derive(Default)]
+struct RowAsks {
+    /// A finger tapped the row, its tag aside: the first tap selects it, the
+    /// next marks it.
+    tapped: bool,
+    /// Its tag, or its menu's entry, was pressed: mark it.
+    mark: bool,
+    /// Its menu is open, from a long press or a right-click.
+    menu_open: bool,
+    /// Its menu opened this frame.
+    menu_opened: bool,
+}
+
+/// The menu a long press or a right-click opens over a sample's row.
+#[derive(Debug, Default)]
+struct RowMenu {
+    /// Opened by a long press: placed above the finger.
+    by_touch: bool,
+    /// Ask for the entry's focus again on the next frame: the press that
+    /// opened the menu counts as one outside it, and egui takes the focus
+    /// back from the entry at the next read.
+    focus_pending: bool,
+}
+
+/// A sample's row: its line, and a faint tag where a marker's would be that
+/// marks it, shown while the pointer is on the row, while a finger's tap
+/// has `selected` it, or on every row under Touch. A long press or a
+/// right-click opens a menu that marks it.
 fn sample_row(
     ui: &mut Ui,
     layout: &LogLayout,
     l10n: &Localizer,
     s: &Sample,
-) -> Option<(Instant, String)> {
+    selected: bool,
+    menu: &mut RowMenu,
+) -> RowAsks {
     let time = dmm_shared::wall_time::local(s.wall_time).strftime("%H:%M:%S%.3f");
     let row_rect = ui.max_rect();
+    // Over the row's share of the gaps too, so the tag doesn't flicker off
+    // between rows, and a tap there still lands on a row.
+    let pitch_rect = row_rect.expand2(egui::vec2(0.0, layout.row_spacing / 2.0));
+    if selected {
+        ui.painter()
+            .rect_filled(pitch_rect, 0.0, ui.visuals().widgets.hovered.weak_bg_fill);
+    }
+    // Under the line's text, which takes its own taps: a tap past the text
+    // lands here.
+    let tap = ui.interact(pitch_rect, ui.scope_id().with("tap"), egui::Sense::CLICK);
+    crate::a11y::hide_from_screen_readers(ui, tap.id);
     // One line, cut short of the tag it may offer: a wrapped line would run
     // into the row below.
     ui.set_max_width((row_rect.width() - layout.number_width - layout.spacing).max(0.0));
@@ -1023,13 +1181,24 @@ fn sample_row(
         )
         .truncate(),
     );
-    // A hovered row offers a marker: a faint tag where a marker's would be,
-    // or past a longer reading. Over the row's share of the gaps too, so the
-    // tag doesn't flicker off between rows.
-    // Under Touch every row shows it: a finger has no hover to bring it up.
-    let pitch_rect = row_rect.expand2(egui::vec2(0.0, layout.row_spacing / 2.0));
-    if !crate::app::Sizing::of(ui.ctx()).touch && !ui.rect_contains_pointer(pitch_rect) {
-        return None;
+    let row = tap.union(label.clone());
+    let mut asks = RowAsks {
+        // A finger's: a mouse's click on the line is the text's, to select
+        // it, and the hover shows the tag.
+        tapped: (tap.clicked() || label.clicked())
+            && ui.input(|i| {
+                i.events
+                    .iter()
+                    .any(|e| matches!(e, egui::Event::Touch { .. }))
+            }),
+        ..RowAsks::default()
+    };
+    asks.mark = row_menu(ui, l10n, &time.to_string(), &row, menu, &mut asks);
+    // Under Touch every row shows the tag: a finger has no hover to bring it
+    // up.
+    if !crate::app::Sizing::of(ui.ctx()).touch && !selected && !ui.rect_contains_pointer(pitch_rect)
+    {
+        return asks;
     }
     // Where the markers' numbers are, when those are on the reading's line.
     let numbers = match layout.marker.controls {
@@ -1070,9 +1239,74 @@ fn sample_row(
     ));
     ui.painter()
         .galley(body.center() - plus.size() / 2.0, plus, layout.flag);
-    response
-        .clicked()
-        .then(|| (s.measurement.timestamp, log_line(l10n, &s.measurement)))
+    asks.mark |= response.clicked();
+    asks
+}
+
+/// The menu a long press or a right-click on a sample's `row`, taken at
+/// `time`, opens, with the one entry that marks it. Whether that entry was
+/// picked; `asks` says whether the menu is open after this frame, and
+/// whether it opened in it.
+fn row_menu(
+    ui: &Ui,
+    l10n: &Localizer,
+    time: &str,
+    row: &egui::Response,
+    menu: &mut RowMenu,
+    asks: &mut RowAsks,
+) -> bool {
+    let ctx = ui.ctx().clone();
+    let popup_id = row.id.with("menu");
+    let was_open = egui::Popup::is_id_open(&ctx, popup_id);
+    if row.secondary_clicked() {
+        // Kept while the menu is open: the finger lifts.
+        menu.by_touch = ctx.input(|i| i.any_touches());
+    }
+    // Handled before the menu is drawn so this frame already shows it
+    // closed; the row can't take the focus back, so it goes nowhere.
+    if was_open {
+        let leave = ctx.input_mut(|i| {
+            i.consume_key(egui::Modifiers::NONE, Key::Tab)
+                | i.consume_key(egui::Modifiers::SHIFT, Key::Tab)
+                | i.consume_key(egui::Modifiers::NONE, Key::Escape)
+        });
+        if leave {
+            egui::Popup::close_id(&ctx, popup_id);
+            ctx.memory_mut(|m| m.move_focus(egui::FocusDirection::None));
+        }
+    }
+    // The open menu's row takes it: every row has the menu, and the first
+    // row drawn is rarely the one open.
+    let focus_again = was_open && std::mem::take(&mut menu.focus_pending);
+    let mut picked = false;
+    let mut popup = egui::Popup::context_menu(row)
+        .id(popup_id)
+        .style(crate::app::Sizing::menu_style(&ctx));
+    if menu.by_touch {
+        popup = crate::app::Sizing::above_the_finger(popup);
+    }
+    popup.show(|ui| {
+        let mark = ui.button(tr!(l10n, "markers-row-mark")).a11y_label(&tr!(
+            l10n,
+            "markers-row-mark.a11y",
+            time = time
+        ));
+        if !was_open || focus_again {
+            mark.request_focus();
+        }
+        // From the next frame on, as the export menu's entries.
+        picked = was_open && mark.clicked();
+        crate::a11y::paint_focus_ring(ui, &mark);
+    });
+    if picked {
+        egui::Popup::close_id(&ctx, popup_id);
+    }
+    asks.menu_open = egui::Popup::is_id_open(&ctx, popup_id);
+    asks.menu_opened = !was_open && asks.menu_open;
+    if asks.menu_opened {
+        menu.focus_pending = true;
+    }
+    picked
 }
 
 /// Marker `m`'s number tag: a button, so Tab stops on it, that brings the
