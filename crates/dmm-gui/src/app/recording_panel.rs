@@ -2804,6 +2804,11 @@ mod tests {
                 live_frame(run, n, t0, vec![]);
             }
         };
+        // A tap first: until egui has seen a touch screen, a finger's drag
+        // on a row's text selects it rather than scrolling the log.
+        let corner = Pos2::new(run.width - 4.0, 4.0);
+        live_frame(&mut run, &mut n, t0, finger_down(corner));
+        live_frame(&mut run, &mut n, t0, finger_up(corner));
         fling(&mut run, &mut n, start - vec2(0.0, 100.0), 100.0);
         assert!(!run.app.marker_list.following(), "scrolled up");
         for _ in 0..4 {
@@ -2814,6 +2819,81 @@ mod tests {
             assert!(
                 run.app.marker_list.following(),
                 "following again, frame {i}"
+            );
+        }
+    }
+
+    /// A mouse click on a row's tag marks that row in a live log, however a
+    /// reading's arrival falls between the button going down and up: the
+    /// press holds the log still.
+    #[test]
+    fn a_tag_clicked_in_a_live_log_marks_its_row() {
+        for phase in 0..6 {
+            let (mut run, t0) = live_log();
+            let mut n = phase;
+            let (at, _) = row_at(&run, 290);
+            let over = sample_rect(&run, at).center();
+            for _ in 0..12 {
+                live_frame(&mut run, &mut n, t0, vec![egui::Event::PointerMoved(over)]);
+            }
+            // The tag of whichever row is under the pointer by now.
+            let (add, tag) = run
+                .tree
+                .iter()
+                .find_map(|(_, node)| {
+                    let label = node.label().filter(|l| l.starts_with("Add a marker at"))?;
+                    Some((label.to_string(), to_rect(node.bounds()?).center()))
+                })
+                .expect("a hovered row's tag");
+            let [moved, pressed, released] = click_frames(tag, egui::PointerButton::Primary);
+            live_frame(&mut run, &mut n, t0, moved);
+            live_frame(&mut run, &mut n, t0, pressed);
+            for _ in 0..6 {
+                live_frame(&mut run, &mut n, t0, vec![]);
+            }
+            live_frame(&mut run, &mut n, t0, released);
+            live_frame(&mut run, &mut n, t0, vec![]);
+            let marker = run.app.markers.iter().next();
+            let time = add.replace("Add a marker at ", "");
+            assert!(marker.is_some(), "phase {phase}: {time} marked");
+        }
+    }
+
+    /// A mouse button held on a live log, too long for a click, or dragged
+    /// across a row's text, lets the log follow its newest rows again as it
+    /// comes up.
+    #[test]
+    fn a_long_mouse_press_on_a_live_log_follows_again_as_it_lifts() {
+        for drag in [0.0, 60.0] {
+            let (mut run, t0) = live_log();
+            let mut n = 0;
+            let (at, _) = row_at(&run, 295);
+            let row = sample_rect(&run, at).left_center() + vec2(20.0, 0.0);
+            let button = |pos, pressed| egui::Event::PointerButton {
+                pos,
+                button: egui::PointerButton::Primary,
+                pressed,
+                modifiers: Modifiers::NONE,
+            };
+            live_frame(&mut run, &mut n, t0, vec![egui::Event::PointerMoved(row)]);
+            live_frame(&mut run, &mut n, t0, vec![button(row, true)]);
+            for step in 1..=90 {
+                let pos = row + vec2(drag * step as f32 / 90.0, 0.0);
+                live_frame(&mut run, &mut n, t0, vec![egui::Event::PointerMoved(pos)]);
+            }
+            assert!(!run.app.marker_list.following(), "held under the press");
+            live_frame(
+                &mut run,
+                &mut n,
+                t0,
+                vec![button(row + vec2(drag, 0.0), false)],
+            );
+            for _ in 0..30 {
+                live_frame(&mut run, &mut n, t0, vec![]);
+            }
+            assert!(
+                run.app.marker_list.following(),
+                "following again after a {drag} pt drag"
             );
         }
     }

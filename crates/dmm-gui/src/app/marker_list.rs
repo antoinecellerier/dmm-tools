@@ -121,12 +121,13 @@ pub(super) struct MarkerList {
     row_menu: RowMenu,
     /// Whether that menu was open last frame.
     menu_open: bool,
-    /// Where the log was on screen last frame: a finger pressing it holds it
-    /// still.
+    /// Where the log was on screen last frame: a press on it holds it still.
     view: Option<egui::Rect>,
-    /// The offset last frame's rows were drawn at, and whether a finger was
-    /// on the log then.
+    /// The offset last frame's rows were drawn at, and whether a press held
+    /// the log then.
     drawn: (f32, bool),
+    /// The offset the press holding the log holds it at.
+    pressed_at: Option<f32>,
 }
 
 impl MarkerList {
@@ -685,15 +686,20 @@ impl App {
         let mut select = None;
         let mut menu_open = false;
 
-        // A finger on the log holds it still, so the row it pressed stays
-        // under it until it lifts, and where it tapped: a quick tap comes
-        // down and up within one frame.
+        // A press on the log, a finger's or a mouse button's, holds it
+        // still, so the row it pressed stays under it until it lifts, and
+        // where it tapped or clicked: a quick tap comes down and up within
+        // one frame. A click must come down and up on the same tag, which a
+        // reading arriving in between would move away.
         let on_log = |p: egui::Pos2| list.view.is_some_and(|view| view.contains(p));
-        let touched = ui.input(|i| {
-            i.any_touches() && i.pointer.press_origin().is_some_and(on_log)
-                || i.events
-                    .iter()
-                    .any(|e| matches!(e, egui::Event::Touch { pos, .. } if on_log(*pos)))
+        let pressed = ui.input(|i| {
+            i.pointer.any_down() && i.pointer.press_origin().is_some_and(on_log)
+                || i.events.iter().any(|e| match e {
+                    egui::Event::Touch { pos, .. } | egui::Event::PointerButton { pos, .. } => {
+                        on_log(*pos)
+                    }
+                    _ => false,
+                })
         });
         let mut area = egui::ScrollArea::vertical()
             .id_salt("recording_log")
@@ -706,7 +712,7 @@ impl App {
             // no scroll to be in view, so nothing would unstick the log, and
             // the readings after it would push it out of a log that a phone's
             // keyboard has cut down to a row or two.
-            .stick_to_bottom(list.editing.is_none() && list.selected.is_none() && !touched);
+            .stick_to_bottom(list.editing.is_none() && list.selected.is_none() && !pressed);
         // While the log follows, a wheel toward its end has nothing to
         // scroll there: it goes to the page, as at any scroller's end. Taken
         // by the log, the tail of a wheel step egui spreads over the next
@@ -719,11 +725,12 @@ impl App {
             });
         }
         let mut refollowing = None;
-        if touched && !list.drawn.1 {
-            // Where the rows were drawn, under the finger as it came down:
+        if pressed && !list.drawn.1 {
+            // Where the rows were drawn, under the press as it came down:
             // following, the log has moved on since to a reading that
             // frame took.
             area = area.vertical_scroll_offset(list.drawn.0);
+            list.pressed_at = Some(list.drawn.0);
         } else if list.refollow {
             // Last frame's end, where `stick_to_bottom` takes over again once
             // a frame brings no new row. Not past it: egui springs an offset
@@ -778,7 +785,7 @@ impl App {
                 geometry.row_at(top).saturating_sub(1)
                     ..(geometry.row_at(top + viewport.height()) + 2).min(rows.len())
             };
-            list.drawn = (viewport.min.y, touched);
+            list.drawn = (viewport.min.y, pressed);
             let last = (height - viewport.height()).max(0.0);
             let in_view = screen(viewport.min.y.min(last));
             let newest = if list.following { screen(last) } else { 0..0 };
@@ -888,16 +895,24 @@ impl App {
             list.selected = None;
         } else if menu_closed || ui.input(|i| i.pointer.any_click()) && !menu_open {
             list.deselect();
-            // A finger's tap that started no selection, mark or note gives
-            // back the hold its press took.
-            let finger = ui.input(|i| {
-                i.events
-                    .iter()
-                    .any(|e| matches!(e, egui::Event::Touch { .. }))
-            });
-            if finger && list.editing.is_none() {
-                list.refollow |= list.rest_following;
-            }
+        }
+        // A press on the log that started no selection, mark or note gives
+        // back the hold it took as it lifts, a click or not, unless it moved
+        // the log: a drag of it or of its scroll bar.
+        let still = list
+            .pressed_at
+            .is_some_and(|at| (list.drawn.0 - at).abs() < pitch);
+        if still
+            && ui.input(|i| i.pointer.any_released())
+            && list.selected.is_none()
+            && mark.is_none()
+            && list.focus.is_none()
+            && list.editing.is_none()
+        {
+            list.refollow |= list.rest_following;
+        }
+        if !pressed {
+            list.pressed_at = None;
         }
         if mark.is_none()
             && list.selected.is_none()
