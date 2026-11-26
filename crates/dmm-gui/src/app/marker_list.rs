@@ -707,6 +707,17 @@ impl App {
             // the readings after it would push it out of a log that a phone's
             // keyboard has cut down to a row or two.
             .stick_to_bottom(list.editing.is_none() && list.selected.is_none() && !touched);
+        // While the log follows, a wheel toward its end has nothing to
+        // scroll there: it goes to the page, as at any scroller's end. Taken
+        // by the log, the tail of a wheel step egui spreads over the next
+        // frames would move it on as each reading made room, never quite to
+        // its end, and stop it following.
+        if list.following && ui.input(|i| i.smooth_scroll_delta().y < 0.0) {
+            area = area.scroll_source(egui::containers::scroll_area::ScrollSource {
+                mouse_wheel: false,
+                ..Default::default()
+            });
+        }
         let mut refollowing = None;
         if touched && !list.drawn.1 {
             // Where the rows were drawn, under the finger as it came down:
@@ -721,6 +732,12 @@ impl App {
             area = area.vertical_scroll_offset(list.end);
             refollowing = Some(list.end);
         }
+        // No spring past the end of a log readings are still coming into:
+        // the end moves on under it, and the spring's speed carries the log
+        // back up rather than to its newest row. A fling stops at the end,
+        // which keeps the log there.
+        let rubber_band = ui.spacing().scroll.kinetic.rubber_band;
+        ui.spacing_mut().scroll.kinetic.rubber_band &= !recording.is_active();
         let output = area.show_viewport(ui, |ui, viewport| {
             ui.spacing_mut().interact_size.y = line;
             ui.spacing_mut().button_padding.y = 0.0;
@@ -851,6 +868,7 @@ impl App {
             let own = egui::Rect::from_min_size(origin + viewport.min.to_vec2(), viewport.size());
             crate::a11y::scroll_to_focus_nested(ui, own);
         });
+        ui.spacing_mut().scroll.kinetic.rubber_band = rubber_band;
         list.following = output.state.clamped_offset().y + output.inner_rect.height()
             >= output.content_size.y - 1.0;
         list.end = (output.content_size.y - output.inner_rect.height()).max(0.0);

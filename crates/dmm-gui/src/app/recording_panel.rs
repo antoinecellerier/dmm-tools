@@ -2704,4 +2704,117 @@ mod tests {
         assert!(run.app.capture.recording.is_active());
         assert_eq!(run.app.capture.recording.recording_samples().len(), 0);
     }
+
+    /// A frame of a live log, a 60th of a second long, with a reading every
+    /// sixth: a meter sending ten a second, at a display's frame rate.
+    fn live_frame(run: &mut MenuRun, frame: &mut u64, t0: Instant, events: Vec<egui::Event>) {
+        *frame += 1;
+        if frame.is_multiple_of(6) {
+            push_reading(run, t0 + std::time::Duration::from_millis(*frame * 100));
+        }
+        run.frame(1.0 / 60.0, events);
+    }
+
+    /// A live log, following, a second after its newest reading.
+    fn live_log() -> (MenuRun, Instant) {
+        let run = run_with_markers(300, &[], true);
+        let t0 = run
+            .app
+            .last_measurement
+            .as_ref()
+            .expect("a reading")
+            .timestamp
+            + std::time::Duration::from_secs(1);
+        (run, t0)
+    }
+
+    /// Wheeled back down to its end, a live log follows its newest rows
+    /// again: the end of each wheel step, which egui spreads over the next
+    /// frames, leaves it there as readings arrive.
+    #[test]
+    fn a_log_wheeled_back_to_its_end_follows_again() {
+        for source in [
+            egui::MouseWheelSource::Wheel,
+            egui::MouseWheelSource::Trackpad,
+        ] {
+            let (mut run, t0) = live_log();
+            let mut n = 0;
+            let (at, _) = row_at(&run, 295);
+            let over = sample_rect(&run, at).center();
+            let hover = || vec![egui::Event::PointerMoved(over)];
+            let wheel = |dy| {
+                vec![
+                    egui::Event::PointerMoved(over),
+                    egui::Event::MouseWheel {
+                        unit: egui::MouseWheelUnit::Line,
+                        delta: vec2(0.0, dy),
+                        phase: egui::TouchPhase::Move,
+                        source,
+                        modifiers: Modifiers::NONE,
+                    },
+                ]
+            };
+            let steps = |run: &mut MenuRun, n: &mut u64, count, dy| {
+                for _ in 0..count {
+                    live_frame(run, n, t0, wheel(dy));
+                    for _ in 0..5 {
+                        live_frame(run, n, t0, hover());
+                    }
+                }
+                for _ in 0..60 {
+                    live_frame(run, n, t0, hover());
+                }
+            };
+            steps(&mut run, &mut n, 5, 3.0);
+            assert!(!run.app.marker_list.following(), "{source:?}: scrolled up");
+            steps(&mut run, &mut n, 15, -3.0);
+            for i in 0..60 {
+                live_frame(&mut run, &mut n, t0, hover());
+                assert!(
+                    run.app.marker_list.following(),
+                    "{source:?}: following again, frame {i}"
+                );
+            }
+        }
+    }
+
+    /// Flung back down to its end, a live log follows its newest rows
+    /// again, rather than springing back off an end that moved on.
+    #[test]
+    fn a_log_flung_back_to_its_end_follows_again() {
+        let (mut run, t0) = live_log();
+        let mut n = 0;
+        let (at, _) = row_at(&run, 295);
+        let start = sample_rect(&run, at).center();
+        let fling = |run: &mut MenuRun, n: &mut u64, from: Pos2, dy: f32| {
+            live_frame(run, n, t0, finger_down(from));
+            for step in 1..=8 {
+                let pos = from + vec2(0.0, dy * step as f32 / 8.0);
+                let moved = egui::Event::Touch {
+                    device_id: egui::TouchDeviceId(0),
+                    id: egui::TouchId(0),
+                    phase: egui::TouchPhase::Move,
+                    pos,
+                    force: None,
+                };
+                live_frame(run, n, t0, vec![moved, egui::Event::PointerMoved(pos)]);
+            }
+            live_frame(run, n, t0, finger_up(from + vec2(0.0, dy)));
+            for _ in 0..60 {
+                live_frame(run, n, t0, vec![]);
+            }
+        };
+        fling(&mut run, &mut n, start - vec2(0.0, 100.0), 100.0);
+        assert!(!run.app.marker_list.following(), "scrolled up");
+        for _ in 0..4 {
+            fling(&mut run, &mut n, start, -150.0);
+        }
+        for i in 0..60 {
+            live_frame(&mut run, &mut n, t0, vec![]);
+            assert!(
+                run.app.marker_list.following(),
+                "following again, frame {i}"
+            );
+        }
+    }
 }
