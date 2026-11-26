@@ -2418,6 +2418,46 @@ mod tests {
         assert!(!run.app.marker_list.following(), "where the finger left it");
     }
 
+    /// A row tapped while a note is being written stays under the finger:
+    /// the log's return to its newest row, owed as the note ends, waits for
+    /// the selection's end.
+    #[test]
+    fn a_row_tapped_from_a_note_stays_put() {
+        let mut run = run_with_markers(300, &[], true);
+        let (at, _) = row_at(&run, 295);
+        let row = sample_rect(&run, at);
+        tap(&mut run, row.center());
+        tap(&mut run, row.center());
+        assert_eq!(focused_label(&run).as_deref(), Some("Note for marker 1"));
+        let t0 = run
+            .app
+            .last_measurement
+            .as_ref()
+            .expect("a reading")
+            .timestamp;
+        let mut next = 0;
+        let mut readings = |run: &mut MenuRun, count| {
+            for _ in 0..count {
+                next += 1;
+                push_reading(run, t0 + std::time::Duration::from_secs(next));
+                run.frame(0.1, vec![]);
+            }
+        };
+        readings(&mut run, 5);
+        let (other, _) = row_at(&run, 290);
+        let pos = sample_rect(&run, other).center();
+        tap(&mut run, pos);
+        assert_eq!(run.app.marker_list.selected(), Some(other));
+        readings(&mut run, 10);
+        assert!(shows_sample(&run, other), "the selected row still in view");
+        assert!(!run.app.marker_list.following(), "held");
+        let elsewhere = Pos2::new(run.width - 4.0, 4.0);
+        tap(&mut run, elsewhere);
+        assert_eq!(run.app.marker_list.selected(), None, "ended by the tap");
+        readings(&mut run, 3);
+        assert!(run.app.marker_list.following(), "following again");
+    }
+
     /// The log holds still under a selected row while readings arrive, and
     /// follows the newest ones again once a tap elsewhere ends the selection.
     #[test]

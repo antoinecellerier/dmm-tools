@@ -151,10 +151,12 @@ impl MarkerList {
         self.following
     }
 
-    /// Select the sample row taken at `at`, holding the log still.
+    /// Select the sample row taken at `at`, holding the log still. A
+    /// return to the newest row still owed, a note's that just ended, waits
+    /// for the selection's end.
     fn select(&mut self, at: Instant) {
         if self.selected.is_none() {
-            self.held = Some(self.rest_following);
+            self.held = Some(self.rest_following || std::mem::take(&mut self.refollow));
         }
         self.selected = Some(at);
     }
@@ -586,7 +588,7 @@ impl App {
         {
             // Trimmed away while its note had the focus: the row whose note
             // ends the edit is gone, so the edit ends here.
-            self.marker_list.refollow = edit.following;
+            self.marker_list.refollow |= edit.following;
         }
         // A handle, as the end of the log borrows the app.
         let l10n = self.l10n.clone();
@@ -701,6 +703,9 @@ impl App {
                     _ => false,
                 })
         });
+        // What holds the log still: a note being edited, a selected row, a
+        // press.
+        let held = list.editing.is_some() || list.selected.is_some() || pressed;
         let mut area = egui::ScrollArea::vertical()
             .id_salt("recording_log")
             .max_height(max_height)
@@ -712,7 +717,7 @@ impl App {
             // no scroll to be in view, so nothing would unstick the log, and
             // the readings after it would push it out of a log that a phone's
             // keyboard has cut down to a row or two.
-            .stick_to_bottom(list.editing.is_none() && list.selected.is_none() && !pressed);
+            .stick_to_bottom(!held);
         // While the log follows, a wheel toward its end has nothing to
         // scroll there: it goes to the page, as at any scroller's end. Taken
         // by the log, the tail of a wheel step egui spreads over the next
@@ -731,7 +736,7 @@ impl App {
             // frame took.
             area = area.vertical_scroll_offset(list.drawn.0);
             list.pressed_at = Some(list.drawn.0);
-        } else if list.refollow {
+        } else if list.refollow && !held {
             // Last frame's end, where `stick_to_bottom` takes over again once
             // a frame brings no new row. Not past it: egui springs an offset
             // past the end back over the next seconds, and the spring's
@@ -884,7 +889,9 @@ impl App {
         // refollow put it.
         let scrolled_away =
             refollowing.is_some_and(|end| output.state.clamped_offset().y < end - 1.0);
-        list.refollow &= !list.following && !scrolled_away;
+        if !held {
+            list.refollow &= !list.following && !scrolled_away;
+        }
         // A selection ends at a click anywhere else, as its menu closes, or as
         // its row is marked, where the note's edit takes over its hold.
         let menu_closed = list.menu_open && !menu_open;
@@ -902,6 +909,11 @@ impl App {
         let still = list
             .pressed_at
             .is_some_and(|at| (list.drawn.0 - at).abs() < pitch);
+        if list.pressed_at.is_some() && !still {
+            // The log is where the user put it, whatever return to its
+            // newest row was owed.
+            list.refollow = false;
+        }
         if still
             && ui.input(|i| i.pointer.any_released())
             && list.selected.is_none()
@@ -972,7 +984,9 @@ impl MarkerList {
                 number,
                 before: note.clone(),
                 revealed: false,
-                following: self.held.take().unwrap_or(self.rest_following),
+                // A return to the newest row still owed waits for its end.
+                following: self.held.take().unwrap_or(self.rest_following)
+                    || std::mem::take(&mut self.refollow),
             });
         }
         // Acting on a note brings its marker into view: a click, or the first
@@ -991,7 +1005,7 @@ impl MarkerList {
             if ui.input(|i| i.key_pressed(Key::Escape)) {
                 *note = edit.before;
             }
-            self.refollow = edit.following;
+            self.refollow |= edit.following;
         }
         reveal
     }
@@ -2267,8 +2281,20 @@ mod tests {
         }
         assert_eq!(run.note_focused(), Some(number));
         assert!(shown(&run), "in view as it takes the focus");
-        // Back to the newest row, the note keeping the focus.
-        run.app.marker_list.refollow = true;
+        // Wheeled on to the newest rows, the note keeping the focus.
+        let over = run.app.marker_list.view.expect("the log drawn").center();
+        for _ in 0..10 {
+            run.frame(vec![
+                Event::PointerMoved(over),
+                Event::MouseWheel {
+                    unit: egui::MouseWheelUnit::Page,
+                    delta: egui::vec2(0.0, -1.0),
+                    phase: egui::TouchPhase::Move,
+                    source: egui::MouseWheelSource::Wheel,
+                    modifiers: egui::Modifiers::NONE,
+                },
+            ]);
+        }
         for _ in 0..10 {
             run.frame(vec![]);
         }
