@@ -484,6 +484,13 @@ replay file, and also reads CSV and JSON exports. `max` needs `--replay` and
 refuses `--mock-clock-preseed`, and the GUI refuses `max`, since a session
 would race through the whole file.
 
+**Capture ask.** The note that asks for a capture of an experimental meter
+counts only a meter on the bench. `dmm-gui --replay <FILE>
+--replay-capture-ask` counts the recording's meter too: its first reading is
+noted under `capture_asks` in `settings.json`, and the note shows once that
+`first_used` is three days old, so set it back by hand. Point
+`XDG_CONFIG_HOME` at a scratch folder to keep the real settings out of it.
+
 **Update notice.** A local build never checks GitHub (see [Shared build
 matrix](#shared-build-matrix)). `dmm-gui --update-notice <TAG>` shows the top
 bar's link and the **Check for new versions** row for a tag such as `v0.8.0`

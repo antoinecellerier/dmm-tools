@@ -887,6 +887,7 @@ mod tests {
 
         replay.source.replay = Some(crate::ReplaySource {
             draws_keys: true,
+            asks_capture: false,
             ..crate::ReplaySource::fixture()
         });
         let (buttons, _) = narrow_column(&mut replay);

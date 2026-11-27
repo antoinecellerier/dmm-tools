@@ -1068,9 +1068,10 @@ impl App {
     ///
     /// Only a meter on the bench counts, so neither a replay nor the mock;
     /// nor one that names another model than the entry opened, whose id
-    /// would name the wrong meter in the command.
+    /// would name the wrong meter in the command. `--replay-capture-ask`
+    /// counts a replay's meter as one on the bench.
     fn note_first_reading(&mut self, now: jiff::Timestamp) {
-        if self.source.replay.is_some() {
+        if self.source.replay.as_ref().is_some_and(|r| !r.asks_capture) {
             return;
         }
         let Some(meter) = &self.connection.meter else {
@@ -1478,6 +1479,22 @@ mod tests {
         let mut replay = linked("ut8803", Stability::Experimental);
         replay.source.replay = Some(crate::ReplaySource::fixture());
         untouched(replay, "a replay");
+
+        // `--replay-capture-ask` counts a replay's meter as one on the bench.
+        let mut counted = linked("ut8803", Stability::Experimental);
+        counted.source.replay = Some(crate::ReplaySource {
+            asks_capture: true,
+            ..crate::ReplaySource::fixture()
+        });
+        counted.deliver(a_reading());
+        assert!(counted.settings.capture_asks.contains_key("ut8803"));
+        counted
+            .settings
+            .capture_asks
+            .insert("ut8803".to_string(), first_used(4));
+        counted.connection.link_up();
+        counted.deliver(a_reading());
+        assert!(counted.capture_ask_shown());
     }
 
     /// A link nothing can reopen ends the session with its reason on screen,

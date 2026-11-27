@@ -117,6 +117,13 @@ struct Args {
     /// screenshots, documented in docs/development.md.
     #[arg(long, hide = true, value_name = "TAG", value_parser = parse_update_notice)]
     update_notice: Option<app::update_check::Tag>,
+
+    /// Count the replayed meter as one on the bench for the capture ask,
+    /// which a replay otherwise never raises: its first reading is noted in
+    /// the settings file and, a few days on, its capture asked for. Hidden:
+    /// a contributor tool, documented in docs/development.md.
+    #[arg(long, hide = true, requires = "replay")]
+    replay_capture_ask: bool,
 }
 
 /// What `--renderer` takes.
@@ -282,6 +289,9 @@ pub(crate) struct ReplaySource {
     /// `--replay-draws-keys`: the recording's meter keeps its buttons and
     /// dropdowns on screen.
     pub draws_keys: bool,
+    /// `--replay-capture-ask`: the recording's meter counts as one on the
+    /// bench for the capture ask.
+    pub asks_capture: bool,
     /// Wall time the recording started at, which the first Connect makes this
     /// session's zero.
     pub recorded: SystemTime,
@@ -304,6 +314,7 @@ impl ReplaySource {
             ),
             path: PathBuf::from("bench.replay"),
             draws_keys: false,
+            asks_capture: false,
             // The `# recorded:` line above, as the loader would parse it.
             recorded: SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(1_788_343_200),
         }
@@ -322,6 +333,7 @@ fn load_replay(path: PathBuf, draws_keys: bool, l: &Localizer) -> Result<ReplayS
         replay: Arc::new(replay),
         path,
         draws_keys,
+        asks_capture: false,
         recorded,
     })
 }
@@ -462,8 +474,12 @@ fn parse_args(l: &Localizer, saved: &dmm_shared::SharedSettings) -> CliOverrides
 
     let replay = args.replay.map(|path| {
         let typed = path.display().to_string();
-        load_replay(path, args.replay_draws_keys, l)
-            .unwrap_or_else(|reason| refuse(arg_errors::refused(&cmd, "replay", &typed, reason)))
+        let source = load_replay(path, args.replay_draws_keys, l)
+            .unwrap_or_else(|reason| refuse(arg_errors::refused(&cmd, "replay", &typed, reason)));
+        ReplaySource {
+            asks_capture: args.replay_capture_ask,
+            ..source
+        }
     });
 
     let (device, clock) = resolve_device_and_clock(

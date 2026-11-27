@@ -2502,6 +2502,7 @@ mod tests {
                     replay: Arc::new(replay),
                     path: std::path::PathBuf::from("dcv-steps.replay"),
                     draws_keys: false,
+                    asks_capture: false,
                     recorded: std::time::SystemTime::UNIX_EPOCH,
                 }),
                 ..crate::CliOverrides::none()
