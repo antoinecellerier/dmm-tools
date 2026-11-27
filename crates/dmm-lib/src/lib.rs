@@ -536,8 +536,21 @@ pub fn list_devices() -> Result<Vec<DeviceInfo>> {
 /// USB listing backs a GUI control and has to stay instant. `path` is what
 /// `--adapter` takes to pin one — its address, or the peripheral identifier
 /// on a platform that exposes no address.
-pub fn list_bluetooth_devices() -> Result<Vec<DeviceInfo>> {
+pub fn list_bluetooth_devices() -> Result<BluetoothListing> {
     ble::list(&open::bluetooth_peers(None))
+}
+
+/// What a Bluetooth scan turned up, for a listing.
+#[derive(Debug, Clone, Default)]
+pub struct BluetoothListing {
+    /// The adapters and meters in range, then the known ones the scan did
+    /// not hear ([`DeviceInfo::not_heard`]).
+    pub devices: Vec<DeviceInfo>,
+    /// The other named devices the scan heard, strongest signal first and
+    /// bounded: no entry lists a name of theirs, so a meter going by an
+    /// unexpected one is among them, with the neighbours' phones and
+    /// speakers. `path` opens one as `--adapter` does.
+    pub unrecognised: Vec<DeviceInfo>,
 }
 
 /// Whether an `--adapter` value names a Bluetooth adapter rather than a USB

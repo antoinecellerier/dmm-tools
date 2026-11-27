@@ -136,7 +136,8 @@ behind an adapter takes adapters; a meter with a built-in radio takes the peers 
 `bluetooth_names` match; `auto` and `list` take all of them. So an open for one meter never lands on
 another. An entry with `bluetooth_names` is looked for over Bluetooth alone, and says why it was
 not found with `Error::BluetoothOnly`. `list_devices()` stays instant because it backs a GUI control;
-`list_bluetooth_devices()` scans.
+`list_bluetooth_devices()` scans, and returns beside the peers it takes the other named devices it
+heard: a meter under a name no entry lists is among them, and opens by address.
 
 For `auto`, the opener takes the first bridge that answers and `detect.rs` identifies the meter on
 it. Each family exports a `Fingerprint`, and `detect.rs` is the engine that runs them. Which ones

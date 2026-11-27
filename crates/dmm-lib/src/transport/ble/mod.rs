@@ -40,9 +40,9 @@ mod search;
 #[cfg(target_os = "windows")]
 mod winrt;
 
-use crate::DeviceInfo;
 use crate::error::{BluetoothIssue, CharacteristicRole, Error, Result};
 use crate::transport::{BluetoothPeers, LateReadings, Link, Transport};
+use crate::{BluetoothListing, DeviceInfo};
 use btleplug::api::{
     Central, CentralState, Characteristic, DEFAULT_MTU_SIZE, Manager as _, Peripheral as _,
     ValueNotification,
@@ -385,24 +385,34 @@ pub(crate) fn is_bluetooth_selector(selector: &str) -> bool {
     is_bd_addr(selector) || is_uuid(selector)
 }
 
-/// The peers in range that `peers` takes, for `dmm-cli list`.
+/// The peers in range that `peers` takes, and the named devices the scan
+/// heard beside them, for `dmm-cli list`.
 ///
 /// Scans, so this takes seconds — never call it from a render path.
-pub(crate) fn list(peers: &BluetoothPeers) -> Result<Vec<DeviceInfo>> {
+pub(crate) fn list(peers: &BluetoothPeers) -> Result<BluetoothListing> {
     let rt = runtime()?;
     rt.block_on(async {
         let (_manager, adapter) = central().await?;
         let found = search(&adapter, Target::Named(peers), Match::All).await?;
-        Ok(found
-            .into_iter()
-            .map(|c| DeviceInfo {
-                path: c.selector(),
-                not_heard: c.standing == Standing::Known,
-                product: c.name,
-                serial: None,
-                transport: crate::BLUETOOTH,
-            })
-            .collect())
+        let listed = |path, product, not_heard| DeviceInfo {
+            path,
+            product,
+            not_heard,
+            serial: None,
+            transport: crate::BLUETOOTH,
+        };
+        Ok(BluetoothListing {
+            devices: found
+                .candidates
+                .into_iter()
+                .map(|c| listed(c.selector(), c.name, c.standing == Standing::Known))
+                .collect(),
+            unrecognised: found
+                .unrecognised
+                .into_iter()
+                .map(|o| listed(o.selector, Some(o.name), false))
+                .collect(),
+        })
     })
 }
 
@@ -572,7 +582,7 @@ async fn connect(target: Target<'_>, begun: &RefCell<Begun>) -> Result<Opened> {
     {
         debug!("Bluetooth: could not forget earlier peers: {e}");
     }
-    let mut found = search(&adapter, target, Match::First).await?;
+    let mut found = search(&adapter, target, Match::First).await?.candidates;
     // A named address the search did not turn up may still answer a connect.
     let mut from_address = false;
     if found.is_empty()

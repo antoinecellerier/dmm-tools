@@ -4,7 +4,7 @@
 //! `cfg` of their own: a build without the feature simply never finds an
 //! adapter.
 
-use crate::DeviceInfo;
+use crate::BluetoothListing;
 use crate::error::{Error, Result};
 use crate::transport::{BluetoothPeers, Transport};
 use std::sync::atomic::AtomicBool;
@@ -38,6 +38,6 @@ fn not_found() -> Error {
     }
 }
 
-pub(crate) fn list(_peers: &BluetoothPeers) -> Result<Vec<DeviceInfo>> {
-    Ok(Vec::new())
+pub(crate) fn list(_peers: &BluetoothPeers) -> Result<BluetoothListing> {
+    Ok(BluetoothListing::default())
 }

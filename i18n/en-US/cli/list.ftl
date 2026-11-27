@@ -19,6 +19,16 @@ list-none-found = No devices found.
 # Paired Bluetooth adapters are listed above, but the scan heard none.
 list-none-heard = No devices heard in range.
 
+## The radio scan found no adapter or meter this tool knows by name, but
+## heard other named devices: this heading, one line per device (what
+## --adapter takes, then its name, as the system reports them), then how to
+## open one. A meter that goes by an unexpected name is among them.
+
+list-unrecognised-heading = Other Bluetooth devices the scan heard:
+# --device <id> and --adapter are command-line options, kept as they are;
+# each device's line starts with its address. $url is the issue tracker.
+list-unrecognised-open = If one is your meter, open it with --device <id> and --adapter followed by its address (--help lists the ids), and report its name at { $url } so this tool finds it.
+
 ## Dim, under a listing of more than one device.
 
 # $selector is the option as typed, --adapter <serial-path-or-address>.

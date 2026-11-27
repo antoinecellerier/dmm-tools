@@ -4,7 +4,7 @@
 use super::issc::ADAPTER_NAME_PREFIX;
 use super::{SCAN_POLL, SCAN_WINDOW, stack_error};
 use crate::error::Result;
-use crate::transport::{BluetoothPeers, name_matches};
+use crate::transport::{BluetoothPeers, is_address_alias, name_matches};
 use btleplug::api::{Central, Peripheral as _, RetrievePeripheralsOptions, ScanFilter};
 use btleplug::platform::{Adapter, Peripheral};
 use log::{debug, info};
@@ -89,6 +89,31 @@ pub(super) enum Match {
     All,
 }
 
+/// What a search found.
+pub(super) struct Found {
+    /// The peers the caller takes, in [`Standing`] order.
+    pub(super) candidates: Vec<Candidate>,
+    /// The named devices our scan heard that the caller does not take,
+    /// strongest signal first: a meter going by a name no entry lists is
+    /// among them. Empty for a search by address.
+    pub(super) unrecognised: Vec<Unrecognised>,
+}
+
+/// A named device the scan heard that no name the caller takes matches.
+#[derive(Debug, PartialEq, Eq)]
+pub(super) struct Unrecognised {
+    /// What `--adapter` takes to open it: see [`Candidate::selector`].
+    pub(super) selector: String,
+    /// Its name, safe to print.
+    pub(super) name: String,
+    /// Signal strength in dBm, which orders the list.
+    rssi: i16,
+}
+
+/// How many unrecognised devices a listing carries. An office has dozens in
+/// range; the meter on the bench is among the strongest.
+const UNRECOGNISED_LIMIT: usize = 20;
+
 /// Look for peers: the ones this host already knows, then a scan.
 ///
 /// With no address named, a peer the caller takes is picked in [`Standing`]
@@ -102,14 +127,10 @@ pub(super) enum Match {
 ///
 /// An address the user named is taken from the known devices or the scan,
 /// whatever its standing, since they asked for that one.
-pub(super) async fn search(
-    adapter: &Adapter,
-    target: Target<'_>,
-    want: Match,
-) -> Result<Vec<Candidate>> {
+pub(super) async fn search(adapter: &Adapter, target: Target<'_>, want: Match) -> Result<Found> {
     // A signal strength in this list is another program's discovery, not
     // ours, so only a connection lifts a known device above `Known`.
-    let known = usable(known_peripherals(adapter).await, target, false).await;
+    let (known, _) = usable(known_peripherals(adapter).await, target, None).await;
     // Opening stops here when the known list already settles it: a connected
     // peer, or the named one. Listing scans regardless, so a peer
     // advertising in range shows up beside the known ones.
@@ -118,7 +139,10 @@ pub(super) async fn search(
         Target::Named(_) => found.iter().any(|c| c.standing < Standing::Known),
     };
     if want == Match::First && settled(&known) {
-        return Ok(keep_matches(known, want));
+        return Ok(Found {
+            candidates: keep_matches(known, want),
+            unrecognised: Vec::new(),
+        });
     }
 
     debug!("Bluetooth: scanning for {SCAN_WINDOW:?}");
@@ -127,16 +151,18 @@ pub(super) async fn search(
         .await
         .map_err(scan_error)?;
     let deadline = tokio::time::Instant::now() + SCAN_WINDOW;
-    let scanned = loop {
+    let (scanned, unrecognised) = loop {
         tokio::time::sleep(SCAN_POLL).await;
         // Read while the scan runs: the signal strength that says a device
         // was heard is gone once it stops.
         let seen = adapter.peripherals().await.unwrap_or_default();
-        let scanned = usable(seen, target, true).await;
+        // Each poll reads every device the stack has heard so far, so the
+        // last one holds them all.
+        let (scanned, unrecognised) = usable(seen, target, Some(want)).await;
         // `All` keeps scanning to the end of the window: a second peer
         // that answers late still belongs in the list.
         if (want == Match::First && settled(&scanned)) || tokio::time::Instant::now() >= deadline {
-            break scanned;
+            break (scanned, unrecognised);
         }
     };
     // The scan is the host's, not ours: leave it off however the search went.
@@ -154,7 +180,10 @@ pub(super) async fn search(
             None => all.push(c),
         }
     }
-    Ok(keep_matches(all, want))
+    Ok(Found {
+        candidates: keep_matches(all, want),
+        unrecognised: strongest(unrecognised),
+    })
 }
 
 /// Why a scan could not start. Android's backend reports no adapter state
@@ -257,13 +286,18 @@ fn standing(connected: bool, heard: bool, scanning: bool) -> Standing {
 }
 
 /// The peripherals the caller may use: the one an address names, or every
-/// peer the caller takes by name, each with its standing.
+/// peer the caller takes by name, each with its standing. Beside them, the
+/// named devices a listing by name heard and did not take
+/// ([`unrecognised`]). `scan` is the search our own scan is running for,
+/// `None` for the devices the host already knew.
 async fn usable(
     peripherals: Vec<Peripheral>,
     target: Target<'_>,
-    scanning: bool,
-) -> Vec<Candidate> {
+    scan: Option<Match>,
+) -> (Vec<Candidate>, Vec<Unrecognised>) {
+    let scanning = scan.is_some();
     let mut usable = Vec::new();
+    let mut others = Vec::new();
     for peripheral in peripherals {
         let properties = peripheral.properties().await.ok().flatten();
         let address = peripheral.address();
@@ -305,6 +339,19 @@ async fn usable(
             if wanted { "match" } else { "no match" }
         );
         if !wanted {
+            let heard = properties.as_ref().and_then(|p| p.rssi);
+            // Only a listing shows them: an open takes its match and goes.
+            if matches!(target, Target::Named(_))
+                && let Some(other) = unrecognised(
+                    scan == Some(Match::All),
+                    heard,
+                    advertised_name.as_deref(),
+                    name.as_deref(),
+                    if address.is_empty() { &id } else { &address },
+                )
+            {
+                others.push(other);
+            }
             continue;
         }
         // Asked only of a device already picked: it costs the stack a round
@@ -322,7 +369,41 @@ async fn usable(
             tied: 1,
         });
     }
-    usable
+    (usable, others)
+}
+
+/// A device the caller's names do not take, if it is worth showing the user:
+/// heard by our own scan (`scanning`, with a signal strength), under a name
+/// of its own.
+///
+/// The name is the one it advertises, else the host's for it — unless that
+/// is its address with dashes, BlueZ's alias for a device that sent no name:
+/// those are the anonymous beacons of every phone and tag in range.
+fn unrecognised(
+    scanning: bool,
+    rssi: Option<i16>,
+    advertised_name: Option<&str>,
+    host_name: Option<&str>,
+    selector: &str,
+) -> Option<Unrecognised> {
+    let rssi = rssi.filter(|_| scanning)?;
+    let named = |n: &&str| !n.trim().is_empty();
+    let name = advertised_name
+        .filter(named)
+        .or_else(|| host_name.filter(named).filter(|n| !is_address_alias(n)))?;
+    Some(Unrecognised {
+        selector: selector.to_string(),
+        name: printable(name.trim()),
+        rssi,
+    })
+}
+
+/// The unrecognised devices a listing carries: the strongest
+/// [`UNRECOGNISED_LIMIT`], strongest first.
+fn strongest(mut others: Vec<Unrecognised>) -> Vec<Unrecognised> {
+    others.sort_by_key(|o| std::cmp::Reverse(o.rssi));
+    others.truncate(UNRECOGNISED_LIMIT);
+    others
 }
 
 /// Put the candidates in [`Standing`] order and keep as many as the caller
@@ -424,6 +505,62 @@ pub(super) fn is_uuid(s: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A listing shows a device no entry's name takes only when our own
+    /// scan heard it under a name of its own.
+    #[test]
+    fn only_a_named_device_the_scan_heard_is_unrecognised() {
+        let at = "12:34:56:78:9A:BC";
+        let kept = |name: &str| {
+            Some(Unrecognised {
+                selector: at.to_string(),
+                name: name.to_string(),
+                rssi: -60,
+            })
+        };
+        assert_eq!(
+            unrecognised(true, Some(-60), Some("CM2100B"), None, at),
+            kept("CM2100B")
+        );
+        // The advertised name wins over the host's alias, and is trimmed.
+        assert_eq!(
+            unrecognised(true, Some(-60), Some(" CM2100B\0"), Some("Bench"), at),
+            kept("CM2100B\u{fffd}")
+        );
+        assert_eq!(
+            unrecognised(true, Some(-60), None, Some("Bench"), at),
+            kept("Bench")
+        );
+        // No name, a blank one, or BlueZ's alias for a nameless device.
+        assert_eq!(unrecognised(true, Some(-60), None, None, at), None);
+        assert_eq!(unrecognised(true, Some(-60), Some("  "), None, at), None);
+        assert_eq!(
+            unrecognised(true, Some(-60), None, Some("12-34-56-78-9A-BC"), at),
+            None
+        );
+        // Not heard, or heard by another program's scan (the known list).
+        assert_eq!(unrecognised(true, None, Some("CM2100B"), None, at), None);
+        assert_eq!(
+            unrecognised(false, Some(-60), Some("CM2100B"), None, at),
+            None
+        );
+    }
+
+    /// The meter on the bench is nearer than the neighbours' devices, so the
+    /// strongest are the ones kept, and listed first.
+    #[test]
+    fn the_strongest_unrecognised_devices_are_kept() {
+        let heard = |rssi: i16| Unrecognised {
+            selector: String::new(),
+            name: rssi.to_string(),
+            rssi,
+        };
+        let others = (0..UNRECOGNISED_LIMIT as i16 + 5).map(|i| heard(-90 + i));
+        let kept = strongest(others.collect());
+        assert_eq!(kept.len(), UNRECOGNISED_LIMIT);
+        assert_eq!(kept[0].rssi, -90 + UNRECOGNISED_LIMIT as i16 + 4);
+        assert!(kept.is_sorted_by_key(|o| std::cmp::Reverse(o.rssi)));
+    }
 
     /// A name a neighbour advertises cannot carry an escape sequence to the
     /// terminal `list` prints it on.

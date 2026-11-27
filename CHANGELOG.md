@@ -16,6 +16,10 @@
 - **A note asks for an experimental meter's capture after three days**
 - **A short graph gives its plot twice the minimap's height** — the minimap kept its full height and stood taller than the plot.
 
+### CLI
+
+- **`dmm-cli list` names the other Bluetooth devices it heard when it knows none** — a meter under an unexpected name opens with `--device` and `--adapter`, by the address shown.
+
 ### Bug fixes
 
 - **A marker's row in the log takes the lines a narrow panel needs** — a "not in the recording" note cut its reading short or put its number over the next row.

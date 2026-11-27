@@ -171,7 +171,10 @@ dmm-cli list
 Prints each device with an index number and transport type. The Bluetooth
 scan takes a few seconds; `--no-bluetooth` skips it and lists cables only. If
 nothing is found, prints troubleshooting steps for each link that was
-searched (udev rule install on Linux, driver install on Windows).
+searched (udev rule install on Linux, driver install on Windows). When the
+scan hears no adapter or meter it knows by name, it lists the other named
+Bluetooth devices it heard: a meter among them opens with `--device <id>` and
+`--adapter` followed by its address.
 
 When more than one device is reachable, use `--adapter` with a serial number,
 HID path or Bluetooth address from the `list` output to select one:

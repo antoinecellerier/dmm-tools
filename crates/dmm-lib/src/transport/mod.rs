@@ -231,6 +231,17 @@ pub(crate) fn name_matches(prefix: &str, name: &str) -> bool {
         .starts_with(&prefix.to_ascii_uppercase())
 }
 
+/// Whether `name` is a Bluetooth address written with dashes
+/// (`12-34-56-78-9A-BC`): BlueZ's alias for a device that sent no name, so
+/// no name at all.
+pub(crate) fn is_address_alias(name: &str) -> bool {
+    let name = name.trim();
+    name.len() == 17
+        && name
+            .split('-')
+            .all(|part| part.len() == 2 && part.bytes().all(|b| b.is_ascii_hexdigit()))
+}
+
 /// The link a meter is on, as the user knows it.
 ///
 /// Never the bridge chip: someone plugged in a USB cable or switched a
