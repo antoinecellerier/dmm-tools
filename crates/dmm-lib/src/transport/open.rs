@@ -181,6 +181,8 @@ pub(crate) fn open_bluetooth_only(
         }
     } else if !opts.bluetooth {
         BluetoothOnlyMiss::SwitchedOff
+    } else if let Some(peer) = opts.bluetooth_peer {
+        return ble::open_selected(peer, opts.stop);
     } else {
         match ble::open_first(&bluetooth_peers(Some(entry)), opts.stop, opts.heard) {
             Err(Error::NoTransportFound { .. }) => BluetoothOnlyMiss::NotInRange,
@@ -217,8 +219,13 @@ pub(crate) fn open_links(
     match hid {
         Ok(transport) => Ok(transport),
         Err(err) if radio_gets_a_turn && usb_failure_falls_through(&err) => {
-            ble::open_first(peers, opts.stop, opts.heard)
-                .map_err(|radio| neither_link(err, radio, cfg!(target_os = "android")))
+            let android = cfg!(target_os = "android");
+            match opts.bluetooth_peer {
+                Some(peer) => ble::open_selected(peer, opts.stop)
+                    .map_err(|radio| no_cable_nor_peer(err, radio, android)),
+                None => ble::open_first(peers, opts.stop, opts.heard)
+                    .map_err(|radio| neither_link(err, radio, android)),
+            }
         }
         Err(err) => Err(err),
     }
@@ -259,6 +266,24 @@ fn neither_link(usb: Error, radio: Error, android: bool) -> Error {
             info!("no meter over Bluetooth either: {radio}");
             searched_bluetooth(usb)
         }
+    }
+}
+
+/// [`neither_link`] when the radio was asked for one device
+/// ([`OpenOptions::bluetooth_peer`]): with no cable in, why that device did
+/// not open is what the user acts on, having chosen it. A radio that is
+/// off or missing says nothing about the device, and is reported as for any
+/// open.
+fn no_cable_nor_peer(usb: Error, radio: Error, android: bool) -> Error {
+    let about_the_device = match &radio {
+        Error::Cancelled => false,
+        Error::Bluetooth(issue) => !issue.is_about_the_radio(),
+        _ => true,
+    };
+    if about_the_device && matches!(usb, Error::NoTransportFound { .. }) {
+        radio
+    } else {
+        neither_link(usb, radio, android)
     }
 }
 
@@ -588,6 +613,39 @@ mod tests {
         // Nothing in range is no fault of the radio's: the cable search.
         assert!(matches!(
             neither_link(no_cable(), Error::LinkLost, true),
+            Error::NoTransportFound {
+                bluetooth_searched: true,
+                ..
+            }
+        ));
+    }
+
+    /// With no cable in, a chosen Bluetooth device that did not open is
+    /// reported for itself; a cable that is the user's to act on, a radio
+    /// that is off and an open called off are reported as for any open.
+    #[test]
+    fn a_chosen_peer_that_did_not_open_is_what_is_reported() {
+        let not_heard = || Error::AdapterNotFound("12:34:56:78:9A:BC".to_string());
+        for android in [false, true] {
+            assert!(matches!(
+                no_cable_nor_peer(no_cable(), not_heard(), android),
+                Error::AdapterNotFound(_)
+            ));
+            assert!(matches!(
+                no_cable_nor_peer(Error::CableNotAllowed, not_heard(), android),
+                Error::CableNotAllowed
+            ));
+            assert!(matches!(
+                no_cable_nor_peer(no_cable(), Error::Cancelled, android),
+                Error::Cancelled
+            ));
+        }
+        assert!(matches!(
+            no_cable_nor_peer(no_cable(), radio_off(), true),
+            Error::NoCableBluetoothOff
+        ));
+        assert!(matches!(
+            no_cable_nor_peer(no_cable(), BluetoothIssue::NoAdapter.into(), false),
             Error::NoTransportFound {
                 bluetooth_searched: true,
                 ..

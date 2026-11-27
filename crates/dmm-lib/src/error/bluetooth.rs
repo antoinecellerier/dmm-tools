@@ -60,6 +60,18 @@ pub enum BluetoothIssue {
     LoginRefused { code: u16 },
 }
 
+impl BluetoothIssue {
+    /// Whether this is about the host's radio, not the device an open was
+    /// after: no adapter, one switched off, a stack that would not start.
+    /// Naming another device changes nothing about it.
+    pub fn is_about_the_radio(&self) -> bool {
+        matches!(
+            self,
+            Self::Runtime { .. } | Self::NoAdapter | Self::PoweredOff
+        )
+    }
+}
+
 /// Which of a profile's two characteristics a peer lacks.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CharacteristicRole {

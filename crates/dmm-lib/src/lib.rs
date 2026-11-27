@@ -393,6 +393,15 @@ pub struct OpenOptions<'a> {
     /// Bluetooth adapter or meter in range. Off, nothing scans the radio — but an
     /// address in `adapter` is still opened, having been asked for by name.
     pub bluetooth: bool,
+    /// The Bluetooth device to open when the radio gets its turn, by address
+    /// or peripheral identifier, in place of the first one in range whose
+    /// name the meter's entry takes: a meter that goes by another name, or
+    /// one adapter among several. Unlike [`adapter`](Self::adapter) it leaves
+    /// the rest of the open as it is: USB cables are still tried first, and
+    /// it is not looked at when the meter has no Bluetooth link or
+    /// [`bluetooth`](Self::bluetooth) is off. No other device is opened when
+    /// this one does not answer.
+    pub bluetooth_peer: Option<&'a str>,
     /// Calls a Bluetooth open off. Once the flag is set, a search or connect
     /// in flight is abandoned, what it brought up is taken down, and the open
     /// returns [`Error::Cancelled`](error::Error::Cancelled). A USB open, and
@@ -416,6 +425,7 @@ impl<'a> OpenOptions<'a> {
         Self {
             adapter: None,
             bluetooth: true,
+            bluetooth_peer: None,
             stop: None,
             heard: None,
         }

@@ -509,6 +509,7 @@ impl App {
                         None => dmm_lib::OpenOptions {
                             adapter: adapter.as_deref(),
                             bluetooth,
+                            bluetooth_peer: None,
                             stop: Some(&stop),
                             heard: None,
                         },

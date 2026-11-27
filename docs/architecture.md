@@ -139,7 +139,9 @@ not found with `Error::BluetoothOnly`. `list_devices()` stays instant because it
 `list_bluetooth_devices()` scans, and returns beside the peers it takes the other named devices it
 heard: a meter under a name no entry lists is among them, and opens by address. An open by name
 hands the same devices to a caller that asks through `OpenOptions::heard`, so one that found no
-meter can offer them without a second scan.
+meter can offer them without a second scan. A caller can name the one device the radio's turn
+opens instead (`OpenOptions::bluetooth_peer`); unlike an address given as the adapter, that leaves
+the USB search in place.
 
 For `auto`, the opener takes the first bridge that answers and `detect.rs` identifies the meter on
 it. Each family exports a `Fingerprint`, and `detect.rs` is the engine that runs them. Which ones

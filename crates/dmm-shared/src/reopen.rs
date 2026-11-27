@@ -148,6 +148,7 @@ impl ReopenPin {
         OpenOptions {
             adapter: self.adapter.as_deref(),
             bluetooth: self.bluetooth,
+            bluetooth_peer: None,
             stop,
             heard: None,
         }

@@ -128,6 +128,7 @@ fn main() {
     let opts = dmm_lib::OpenOptions {
         adapter: cli.adapter.as_deref(),
         bluetooth,
+        bluetooth_peer: None,
         stop: None,
         heard: None,
     };
