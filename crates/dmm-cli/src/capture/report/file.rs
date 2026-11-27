@@ -243,7 +243,8 @@ pub(in crate::capture) fn populate_report_metadata(
     // A report is one meter's: a run whose link has nothing to say, or
     // whose query failed, keeps what an earlier session of it wrote.
     match dmm.transport().transport_info() {
-        Ok(Some(info)) => report.transport_info = Some(info),
+        // One line in the report, as it has always been.
+        Ok(Some(info)) => report.transport_info = Some(info.replace('\n', "; ")),
         Ok(None) => {}
         Err(e) => log::debug!("capture: no transport info for the report: {e}"),
     }

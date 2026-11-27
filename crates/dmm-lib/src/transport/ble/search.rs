@@ -22,6 +22,10 @@ pub(super) struct Candidate {
     /// (`name_matches`); for a peer picked by address, the name it
     /// advertises, else [`Candidate::name`].
     pub(super) taken_by: Option<String>,
+    /// What it advertised beside its name ([`advertisement`]), as the
+    /// search saw it, before any connect: `None` when the platform had
+    /// nothing on it.
+    pub(super) advertising: Option<String>,
     /// How sure we are that it can answer, which orders the candidates.
     pub(super) standing: Standing,
     /// For the one an open takes, how many matched as well as it did: 1
@@ -258,6 +262,7 @@ pub(super) async fn by_address(adapter: &Adapter, selector: Option<&str>) -> Opt
         address: address.to_string(),
         name: None,
         taken_by: None,
+        advertising: None,
         standing: Standing::Known,
         tied: 1,
         peripheral,
@@ -335,14 +340,16 @@ async fn usable(
             }
         };
         let taken_by = taken_by.map(str::to_string);
+        let advertising = properties.as_ref().map(advertisement);
         // Every device the stack reports, kept or not: when a peer in range
         // is not found, this line says what the platform made of it.
         debug!(
             "Bluetooth: saw {address:?} id {id:?} local name {:?} advertised {:?} \
-             RSSI {:?}: {}",
+             RSSI {:?}, advertising {}: {}",
             properties.as_ref().and_then(|p| p.local_name.as_deref()),
             advertised_name,
             properties.as_ref().and_then(|p| p.rssi),
+            advertising.as_deref().unwrap_or("nothing known"),
             if wanted { "match" } else { "no match" }
         );
         if !wanted {
@@ -372,10 +379,112 @@ async fn usable(
             // Printed by `list` and `info`: a radio neighbour chooses it.
             name: name.as_deref().map(printable),
             taken_by,
+            advertising,
             tied: 1,
         });
     }
     (usable, others)
+}
+
+/// What a device advertises beside its name, for a log or a report: the
+/// services it lists, and whose manufacturer and service data it carries.
+///
+/// The services are the host's list for the device: BlueZ adds the ones it
+/// found on a device it has connected to before, so a list from a first
+/// scan is the one to design a match on.
+///
+/// The data's bytes are left out, only their count given: a maker may put
+/// the device's address or a serial number there, and reports are posted in
+/// public. A company identifier is the maker's, the same on every unit, and
+/// with the service identifiers is what could tell a meter from its
+/// neighbours when its name does not — unless the data is the device's own
+/// address, as some modules send it, whose first two bytes then sit where
+/// the identifier goes: that is said, and the bytes kept out.
+pub(super) fn advertisement(properties: &btleplug::api::PeripheralProperties) -> String {
+    let mut services: Vec<String> = properties.services.iter().map(short_uuid).collect();
+    services.sort();
+    let address = properties.address.into_inner();
+    let mut manufacturer: Vec<Maker> = properties
+        .manufacturer_data
+        .iter()
+        .map(|(company, data)| {
+            if company.to_le_bytes() == address[..2] {
+                Maker::OwnAddress {
+                    whole: data.as_slice() == &address[2..],
+                }
+            } else {
+                Maker::Company(*company, data.len())
+            }
+        })
+        .collect();
+    manufacturer.sort();
+    let mut service_data: Vec<(String, usize)> = properties
+        .service_data
+        .iter()
+        .map(|(uuid, data)| (short_uuid(uuid), data.len()))
+        .collect();
+    service_data.sort();
+    advertisement_note(&services, &manufacturer, &service_data)
+}
+
+/// One piece of manufacturer data, as a note names it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+enum Maker {
+    /// A company identifier and the bytes after it, counted.
+    Company(u16, usize),
+    /// Data that starts with the device's own address: all of it the
+    /// address (`whole`), or only where the identifier goes.
+    OwnAddress { whole: bool },
+}
+
+/// [`advertisement`], from the identifiers and the byte counts.
+fn advertisement_note(
+    services: &[String],
+    manufacturer: &[Maker],
+    service_data: &[(String, usize)],
+) -> String {
+    let mut parts = Vec::new();
+    if !services.is_empty() {
+        parts.push(format!("services {}", services.join(" ")));
+    }
+    if !manufacturer.is_empty() {
+        let data: Vec<String> = manufacturer
+            .iter()
+            .map(|maker| match maker {
+                Maker::Company(company, len) => format!("{company:#06x} ({len} bytes)"),
+                Maker::OwnAddress { whole: true } => "its own address".to_string(),
+                Maker::OwnAddress { whole: false } => {
+                    "starting as its own address does".to_string()
+                }
+            })
+            .collect();
+        parts.push(format!("manufacturer data {}", data.join(" ")));
+    }
+    if !service_data.is_empty() {
+        let data: Vec<String> = service_data
+            .iter()
+            .map(|(uuid, len)| format!("{uuid} ({len} bytes)"))
+            .collect();
+        parts.push(format!("service data {}", data.join(" ")));
+    }
+    if parts.is_empty() {
+        "no service or data".to_string()
+    } else {
+        parts.join(", ")
+    }
+}
+
+/// A UUID as short as it is assigned: the four digits of a Bluetooth SIG
+/// one, a maker's own in full.
+pub(super) fn short_uuid(uuid: &impl std::fmt::Display) -> String {
+    let uuid = uuid.to_string();
+    match uuid
+        .strip_prefix("0000")
+        .and_then(|rest| rest.strip_suffix("-0000-1000-8000-00805f9b34fb"))
+    {
+        Some(short) => short.to_string(),
+        None => uuid,
+    }
 }
 
 /// A device the caller's names do not take, if it is worth showing the user:
@@ -511,6 +620,44 @@ pub(super) fn is_uuid(s: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// An advertisement is noted by its identifiers and the size of its
+    /// data, never the data's bytes, in a stable order.
+    #[test]
+    fn an_advertisement_is_noted_without_its_data() {
+        let mut properties = btleplug::api::PeripheralProperties::default();
+        assert_eq!(advertisement(&properties), "no service or data");
+        properties.services = vec![
+            "49535343-fe7d-4ae5-8fa9-9fafd205e455".parse().unwrap(),
+            "0000fff0-0000-1000-8000-00805f9b34fb".parse().unwrap(),
+        ];
+        properties
+            .manufacturer_data
+            .insert(0x0059, vec![0x12, 0x34, 0x56, 0x78, 0x9A, 0xBC]);
+        // Data that is the device's own address is said to be, its bytes
+        // kept out; data that only starts as the address does likewise.
+        let mut own = btleplug::api::PeripheralProperties {
+            address: btleplug::api::BDAddr::from([0x12, 0x34, 0x56, 0x78, 0x9A, 0xBC]),
+            ..Default::default()
+        };
+        own.manufacturer_data
+            .insert(0x3412, vec![0x56, 0x78, 0x9A, 0xBC]);
+        assert_eq!(advertisement(&own), "manufacturer data its own address");
+        own.manufacturer_data.insert(0x3412, vec![0x01]);
+        assert_eq!(
+            advertisement(&own),
+            "manufacturer data starting as its own address does"
+        );
+        properties.service_data.insert(
+            "0000fe95-0000-1000-8000-00805f9b34fb".parse().unwrap(),
+            vec![0; 12],
+        );
+        assert_eq!(
+            advertisement(&properties),
+            "services 49535343-fe7d-4ae5-8fa9-9fafd205e455 fff0, \
+             manufacturer data 0x0059 (6 bytes), service data fe95 (12 bytes)"
+        );
+    }
 
     /// A listing shows a device no entry's name takes only when our own
     /// scan heard it under a name of its own.

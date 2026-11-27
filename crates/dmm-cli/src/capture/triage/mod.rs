@@ -441,8 +441,8 @@ fn tally(items: impl IntoIterator<Item = String>) -> Vec<(String, usize)> {
 /// FFF2): a protocol that reads it decodes the steps as the live run did.
 ///
 /// A report written before it had a field of its own carries the bytes only
-/// in the note the Bluetooth transport ends `transport_info` with, as
-/// `dmm-cli info` still prints it.
+/// in the note the Bluetooth transport puts after the device's name in
+/// `transport_info`, as `dmm-cli info` still prints it.
 fn device_information(report: &CaptureReport) -> Option<Vec<u8>> {
     report
         .device_information
@@ -451,7 +451,8 @@ fn device_information(report: &CaptureReport) -> Option<Vec<u8>> {
         .or_else(|| {
             let info = report.transport_info.as_deref()?;
             let (_, hex) = info.rsplit_once(", device information: ")?;
-            hex_bytes(hex)
+            // What the device advertises follows the note in a later report.
+            hex_bytes(hex.split(';').next()?)
         })
 }
 
@@ -515,6 +516,16 @@ pub(super) mod tests {
             ..report
         };
         assert_eq!(device_information(&garbled), Some(vec![0x12, 0x63]));
+        // What the device advertises follows the note in a later report.
+        let later = CaptureReport {
+            transport_info: Some(
+                "BDM (12:34:56:78:9A:BC), device information: 12 63; Advertised: services fff0; \
+                 On connect: services fff0"
+                    .to_string(),
+            ),
+            ..garbled
+        };
+        assert_eq!(device_information(&later), Some(vec![0x12, 0x63]));
     }
 
     /// A report from before the field: the bytes come from the Bluetooth

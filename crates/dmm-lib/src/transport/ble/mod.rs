@@ -54,7 +54,7 @@ use log::{debug, info, trace, warn};
 use profile::{BringUp, GattProfile, PROFILES, choose_profile, write_chunk_size, write_type};
 use search::{
     Found, Match, Standing, Target, Unrecognised, by_address, is_bd_addr, is_uuid, printable,
-    search,
+    search, short_uuid,
 };
 use std::cell::{Cell, RefCell};
 use std::collections::VecDeque;
@@ -272,6 +272,9 @@ pub(crate) struct Ble {
     /// The name the peer goes by, as the search found it; `None` for one
     /// opened by address with no name heard.
     advertised_name: Option<String>,
+    /// What the peer advertised beside its name, as the search saw it
+    /// before connecting ([`search::advertisement`]).
+    advertising: Option<String>,
     /// The short-interval request, kept for as long as the link is open:
     /// dropping it withdraws it ([`request_short_interval`]).
     _short_interval: Option<ShortInterval>,
@@ -443,6 +446,7 @@ struct Opened {
     notifications: Pin<Box<dyn Stream<Item = ValueNotification> + Send>>,
     selector: String,
     advertised_name: Option<String>,
+    advertising: Option<String>,
     short_interval: Option<ShortInterval>,
     /// How many peers matched as well as this one ([`Candidate::tied`]).
     tied: usize,
@@ -536,6 +540,7 @@ fn open(
         heartbeats: Cell::new(0),
         selector: opened.selector,
         advertised_name: opened.advertised_name,
+        advertising: opened.advertising,
         tied: opened.tied,
         _short_interval: opened.short_interval,
         #[cfg(target_os = "android")]
@@ -732,6 +737,7 @@ async fn connect(
         notifications,
         selector,
         advertised_name: candidate.taken_by,
+        advertising: candidate.advertising,
         short_interval,
         tied: candidate.tied,
     })
@@ -1244,7 +1250,10 @@ impl Transport for Ble {
     fn transport_info(&self) -> Result<Option<String>> {
         // The peer's own name and identity. An adapter cannot say which
         // meter is behind it — its Device Information strings are empty
-        // (research doc §1) — so this is all there is to report.
+        // (research doc §1) — so this is all there is to report. Then, on
+        // lines of their own, what it advertised when the search saw it
+        // and the services it offers now, by their identifiers: what a
+        // report needs for a meter to be found by more than its name.
         let name = self
             .rt
             .block_on(self.peripheral.properties())
@@ -1254,7 +1263,27 @@ impl Transport for Ble {
             .map(|n| printable(&n))
             .unwrap_or_else(|| "unnamed device".to_string());
         let info = info_note(&self.profile.bring_up, self.info_characteristic.as_deref());
-        Ok(Some(format!("{name} ({}){info}", self.selector)))
+        let advertising = self
+            .advertising
+            .as_deref()
+            .map(|advertising| format!("\nAdvertised: {advertising}"))
+            .unwrap_or_default();
+        let mut offered: Vec<String> = self
+            .peripheral
+            .services()
+            .iter()
+            .map(|s| short_uuid(&s.uuid))
+            .collect();
+        offered.sort();
+        let offered = if offered.is_empty() {
+            "none found".to_string()
+        } else {
+            offered.join(" ")
+        };
+        Ok(Some(format!(
+            "{name} ({}){info}{advertising}\nOn connect: services {offered}",
+            self.selector
+        )))
     }
 
     fn transport_status(&self) -> Result<Option<String>> {

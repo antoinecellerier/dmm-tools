@@ -31,7 +31,17 @@ pub(crate) fn cmd_info(
     let transport = dmm.transport().transport_name();
     println!("{}", tr!(l, "info-transport", transport = transport));
     match dmm.transport().transport_info() {
-        Ok(Some(info)) => println!("  {info}"),
+        // The link's identity, then what else it has to say about itself,
+        // dim: a reporter's detail, not what the user came for.
+        Ok(Some(info)) => {
+            let mut lines = info.lines();
+            if let Some(identity) = lines.next() {
+                println!("  {identity}");
+            }
+            for detail in lines {
+                println!("  {}", console::style(detail).dim());
+            }
+        }
         Ok(None) => {}
         // The chip's identity has no label of its own; a failure needs one.
         Err(e) => println!(

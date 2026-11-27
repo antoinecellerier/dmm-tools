@@ -430,7 +430,7 @@ With no meter named, the Bluetooth search falls back to peers the platform knows
 
 **Complexity:** Medium
 
-A meter with the radio built in is found by the name it advertises, so one that goes by a name no entry lists is not found until its owner chooses it by hand ([#44](https://github.com/antoinecellerier/dmm-tools/issues/44)). An advertisement also carries service UUIDs and manufacturer data, and the services a device offers are known once connected: any of them could find a renamed meter. It needs each meter's advertisement on record first, which the scan's debug line could log for reporters to send.
+A meter with the radio built in is found by the name it advertises, so one that goes by a name no entry lists is not found until its owner chooses it by hand ([#44](https://github.com/antoinecellerier/dmm-tools/issues/44)). An advertisement also carries service UUIDs and manufacturer data, and the services a device offers are known once connected: any of them could find a renamed meter. It needs each meter's advertisement on record first: `dmm-cli info`, a capture report and the scan's debug lines carry the identifiers, without the data's bytes, so new reports add to that record.
 
 Use cases: a meter renamed in its vendor's app, or a model sold under a name we have not seen, found without a trip to Settings.
 

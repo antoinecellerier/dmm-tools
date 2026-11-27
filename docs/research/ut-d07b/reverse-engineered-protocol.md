@@ -85,6 +85,10 @@ UT513C insulation tester's older firmware only; the app talks to the
 native-BLE UT60BT and UT202BT over the ISSC service above, as to this adapter
 [VENDOR] (read 2026-09-25, [ut61-family §1](../ut61-family/reverse-engineered-protocol.md)).
 
+The advertisement also carries six bytes of manufacturer data, which are the
+unit's own address: the two a scanner reads as the company identifier are its
+first two bytes, not a maker's identifier [HARDWARE] (our unit, 2026-11-27).
+
 On connect, BlueZ 5.87 logs
 `profiles/gap/gas.c:read_ppcp_cb() GAS PPCP: Invalid Connection Parameters
 values` [HARDWARE]: the adapter's Peripheral Preferred Connection Parameters

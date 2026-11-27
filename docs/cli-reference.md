@@ -194,8 +194,9 @@ dmm-cli --adapter 12:34:56:78:9A:BC read
 Connect to the meter and print device info: the meter it was opened as
 (picked, and where, or detected), the name it reports, transport type, and
 transport-specific diagnostics (CP2110 firmware version and UART error flags
-over USB; MTU, adapter heartbeats and an OWON meter's device information over
-Bluetooth).
+over USB; over Bluetooth, the services and data the device advertises, by
+their identifiers, the services it offers, MTU, adapter heartbeats and an
+OWON meter's device information).
 
 ```
 $ dmm-cli --adapter 12:34:56:78:9A:BC info
@@ -203,6 +204,8 @@ Detected: UNI-T UT61E+
 Reported name: UT61E+
 Transport: Bluetooth
   UT-D07B (12:34:56:78:9A:BC)
+  Advertised: services 0000d0ff-3c17-d293-8e48-14fe2e4da212 1800 1801 180a 49535343-fe7d-4ae5-8fa9-9fafd205e455 ff12, manufacturer data its own address
+  On connect: services 0000d0ff-3c17-d293-8e48-14fe2e4da212 1800 1801 180a 49535343-fe7d-4ae5-8fa9-9fafd205e455
   Status: MTU: 247 bytes, adapter heartbeats: 1
 ```
 
