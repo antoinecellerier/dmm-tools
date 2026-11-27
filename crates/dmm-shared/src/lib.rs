@@ -153,6 +153,62 @@ pub struct SharedSettings {
     /// ([`l10n::resolve`]).
     #[serde(default)]
     pub language: String,
+    /// The Bluetooth device dmm-gui's **Bluetooth device** row names, which
+    /// both apps open on the radio's turn; `None` for Auto, which finds one
+    /// by name ([`SharedSettings::bluetooth_peer`]).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bluetooth_device: Option<BluetoothDevice>,
+}
+
+/// A Bluetooth device chosen in dmm-gui's Settings, opened by address in
+/// place of the first one found by name.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct BluetoothDevice {
+    /// Its address, or the platform's identifier where there is none.
+    /// Empty, as a hand-edited file may leave it, chooses nothing.
+    pub selector: String,
+    /// The name it was chosen by, which the apps show.
+    pub name: String,
+    /// Whether dmm-gui has asked for its name to be reported, for a meter
+    /// that goes by one its entry does not list: asked once, not at every
+    /// start.
+    pub report_asked: bool,
+}
+
+/// Why the chosen Bluetooth device is not what an open takes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ChoiceSetAside {
+    /// `--adapter` names what the session opens.
+    Adapter,
+    /// The meter picked is on no Bluetooth link.
+    NoBluetoothLink,
+    /// Bluetooth is not searched.
+    BluetoothOff,
+}
+
+impl ChoiceSetAside {
+    /// What sets a chosen Bluetooth device aside, if anything does, for a
+    /// session given `adapter` on `--adapter`, opening `device` (`None`
+    /// under Auto-detect) and searching the radio or not (`bluetooth`).
+    pub fn of(
+        adapter: Option<&str>,
+        device: Option<&dmm_lib::protocol::registry::SelectableDevice>,
+        bluetooth: bool,
+    ) -> Option<Self> {
+        let on_bluetooth = |d: &dmm_lib::protocol::registry::SelectableDevice| {
+            d.bluetooth_only() || dmm_lib::searches_bluetooth(Some(d))
+        };
+        if adapter.is_some() {
+            Some(Self::Adapter)
+        } else if !device.is_none_or(on_bluetooth) {
+            Some(Self::NoBluetoothLink)
+        } else if !bluetooth {
+            Some(Self::BluetoothOff)
+        } else {
+            None
+        }
+    }
 }
 
 /// Bluetooth probing is on unless it was turned off: a settings file written
@@ -162,6 +218,24 @@ fn bluetooth_default() -> bool {
 }
 
 impl SharedSettings {
+    /// The Bluetooth device an open takes on the radio's turn
+    /// ([`dmm_lib::OpenOptions::bluetooth_peer`]): the one chosen, unless
+    /// something sets it aside ([`ChoiceSetAside::of`], with its
+    /// arguments). `None` finds one by name.
+    pub fn bluetooth_peer(
+        &self,
+        adapter: Option<&str>,
+        device: Option<&dmm_lib::protocol::registry::SelectableDevice>,
+        bluetooth: bool,
+    ) -> Option<&BluetoothDevice> {
+        // Only an address or a peripheral identifier names a Bluetooth
+        // device: anything else a hand edit left chooses nothing.
+        self.bluetooth_device.as_ref().filter(|d| {
+            dmm_lib::is_bluetooth_selector(&d.selector)
+                && ChoiceSetAside::of(adapter, device, bluetooth).is_none()
+        })
+    }
+
     /// The device the file names, `None` when it names none. Empty means not
     /// set: what a file written before the field existed deserializes to,
     /// and what the GUI writes when nothing is picked. Whether any meter
@@ -200,6 +274,7 @@ impl Default for SharedSettings {
             bluetooth: bluetooth_default(),
             mock_mode: String::new(),
             language: String::new(),
+            bluetooth_device: None,
         }
     }
 }
@@ -716,6 +791,52 @@ mod tests {
             device_family: family.to_string(),
             ..Default::default()
         }
+    }
+
+    /// The chosen Bluetooth device is what the radio's turn opens, under
+    /// Auto-detect and for a meter on Bluetooth, and is set aside, not
+    /// forgotten, by `--adapter`, a cable-only meter and a radio that is
+    /// not searched. A file from before the setting, or with a key missing,
+    /// still loads.
+    #[test]
+    fn the_chosen_bluetooth_device_is_opened_unless_set_aside() {
+        use dmm_lib::protocol::registry::find_device;
+        let address = "12:34:56:78:9A:BC";
+        let saved: SharedSettings = serde_json::from_str(
+            r#"{"device_family": "auto", "bluetooth_device": {"selector": "12:34:56:78:9A:BC"}}"#,
+        )
+        .unwrap();
+        let peer = |adapter, device: Option<&str>, bluetooth| {
+            saved
+                .bluetooth_peer(adapter, device.and_then(find_device), bluetooth)
+                .map(|d| d.selector.as_str())
+        };
+        assert_eq!(peer(None, None, true), Some(address));
+        assert_eq!(peer(None, Some("ut61eplus"), true), Some(address));
+        assert_eq!(peer(None, Some("cm2100b"), true), Some(address));
+        assert_eq!(peer(Some("00C5B27A"), None, true), None);
+        assert_eq!(peer(None, Some("ut804"), true), None);
+        assert_eq!(peer(None, None, false), None);
+        assert_eq!(
+            ChoiceSetAside::of(None, find_device("ut804"), true),
+            Some(ChoiceSetAside::NoBluetoothLink)
+        );
+
+        let before: SharedSettings = serde_json::from_str(r#"{"device_family": "auto"}"#).unwrap();
+        assert_eq!(before.bluetooth_device, None);
+        let emptied = SharedSettings {
+            bluetooth_device: Some(BluetoothDevice::default()),
+            ..Default::default()
+        };
+        assert!(emptied.bluetooth_peer(None, None, true).is_none());
+        let not_an_address = SharedSettings {
+            bluetooth_device: Some(BluetoothDevice {
+                selector: "00C5B27A".to_string(),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        assert!(not_an_address.bluetooth_peer(None, None, true).is_none());
     }
 
     /// Empty pins nothing; a label or alias pins that scenario; anything

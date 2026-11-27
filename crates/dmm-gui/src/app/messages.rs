@@ -521,6 +521,13 @@ impl App {
         } else {
             let adapter = self.settings.overrides.adapter.clone();
             let peer = self.bluetooth_peer().map(|d| d.selector.clone());
+            // Only an open the radio may get a turn in waits for the list's
+            // scan: a cable-only meter has nothing to do with it.
+            let on_radio = adapter.is_some()
+                || (self.settings.shared.bluetooth
+                    && device_entry.is_none_or(|d| {
+                        d.bluetooth_only() || dmm_lib::searches_bluetooth(Some(d))
+                    }));
             let scanning = self.bluetooth.scanning();
             let bluetooth = self.settings.shared.bluetooth;
             // A Bluetooth open can take seconds; stopping the thread calls it
@@ -537,7 +544,7 @@ impl App {
                 // comes back is identified again rather than assumed to be the
                 // one that left. The pin says what a reconnect may open.
                 move |pin: Option<&ReopenPin>| {
-                    if pin.is_none() {
+                    if pin.is_none() && on_radio {
                         super::bluetooth_device::wait_for_scan(&scanning, &stop);
                     }
                     let opts = match pin {
@@ -810,7 +817,7 @@ impl App {
                     // A device chosen in Settings opens at every start:
                     // its name is asked for once, not each time.
                     if self.bluetooth_peer().is_some()
-                        && let Some(chosen) = self.settings.bluetooth_device.as_mut()
+                        && let Some(chosen) = self.settings.shared.bluetooth_device.as_mut()
                     {
                         if chosen.report_asked {
                             continue;

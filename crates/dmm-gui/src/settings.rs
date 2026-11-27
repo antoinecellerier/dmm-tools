@@ -404,21 +404,6 @@ impl CaptureAsk {
     }
 }
 
-/// The Bluetooth device chosen on the **Bluetooth device** row, opened by
-/// address in place of the first one found by name.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(default)]
-pub struct BluetoothDevice {
-    /// Its address, or the platform's identifier where there is none.
-    /// Empty, as a hand-edited file may leave it, chooses nothing.
-    pub selector: String,
-    /// The name it was chosen by, which the row and the notices show.
-    pub name: String,
-    /// Whether its name has been asked to be reported, for a meter that
-    /// goes by one its entry does not list: asked once, not at every start.
-    pub report_asked: bool,
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Settings {
@@ -499,10 +484,6 @@ pub struct Settings {
     /// there. `None` until one does.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub last_folder: Option<PathBuf>,
-    /// The device the **Bluetooth device** row names; `None` for Auto,
-    /// which finds one by name.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub bluetooth_device: Option<BluetoothDevice>,
     /// The window's inner size when last resized, in OS logical points (so
     /// the UI zoom doesn't change it). Not while maximized, fullscreen or in
     /// big meter mode. `None` until the user resizes the window.
@@ -624,7 +605,6 @@ impl Default for Settings {
             announce_interval_secs: default_announce_interval_secs(),
             announce_only_focused: false,
             last_folder: None,
-            bluetooth_device: None,
             window_size: None,
             window_maximized: false,
             reading_panel_width: SIDE_PANEL_DEFAULT_WIDTH,
@@ -1264,6 +1244,11 @@ mod tests {
                 bluetooth: false,
                 mock_mode: "dcv".to_string(),
                 language: "fr".to_string(),
+                bluetooth_device: Some(dmm_shared::BluetoothDevice {
+                    selector: "12:34:56:78:9A:BC".to_string(),
+                    name: "CM2100B".to_string(),
+                    report_asked: true,
+                }),
             },
             theme: ThemeMode::Light,
             named_theme: Some("Desert".to_string()),
@@ -1293,11 +1278,6 @@ mod tests {
             announce_interval_secs: None,
             announce_only_focused: true,
             last_folder: Some(PathBuf::from("/data/bench")),
-            bluetooth_device: Some(BluetoothDevice {
-                selector: "12:34:56:78:9A:BC".to_string(),
-                name: "CM2100B".to_string(),
-                report_asked: true,
-            }),
             window_size: Some([1300.0, 900.0]),
             window_maximized: true,
             reading_panel_width: 300.0,
@@ -1335,13 +1315,16 @@ mod tests {
         assert!(!deserialized.specs_expanded);
         assert!(!deserialized.spec_fields.notes);
         assert!(deserialized.spec_fields.input_impedance);
-        assert_eq!(deserialized.bluetooth_device, s.bluetooth_device);
+        assert_eq!(
+            deserialized.shared.bluetooth_device,
+            s.shared.bluetooth_device
+        );
         // A choice written by hand with a key missing still loads.
         let partial: Settings =
             serde_json::from_str(r#"{"bluetooth_device": {"selector": "12:34:56:78:9A:BC"}}"#)
                 .unwrap();
-        assert_eq!(partial.bluetooth_device.unwrap().name, "");
-        assert!(deserialized.bluetooth_device.is_some());
+        assert_eq!(partial.shared.bluetooth_device.unwrap().name, "");
+        assert!(deserialized.shared.bluetooth_device.is_some());
         assert!(deserialized.always_on_top);
         assert!(deserialized.hide_decorations);
         assert!(deserialized.full_screen);

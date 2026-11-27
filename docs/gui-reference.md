@@ -574,7 +574,7 @@ Opened via the gear icon. Persisted to `~/.config/dmm-tools/settings.json` on Li
 | Setting | Default | Description |
 |---|---|---|
 | **Device** | Auto-detect | Auto-detect finds the meter and saves it here; the other entries, grouped by brand, pick a model directly. Requires reconnect. |
-| **Bluetooth device** | Auto (found by name) | Auto opens the first adapter or meter in range under a name the **Device** is known by. Opening the list scans; a device picked from it is opened by its address instead, after any USB cable. Takes effect on the next connect; a session on another Bluetooth device reconnects. |
+| **Bluetooth device** | Auto (found by name) | Auto opens the first adapter or meter in range under a name the **Device** is known by. Opening the list scans; a device picked from it is opened by its address instead, after any USB cable. Takes effect on the next connect; a session on another Bluetooth device reconnects. [`dmm-cli` opens it too](cli-reference.md#devices). |
 | **Mock mode** | Auto (cycle) | Only shown when Device is Mock. Pins the mock to one of the scenarios listed under [Command-Line Options](#command-line-options), or cycles through all of them. Requires reconnect. |
 | **Auto-connect on start** | on | Connect to meter automatically on startup |
 | **Show device name on connect (beeps)** | on | Ask meter for its name on connect. Skipped when Auto-detect already has the name, or a recording being played back names it. |

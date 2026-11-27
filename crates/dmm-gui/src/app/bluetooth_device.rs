@@ -18,7 +18,7 @@ use super::connection_issue::ConnectionIssue;
 use super::task::Task;
 use super::{App, ConnectionState};
 use crate::a11y::ResponseA11yExt;
-use crate::settings::BluetoothDevice;
+use dmm_shared::{BluetoothDevice, ChoiceSetAside as ChoiceIgnored};
 
 /// A named Bluetooth device a scan heard: what opens it, and its name.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -46,17 +46,6 @@ impl Heard {
             selector: device.path,
         }
     }
-}
-
-/// Why the chosen device is not what the next Connect opens.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) enum ChoiceIgnored {
-    /// `--adapter` names what this session opens.
-    Adapter,
-    /// The meter picked on the Device row is on no Bluetooth link.
-    NoBluetoothLink,
-    /// **Look for Bluetooth devices** is off.
-    BluetoothOff,
 }
 
 /// The scan behind the open **Bluetooth device** list, and what it heard.
@@ -151,28 +140,22 @@ pub(super) fn scenario_devices(count: usize) -> Vec<dmm_lib::DeviceInfo> {
 impl App {
     /// Why the next Connect leaves the chosen device aside, if it does.
     pub(super) fn bluetooth_choice_ignored(&self) -> Option<ChoiceIgnored> {
-        let on_bluetooth = |d: &dmm_lib::protocol::registry::SelectableDevice| {
-            d.bluetooth_only() || dmm_lib::searches_bluetooth(Some(d))
-        };
-        if self.settings.overrides.adapter.is_some() {
-            Some(ChoiceIgnored::Adapter)
-        } else if !self.selected_device().is_none_or(on_bluetooth) {
-            Some(ChoiceIgnored::NoBluetoothLink)
-        } else if !self.settings.shared.bluetooth {
-            Some(ChoiceIgnored::BluetoothOff)
-        } else {
-            None
-        }
+        ChoiceIgnored::of(
+            self.settings.overrides.adapter.as_deref(),
+            self.selected_device(),
+            self.settings.shared.bluetooth,
+        )
     }
 
     /// The Bluetooth device the next Connect opens on the radio's turn:
     /// the one chosen, unless something sets it aside. `None` finds one by
     /// name.
     pub(super) fn bluetooth_peer(&self) -> Option<&BluetoothDevice> {
-        self.settings
-            .bluetooth_device
-            .as_ref()
-            .filter(|d| !d.selector.is_empty() && self.bluetooth_choice_ignored().is_none())
+        self.settings.shared.bluetooth_peer(
+            self.settings.overrides.adapter.as_deref(),
+            self.selected_device(),
+            self.settings.shared.bluetooth,
+        )
     }
 
     /// The chosen device, when `address` is its own and not one `--adapter`
@@ -181,6 +164,7 @@ impl App {
     /// its wording when a setting changes under it.
     pub(super) fn chosen_at(&self, address: &str) -> Option<&BluetoothDevice> {
         self.settings
+            .shared
             .bluetooth_device
             .as_ref()
             .filter(|d| d.selector == address && self.settings.overrides.adapter.is_none())
@@ -198,7 +182,7 @@ impl App {
             report_asked: false,
         });
         let same = |a: &BluetoothDevice, b: &BluetoothDevice| a.selector == b.selector;
-        let unchanged = match (&mut self.settings.bluetooth_device, &chosen) {
+        let unchanged = match (&mut self.settings.shared.bluetooth_device, &chosen) {
             (None, None) => true,
             (Some(a), Some(b)) if same(a, b) => {
                 // The same device, perhaps under a new name.
@@ -223,7 +207,7 @@ impl App {
             },
             _ => false,
         };
-        self.settings.bluetooth_device = chosen;
+        self.settings.shared.bluetooth_device = chosen;
         if !stays {
             self.connection.needs_reconnect = true;
         }
@@ -268,6 +252,12 @@ impl App {
                     }
                 }
                 heard.append(&mut now);
+                // The chosen device, heard under a new name, takes it.
+                if let Some(chosen) = self.settings.shared.bluetooth_device.as_mut()
+                    && let Some(now) = heard.iter().find(|h| h.selector == chosen.selector)
+                {
+                    chosen.name.clone_from(&now.name);
+                }
                 self.bluetooth.heard = heard;
                 self.bluetooth.problem = None;
             }
@@ -297,10 +287,15 @@ impl App {
         self.poll_bluetooth_scan();
         let l10n = std::sync::Arc::clone(&self.l10n);
         let ignored = self.bluetooth_choice_ignored();
-        let chosen = self.settings.bluetooth_device.as_ref().map(|d| Heard {
-            selector: d.selector.clone(),
-            name: d.name.clone(),
-        });
+        let chosen = self
+            .settings
+            .shared
+            .bluetooth_device
+            .as_ref()
+            .map(|d| Heard {
+                selector: d.selector.clone(),
+                name: d.name.clone(),
+            });
         let auto = tr!(l10n, "settings-bluetooth-device-auto");
         let shown = chosen.as_ref().map_or(auto.as_ref(), |d| d.name.as_str());
         // Auto, the choice, then the rest of what the scan heard.
@@ -341,7 +336,10 @@ impl App {
             .horizontal_wrapped(|ui| {
                 let picked = ui
                     .scope(|ui| {
-                        if ignored.is_some() || connecting {
+                        // A reconnect searches the radio as a Connect does,
+                        // and the list's scan would cut that search short.
+                        let reopening = self.connection.state == ConnectionState::Reconnecting;
+                        if ignored.is_some() || connecting || reopening {
                             ui.disable();
                         }
                         ui.label(tr!(l10n, "settings-bluetooth-device"));
@@ -449,9 +447,7 @@ impl App {
             // Nothing recognisable answered over the radio, where the
             // chosen device is the one that was opened.
             Diagnosis::NotIdentified { bridge, .. } => {
-                *bridge == dmm_lib::BLUETOOTH
-                    && self.settings.bluetooth_device.is_some()
-                    && self.settings.overrides.adapter.is_none()
+                *bridge == dmm_lib::BLUETOOTH && self.bluetooth_peer().is_some()
             }
             _ => false,
         };
@@ -646,7 +642,10 @@ mod tests {
             Some(ChoiceIgnored::NoBluetoothLink)
         );
         assert!(app.bluetooth_peer().is_none());
-        assert!(app.settings.bluetooth_device.is_some(), "kept in the file");
+        assert!(
+            app.settings.shared.bluetooth_device.is_some(),
+            "kept in the file"
+        );
     }
 
     /// Only a session on another Bluetooth device than the one chosen
@@ -671,7 +670,7 @@ mod tests {
         let mut app = session_on(Some(ADDRESS));
         app.choose_bluetooth_device(Some(heard("Bench clamp")));
         assert!(!app.connection.needs_reconnect, "already on it");
-        assert!(app.settings.bluetooth_device.is_some());
+        assert!(app.settings.shared.bluetooth_device.is_some());
         app.choose_bluetooth_device(None);
         assert!(!app.connection.needs_reconnect, "Auto");
 
@@ -738,11 +737,16 @@ mod tests {
     #[test]
     fn the_chosen_device_takes_a_new_name() {
         let mut app = chosen("auto");
-        if let Some(device) = app.settings.bluetooth_device.as_mut() {
+        if let Some(device) = app.settings.shared.bluetooth_device.as_mut() {
             device.report_asked = true;
         }
         app.choose_bluetooth_device(Some(heard("Renamed clamp")));
-        let device = app.settings.bluetooth_device.as_ref().expect("a choice");
+        let device = app
+            .settings
+            .shared
+            .bluetooth_device
+            .as_ref()
+            .expect("a choice");
         assert_eq!(device.name, "Renamed clamp");
         assert!(device.report_asked, "asked for it already");
     }
@@ -872,7 +876,12 @@ mod tests {
         click(&mut app, "2 other Bluetooth devices heard");
         assert!(app.bluetooth.unfolded);
         click(&mut app, "CM2100B");
-        let chosen = app.settings.bluetooth_device.as_ref().expect("a choice");
+        let chosen = app
+            .settings
+            .shared
+            .bluetooth_device
+            .as_ref()
+            .expect("a choice");
         assert_eq!(chosen.selector, "12:34:56:78:9A:00");
         assert!(app.connection.needs_reconnect);
     }

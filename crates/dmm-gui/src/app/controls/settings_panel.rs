@@ -987,6 +987,7 @@ mod tests {
         let chosen = run
             .app
             .settings
+            .shared
             .bluetooth_device
             .as_ref()
             .expect("a choice");

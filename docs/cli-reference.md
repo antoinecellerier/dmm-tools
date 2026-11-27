@@ -50,6 +50,8 @@ nothing answers, the CLI lists what each meter needs switched on.
 
 A detected run prints one dim stderr line naming the meter and the `--device <id>` that pins it.
 
+The CLI also opens the Bluetooth device chosen in `dmm-gui`'s Settings (`bluetooth_device` in the settings file) in place of the first one found by name, after any USB cable. `--adapter` opens another for one run.
+
 <!-- devices:start -->
 | Value | Aliases | Description |
 |---|---|---|

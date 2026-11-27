@@ -125,10 +125,21 @@ fn main() {
 
     let bluetooth = bluetooth_probing(cli.bluetooth, cli.no_bluetooth, settings.as_ref());
     open::note_no_bluetooth_flag(cli.no_bluetooth);
+    // The Bluetooth device chosen in dmm-gui, as dmm-gui opens it.
+    let chosen = settings.as_ref().filter(|_| opens_the_pick).and_then(|s| {
+        let device = match selection {
+            Selection::Device(device) => Some(device),
+            Selection::Auto => None,
+        };
+        s.bluetooth_peer(cli.adapter.as_deref(), device, bluetooth)
+    });
+    if let Some(chosen) = chosen {
+        open::note_bluetooth_device(chosen);
+    }
     let opts = dmm_lib::OpenOptions {
         adapter: cli.adapter.as_deref(),
         bluetooth,
-        bluetooth_peer: None,
+        bluetooth_peer: chosen.map(|d| d.selector.as_str()),
         stop: None,
         heard: None,
     };

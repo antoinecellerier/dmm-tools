@@ -450,6 +450,14 @@ Under **Bluetooth runs only inside its own calls** in [architecture.md](architec
 
 ## Usability
 
+### Settings from the command line
+
+**Complexity:** Low
+
+`dmm-cli` follows what `dmm-gui` saved (the device, the Bluetooth device, whether Bluetooth is searched, the mock mode, the language) and can override each for one run, but only the GUI writes the settings file. A `dmm-cli settings` command that shows these and sets or clears one would do for a machine with no display what the Settings panel does.
+
+Use cases: a Raspberry Pi logger over SSH, choosing a Bluetooth device from `dmm-cli list` once and keeping it.
+
 ### Configurable CSV columns
 
 **Complexity:** Low

@@ -154,8 +154,9 @@ cmd_run() {
 		# takes the --device mock default nor counts as hardware; nor does an
 		# imported file, which opens no meter at all.
 		--replay | --replay=* | --import | --import=*) replay=1 ;;
-		# Opens no meter and scans no radio whatever --device says: every
-		# Connect fails, and the scan's devices are made up.
+		# Opens no hardware and scans no radio whatever --device says: a
+		# simulated meter aside, every Connect fails, and the scan's devices
+		# are made up.
 		--bluetooth-scenario | --bluetooth-scenario=*) scenario=1 ;;
 		esac
 	done

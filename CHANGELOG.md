@@ -19,6 +19,7 @@
 
 ### CLI
 
+- **`dmm-cli` opens the Bluetooth device chosen in `dmm-gui`'s Settings** — `--adapter` opens another for one run.
 - **`dmm-cli list` names the other Bluetooth devices it heard when it knows none** — a meter under an unexpected name opens with `--device` and `--adapter`, by the address shown.
 
 ### Bug fixes

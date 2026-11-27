@@ -53,6 +53,12 @@ connect-selected =
         [settings] Selected: { $meter } (saved by dmm-gui; pass --device auto to detect the meter)
         [recording] Selected: { $meter } (named by the recording)
     }
+# Under a failed open's headline, after connect-selected: the Bluetooth
+# device this run looked for,
+# chosen in dmm-gui's Settings on its Bluetooth device row, whose first
+# entry is Auto. $name is the device's name, e.g. CM2100B; --adapter is a
+# command-line option, kept as it is.
+connect-bluetooth-device = Bluetooth device: { $name } (chosen in dmm-gui; pass --adapter to open another, or set it to Auto there)
 # The name the meter gave for itself. $name is that name as the meter sent
 # it, or connect-reported-name-none.
 connect-reported-name = Reported name: { $name }

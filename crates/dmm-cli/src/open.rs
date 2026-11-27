@@ -208,9 +208,37 @@ fn pick_hint(
     }
 }
 
-/// Print [`picked_line`], when there is one, under a failed open's headline.
+/// The Bluetooth device chosen in dmm-gui that this run opens on the
+/// radio's turn, by name. Set once, before anything is opened.
+static BLUETOOTH_DEVICE: OnceLock<dmm_shared::BluetoothDevice> = OnceLock::new();
+
+/// Record the chosen Bluetooth device this run opens.
+pub(crate) fn note_bluetooth_device(device: &dmm_shared::BluetoothDevice) {
+    let _ = BLUETOOTH_DEVICE.set(device.clone());
+}
+
+/// The line that says which Bluetooth device the run was told to open: one
+/// chosen in dmm-gui opens with no `--adapter` in sight, and when it is
+/// switched off the search by name it replaced would have found another.
+/// `None` when none is chosen. In `l`'s language.
+fn bluetooth_device_line(l: &Localizer) -> Option<String> {
+    let device = BLUETOOTH_DEVICE.get()?;
+    Some(chosen_line(l, &device.name))
+}
+
+/// [`bluetooth_device_line`] for the device going by `name`.
+fn chosen_line(l: &Localizer, name: &str) -> String {
+    tr!(l, "connect-bluetooth-device", name = name).into_owned()
+}
+
+/// Print [`picked_line`] and [`bluetooth_device_line`], when there are any,
+/// under a failed open's headline.
 fn print_picked() {
-    if let Some(line) = picked_line(crate::l10n::get()) {
+    let l = crate::l10n::get();
+    for line in [picked_line(l), bluetooth_device_line(l)]
+        .into_iter()
+        .flatten()
+    {
         eprintln!("{line}");
     }
 }
@@ -405,6 +433,14 @@ pub(crate) fn warn_unlisted_name<T: dmm_lib::transport::Transport>(dmm: &dmm_lib
     // Looked at once: the name is the link's, and cannot change under it.
     static LOOKED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
     if LOOKED.swap(true, std::sync::atomic::Ordering::Relaxed) {
+        return;
+    }
+    // The device chosen in dmm-gui, which asked for its name already.
+    let asked = BLUETOOTH_DEVICE.get().is_some_and(|chosen| {
+        chosen.report_asked
+            && dmm.transport().bluetooth_selector() == Some(chosen.selector.as_str())
+    });
+    if asked {
         return;
     }
     if let Some(name) = dmm.unlisted_bluetooth_name() {
@@ -765,7 +801,16 @@ fn open_error_help(
     opts: dmm_lib::OpenOptions<'_>,
     error: dmm_lib::error::Error,
 ) -> crate::l10n::Failure {
-    match Diagnosis::of(&error, opts.adapter, picked(selection)) {
+    // A chosen Bluetooth device is explained as an address on `--adapter`
+    // is, when the error is about that device and not about the radio.
+    let about_the_radio = matches!(
+        &error,
+        dmm_lib::error::Error::Bluetooth(issue) if issue.is_about_the_radio()
+    );
+    let named = opts
+        .adapter
+        .or(opts.bluetooth_peer.filter(|_| !about_the_radio));
+    match Diagnosis::of(&error, named, picked(selection)) {
         Diagnosis::NotFound { bluetooth_searched } => {
             // The radio skipped only for its switch: say how to turn it on.
             let hint = bluetooth_off_hint(crate::l10n::get());
@@ -1065,6 +1110,17 @@ mod tests {
         assert_eq!(
             selected_line(crate::l10n::english(), et2517a, PickedBy::Recording),
             "Selected: Minipa ET-2517A (named by the recording)"
+        );
+    }
+
+    /// The Bluetooth device chosen in dmm-gui is named under a failed open,
+    /// with the two ways to open another.
+    #[test]
+    fn the_chosen_bluetooth_device_line_says_how_to_open_another() {
+        assert_eq!(
+            chosen_line(crate::l10n::english(), "CM2100B"),
+            "Bluetooth device: CM2100B (chosen in dmm-gui; pass --adapter to open another, \
+             or set it to Auto there)"
         );
     }
 
