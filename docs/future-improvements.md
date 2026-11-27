@@ -426,13 +426,13 @@ The UT61+ protocol sends the UT-D07B's start command on every Bluetooth link, ad
 
 With no meter named, the Bluetooth search falls back to peers the platform knows (paired or cached) when the scan misses. It tries whichever the platform lists first, so a cached built-in meter that is asleep costs a ~10 s connect and "not found" before a known UT-D07B is tried. Trying known adapters ahead of known built-in meters fixes that, once a report shows it matters.
 
-### Pick an unrecognised Bluetooth device in the GUI
+### Bluetooth meters matched on more than the name
 
 **Complexity:** Medium
 
-A meter with the radio built in is found by the name it advertises, so one that goes by a name no entry lists is not found ([#44](https://github.com/antoinecellerier/dmm-tools/issues/44)). `dmm-cli list` shows the other named devices the scan heard, and `--device <id> --adapter <address>` opens one; the GUI has no scan of its own and, on Android, no command line. The no-meter notice would list the same devices, and picking one would open it as the meter chosen in Settings for that session, with the report prompt the CLI gives.
+A meter with the radio built in is found by the name it advertises, so one that goes by a name no entry lists is not found until its owner chooses it by hand ([#44](https://github.com/antoinecellerier/dmm-tools/issues/44)). An advertisement also carries service UUIDs and manufacturer data, and the services a device offers are known once connected: any of them could find a renamed meter. It needs each meter's advertisement on record first, which the scan's debug line could log for reporters to send.
 
-Use cases: a meter renamed in its vendor's app, or a model whose name we have wrong, on a phone.
+Use cases: a meter renamed in its vendor's app, or a model sold under a name we have not seen, found without a trip to Settings.
 
 ### Cables grouped by the meters they serve
 

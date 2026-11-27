@@ -427,13 +427,7 @@ impl App {
             Diagnosis::NothingAtAddress { address }
                 if let Some(chosen) = self.chosen_at(address) =>
             {
-                let links = match self.selected_device().filter(|d| d.bluetooth_only()) {
-                    Some(device) => LinksSearched::BluetoothOnly {
-                        model: device.display_name(),
-                        activation: device.activation_instructions,
-                    },
-                    None => LinksSearched::UsbAndBluetooth,
-                };
+                let links = self.links_with_chosen_device();
                 ConnectionNotice {
                     kind: NoticeKind::BluetoothNotFound,
                     title: tr!(
@@ -456,6 +450,17 @@ impl App {
                     // The GUI cannot scan, so the way back in is a restart with
                     // the address the scan printed.
                     body: tr!(l10n, "connection-restart-with-address").into_owned(),
+                    feedback_link: None,
+                }
+            }
+            // The chosen device, found but not linked: the stack's own words,
+            // over the steps of the links that open searched.
+            Diagnosis::AdapterUnreachable { address } if self.chosen_at(address).is_some() => {
+                ConnectionNotice {
+                    kind: NoticeKind::BluetoothUnreachable,
+                    title: l10n.error(error),
+                    sections: l10n.help().sections(&self.links_with_chosen_device()),
+                    body: tr!(l10n, "connection-click-connect").into_owned(),
                     feedback_link: None,
                 }
             }
@@ -585,6 +590,19 @@ impl App {
             )
             .into_owned()
         })
+    }
+
+    /// The links an open with a Bluetooth device chosen searched: the
+    /// cables, then the radio, or the radio alone for a meter with it built
+    /// in.
+    fn links_with_chosen_device(&self) -> LinksSearched<'static> {
+        match self.selected_device().filter(|d| d.bluetooth_only()) {
+            Some(device) => LinksSearched::BluetoothOnly {
+                model: device.display_name(),
+                activation: device.activation_instructions,
+            },
+            None => LinksSearched::UsbAndBluetooth,
+        }
     }
 
     /// `line`, when there is one, then the closing "Click Connect" line.

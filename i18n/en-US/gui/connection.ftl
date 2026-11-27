@@ -48,6 +48,20 @@ connection-chosen-not-heard = { $name } not heard over Bluetooth
 # device" and "Auto" are the Settings row and its first entry.
 connection-chosen-auto = Set Bluetooth device to Auto
     .hover = Look for the meter by its name instead
+# Under a notice that no meter was found: a line that unfolds into the other
+# Bluetooth devices in range, each a button. $count is 1 or more.
+connection-others-heard =
+    { $count ->
+        [one] { $count } other Bluetooth device heard
+       *[other] { $count } other Bluetooth devices heard
+    }
+# Under that line, above the devices. $meter is the meter picked on the
+# Device row, e.g. UNI-T UT61E+. The .hover is each device button's.
+connection-others-pick = If one is your meter, pick it to open it as the { $meter }.
+    .hover = Open it and keep it as the Bluetooth device
+# The same while the Device row is on Auto-detect. "Settings" and "Device"
+# are the panel and its row.
+connection-others-pick-auto = If one is your meter, pick it. Its model is detected: if readings look wrong, choose the meter in Settings → Device.
 # The closing line after the Bluetooth steps when nothing answered at the
 # address given with --adapter, a command-line option kept as it is. "It"
 # is the scan command the steps above name.

@@ -84,6 +84,14 @@ alone, a USB cable still being tried first, and no other device is opened
 when the chosen one is silent: its readings would pass for the chosen one's
 (`app/bluetooth_device.rs`).
 
+**A Connect that finds no meter offers what it heard, folded.** The other
+named devices its own scan heard sit under the notice as one line that
+unfolds into buttons, and picking one sets Bluetooth device and connects.
+That is where a meter under an unexpected name is first missed, and the
+Connect's scan is reused because a phone allows few of them. Folded, since a
+meter that is merely switched off is the common case and the list is then
+the neighbours' devices.
+
 **Settings run meter first, appearance last.** Groups a rule apart, in the
 order a first run needs them: the meter, what is kept, the panels, the window,
 then the look, set once, whose expanding Customize colors grows the panel at

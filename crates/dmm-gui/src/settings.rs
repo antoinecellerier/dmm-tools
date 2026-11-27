@@ -406,15 +406,16 @@ impl CaptureAsk {
 
 /// The Bluetooth device chosen on the **Bluetooth device** row, opened by
 /// address in place of the first one found by name.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
 pub struct BluetoothDevice {
     /// Its address, or the platform's identifier where there is none.
+    /// Empty, as a hand-edited file may leave it, chooses nothing.
     pub selector: String,
     /// The name it was chosen by, which the row and the notices show.
     pub name: String,
     /// Whether its name has been asked to be reported, for a meter that
     /// goes by one its entry does not list: asked once, not at every start.
-    #[serde(default)]
     pub report_asked: bool,
 }
 
@@ -1335,6 +1336,11 @@ mod tests {
         assert!(!deserialized.spec_fields.notes);
         assert!(deserialized.spec_fields.input_impedance);
         assert_eq!(deserialized.bluetooth_device, s.bluetooth_device);
+        // A choice written by hand with a key missing still loads.
+        let partial: Settings =
+            serde_json::from_str(r#"{"bluetooth_device": {"selector": "12:34:56:78:9A:BC"}}"#)
+                .unwrap();
+        assert_eq!(partial.bluetooth_device.unwrap().name, "");
         assert!(deserialized.bluetooth_device.is_some());
         assert!(deserialized.always_on_top);
         assert!(deserialized.hide_decorations);

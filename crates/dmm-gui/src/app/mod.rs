@@ -1060,7 +1060,7 @@ impl App {
                 notice_line: line_drawn,
                 late_readings_note: self.late_readings_note_shown(),
                 capture_ask_note: self.capture_ask_shown(),
-                bluetooth_auto_offer: self.offers_bluetooth_auto(),
+                bluetooth_offer: self.bluetooth_offer_shape(),
                 screen_only_note: self.screen_only_note_shown(),
                 language: self.l10n.language().id,
                 stats_widths: self.stats_widths.fit_key(),
@@ -1133,7 +1133,7 @@ impl App {
                         if let Some(notice) = &notice {
                             self.show_notice_help(ui, notice);
                         }
-                        self.show_bluetooth_auto_offer(ui);
+                        self.show_bluetooth_offers(ui);
                         self.show_screen_only_note(ui);
                         self.show_late_readings(ui);
                         self.show_capture_ask(ui);

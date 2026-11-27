@@ -275,7 +275,7 @@ pub(super) struct FitInputs {
     /// reading while it shows.
     pub(super) late_readings_note: bool,
     pub(super) capture_ask_note: bool,
-    pub(super) bluetooth_auto_offer: bool,
+    pub(super) bluetooth_offer: usize,
     pub(super) screen_only_note: bool,
     /// The language the badges, the placeholder and a notice's hint are
     /// written in, whose words differ in length.
@@ -382,7 +382,7 @@ mod tests {
             notice_line: false,
             late_readings_note: false,
             capture_ask_note: false,
-            bluetooth_auto_offer: false,
+            bluetooth_offer: 0,
             screen_only_note: false,
             language: "en-US",
             stats_widths: [7, 2, 3, 4],
@@ -889,7 +889,7 @@ mod tests {
             ..inputs()
         });
         mutations.push(FitInputs {
-            bluetooth_auto_offer: true,
+            bluetooth_offer: 2,
             ..inputs()
         });
         mutations.push(FitInputs {

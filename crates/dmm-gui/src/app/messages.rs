@@ -388,6 +388,8 @@ impl App {
         // `None` = Auto-detect: nothing names the meter, so the opener works
         // it out from the bytes it sends.
         let device_entry = self.selected_device();
+        // Where this Connect's scan leaves the other devices it hears.
+        let heard = self.begin_bluetooth_offer();
         self.set_gap_interval(sample_interval_ms);
         let mut thread_ctx = ThreadContext {
             msg_tx,
@@ -487,7 +489,7 @@ impl App {
                 },
                 thread_ctx,
             );
-        } else if self.bluetooth.scenario.is_some() {
+        } else if let Some(count) = self.bluetooth.scenario {
             // `--bluetooth-scenario`: no radio and no bus, and no meter. Only
             // an address is reported as not found: any other selector would
             // have the notice list the bus.
@@ -497,6 +499,11 @@ impl App {
                 .filter(|s| dmm_lib::is_bluetooth_selector(s));
             spawn_acquisition(
                 move |_| {
+                    if peer.is_none()
+                        && let Ok(mut heard) = heard.lock()
+                    {
+                        *heard = super::bluetooth_device::scenario_devices(count);
+                    }
                     type Opened = (
                         dmm_lib::Dmm<Box<dyn dmm_lib::transport::Transport>>,
                         Option<dmm_lib::detect::Detected>,
@@ -514,6 +521,7 @@ impl App {
         } else {
             let adapter = self.settings.overrides.adapter.clone();
             let peer = self.bluetooth_peer().map(|d| d.selector.clone());
+            let scanning = self.bluetooth.scanning();
             let bluetooth = self.settings.shared.bluetooth;
             // A Bluetooth open can take seconds; stopping the thread calls it
             // off, so Disconnect and quit don't wait for it.
@@ -529,6 +537,9 @@ impl App {
                 // comes back is identified again rather than assumed to be the
                 // one that left. The pin says what a reconnect may open.
                 move |pin: Option<&ReopenPin>| {
+                    if pin.is_none() {
+                        super::bluetooth_device::wait_for_scan(&scanning, &stop);
+                    }
                     let opts = match pin {
                         Some(pin) => pin.options(Some(&stop)),
                         None => dmm_lib::OpenOptions {
@@ -536,7 +547,7 @@ impl App {
                             bluetooth,
                             bluetooth_peer: peer.as_deref(),
                             stop: Some(&stop),
-                            heard: None,
+                            heard: Some(&heard),
                         },
                     };
                     match device_entry {
@@ -767,6 +778,7 @@ impl App {
                 DmmMessage::Failed(e) => {
                     error!("UI: error: {e}");
                     self.connection.last_error = Some(self.issue_from(e));
+                    self.keep_bluetooth_offer();
                     clear_channel = true;
                 }
                 // The thread reads on, and the next good frame clears it.
@@ -875,13 +887,17 @@ impl App {
     /// pick and adapter.
     fn issue_from(&self, e: dmm_lib::error::Error) -> ConnectionIssue {
         // A chosen Bluetooth device is explained as an address named on
-        // the command line is: the error is about that device.
-        let adapter = self
-            .settings
-            .overrides
-            .adapter
-            .as_deref()
-            .or(self.bluetooth_peer().map(|d| d.selector.as_str()));
+        // the command line is, when the error is about that device: a radio
+        // that is off or missing is explained as for any open.
+        let about_the_radio = matches!(
+            &e,
+            dmm_lib::error::Error::Bluetooth(issue) if issue.is_about_the_radio()
+        );
+        let chosen = self
+            .bluetooth_peer()
+            .filter(|_| !about_the_radio)
+            .map(|d| d.selector.as_str());
+        let adapter = self.settings.overrides.adapter.as_deref().or(chosen);
         ConnectionIssue::from_error(e, adapter, self.picked_listing())
     }
 
