@@ -644,8 +644,8 @@ fn warn_if_experimental(
     eprintln!(
         "{}",
         style(format!(
-            "  dmm-cli --device {} capture",
-            meter_listing(device).id()
+            "  {}",
+            dmm_shared::help::capture_command(meter_listing(device))
         ))
         .yellow()
     );

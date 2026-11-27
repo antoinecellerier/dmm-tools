@@ -54,6 +54,12 @@ pub fn issues_url() -> String {
     format!("{PROJECT_URL}/issues")
 }
 
+/// The command that runs a guided capture of the meter on `listing`, as both
+/// binaries show it to the user of a meter short of verified.
+pub fn capture_command(listing: registry::Listing) -> String {
+    format!("dmm-cli --device {} capture", listing.id())
+}
+
 /// The setup guide, which the Linux cable help points a headless machine to.
 #[cfg(target_os = "linux")]
 const SETUP_GUIDE_URL: &str =
@@ -1641,6 +1647,14 @@ mod tests {
     /// The row `id` names, as Settings or `--device` would pick it.
     fn pick(id: &str) -> Option<registry::Listing> {
         Some(registry::resolve_listing(id).expect("a registry row"))
+    }
+
+    #[test]
+    fn the_capture_command_names_the_row_picked() {
+        assert_eq!(
+            capture_command(pick("ut8803").expect("a row")),
+            "dmm-cli --device ut8803 capture"
+        );
     }
 
     const ADDRESS: &str = "12:34:56:78:9A:BC";
