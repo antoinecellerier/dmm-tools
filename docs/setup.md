@@ -141,7 +141,8 @@ either: disconnect any other app, then, on any function but Auto V/LoZ, hold
 switches off after 15 to 30 minutes idle; hold SELECT while turning it on to
 disable that. A renamed meter opens with
 `--device bm78xbt --adapter <address>`, the address from the other devices
-`dmm-cli list` heard.
+`dmm-cli list` heard, or in dmm-gui from the **Bluetooth device** list in
+Settings.
 
 OWON's meters and the Voltcraft VC871, VC891, VC915 and VC925 PV have
 Bluetooth built in and need no pairing either: disconnect any other app,
@@ -154,7 +155,12 @@ after 5 on the CM2100B and OW67B; switch it on again after every power-on
 of a VC871 or VC891. A meter under any other name opens with
 `--device <id> --adapter <address>`, the id from
 [Devices](cli-reference.md#devices) and the address from the other devices
-`dmm-cli list` heard.
+`dmm-cli list` heard, or in dmm-gui from the **Bluetooth device** list in
+Settings.
+
+A device opened by its address, either way, is taken for the meter: if it
+offers a Bluetooth service the supported meters use, it is sent that meter's
+requests. Choose only your own meter.
 
 Readings arrive as fast as the link delivers: on a UT61E+, about 3 a second
 over the adapter, against about 10 over the cable.

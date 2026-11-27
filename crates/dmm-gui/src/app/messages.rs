@@ -487,8 +487,33 @@ impl App {
                 },
                 thread_ctx,
             );
+        } else if self.bluetooth.scenario.is_some() {
+            // `--bluetooth-scenario`: no radio and no bus, and no meter. Only
+            // an address is reported as not found: any other selector would
+            // have the notice list the bus.
+            let peer = self
+                .bluetooth_peer()
+                .map(|d| d.selector.clone())
+                .filter(|s| dmm_lib::is_bluetooth_selector(s));
+            spawn_acquisition(
+                move |_| {
+                    type Opened = (
+                        dmm_lib::Dmm<Box<dyn dmm_lib::transport::Transport>>,
+                        Option<dmm_lib::detect::Detected>,
+                    );
+                    Err::<Opened, _>(match &peer {
+                        Some(selector) => dmm_lib::error::Error::AdapterNotFound(selector.clone()),
+                        None => dmm_lib::error::Error::NoTransportFound {
+                            cables: Vec::new(),
+                            bluetooth_searched: true,
+                        },
+                    })
+                },
+                thread_ctx,
+            );
         } else {
             let adapter = self.settings.overrides.adapter.clone();
+            let peer = self.bluetooth_peer().map(|d| d.selector.clone());
             let bluetooth = self.settings.shared.bluetooth;
             // A Bluetooth open can take seconds; stopping the thread calls it
             // off, so Disconnect and quit don't wait for it.
@@ -509,7 +534,7 @@ impl App {
                         None => dmm_lib::OpenOptions {
                             adapter: adapter.as_deref(),
                             bluetooth,
-                            bluetooth_peer: None,
+                            bluetooth_peer: peer.as_deref(),
                             stop: Some(&stop),
                             heard: None,
                         },
@@ -770,6 +795,16 @@ impl App {
                     self.toasts.push(Toast::caution(message));
                 }
                 DmmMessage::UnlistedName { opened, name } => {
+                    // A device chosen in Settings opens at every start:
+                    // its name is asked for once, not each time.
+                    if self.bluetooth_peer().is_some()
+                        && let Some(chosen) = self.settings.bluetooth_device.as_mut()
+                    {
+                        if chosen.report_asked {
+                            continue;
+                        }
+                        chosen.report_asked = true;
+                    }
                     let pick = self.picked_listing();
                     let opened = registry::connected_listing(pick, opened).display_name();
                     let opened = self.l10n.label(dmm_lib::text::TextKind::Model, opened);
@@ -839,11 +874,15 @@ impl App {
     /// What to tell the user about a library failure, for this session's
     /// pick and adapter.
     fn issue_from(&self, e: dmm_lib::error::Error) -> ConnectionIssue {
-        ConnectionIssue::from_error(
-            e,
-            self.settings.overrides.adapter.as_deref(),
-            self.picked_listing(),
-        )
+        // A chosen Bluetooth device is explained as an address named on
+        // the command line is: the error is about that device.
+        let adapter = self
+            .settings
+            .overrides
+            .adapter
+            .as_deref()
+            .or(self.bluetooth_peer().map(|d| d.selector.as_str()));
+        ConnectionIssue::from_error(e, adapter, self.picked_listing())
     }
 
     /// A link is up: record the meter, save or toast about the model it

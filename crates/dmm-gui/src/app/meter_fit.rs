@@ -269,11 +269,13 @@ pub(super) struct FitInputs {
     /// smaller, and one at the smallest font wraps instead
     /// (`NoReadingText::show_under_reading`), which the fit doesn't see.
     pub(super) notice_line: bool,
-    /// The late-readings notice, the capture ask and the screen-only line,
-    /// drawn under the buttons with the mode `Off`: each takes room from the
+    /// The late-readings notice, the capture ask, the offer under a notice
+    /// about the chosen Bluetooth device and the screen-only line, drawn
+    /// under the buttons with the mode `Off`: each takes room from the
     /// reading while it shows.
     pub(super) late_readings_note: bool,
     pub(super) capture_ask_note: bool,
+    pub(super) bluetooth_auto_offer: bool,
     pub(super) screen_only_note: bool,
     /// The language the badges, the placeholder and a notice's hint are
     /// written in, whose words differ in length.
@@ -380,6 +382,7 @@ mod tests {
             notice_line: false,
             late_readings_note: false,
             capture_ask_note: false,
+            bluetooth_auto_offer: false,
             screen_only_note: false,
             language: "en-US",
             stats_widths: [7, 2, 3, 4],
@@ -883,6 +886,10 @@ mod tests {
         });
         mutations.push(FitInputs {
             capture_ask_note: true,
+            ..inputs()
+        });
+        mutations.push(FitInputs {
+            bluetooth_auto_offer: true,
             ..inputs()
         });
         mutations.push(FitInputs {

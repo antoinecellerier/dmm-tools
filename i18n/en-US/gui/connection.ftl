@@ -41,6 +41,13 @@ connection-unrecognised-report = Please report it through { project-link } in th
 connection-unlisted-name-report = If the meter came with that name, please report it through { project-link } in the top bar.
 # The closing line under the steps. "Connect" is the top bar's button.
 connection-click-connect = Resolve the issue, then "Connect" again.
+# The notice's title when the device chosen on Settings' Bluetooth device
+# row did not answer. $name is that device's name, e.g. CM2100B.
+connection-chosen-not-heard = { $name } not heard over Bluetooth
+# A button under a notice about the chosen Bluetooth device. "Bluetooth
+# device" and "Auto" are the Settings row and its first entry.
+connection-chosen-auto = Set Bluetooth device to Auto
+    .hover = Look for the meter by its name instead
 # The closing line after the Bluetooth steps when nothing answered at the
 # address given with --adapter, a command-line option kept as it is. "It"
 # is the scan command the steps above name.

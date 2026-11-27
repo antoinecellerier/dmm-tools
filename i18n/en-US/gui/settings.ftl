@@ -27,6 +27,29 @@ settings-device-replay = (restart without --replay to pick a meter)
 # clock, set by command-line options for testing.
 settings-device-clock = (restart without the clock flags to pick a meter)
 
+## The Bluetooth device row: which Bluetooth adapter or meter is opened.
+
+# The row's caption; .a11y names its dropdown for a screen reader.
+settings-bluetooth-device = Bluetooth device:
+    .a11y = Bluetooth device
+    .hover = The Bluetooth adapter or meter to open
+# The dropdown and its first entry while no device is chosen: the first one
+# in range whose name the meter is known by is opened.
+settings-bluetooth-device-auto = Auto (found by name)
+# In the open list, while it looks for devices in range.
+settings-bluetooth-device-scanning = Scanning…
+# In the open list, when the scan heard no device with a name.
+settings-bluetooth-device-none = No named device heard
+# Beside the greyed dropdown while --adapter, a command-line option, names
+# the device this session opens.
+settings-bluetooth-device-adapter = (restart without --adapter to choose one)
+# Beside the greyed dropdown while the meter picked on the Device row is one
+# that only connects through a USB cable.
+settings-bluetooth-device-no-link = (the meter on the Device row has no Bluetooth link)
+# Beside the greyed dropdown while Bluetooth is not searched. $setting is
+# that checkbox's label, e.g. Look for Bluetooth devices.
+settings-bluetooth-device-off = (switch on { $setting } to choose one)
+
 ## The open Device dropdown: Auto-detect, then every meter under its brand.
 
 # An entry's hover and screen-reader name. $name is the meter, e.g. UNI-T

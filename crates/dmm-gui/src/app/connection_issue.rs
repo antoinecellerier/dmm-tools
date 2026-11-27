@@ -421,6 +421,32 @@ impl App {
                     message.into_owned(),
                 )
             }
+            // The device chosen in Settings, by the name it was chosen by.
+            // What was searched is what any open searches: the cables, then
+            // the radio, for that device alone.
+            Diagnosis::NothingAtAddress { address }
+                if let Some(chosen) = self.chosen_at(address) =>
+            {
+                let links = match self.selected_device().filter(|d| d.bluetooth_only()) {
+                    Some(device) => LinksSearched::BluetoothOnly {
+                        model: device.display_name(),
+                        activation: device.activation_instructions,
+                    },
+                    None => LinksSearched::UsbAndBluetooth,
+                };
+                ConnectionNotice {
+                    kind: NoticeKind::BluetoothNotFound,
+                    title: tr!(
+                        l10n,
+                        "connection-chosen-not-heard",
+                        name = chosen.name.as_str()
+                    )
+                    .into_owned(),
+                    sections: l10n.help().sections(&links),
+                    body: tr!(l10n, "connection-click-connect").into_owned(),
+                    feedback_link: None,
+                }
+            }
             Diagnosis::NothingAtAddress { address } => {
                 let links = LinksSearched::BluetoothAt(address);
                 ConnectionNotice {

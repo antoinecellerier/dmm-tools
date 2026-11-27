@@ -8,6 +8,7 @@
 
 ### GUI
 
+- **A Bluetooth device setting picks the adapter or meter to open from a scan** — for a meter under an unexpected name, or one adapter among several.
 - **A Density setting gives buttons finger-sized targets** — Touch, the default on Android; Compact keeps the desktop's sizes.
 - **A finger can mark a row of the recording log** — tap it twice, or long-press it for **Mark**; a right-click opens the same menu.
 - **A narrow graph puts its time windows in a list** — their chips wrapped the toolbar onto another row.

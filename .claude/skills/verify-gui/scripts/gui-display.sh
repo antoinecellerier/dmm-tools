@@ -136,7 +136,7 @@ cmd_start() {
 
 cmd_run() {
 	require xdotool cargo
-	local root disp pid wid i dev="" replay=0
+	local root disp pid wid i dev="" replay=0 scenario=0
 	root="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel)}"
 	[ -f "$root/Cargo.toml" ] || die "no Cargo.toml in $root"
 	local script_dir
@@ -154,13 +154,18 @@ cmd_run() {
 		# takes the --device mock default nor counts as hardware; nor does an
 		# imported file, which opens no meter at all.
 		--replay | --replay=* | --import | --import=*) replay=1 ;;
+		# Opens no meter and scans no radio whatever --device says: every
+		# Connect fails, and the scan's devices are made up.
+		--bluetooth-scenario | --bluetooth-scenario=*) scenario=1 ;;
 		esac
 	done
 	# With the hardware grant and no --device, the app opens what settings.json
 	# names, as a user's launch does — no "(--device)" mark on the Device row.
 	# The mock-only flags then need that saved device to be simulated: the app
 	# refuses them on anything else, as nothing implies the mock.
-	if [ -z "$dev" ] && [ "$replay" = 0 ] && [ "${VERIFY_GUI_ALLOW_HW:-0}" != 1 ]; then
+	if [ "$scenario" = 1 ]; then
+		:
+	elif [ -z "$dev" ] && [ "$replay" = 0 ] && [ "${VERIFY_GUI_ALLOW_HW:-0}" != 1 ]; then
 		args=(--device mock ${args[@]+"${args[@]}"})
 	elif [ -n "$dev" ] && [ "${VERIFY_GUI_ALLOW_HW:-0}" != 1 ]; then
 		# Real meters need the user's go-ahead (CLAUDE.md); this grant is prompt-free.

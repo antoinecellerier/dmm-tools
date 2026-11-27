@@ -401,6 +401,8 @@ impl App {
             }
         });
 
+        self.show_bluetooth_device_row(ui, connecting);
+
         // Mock mode selector (only shown when mock device is selected)
         if self
             .selected_device()
@@ -950,6 +952,52 @@ mod tests {
         run.frame(vec![])
     }
 
+    /// The **Bluetooth device** list scans as it opens, shows what the scan
+    /// heard under Auto, and Enter saves the focused device, by the keyboard
+    /// alone.
+    #[test]
+    fn the_bluetooth_device_list_scans_and_picks() {
+        let mut run = SettingsRun::new(1600.0, 1000.0);
+        // Two made-up devices in place of the radio's.
+        run.app.bluetooth.scenario = Some(2);
+        run.ctx.enable_accesskit();
+        run.frame(vec![]);
+        let reached = (0..60).any(|_| {
+            let frame = run.frame(key_tap(egui::Key::Tab));
+            focused_on(&frame, "Bluetooth device")
+        });
+        assert!(reached, "Tab never reached the Bluetooth device box");
+        run.frame(key_tap(egui::Key::Space));
+        let listed = |frame: &SettingsFrame, name: &str| {
+            frame.nodes.iter().any(|(_, n)| n.label() == Some(name))
+        };
+        let heard = (0..500).any(|_| {
+            std::thread::sleep(std::time::Duration::from_millis(2));
+            let frame = run.frame(vec![]);
+            listed(&frame, "CM2100B")
+        });
+        assert!(heard, "the scan's devices never reached the list");
+        // The list closed and opened again to take its new height, with
+        // focus back on Auto, the live entry.
+        let frame = run.frame(vec![]);
+        assert!(listed(&frame, "Living Room Speaker"));
+        run.frame(key_tap(egui::Key::ArrowDown));
+        run.frame(key_tap(egui::Key::Enter));
+        let frame = run.frame(vec![]);
+        let chosen = run
+            .app
+            .settings
+            .bluetooth_device
+            .as_ref()
+            .expect("a choice");
+        assert_eq!(chosen.name, "CM2100B");
+        assert_eq!(chosen.selector, "12:34:56:78:9A:00");
+        assert!(
+            !listed(&frame, "Living Room Speaker"),
+            "the list stayed open"
+        );
+    }
+
     /// Opened from the keyboard, the list puts focus on the selected meter,
     /// so Enter picks it and a screen reader names it, with no Tab first.
     #[test]
@@ -1435,8 +1483,10 @@ mod tests {
         let frame = run.frame(vec![]);
         let rows = [
             "Device",
+            "Bluetooth device",
             "Auto-connect on start",
-            "Every reading",
+            // Not "Every reading", which Screen reader updates offers too.
+            "100ms",
             "100K",
             "Graph",
             "30%",

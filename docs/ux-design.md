@@ -74,6 +74,16 @@ either: it is a mode the user steps into.
 window would cramp the next launch's full layout (`App::track_layout` in
 `app/layout.rs`).
 
+**The Bluetooth device is a setting, and Auto comes first.** A meter under a
+name no entry lists, or one adapter among several, is chosen from what a scan
+hears and kept, so a phone, which has no command line, connects to it at every
+start. It sits under Device with Auto first, as Auto-detect is there: finding
+the device by name is right for nearly everyone. Opening the list is what
+scans, so nothing searches the radio unasked. The choice covers the radio
+alone, a USB cable still being tried first, and no other device is opened
+when the chosen one is silent: its readings would pass for the chosen one's
+(`app/bluetooth_device.rs`).
+
 **Settings run meter first, appearance last.** Groups a rule apart, in the
 order a first run needs them: the meter, what is kept, the panels, the window,
 then the look, set once, whose expanding Customize colors grows the panel at

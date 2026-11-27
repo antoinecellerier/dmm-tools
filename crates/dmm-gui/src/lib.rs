@@ -124,6 +124,13 @@ struct Args {
     /// a contributor tool, documented in docs/development.md.
     #[arg(long, hide = true, requires = "replay")]
     replay_capture_ask: bool,
+
+    /// Open no meter: every Connect finds none, and a Bluetooth scan hears
+    /// COUNT made-up devices instead of the radio's. Hidden: a contributor
+    /// tool for screenshots of the Bluetooth device choice, documented in
+    /// docs/development.md.
+    #[arg(long, hide = true, value_name = "COUNT")]
+    bluetooth_scenario: Option<u8>,
 }
 
 /// What `--renderer` takes.
@@ -251,6 +258,8 @@ pub(crate) struct CliOverrides {
     /// `--update-notice`: the release the top bar links to, in place of
     /// asking GitHub.
     pub(crate) update_notice: Option<app::update_check::Tag>,
+    /// `--bluetooth-scenario`: the made-up devices a scan hears.
+    pub(crate) bluetooth_scenario: Option<usize>,
     /// The radius of the screen's rounded corners in pixels, where the
     /// window fills such a screen (a phone); 0 for a window on a desktop.
     pub(crate) screen_corner_px: f32,
@@ -273,6 +282,7 @@ impl CliOverrides {
             replay: None,
             import: None,
             update_notice: None,
+            bluetooth_scenario: None,
             screen_corner_px: 0.0,
         }
     }
@@ -514,6 +524,7 @@ fn parse_args(l: &Localizer, saved: &dmm_shared::SharedSettings) -> CliOverrides
         replay,
         import: args.import,
         update_notice: args.update_notice,
+        bluetooth_scenario: args.bluetooth_scenario.map(usize::from),
         screen_corner_px: 0.0,
     }
 }

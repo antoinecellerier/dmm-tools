@@ -179,6 +179,9 @@ pub(crate) struct ConnectedMeter {
     /// link its recording was made on. `None` for the mock, which is on no
     /// link at all.
     pub(crate) link: Option<Link>,
+    /// The Bluetooth device the session is on, by what opens it; `None` on
+    /// a cable, and for a simulated or replayed meter.
+    pub(crate) bluetooth_selector: Option<String>,
     /// Commands the connected protocol supports.
     pub(crate) supported_commands: Vec<&'static str>,
     /// The function and context keys the protocol lists, drawn as the mode
@@ -263,6 +266,7 @@ impl ConnectedMeter {
             stability: Stability::Verified,
             feedback_url: String::new(),
             link: None,
+            bluetooth_selector: None,
             supported_commands: Vec::new(),
             meter_keys: MeterKeys::NONE,
             max_aux_values: 0,
@@ -373,6 +377,7 @@ fn establish_connection<T: Transport>(
     let meter_keys = profile.meter_keys;
     // A replay's transport reports the link its file was recorded over.
     let link = dmm.transport().link();
+    let bluetooth_selector = dmm.transport().bluetooth_selector().map(str::to_owned);
     let device = detected
         .as_ref()
         .map(|d| d.device)
@@ -392,6 +397,7 @@ fn establish_connection<T: Transport>(
         stability,
         feedback_url,
         link,
+        bluetooth_selector,
         supported_commands: cmds,
         meter_keys,
         max_aux_values,

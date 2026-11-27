@@ -491,6 +491,12 @@ noted under `capture_asks` in `settings.json`, and the note shows once that
 `first_used` is three days old, so set it back by hand. Point
 `XDG_CONFIG_HOME` at a scratch folder to keep the real settings out of it.
 
+**Bluetooth device choice.** `dmm-gui --bluetooth-scenario <COUNT>` opens no
+meter and searches no radio: every Connect finds no meter, or does not hear
+the device chosen as **Bluetooth device**, and that list's scan hears `COUNT`
+made-up devices. It is how the list and its notices are drawn without a
+second Bluetooth device on the bench.
+
 **Update notice.** A local build never checks GitHub (see [Shared build
 matrix](#shared-build-matrix)). `dmm-gui --update-notice <TAG>` shows the top
 bar's link and the **Check for new versions** row for a tag such as `v0.8.0`

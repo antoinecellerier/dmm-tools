@@ -574,6 +574,7 @@ Opened via the gear icon. Persisted to `~/.config/dmm-tools/settings.json` on Li
 | Setting | Default | Description |
 |---|---|---|
 | **Device** | Auto-detect | Auto-detect finds the meter and saves it here; the other entries, grouped by brand, pick a model directly. Requires reconnect. |
+| **Bluetooth device** | Auto (found by name) | Auto opens the first adapter or meter in range under a name the **Device** is known by. Opening the list scans; a device picked from it is opened by its address instead, after any USB cable. Takes effect on the next connect; a session on another Bluetooth device reconnects. |
 | **Mock mode** | Auto (cycle) | Only shown when Device is Mock. Pins the mock to one of the scenarios listed under [Command-Line Options](#command-line-options), or cycles through all of them. Requires reconnect. |
 | **Auto-connect on start** | on | Connect to meter automatically on startup |
 | **Show device name on connect (beeps)** | on | Ask meter for its name on connect. Skipped when Auto-detect already has the name, or a recording being played back names it. |
@@ -750,7 +751,7 @@ When started from a terminal, dmm-gui logs there as [dmm-cli](cli-reference.md#e
 - Every feature is reachable from the keyboard. See [Keyboard Shortcuts](#keyboard-shortcuts) for the full list.
 - Tab and Shift+Tab cycle through every control in visual order, with a visible focus outline.
 - Custom widgets respond to arrow keys when focused: **Left/Right** pans the graph minimap, **Up/Down** resizes the recording-panel divider, and **Left/Right** resizes the left side-panel handle. Inside the Customize colors popup, the saturation/value square and the hue gradient also accept arrow keys.
-- The mode and range dropdowns under the reading, and the Settings **Device** and **Language** lists, open on Enter or Space; Up/Down move, Enter picks, Esc or Tab closes. In the **Device** list, Left/Right move to the next column.
+- The mode and range dropdowns under the reading, and the Settings **Device**, **Bluetooth device** and **Language** lists, open on Enter or Space; Up/Down move, Enter picks, Esc or Tab closes. In the **Device** list, Left/Right move to the next column.
 - Text inputs (Y axis min/max, envelope window seconds, reference values) carry hint text that screen readers announce as the field name.
 - The `?` help overlay and the **What's New** window keep focus inside while open and return it to the control that opened them when closed.
 
