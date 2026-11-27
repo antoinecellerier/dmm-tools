@@ -1,4 +1,4 @@
-<!-- translated from README.md 8cddcf8b15c4c17033f71b8ffea36d68d80196da -->
+<!-- translated from README.md 8ef722ba124c1581b3705d9683e809916f656fff -->
 # dmm-tools
 
 [![CI](https://github.com/antoinecellerier/dmm-tools/actions/workflows/ci.yml/badge.svg)](https://github.com/antoinecellerier/dmm-tools/actions/workflows/ci.yml)
@@ -148,7 +148,7 @@ Bluetooth の「アダプター」は UNI-T のオプション品 UT-D07A/B で�
 
 ## フィードバック
 
-バグ、アイデア、質問、アプリやドキュメントでわかりにくかった点などは、[Issue を作成](https://github.com/antoinecellerier/dmm-tools/issues/new)してお知らせください。[機種の表](#対応機種)にあるマルチメーターの動作状況は、その行の Issue に書き込んでください。[バグ報告に含める内容](CONTRIBUTING.md#bug-reports) (英語) もご覧ください。
+フィードバックをお待ちしています。バグを見つけた場合、改善のアイデアや質問がある場合、アプリやドキュメントでわかりにくい点があった場合は、[Issue を作成](https://github.com/antoinecellerier/dmm-tools/issues/new)してください。特定の機種についてのフィードバックは、[機種の表](#対応機種)にあるその機種の Issue に書き込んでください。Issue がまだない場合は、新しく作成してください。
 
 ## ライセンス
 

@@ -1,4 +1,4 @@
-<!-- translated from README.md 8cddcf8b15c4c17033f71b8ffea36d68d80196da -->
+<!-- translated from README.md 8ef722ba124c1581b3705d9683e809916f656fff -->
 # dmm-tools
 
 [![CI](https://github.com/antoinecellerier/dmm-tools/actions/workflows/ci.yml/badge.svg)](https://github.com/antoinecellerier/dmm-tools/actions/workflows/ci.yml)
@@ -148,7 +148,7 @@ $ dmm-cli read --interval-ms 2500 --count 5
 
 ## 反馈
 
-遇到错误，有想法或疑问，或者应用和文档中有令人困惑的地方，请[提交议题](https://github.com/antoinecellerier/dmm-tools/issues/new)。如果万用表列在[设备表](#支持的设备)中，请在该型号对应的议题下反馈使用情况。[错误报告应包含哪些内容](CONTRIBUTING.md#bug-reports)（英文）。
+欢迎反馈！遇到错误、有改进想法或疑问，或者应用和文档中有令人困惑的地方，请[提交议题](https://github.com/antoinecellerier/dmm-tools/issues/new)。针对某款万用表的反馈，请发到[设备表](#支持的设备)中该型号对应的议题下；如果还没有对应的议题，请新建一个。
 
 ## 许可证
 

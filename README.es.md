@@ -1,4 +1,4 @@
-<!-- translated from README.md 8cddcf8b15c4c17033f71b8ffea36d68d80196da -->
+<!-- translated from README.md 8ef722ba124c1581b3705d9683e809916f656fff -->
 # dmm-tools
 
 [![CI](https://github.com/antoinecellerier/dmm-tools/actions/workflows/ci.yml/badge.svg)](https://github.com/antoinecellerier/dmm-tools/actions/workflows/ci.yml)
@@ -148,7 +148,7 @@ Para colaboradores: [CONTRIBUTING.md](CONTRIBUTING.md), sobre informes de errore
 
 ## Comentarios
 
-Errores, ideas, preguntas o algo de la aplicación o de la documentación que te haya confundido: [abre una incidencia](https://github.com/antoinecellerier/dmm-tools/issues/new). Si tu multímetro está en la [tabla de dispositivos](#dispositivos-compatibles), cuéntanos cómo te funciona en la incidencia de su fila. [Qué incluir en un informe de error](CONTRIBUTING.md#bug-reports) (en inglés).
+¡Los comentarios son bienvenidos! [Abre una incidencia](https://github.com/antoinecellerier/dmm-tools/issues/new) si encuentras errores, tienes ideas de mejora o preguntas, o si algo de la aplicación o de la documentación te confundió. Para comentarios sobre un multímetro concreto, usa su incidencia en la [tabla de dispositivos](#dispositivos-compatibles) o abre una nueva si aún no la tiene.
 
 ## Licencia
 

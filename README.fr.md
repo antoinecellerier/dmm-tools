@@ -1,4 +1,4 @@
-<!-- translated from README.md 8cddcf8b15c4c17033f71b8ffea36d68d80196da -->
+<!-- translated from README.md 8ef722ba124c1581b3705d9683e809916f656fff -->
 # dmm-tools
 
 [![CI](https://github.com/antoinecellerier/dmm-tools/actions/workflows/ci.yml/badge.svg)](https://github.com/antoinecellerier/dmm-tools/actions/workflows/ci.yml)
@@ -148,7 +148,7 @@ Pour les contributeurs, en anglais : [CONTRIBUTING.md](CONTRIBUTING.md) pour le
 
 ## Commentaires
 
-Bugs, idées, questions, ou un point de l’application ou de la documentation qui vous a semblé peu clair : [ouvrez un ticket](https://github.com/antoinecellerier/dmm-tools/issues/new). Pour un multimètre du [tableau des appareils](#appareils-pris-en-charge), donnez vos retours dans le ticket indiqué sur sa ligne. [Que mettre dans un rapport de bug](CONTRIBUTING.md#bug-reports) (en anglais).
+Vos retours sont les bienvenus ! [Ouvrez un ticket](https://github.com/antoinecellerier/dmm-tools/issues/new) pour signaler un bug, proposer une amélioration, poser une question ou indiquer ce qui vous a semblé peu clair dans l’application ou la documentation. Pour un multimètre précis, utilisez le ticket qui lui est consacré dans le [tableau des appareils](#appareils-pris-en-charge), ou ouvrez-en un s’il n’en a pas encore.
 
 ## Licence
 
