@@ -95,7 +95,7 @@ pub(super) struct Found {
     pub(super) candidates: Vec<Candidate>,
     /// The named devices our scan heard that the caller does not take,
     /// strongest signal first: a meter going by a name no entry lists is
-    /// among them. Empty for a search by address.
+    /// among them. Empty unless asked for, and for a search by address.
     pub(super) unrecognised: Vec<Unrecognised>,
 }
 
@@ -127,10 +127,15 @@ const UNRECOGNISED_LIMIT: usize = 20;
 ///
 /// An address the user named is taken from the known devices or the scan,
 /// whatever its standing, since they asked for that one.
-pub(super) async fn search(adapter: &Adapter, target: Target<'_>, want: Match) -> Result<Found> {
+pub(super) async fn search(
+    adapter: &Adapter,
+    target: Target<'_>,
+    want: Match,
+    others: bool,
+) -> Result<Found> {
     // A signal strength in this list is another program's discovery, not
     // ours, so only a connection lifts a known device above `Known`.
-    let (known, _) = usable(known_peripherals(adapter).await, target, None).await;
+    let (known, _) = usable(known_peripherals(adapter).await, target, false, false).await;
     // Opening stops here when the known list already settles it: a connected
     // peer, or the named one. Listing scans regardless, so a peer
     // advertising in range shows up beside the known ones.
@@ -158,7 +163,7 @@ pub(super) async fn search(adapter: &Adapter, target: Target<'_>, want: Match) -
         let seen = adapter.peripherals().await.unwrap_or_default();
         // Each poll reads every device the stack has heard so far, so the
         // last one holds them all.
-        let (scanned, unrecognised) = usable(seen, target, Some(want)).await;
+        let (scanned, unrecognised) = usable(seen, target, true, others).await;
         // `All` keeps scanning to the end of the window: a second peer
         // that answers late still belongs in the list.
         if (want == Match::First && settled(&scanned)) || tokio::time::Instant::now() >= deadline {
@@ -288,16 +293,18 @@ fn standing(connected: bool, heard: bool, scanning: bool) -> Standing {
 /// The peripherals the caller may use: the one an address names, or every
 /// peer the caller takes by name, each with its standing. Beside them, the
 /// named devices a listing by name heard and did not take
-/// ([`unrecognised`]). `scan` is the search our own scan is running for,
-/// `None` for the devices the host already knew.
+/// ([`unrecognised`]), when the caller asked for them (`others`). `scanning`
+/// says the peripherals are what our own scan is hearing, not the devices
+/// the host already knew.
 async fn usable(
     peripherals: Vec<Peripheral>,
     target: Target<'_>,
-    scan: Option<Match>,
+    scanning: bool,
+    others: bool,
 ) -> (Vec<Candidate>, Vec<Unrecognised>) {
-    let scanning = scan.is_some();
-    let mut usable = Vec::new();
+    let collect = scanning && others;
     let mut others = Vec::new();
+    let mut usable = Vec::new();
     for peripheral in peripherals {
         let properties = peripheral.properties().await.ok().flatten();
         let address = peripheral.address();
@@ -340,10 +347,9 @@ async fn usable(
         );
         if !wanted {
             let heard = properties.as_ref().and_then(|p| p.rssi);
-            // Only a listing shows them: an open takes its match and goes.
             if matches!(target, Target::Named(_))
                 && let Some(other) = unrecognised(
-                    scan == Some(Match::All),
+                    collect,
                     heard,
                     advertised_name.as_deref(),
                     name.as_deref(),

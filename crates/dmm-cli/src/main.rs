@@ -129,6 +129,7 @@ fn main() {
         adapter: cli.adapter.as_deref(),
         bluetooth,
         stop: None,
+        heard: None,
     };
 
     // Device-independent commands — handle before mock/real split

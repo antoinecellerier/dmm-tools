@@ -52,10 +52,14 @@ use futures::stream::{Stream, StreamExt};
 use issc::strip_heartbeats;
 use log::{debug, info, trace, warn};
 use profile::{BringUp, GattProfile, PROFILES, choose_profile, write_chunk_size, write_type};
-use search::{Match, Standing, Target, by_address, is_bd_addr, is_uuid, printable, search};
+use search::{
+    Found, Match, Standing, Target, Unrecognised, by_address, is_bd_addr, is_uuid, printable,
+    search,
+};
 use std::cell::{Cell, RefCell};
 use std::collections::VecDeque;
 use std::pin::Pin;
+use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 #[cfg(target_os = "windows")]
@@ -360,11 +364,15 @@ impl Ble {
 
 /// Open the first peer in range that `peers` takes, unless `stop` calls it
 /// off.
+///
+/// `heard` is handed the other named devices the search's scan heard
+/// ([`crate::OpenOptions::heard`]), whether or not a peer opened.
 pub(crate) fn open_first(
     peers: &BluetoothPeers,
     stop: Option<&AtomicBool>,
+    heard: Option<&Mutex<Vec<DeviceInfo>>>,
 ) -> Result<Box<dyn Transport>> {
-    open(Target::Named(peers), stop)
+    open(Target::Named(peers), stop, heard)
 }
 
 /// Open the peer `selector` names — an address, or the platform id
@@ -373,7 +381,7 @@ pub(crate) fn open_selected(
     selector: &str,
     stop: Option<&AtomicBool>,
 ) -> Result<Box<dyn Transport>> {
-    open(Target::At(selector), stop)
+    open(Target::At(selector), stop, None)
 }
 
 /// Whether `selector` names a Bluetooth peer rather than a HID device.
@@ -393,27 +401,33 @@ pub(crate) fn list(peers: &BluetoothPeers) -> Result<BluetoothListing> {
     let rt = runtime()?;
     rt.block_on(async {
         let (_manager, adapter) = central().await?;
-        let found = search(&adapter, Target::Named(peers), Match::All).await?;
-        let listed = |path, product, not_heard| DeviceInfo {
-            path,
-            product,
-            not_heard,
-            serial: None,
-            transport: crate::BLUETOOTH,
-        };
+        let found = search(&adapter, Target::Named(peers), Match::All, true).await?;
         Ok(BluetoothListing {
             devices: found
                 .candidates
                 .into_iter()
                 .map(|c| listed(c.selector(), c.name, c.standing == Standing::Known))
                 .collect(),
-            unrecognised: found
-                .unrecognised
-                .into_iter()
-                .map(|o| listed(o.selector, Some(o.name), false))
-                .collect(),
+            unrecognised: found.unrecognised.into_iter().map(other_device).collect(),
         })
     })
+}
+
+/// A Bluetooth device as a listing shows it.
+fn listed(path: String, product: Option<String>, not_heard: bool) -> DeviceInfo {
+    DeviceInfo {
+        path,
+        product,
+        not_heard,
+        serial: None,
+        transport: crate::BLUETOOTH,
+    }
+}
+
+/// A device the scan heard under a name no entry lists, as a listing shows
+/// it: what opens it, and its name.
+fn other_device(other: Unrecognised) -> DeviceInfo {
+    listed(other.selector, Some(other.name), false)
 }
 
 /// Everything one open produced, so the whole sequence fits in one
@@ -451,18 +465,22 @@ struct Begun {
 /// otherwise leave it linked with nobody reading it — or else its scan is
 /// stopped, the host's to leave off. Nothing is looked for when the flag is
 /// already set.
-fn open(target: Target<'_>, stop: Option<&AtomicBool>) -> Result<Box<dyn Transport>> {
+fn open(
+    target: Target<'_>,
+    stop: Option<&AtomicBool>,
+    heard: Option<&Mutex<Vec<DeviceInfo>>>,
+) -> Result<Box<dyn Transport>> {
     let rt = runtime()?;
     let begun = RefCell::new(Begun::default());
     let opened = rt.block_on(async {
         let Some(stop) = stop else {
-            return connect(target, &begun).await;
+            return connect(target, &begun, heard).await;
         };
         let called_off = || stop.load(Ordering::Relaxed);
         if called_off() {
             return Err(Error::Cancelled);
         }
-        let connecting = Box::pin(connect(target, &begun));
+        let connecting = Box::pin(connect(target, &begun, heard));
         let watching = Box::pin(async {
             while !called_off() {
                 tokio::time::sleep(STOP_POLL).await;
@@ -568,7 +586,11 @@ async fn central() -> Result<(Manager, Adapter)> {
 /// Find a peer, connect to it and subscribe to its profile's notify
 /// characteristic. What it starts goes into `begun` (see [`Begun`]) before
 /// it is started.
-async fn connect(target: Target<'_>, begun: &RefCell<Begun>) -> Result<Opened> {
+async fn connect(
+    target: Target<'_>,
+    begun: &RefCell<Begun>,
+    heard: Option<&Mutex<Vec<DeviceInfo>>>,
+) -> Result<Opened> {
     let selector = target.selector();
     let (manager, adapter) = central().await?;
     begun.borrow_mut().session = Some((manager.clone(), adapter.clone()));
@@ -582,7 +604,17 @@ async fn connect(target: Target<'_>, begun: &RefCell<Begun>) -> Result<Opened> {
     {
         debug!("Bluetooth: could not forget earlier peers: {e}");
     }
-    let mut found = search(&adapter, target, Match::First).await?.candidates;
+    let Found {
+        candidates: mut found,
+        unrecognised,
+    } = search(&adapter, target, Match::First, heard.is_some()).await?;
+    // Handed over before anything is tried: a known peer that was not heard
+    // is still a candidate, and the open that fails on it found no meter.
+    if let Some(heard) = heard
+        && let Ok(mut heard) = heard.lock()
+    {
+        *heard = unrecognised.into_iter().map(other_device).collect();
+    }
     // A named address the search did not turn up may still answer a connect.
     let mut from_address = false;
     if found.is_empty()
@@ -1482,7 +1514,7 @@ mod tests {
             meters: Vec::new(),
         };
         assert!(matches!(
-            open_first(&peers, Some(&stop)),
+            open_first(&peers, Some(&stop), None),
             Err(Error::Cancelled)
         ));
     }

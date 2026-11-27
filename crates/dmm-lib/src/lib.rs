@@ -400,6 +400,13 @@ pub struct OpenOptions<'a> {
     /// bounded, and quick next to a Bluetooth bring-up. `None` lets every
     /// open run to its end.
     pub stop: Option<&'a std::sync::atomic::AtomicBool>,
+    /// Where an open that searches the radio by name leaves the other named
+    /// devices its scan heard, as [`BluetoothListing::unrecognised`] lists
+    /// them: a meter going by a name no entry lists is among them, and
+    /// [`adapter`](Self::adapter) opens one. Written whether or not the open
+    /// succeeds, and left alone when no such search ran. `None` asks for
+    /// nothing.
+    pub heard: Option<&'a std::sync::Mutex<Vec<DeviceInfo>>>,
 }
 
 impl<'a> OpenOptions<'a> {
@@ -410,6 +417,7 @@ impl<'a> OpenOptions<'a> {
             adapter: None,
             bluetooth: true,
             stop: None,
+            heard: None,
         }
     }
 }

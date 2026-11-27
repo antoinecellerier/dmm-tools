@@ -182,7 +182,7 @@ pub(crate) fn open_bluetooth_only(
     } else if !opts.bluetooth {
         BluetoothOnlyMiss::SwitchedOff
     } else {
-        match ble::open_first(&bluetooth_peers(Some(entry)), opts.stop) {
+        match ble::open_first(&bluetooth_peers(Some(entry)), opts.stop, opts.heard) {
             Err(Error::NoTransportFound { .. }) => BluetoothOnlyMiss::NotInRange,
             opened => return opened,
         }
@@ -217,7 +217,7 @@ pub(crate) fn open_links(
     match hid {
         Ok(transport) => Ok(transport),
         Err(err) if radio_gets_a_turn && usb_failure_falls_through(&err) => {
-            ble::open_first(peers, opts.stop)
+            ble::open_first(peers, opts.stop, opts.heard)
                 .map_err(|radio| neither_link(err, radio, cfg!(target_os = "android")))
         }
         Err(err) => Err(err),

@@ -510,6 +510,7 @@ impl App {
                             adapter: adapter.as_deref(),
                             bluetooth,
                             stop: Some(&stop),
+                            heard: None,
                         },
                     };
                     match device_entry {

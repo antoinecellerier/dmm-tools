@@ -4,9 +4,10 @@
 //! `cfg` of their own: a build without the feature simply never finds an
 //! adapter.
 
-use crate::BluetoothListing;
 use crate::error::{Error, Result};
 use crate::transport::{BluetoothPeers, Transport};
+use crate::{BluetoothListing, DeviceInfo};
+use std::sync::Mutex;
 use std::sync::atomic::AtomicBool;
 
 /// No selector is a Bluetooth one here, so `--adapter` stays on the HID path
@@ -18,6 +19,7 @@ pub(crate) fn is_bluetooth_selector(_selector: &str) -> bool {
 pub(crate) fn open_first(
     _peers: &BluetoothPeers,
     _stop: Option<&AtomicBool>,
+    _heard: Option<&Mutex<Vec<DeviceInfo>>>,
 ) -> Result<Box<dyn Transport>> {
     Err(not_found())
 }
