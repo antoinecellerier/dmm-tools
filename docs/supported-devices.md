@@ -242,8 +242,7 @@ the Voltcraft meters) and clamp meters (CM2100B, CMS101, CMS061; UNI-T
 sells the CMS101 and CMS061 as the UT217B and UT217A, per UNI-T's
 [UT217 manual](https://meters.uni-trend.com.cn/static/upload/file/20250801/1754017016517212.pdf)).
 Bluetooth built in, no cable; the meter shows up as "BDM", or as "Lilliput"
-on some systems (B35T+, B41T+), and a Voltcraft meter may show up under its
-model name
+on some systems (B35T+, B41T+), and may show up under its model name
 ([setup](setup.md#bluetooth)). Switch on: disconnect any other app, then
 hold △/ᛒ on the B33, B35T+ and B41T+, Hz/Duty△/ᛒ on the OW16B, OW18B and
 OW18E, ZERO/ᛒ for about 2 s on the CM2100B, Tab⇌ on the CMS101 and CMS061,

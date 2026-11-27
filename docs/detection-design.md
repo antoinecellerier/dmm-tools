@@ -206,9 +206,11 @@ seen on a new cable joins detection there by being listed on it.
   Behind an unnamed link it rides the UNI-T probe windows and sends nothing.
 - **OWON meters** stream on their own too. Their Bluetooth profile reads the model code once at
   connect, before detection starts, and the rule takes it with one frame; with no code read, it
-  needs two 6-byte frames. With "BDM", "LILLIPUT", "VC8…" or "VC9…" as the peer's name, or FFF2
-  read, it is the only rule that runs; behind an unnamed link that read no FFF2 it rides the
-  UNI-T probe windows and sends nothing.
+  needs two 6-byte frames, or one 15-byte frame under a name one 15-byte entry alone lists; they
+  open the entry the peer's name alone names, else the fallback.
+  With "BDM", "LILLIPUT", a model name its entries list or FFF2 read, it is the only rule that
+  runs; behind an unnamed link that read no FFF2 it rides the UNI-T probe windows and sends
+  nothing.
 - **BU-86X** carries Brymen's three series alone, so detection there sends each series' reading
   request, the one a named meter sends for every reading. A meter in capacitance, or a BM86x at
   500000 counts, can answer after the windows close; the activation steps say to set a voltage

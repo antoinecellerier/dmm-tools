@@ -1063,6 +1063,22 @@ mod tests {
         for name in ["VC871", "VC891", "VC8xx_1", "vc915", "VC925"] {
             assert_eq!(ids(name), VOLTCRAFT, "{name:?}");
         }
+        // A model name long enough to be no one else's finds its entry
+        // alone; the short B-series ones find nothing.
+        for (name, id) in [
+            ("CM2100B", "cm2100b"),
+            ("CM2100", "cm2100b"),
+            ("OW16B", "ow18b"),
+            ("ow18b", "ow18b"),
+            ("OW18E", "ow18e"),
+            ("CMS061", "cms061"),
+            ("OW67B", "ow67b"),
+        ] {
+            assert_eq!(ids(name), [id], "{name:?}");
+        }
+        for name in ["B33", "B35T", "B35 earbuds", "B41T", "OW18", "CMS"] {
+            assert!(ids(name).is_empty(), "{name:?}: {:?}", ids(name));
+        }
         // No other entry advertises a VC name, nor takes these.
         for name in ["VC", "V", "VC7", "VC650BT", "VC-880", "VC-890"] {
             assert!(ids(name).is_empty(), "{name:?}: {:?}", ids(name));

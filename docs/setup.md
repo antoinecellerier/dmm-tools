@@ -148,7 +148,7 @@ Bluetooth built in and need no pairing either: disconnect any other app,
 then hold the meter's Bluetooth key, as
 [supported devices](supported-devices.md) lists, until the Bluetooth symbol
 shows. The meter shows up as "BDM", or as "Lilliput" on some systems (B35T+,
-B41T+); a Voltcraft meter may show up under its model name. Bluetooth switches off
+B41T+); it may show up under its model name. Bluetooth switches off
 after 10 minutes idle on the B33, B35T+, B41T+, OW16B, OW18B and OW18E, and
 after 5 on the CM2100B and OW67B; switch it on again after every power-on
 of a VC871 or VC891. A meter under any other name opens with

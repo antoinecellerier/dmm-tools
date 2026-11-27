@@ -479,7 +479,9 @@ pub(crate) static FINGERPRINT: Fingerprint = Fingerprint {
 /// code needs only 15 bytes, so that a stream its frame does not fit ends
 /// in that entry's no-marker error rather than in no meter found. Without a
 /// code, two plausible 6-byte frames in a row with the marker at every
-/// later 6-byte step ([`frame::tiles`]), which open the fallback entry; a
+/// later 6-byte step ([`frame::tiles`]), which open the 6-byte entry the
+/// advertised name alone names, else the fallback entry; under a name one
+/// 15-byte entry alone lists, 15 bytes open it, and otherwise a
 /// 15-byte stream opens nothing, as no entry can be told from its frames. A
 /// code no entry reads (spec §1, §10.1) opens the fallback entry on any
 /// bytes, so that `init` refuses it naming why.
@@ -499,10 +501,22 @@ fn recognise(buf: &[u8], probing: &Probing) -> Option<Evidence> {
                 reported_name: Some(name_for(info.code)),
             })
         }
-        None => frame::tiles(buf).then_some(Evidence::Model {
-            device: FALLBACK.entry,
-            reported_name: None,
-        }),
+        // The frames tell no model from another, so a name only one entry
+        // lists settles it: a 15-byte model on 15 bytes, as its code would,
+        // a 6-byte one ahead of the fallback.
+        None => {
+            let named = probing
+                .advertised
+                .and_then(|named| model::MODELS.iter().find(|m| std::ptr::eq(m.entry, named)));
+            let (heard, model) = match named {
+                Some(m) if m.frame == FrameKind::Fifteen => (buf.len() >= frame15::FRAME_LEN, *m),
+                _ => (frame::tiles(buf), named.copied().unwrap_or(FALLBACK)),
+            };
+            heard.then_some(Evidence::Model {
+                device: model.entry,
+                reported_name: None,
+            })
+        }
     }
 }
 
@@ -1165,7 +1179,16 @@ mod tests {
                 }
                 FrameKind::Fifteen => &["BDM"],
             };
-            assert_eq!(entry.bluetooth_names, names, "{}", m.entry.id);
+            // The shared names first, then the entry's own model names.
+            let (shared, own) = entry.bluetooth_names.split_at(names.len());
+            assert_eq!(shared, names, "{}", m.entry.id);
+            for name in own {
+                assert!(
+                    name.len() >= 5 && entry.model.split('/').any(|model| model.starts_with(name)),
+                    "{}: {name}",
+                    m.entry.id
+                );
+            }
             assert!(std::ptr::eq(entry.fingerprint.unwrap(), &FINGERPRINT));
             assert!(
                 entry

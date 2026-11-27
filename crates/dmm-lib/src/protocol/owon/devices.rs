@@ -21,10 +21,13 @@ const LINKS: &[&str] = &[crate::BLUETOOTH];
 /// as "Lilliput" on Windows (spec §14.4). The owner can rename a meter
 /// (spec §7.2); a renamed one opens with
 /// `--device <id> --adapter <address>`.
+///
+/// An entry whose model name is long enough to be no one else's lists it
+/// after these, since OWON's app filters on no name and a Voltcraft meter
+/// was seen under its own (spec §2, §14.4): none is confirmed on a meter
+/// (verification.md, Advertising and GATT). "B33", "B35" and "B41" are
+/// short enough for an earbud or a tag to carry, and stay out.
 const NAMES: &[&str] = &["BDM", "LILLIPUT"];
-
-/// The 15-byte OWON meters' manuals show "BDM" in the app's list (spec §2).
-const NAMES_15: &[&str] = &["BDM"];
 
 /// Voltcraft's manuals say to pick "VC871", "VC891" or "VCxxx", its app
 /// manual shows "VC8xx_1", and its later app manual "BDM" (spec §2): which
@@ -147,7 +150,7 @@ pub(crate) static OW18B: SelectableDevice = SelectableDevice {
     manual_url: Some(OW18_PAGE),
     links: LINKS,
     detection_verified: &[],
-    bluetooth_names: NAMES,
+    bluetooth_names: &["BDM", "LILLIPUT", "OW18B", "OW16B"],
 };
 
 pub(crate) static OW18E: SelectableDevice = SelectableDevice {
@@ -164,7 +167,7 @@ pub(crate) static OW18E: SelectableDevice = SelectableDevice {
     manual_url: Some(OW18DE_PAGE),
     links: LINKS,
     detection_verified: &[],
-    bluetooth_names: NAMES,
+    bluetooth_names: &["BDM", "LILLIPUT", "OW18E"],
 };
 
 pub(crate) static B33: SelectableDevice = SelectableDevice {
@@ -233,7 +236,7 @@ pub(crate) static CM2100B: SelectableDevice = SelectableDevice {
     manual_url: Some(CM2100_PAGE),
     links: LINKS,
     detection_verified: &[],
-    bluetooth_names: NAMES,
+    bluetooth_names: &["BDM", "LILLIPUT", "CM2100"],
 };
 
 pub(crate) static CMS101: SelectableDevice = SelectableDevice {
@@ -256,7 +259,7 @@ pub(crate) static CMS101: SelectableDevice = SelectableDevice {
     manual_url: Some(CMS_PAGE),
     links: LINKS,
     detection_verified: &[],
-    bluetooth_names: NAMES_15,
+    bluetooth_names: &["BDM", "CMS101"],
 };
 
 pub(crate) static CMS061: SelectableDevice = SelectableDevice {
@@ -279,7 +282,7 @@ pub(crate) static CMS061: SelectableDevice = SelectableDevice {
     links: LINKS,
     // A UT217A detected after a restart, #45.
     detection_verified: &[crate::BLUETOOTH],
-    bluetooth_names: NAMES_15,
+    bluetooth_names: &["BDM", "CMS061"],
 };
 
 pub(crate) static OW65B: SelectableDevice = SelectableDevice {
@@ -296,7 +299,7 @@ pub(crate) static OW65B: SelectableDevice = SelectableDevice {
     manual_url: Some(OW65_PAGE),
     links: LINKS,
     detection_verified: &[],
-    bluetooth_names: NAMES_15,
+    bluetooth_names: &["BDM", "OW65B"],
 };
 
 pub(crate) static OW67B: SelectableDevice = SelectableDevice {
@@ -313,7 +316,7 @@ pub(crate) static OW67B: SelectableDevice = SelectableDevice {
     manual_url: Some(OW67_PAGE),
     links: LINKS,
     detection_verified: &[],
-    bluetooth_names: NAMES_15,
+    bluetooth_names: &["BDM", "OW67B"],
 };
 
 pub(crate) static OW69B: SelectableDevice = SelectableDevice {
@@ -330,7 +333,7 @@ pub(crate) static OW69B: SelectableDevice = SelectableDevice {
     manual_url: Some(OW69_PAGE),
     links: LINKS,
     detection_verified: &[],
-    bluetooth_names: NAMES_15,
+    bluetooth_names: &["BDM", "OW69B"],
 };
 
 pub(crate) static VC871: SelectableDevice = SelectableDevice {

@@ -1133,6 +1133,21 @@ mod tests {
         assert_eq!(detected.device.id, "b35t+");
         assert_eq!(detected.reported_name, None);
         assert!(meter.inner.written.borrow().is_empty());
+
+        // Under a name one 6-byte entry alone lists, the same frames open
+        // that entry.
+        let meter = Advertising::new("CM2100B", frames.to_vec());
+        let detected = detect_device(&meter).unwrap();
+        assert_eq!(detected.device.id, "cm2100b");
+        assert_eq!(detected.reported_name, None);
+        assert!(meter.inner.written.borrow().is_empty());
+
+        // And a 15-byte entry's own name opens it on a frame's worth of
+        // bytes, as its model code would.
+        let meter = Advertising::new("OW67B", vec![vec![0x00; 15]]);
+        let detected = detect_device(&meter).unwrap();
+        assert_eq!(detected.device.id, "ow67b");
+        assert!(meter.inner.written.borrow().is_empty());
     }
 
     /// A renamed OWON meter, or one opened by address, whose link read its

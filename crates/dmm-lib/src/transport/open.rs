@@ -855,22 +855,35 @@ mod tests {
                 }
             );
         }
-        for id in ["ow18b", "ow18e", "b33", "b35t+", "b41t+", "cm2100b"] {
+        for (id, own) in [
+            ("ow18b", &["OW18B", "OW16B"][..]),
+            ("ow18e", &["OW18E"]),
+            ("b33", &[]),
+            ("b35t+", &[]),
+            ("b41t+", &[]),
+            ("cm2100b", &["CM2100"]),
+        ] {
             assert_eq!(
                 peers(id),
                 BluetoothPeers {
                     adapters: false,
-                    meters: vec!["BDM", "LILLIPUT"],
+                    meters: [&["BDM", "LILLIPUT"], own].concat(),
                 },
                 "{id}"
             );
         }
-        for id in ["cms101", "cms061", "ow65b", "ow67b", "ow69b"] {
+        for (id, own) in [
+            ("cms101", "CMS101"),
+            ("cms061", "CMS061"),
+            ("ow65b", "OW65B"),
+            ("ow67b", "OW67B"),
+            ("ow69b", "OW69B"),
+        ] {
             assert_eq!(
                 peers(id),
                 BluetoothPeers {
                     adapters: false,
-                    meters: vec!["BDM"],
+                    meters: vec!["BDM", own],
                 },
                 "{id}"
             );
@@ -897,6 +910,15 @@ mod tests {
                     "BM78xBT",
                     "BDM",
                     "LILLIPUT",
+                    "OW18B",
+                    "OW16B",
+                    "OW18E",
+                    "CM2100",
+                    "CMS101",
+                    "CMS061",
+                    "OW65B",
+                    "OW67B",
+                    "OW69B",
                     "VC8",
                     "VC9"
                 ],

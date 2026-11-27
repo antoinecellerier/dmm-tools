@@ -51,6 +51,9 @@ and each still wants a capture of our own.
   optional filter; absent on a B35T+ and a B41T+, §14.3 D1) and a public
   address (the PC's assumption; public on a B35T+) (§2) — decides what a
   search can match. Needs a passive scan, the CM2100B first.
+- Which models advertise their model name, as a CM2100B seems to
+  ([#44](https://github.com/antoinecellerier/dmm-tools/issues/44)) — decides
+  the names the entries list (`owon/devices.rs`). Needs `dmm-cli list` per model.
 - Whether a rename (`40` + name) changes the advertised name, and keeps it
   across a power cycle (§2, §7.2; changed on a B41T+, §14.4) — settles §2's
   row. Needs a meter renamed by OWON's app.
