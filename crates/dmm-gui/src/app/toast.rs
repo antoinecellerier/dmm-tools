@@ -54,12 +54,41 @@ const OK_GLYPH: &str = "\u{2714}";
 const CAUTION_GLYPH: &str = "\u{2139}";
 pub(super) const ERROR_GLYPH: &str = "\u{26A0}";
 
-/// The × that closes a notice, a toast or one drawn in a panel.
+/// The × that closes a toast, a finger's size under Touch.
 pub(super) fn dismiss_button(ui: &mut egui::Ui, l10n: &Localizer) -> egui::Response {
+    let size = crate::app::Sizing::of(ui.ctx()).glyph();
+    dismiss_button_sized(ui, l10n, size)
+}
+
+/// The × that closes a note drawn in a panel, beside its title. It keeps its
+/// Compact size under Touch, where a finger-sized button would stand taller
+/// than the title and push the note's text down from it; [`note_dismissed`]
+/// gives it a finger's reach.
+pub(super) fn note_dismiss_button(ui: &mut egui::Ui, l10n: &Localizer) -> egui::Response {
+    let touch = crate::app::Sizing::of(ui.ctx()).touch;
+    ui.scope(|ui| {
+        if touch {
+            // Touch's padding alone stands the button taller than the title.
+            ui.spacing_mut().button_padding.y = 0.0;
+        }
+        dismiss_button_sized(ui, l10n, egui::Vec2::ZERO)
+    })
+    .inner
+}
+
+/// Whether a note's × ([`note_dismiss_button`]) was clicked, or under Touch
+/// tapped within a finger's reach of it. Called once the note's text is
+/// placed, so the reach over it takes the tap.
+pub(super) fn note_dismissed(ui: &egui::Ui, close: &egui::Response) -> bool {
+    let reach = egui::Vec2::splat(crate::app::Sizing::of(ui.ctx()).control);
+    close.clicked() || crate::app::Sizing::tapped_around(ui, close, reach)
+}
+
+fn dismiss_button_sized(ui: &mut egui::Ui, l10n: &Localizer, size: egui::Vec2) -> egui::Response {
     ui.add(
         egui::Button::new(RichText::new("\u{00D7}").small())
             .frame_when_inactive(false)
-            .min_size(crate::app::Sizing::of(ui.ctx()).glyph()),
+            .min_size(size),
     )
     .on_hover_text(tr!(l10n, "connection-dismiss.hover"))
     .a11y_label(&tr!(l10n, "connection-dismiss.a11y"))

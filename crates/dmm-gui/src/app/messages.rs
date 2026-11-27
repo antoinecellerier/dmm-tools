@@ -2,7 +2,8 @@
 //! the messages the device thread sends, and drawing the connection help the
 //! reading column shows when there is nothing to read.
 
-use dmm_lib::protocol::registry;
+use dmm_lib::protocol::{Stability, registry};
+use dmm_lib::text::TextKind;
 use dmm_shared::help::{Diagnosis, MeterChoice};
 use dmm_shared::l10n::Localizer;
 use dmm_shared::reopen::ReopenPin;
@@ -19,9 +20,24 @@ use super::connection::{
     ReopenSource, ThreadContext, spawn_acquisition,
 };
 use super::connection_issue::{ConnectionIssue, ConnectionNotice, NoticeKind};
-use super::toast::{ERROR_GLYPH, Toast, dismiss_button};
+use super::toast::{ERROR_GLYPH, Toast, note_dismiss_button, note_dismissed};
 use super::{App, ConnectionState, Worker, named_device};
-use crate::settings::format_sample_count;
+use crate::settings::{CaptureAsk, format_sample_count};
+
+/// Where the capture ask sends a reader for how to run one.
+const CAPTURE_GUIDE_URL: &str =
+    "https://github.com/antoinecellerier/dmm-tools/blob/main/CONTRIBUTING.md#running-a-capture";
+
+/// The button that copies a note's command, small beside the command's small
+/// text; under Touch a button of the usual height, which a finger can hit.
+fn copy_button(ui: &mut Ui, l10n: &Localizer) -> egui::Response {
+    let label = tr!(l10n, "connection-late-copy");
+    if super::Sizing::of(ui.ctx()).touch {
+        ui.button(label)
+    } else {
+        ui.small_button(label)
+    }
+}
 
 /// How long quitting waits for the meter to be let go: a read already in
 /// flight, or an open the stop flag calls off, then the transport's own
@@ -944,6 +960,10 @@ impl App {
     fn on_measurement(&mut self, m: dmm_lib::measurement::Measurement) -> Option<PendingBreach> {
         self.connection.last_error = None;
         self.connection.waiting_timeouts = 0;
+        // Before the pause check: a paused link has still answered.
+        if !self.connection.has_read {
+            self.note_first_reading(jiff::Timestamp::now());
+        }
         self.connection.has_read = true;
         if self.connection.paused {
             return None;
@@ -983,7 +1003,7 @@ impl App {
             .settings
             .theme_colors(ui.visuals().dark_mode)
             .status_warning();
-        let mut dismissed = false;
+        let mut close = None;
         let mut copied = false;
         ui.add_space(8.0);
         // The close button goes in first, from the right, so the title wraps
@@ -992,7 +1012,7 @@ impl App {
         ui.with_layout(egui::Layout::right_to_left(egui::Align::TOP), |ui| {
             let scroll = &ui.spacing().scroll;
             ui.add_space(scroll.bar_width + scroll.bar_outer_margin);
-            dismissed = dismiss_button(ui, &self.l10n).clicked();
+            close = Some(note_dismiss_button(ui, &self.l10n));
             ui.with_layout(egui::Layout::left_to_right(egui::Align::TOP), |ui| {
                 ui.add(
                     egui::Label::new(
@@ -1020,9 +1040,7 @@ impl App {
                     .wrap()
                     .selectable(true),
                 );
-                copied = ui
-                    .small_button(tr!(self.l10n, "connection-late-copy"))
-                    .clicked();
+                copied = copy_button(ui, &self.l10n).clicked();
             });
             if copied {
                 ui.ctx().copy_text(command.clone());
@@ -1035,8 +1053,146 @@ impl App {
                     .wrap(),
             );
         }
-        if dismissed {
+        if close.is_some_and(|close| note_dismissed(ui, &close)) {
             self.connection.late_readings = None;
+        }
+        if copied {
+            self.toasts
+                .push(Toast::info(tr!(self.l10n, "connection-late-copied")));
+        }
+    }
+
+    /// A link's first reading, at `now`: an experimental meter this machine
+    /// has not read before is noted, and one first read a few days ago has
+    /// its capture asked for, unless that was dismissed.
+    ///
+    /// Only a meter on the bench counts, so neither a replay nor the mock;
+    /// nor one that names another model than the entry opened, whose id
+    /// would name the wrong meter in the command.
+    fn note_first_reading(&mut self, now: jiff::Timestamp) {
+        if self.source.replay.is_some() {
+            return;
+        }
+        let Some(meter) = &self.connection.meter else {
+            return;
+        };
+        let (Some(device), Some(listing)) = (meter.device, meter.listing) else {
+            return;
+        };
+        if meter.stability != Stability::Experimental
+            || !device.requires_hardware
+            || meter.named_other.is_some()
+        {
+            return;
+        }
+        match self.settings.capture_asks.get(device.id) {
+            None => {
+                // To the second, as the file's other times are.
+                let first_used = jiff::Timestamp::from_second(now.as_second()).unwrap_or(now);
+                let ask = CaptureAsk {
+                    first_used,
+                    dismissed: false,
+                };
+                self.settings
+                    .capture_asks
+                    .insert(device.id.to_string(), ask);
+            }
+            Some(ask) if ask.is_due(now) => self.connection.capture_ask = Some(listing),
+            Some(_) => {}
+        }
+        // Noted under a clock that ran ahead, the ask would wait for the
+        // clock to catch up: the wait starts over from now.
+        if let Some(ask) = self.settings.capture_asks.get_mut(device.id)
+            && ask.first_used > now
+        {
+            ask.first_used = now;
+        }
+    }
+
+    /// Whether [`Self::show_capture_ask`] draws its note: not over a link
+    /// that has a problem to tell, which comes first. A missed read is not
+    /// one yet, and the note going and coming back with it would resize the
+    /// reading the meter-only view fits, which keys its fit on this too.
+    pub(super) fn capture_ask_shown(&self) -> bool {
+        self.connection.capture_ask.is_some()
+            && self.connection.last_error.is_none()
+            && self.connection.late_readings.is_none()
+    }
+
+    /// Draw the ask for a capture of an experimental meter under the
+    /// reading, until dismissed, which is for good: what a capture is for,
+    /// the command that runs one with a button to copy it, and a link to
+    /// the guide. A phone has no `dmm-cli`, so there the text says where to
+    /// run it and the command is left out.
+    ///
+    /// Not drawn in the big-meter modes, as the connection help is not.
+    pub(super) fn show_capture_ask(&mut self, ui: &mut Ui) {
+        if !self.capture_ask_shown() {
+            return;
+        }
+        let (Some(listing), Some(meter)) = (self.connection.capture_ask, &self.connection.meter)
+        else {
+            return;
+        };
+        let model = self.l10n.label(TextKind::Model, listing.display_name());
+        let warning = self.l10n.help().stability_warning(&model, meter.stability);
+        let no_cli = cfg!(target_os = "android");
+        let body = if no_cli {
+            tr!(
+                self.l10n,
+                "connection-capture-ask-body-computer",
+                warning = warning
+            )
+        } else {
+            tr!(self.l10n, "connection-capture-ask-body", warning = warning)
+        };
+        let mut close = None;
+        let mut copied = false;
+        ui.add_space(8.0);
+        // The close button first, from the right, as in the late-readings
+        // notice.
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::TOP), |ui| {
+            let scroll = &ui.spacing().scroll;
+            ui.add_space(scroll.bar_width + scroll.bar_outer_margin);
+            close = Some(note_dismiss_button(ui, &self.l10n));
+            ui.with_layout(egui::Layout::left_to_right(egui::Align::TOP), |ui| {
+                let title = tr!(self.l10n, "connection-capture-ask-title");
+                ui.add(egui::Label::new(RichText::new(title).strong()).wrap());
+            });
+        });
+        ui.add(egui::Label::new(RichText::new(body).small()).wrap());
+        ui.add_space(4.0);
+        if !no_cli {
+            // One program reads the meter at a time, and this one has it.
+            let first = tr!(self.l10n, "connection-capture-ask-disconnect");
+            ui.add(egui::Label::new(RichText::new(first).small()).wrap());
+            let command = dmm_shared::help::capture_command(listing);
+            ui.horizontal_wrapped(|ui| {
+                ui.add(
+                    egui::Label::new(
+                        RichText::new(&command)
+                            .small()
+                            .family(egui::FontFamily::Monospace),
+                    )
+                    .wrap()
+                    .selectable(true),
+                );
+                copied = copy_button(ui, &self.l10n).clicked();
+            });
+            if copied {
+                ui.ctx().copy_text(command);
+            }
+        }
+        ui.hyperlink_to(
+            RichText::new(tr!(self.l10n, "connection-capture-ask-link")).small(),
+            CAPTURE_GUIDE_URL,
+        )
+        .on_hover_text(tr!(self.l10n, "connection-capture-ask-link.hover"));
+        if close.is_some_and(|close| note_dismissed(ui, &close)) {
+            if let Some(ask) = self.settings.capture_asks.get_mut(listing.device.id) {
+                ask.dismissed = true;
+            }
+            self.connection.capture_ask = None;
         }
         if copied {
             self.toasts
@@ -1149,7 +1305,6 @@ mod tests {
     use crate::settings::Settings;
     use dmm_lib::flags::StatusFlags;
     use dmm_lib::measurement::{MeasuredValue, Measurement};
-    use dmm_lib::protocol::Stability;
     use std::sync::atomic::Ordering;
     use std::time::{Duration, Instant};
 
@@ -1188,6 +1343,141 @@ mod tests {
         assert!(app.connection.has_read);
         app.connection.link_up();
         assert!(!app.connection.has_read);
+    }
+
+    /// An app connected to the entry `id` at `stability`, nothing read yet.
+    fn linked(id: &str, stability: Stability) -> App {
+        let mut app = app(id, false);
+        app.connection.state = ConnectionState::Connected;
+        app.connection.meter = Some(ConnectedMeter {
+            stability,
+            ..ConnectedMeter::test_fixture(Some(id))
+        });
+        app
+    }
+
+    fn a_reading() -> DmmMessage {
+        DmmMessage::Measurement(Measurement::test_fixture(
+            MeasuredValue::Normal(1.0),
+            "V",
+            StatusFlags::default(),
+        ))
+    }
+
+    /// The record of a meter first read `days` ago.
+    fn first_used(days: i64) -> CaptureAsk {
+        CaptureAsk {
+            first_used: jiff::Timestamp::now() - jiff::SignedDuration::from_hours(24 * days),
+            dismissed: false,
+        }
+    }
+
+    /// An experimental meter's first reading is noted and nothing is asked;
+    /// read again a few days on, its capture is asked for, at each link
+    /// until dismissed.
+    #[test]
+    fn a_capture_is_asked_for_a_few_days_after_the_first_reading() {
+        let mut app = linked("ut8803", Stability::Experimental);
+        assert!(app.settings.capture_asks.is_empty(), "nothing read yet");
+        app.deliver(a_reading());
+        assert!(app.settings.capture_asks.contains_key("ut8803"));
+        assert!(!app.capture_ask_shown(), "not on the first day");
+
+        app.settings
+            .capture_asks
+            .insert("ut8803".to_string(), first_used(4));
+        app.deliver(a_reading());
+        assert!(
+            !app.capture_ask_shown(),
+            "decided at a link's first reading"
+        );
+        app.connection.link_up();
+        assert!(!app.capture_ask_shown(), "not before the meter answers");
+        app.deliver(a_reading());
+        assert!(app.capture_ask_shown());
+        let listing = app.connection.capture_ask.expect("asked");
+        assert_eq!(listing.id(), "ut8803");
+
+        // A record from a clock that ran ahead starts its wait over.
+        app.settings
+            .capture_asks
+            .insert("ut8803".to_string(), first_used(-30));
+        app.connection.link_up();
+        app.deliver(a_reading());
+        assert!(!app.capture_ask_shown());
+        let noted = app.settings.capture_asks["ut8803"].first_used;
+        assert!(noted <= jiff::Timestamp::now(), "{noted}");
+        app.settings
+            .capture_asks
+            .insert("ut8803".to_string(), first_used(4));
+        app.connection.link_up();
+        app.deliver(a_reading());
+
+        app.connection.link_lost();
+        assert!(!app.capture_ask_shown(), "gone with the link");
+        app.connection.link_up();
+        app.deliver(a_reading());
+        assert!(app.capture_ask_shown(), "and back with it");
+    }
+
+    /// A problem on the link comes first: the ask waits under an error and
+    /// the late-readings notice, but stays through a missed read.
+    #[test]
+    fn the_capture_ask_waits_for_a_link_without_a_problem() {
+        let mut app = linked("ut8803", Stability::Experimental);
+        app.settings
+            .capture_asks
+            .insert("ut8803".to_string(), first_used(4));
+        app.deliver(a_reading());
+        assert!(app.capture_ask_shown());
+        app.connection.waiting_timeouts = 1;
+        assert!(app.capture_ask_shown(), "a missed read is no problem yet");
+        app.connection.waiting_timeouts = 0;
+        app.connection.last_error = Some(ConnectionIssue::Stopped);
+        assert!(!app.capture_ask_shown());
+        app.connection.last_error = None;
+        app.connection.late_readings = Some(dmm_lib::transport::LateReadings::plain());
+        assert!(!app.capture_ask_shown());
+        app.connection.late_readings = None;
+        assert!(app.capture_ask_shown());
+    }
+
+    /// Only an experimental meter on the bench is noted and asked about:
+    /// not a verified or partly verified one, the mock, a replay, or a
+    /// meter that names another model than the entry opened.
+    #[test]
+    fn only_an_experimental_meter_on_the_bench_is_asked_about() {
+        let untouched = |mut app: App, why: &str| {
+            let id = app.connection.detected().expect("an entry").id;
+            app.deliver(a_reading());
+            assert!(app.settings.capture_asks.is_empty(), "{why}: noted");
+            // Nor asked where a record is already there.
+            app.settings
+                .capture_asks
+                .insert(id.to_string(), first_used(4));
+            app.connection.link_up();
+            app.deliver(a_reading());
+            assert!(!app.capture_ask_shown(), "{why}: asked");
+        };
+        untouched(linked("ut61eplus", Stability::Verified), "verified");
+        untouched(
+            linked("ut181a", Stability::PartlyVerified),
+            "partly verified",
+        );
+        untouched(linked("mock", Stability::Experimental), "the mock");
+
+        let mut named = linked("ut8803", Stability::Experimental);
+        named
+            .connection
+            .meter
+            .as_mut()
+            .expect("a meter")
+            .named_other = registry::find_device("ut8802");
+        untouched(named, "names another model");
+
+        let mut replay = linked("ut8803", Stability::Experimental);
+        replay.source.replay = Some(crate::ReplaySource::fixture());
+        untouched(replay, "a replay");
     }
 
     /// A link nothing can reopen ends the session with its reason on screen,

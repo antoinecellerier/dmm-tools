@@ -382,6 +382,28 @@ impl Overrides {
     }
 }
 
+/// One experimental meter's capture ask: asked for once the meter has been in
+/// use a few days, until dismissed.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CaptureAsk {
+    /// When this machine first got a reading from the meter.
+    pub first_used: jiff::Timestamp,
+    /// The user closed the ask: it never shows for this meter again.
+    #[serde(default)]
+    pub dismissed: bool,
+}
+
+impl CaptureAsk {
+    /// How long a meter is in use before its capture is asked for.
+    const AFTER: jiff::SignedDuration = jiff::SignedDuration::from_hours(72);
+
+    /// Whether to ask at `now`. A clock set back to before the first use
+    /// only delays it.
+    pub(crate) fn is_due(&self, now: jiff::Timestamp) -> bool {
+        !self.dismissed && now.duration_since(self.first_used) >= Self::AFTER
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Settings {
@@ -484,6 +506,11 @@ pub struct Settings {
     /// reading, and its chip still lists it, unlit.
     #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
     pub hidden_series: BTreeSet<String>,
+    /// The experimental meters this machine has read, by registry id: what
+    /// decides when each one's capture ask shows, and whether it was
+    /// dismissed (`App::show_capture_ask`). Kept here and sent nowhere.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub capture_asks: BTreeMap<String, CaptureAsk>,
     /// CLI overrides (not serialized).
     #[serde(skip)]
     pub overrides: Overrides,
@@ -585,6 +612,7 @@ impl Default for Settings {
             histogram_width: histogram::STRIP_WIDTH,
             histogram_height: histogram::BAND_HEIGHT,
             hidden_series: BTreeSet::new(),
+            capture_asks: BTreeMap::new(),
             overrides: Overrides::default(),
             user_themes: Arc::default(),
             load_problem: None,
@@ -1080,6 +1108,43 @@ mod tests {
         );
     }
 
+    /// A capture is asked for three days after the meter's first reading,
+    /// never once dismissed, and a clock set back only delays it.
+    #[test]
+    fn a_capture_is_asked_for_after_three_days() {
+        let first_used: jiff::Timestamp = "2026-11-01T08:15:02Z".parse().unwrap();
+        let after = |hours| first_used + jiff::SignedDuration::from_hours(hours);
+        let ask = CaptureAsk {
+            first_used,
+            dismissed: false,
+        };
+        assert!(!ask.is_due(after(71)));
+        assert!(ask.is_due(after(72)));
+        assert!(!ask.is_due(after(-100)), "the clock was set back");
+        let dismissed = CaptureAsk {
+            dismissed: true,
+            ..ask
+        };
+        assert!(!dismissed.is_due(after(1000)));
+    }
+
+    /// The meters read are kept by id with the time of the first reading; a
+    /// file from before has none, and none writes nothing.
+    #[test]
+    fn the_capture_asks_round_trip() {
+        let old: Settings = serde_json::from_str(r#"{"theme":"Light"}"#).unwrap();
+        assert!(old.capture_asks.is_empty());
+        let json = serde_json::to_string(&old).unwrap();
+        assert!(!json.contains("capture_asks"), "{json}");
+
+        let json = r#"{"capture_asks":{"ut8803":{"first_used":"2026-11-01T08:15:02Z"}}}"#;
+        let s: Settings = serde_json::from_str(json).unwrap();
+        let ask = &s.capture_asks["ut8803"];
+        assert!(!ask.dismissed);
+        let again: Settings = serde_json::from_str(&serde_json::to_string(&s).unwrap()).unwrap();
+        assert_eq!(again.capture_asks, s.capture_asks);
+    }
+
     /// A file from before hidden traces were remembered hides none, and an
     /// empty set writes nothing. Nor did it choose solid lines.
     #[test]
@@ -1215,6 +1280,13 @@ mod tests {
             histogram_width: 120.0,
             histogram_height: 70.0,
             hidden_series: BTreeSet::from(["Period".to_string()]),
+            capture_asks: BTreeMap::from([(
+                "ut8803".to_string(),
+                CaptureAsk {
+                    first_used: jiff::Timestamp::UNIX_EPOCH,
+                    dismissed: true,
+                },
+            )]),
             overrides: Overrides::default(),
             user_themes: Arc::default(),
             load_problem: None,
@@ -1226,6 +1298,7 @@ mod tests {
         // Every field this build writes is one it reads back as its own.
         assert_eq!(deserialized.unknown, s.unknown);
         assert_eq!(deserialized.hidden_series, s.hidden_series);
+        assert_eq!(deserialized.capture_asks, s.capture_asks);
         assert_eq!(deserialized.graph_lines, GraphLines::Solid);
         assert_eq!(deserialized.density, Some(Density::Touch));
         assert_eq!(deserialized.theme, ThemeMode::Light);

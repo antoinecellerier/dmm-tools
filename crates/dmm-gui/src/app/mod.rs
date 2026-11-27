@@ -310,6 +310,10 @@ pub(super) struct Connection {
     /// What to tell the user about readings arriving two at a time, until
     /// dismissed or the link goes ([`App::show_late_readings`]).
     pub(super) late_readings: Option<dmm_lib::transport::LateReadings>,
+    /// The experimental meter on this link whose capture is asked for, by
+    /// the row it goes by, until dismissed or the link goes
+    /// ([`App::show_capture_ask`]). Decided at the link's first reading.
+    pub(super) capture_ask: Option<registry::Listing>,
 }
 
 /// The app's ends of a running acquisition thread's channels, set up
@@ -401,6 +405,7 @@ impl Connection {
         self.waiting_timeouts = 0;
         self.last_error = None;
         self.late_readings = None;
+        self.capture_ask = None;
     }
 
     /// A link is up, first or again: nothing of the one before it stands.
@@ -413,6 +418,7 @@ impl Connection {
         self.waiting_timeouts = 0;
         self.has_read = false;
         self.late_readings = None;
+        self.capture_ask = None;
         self.last_error = None;
         self.reconnect_attempt = 0;
         self.reconnect_last_error = None;
@@ -1048,6 +1054,7 @@ impl App {
                 notice_kind: notice.as_ref().filter(|_| !line_drawn).map(|n| n.kind),
                 notice_line: line_drawn,
                 late_readings_note: self.late_readings_note_shown(),
+                capture_ask_note: self.capture_ask_shown(),
                 screen_only_note: self.screen_only_note_shown(),
                 language: self.l10n.language().id,
                 stats_widths: self.stats_widths.fit_key(),
@@ -1122,6 +1129,7 @@ impl App {
                         }
                         self.show_screen_only_note(ui);
                         self.show_late_readings(ui);
+                        self.show_capture_ask(ui);
                         self.show_specs_section_inline(ui, scale);
 
                         if self.settings.show_stats {
@@ -2181,6 +2189,68 @@ mod tests {
                 "no advice in {texts:#?}"
             );
             assert_eq!(texts.contains(report_line), report, "{texts:#?}");
+        }
+    }
+
+    /// The capture ask is drawn under the reading in both themes, and with
+    /// the panels hidden, where the reading is the whole window: what a
+    /// capture is for, the command and the guide's link. Its close button
+    /// ends it for that meter, in the settings the next session reads.
+    #[test]
+    fn the_capture_ask_is_drawn_until_dismissed() {
+        let ut8803 = registry::find_device("ut8803").expect("a registry id");
+        for (theme, panels) in [
+            (ThemeMode::Dark, true),
+            (ThemeMode::Light, true),
+            (ThemeMode::Dark, false),
+        ] {
+            let mut app = App::from_settings(
+                Settings {
+                    auto_connect: false,
+                    theme,
+                    show_graph: panels,
+                    show_recording: panels,
+                    ..Settings::default()
+                },
+                dmm_lib::Clock::real(),
+            );
+            with_readings(&mut app);
+            app.settings.capture_asks.insert(
+                ut8803.id.to_string(),
+                crate::settings::CaptureAsk {
+                    first_used: jiff::Timestamp::UNIX_EPOCH,
+                    dismissed: false,
+                },
+            );
+            app.connection.meter = Some(ConnectedMeter {
+                stability: dmm_lib::protocol::Stability::Experimental,
+                ..ConnectedMeter::test_fixture(Some(ut8803.id))
+            });
+            app.connection.capture_ask = Some(ut8803.listing());
+
+            let texts = drawn_texts(&last_frame(&mut app));
+            let case = format!("{theme:?}, panels {panels}: {texts:#?}");
+            assert!(texts.contains("Help verify this meter"), "{case}");
+            assert!(
+                texts.iter().any(|t| t.starts_with(
+                    "UNI-T UT8803 support is experimental (unverified against real \
+                     hardware). A guided capture from yours is the most valuable"
+                )),
+                "{case}"
+            );
+            assert!(texts.contains("dmm-cli --device ut8803 capture"), "{case}");
+            assert!(texts.contains("How to capture \u{2197}"), "{case}");
+
+            // A toast has a close button of the same name.
+            app.toasts.clear();
+            let close: &Click = &|_, out| {
+                node_centre(out, |l| l == "Dismiss notification")
+                    .map(|pos| (pos, egui::PointerButton::Primary))
+            };
+            let texts = drawn_texts(&frame_after_clicks(&mut app, &[close]));
+            assert!(!texts.contains("Help verify this meter"), "{theme:?}");
+            assert!(app.settings.capture_asks[ut8803.id].dismissed);
+            assert!(app.connection.capture_ask.is_none());
         }
     }
 

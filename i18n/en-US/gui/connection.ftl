@@ -142,13 +142,33 @@ connection-feedback = { $warning } Report feedback.
 ## The notice under the reading when the Bluetooth link delivers readings
 ## two at a time, which can end with a command that fixes it.
 
-# Copies the command to the clipboard.
+# Copies the command to the clipboard. The capture ask below has the same
+# button and the same toast.
 connection-late-copy = Copy
 # A toast, once the command is copied.
 connection-late-copied = Command copied
 # The notice's last line, on a link the tool has no fix for yet.
 # { project-link } is the top bar's Help & Feedback link.
 connection-late-report = Please report it through { project-link } in the top bar, naming the meter and the operating system.
+
+## The note under the reading that asks, once, for a capture of a meter whose
+## support is experimental. A capture is a guided run of the dmm-cli tool
+## that records what the meter sends in each of its modes.
+
+connection-capture-ask-title = Help verify this meter
+# $warning is the sentence saying how far the meter's support is verified,
+# which names the meter. "yours" is the reader's own meter.
+connection-capture-ask-body = { $warning } A guided capture from yours is the most valuable contribution you can make to the project: it confirms what works and gets any issue fixed.
+# The same on a phone, which has no dmm-cli to run the capture with;
+# $warning as above.
+connection-capture-ask-body-computer = { $warning } A guided capture from yours, run with dmm-cli on a computer once this app is disconnected, is the most valuable contribution you can make to the project: it confirms what works and gets any issue fixed.
+# Above the command that runs the capture: this window has the meter, and
+# the command needs it. Copy is the button after the command, and the note
+# goes when the top bar's Disconnect is pressed, so the copy comes first.
+connection-capture-ask-disconnect = Copy this command, then disconnect and run it:
+# A link to the contributors' guide on GitHub; ↗ marks a link.
+connection-capture-ask-link = How to capture ↗
+    .hover = Open the capture guide on GitHub
 
 ## Toasts.
 

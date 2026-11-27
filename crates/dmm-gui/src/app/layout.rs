@@ -107,6 +107,7 @@ impl App {
         self.show_connection_help(ui);
         self.show_screen_only_note(ui);
         self.show_late_readings(ui);
+        self.show_capture_ask(ui);
 
         match layout {
             ContentLayout::Wide => {

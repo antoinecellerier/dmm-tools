@@ -60,6 +60,12 @@ leaving rather than vanishing mid-read. Under the pointer the stack holds
 still, clocks included, so a click lands on the card it was aimed at; a
 message arriving then goes under the others rather than waiting unseen.
 
+**A capture is asked for once per meter.** A note under the reading, for an
+experimental meter in use a few days: by then its user knows what works, and
+a first session is no time to ask. Closing it ends it for that meter. The
+date of the first reading stays in the settings file and goes nowhere
+(`App::show_capture_ask` in `app/messages.rs`).
+
 **The window's position is left to the OS.** Wayland ignores it, and a monitor
 unplugged since would leave the window off-screen. Fullscreen isn't restored
 either: it is a mode the user steps into.
