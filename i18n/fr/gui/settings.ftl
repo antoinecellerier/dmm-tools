@@ -181,6 +181,13 @@ settings-zoom-chip =
 # those that step the zoom.
 settings-zoom-reset-chip =
     .hover = Afficher l’interface à 100 % ({ $reset }, ou { $step } pour ajuster par paliers)
+# How roomy the buttons are, after Firefox's Density setting: Compact fits
+# more on screen, Touch makes every button a finger-sized target. Neither
+# changes the text size, which is Zoom's.
+settings-density = Densité :
+    .hover = Compacte affiche plus d’éléments à l’écran, Tactile agrandit les boutons pour les utiliser au doigt
+settings-density-compact = Compacte
+settings-density-touch = Tactile
 # On Android only, in place of the two checkboxes below: hides the bars
 # Android draws at the screen's edges, with the clock and the navigation
 # buttons.
