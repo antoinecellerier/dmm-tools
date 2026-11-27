@@ -179,6 +179,13 @@ settings-zoom-chip =
 # those that step the zoom.
 settings-zoom-reset-chip =
     .hover = 将 GUI 缩放到 100% (用 { $reset } 恢复，用 { $step } 逐级调整)
+# How roomy the buttons are, after Firefox's Density setting: Compact fits
+# more on screen, Touch makes every button a finger-sized target. Neither
+# changes the text size, which is Zoom's.
+settings-density = 密度:
+    .hover = “紧凑”可在屏幕上显示更多内容，“触控”让按钮变大，便于手指操作
+settings-density-compact = 紧凑
+settings-density-touch = 触控
 # On Android only, in place of the two checkboxes below: hides the bars
 # Android draws at the screen's edges, with the clock and the navigation
 # buttons.

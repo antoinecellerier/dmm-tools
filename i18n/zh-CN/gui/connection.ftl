@@ -148,6 +148,25 @@ connection-late-copied = 命令已复制
 # { project-link } is the top bar's Help & Feedback link.
 connection-late-report = 请通过顶栏中的“{ project-link }”报告此问题，并注明万用表型号和操作系统。
 
+## The note under the reading that asks, once, for a capture of a meter whose
+## support is experimental. A capture is a guided run of the dmm-cli tool
+## that records what the meter sends in each of its modes.
+
+connection-capture-ask-title = 帮助验证这款万用表
+# $warning is the sentence saying how far the meter's support is verified,
+# which names the meter. "yours" is the reader's own meter.
+connection-capture-ask-body = { $warning }用你手上的这台万用表进行一次引导式捕获，是对本项目最有价值的贡献: 既能确认哪些功能正常，也能让发现的问题得到修复。
+# The same on a phone, which has no dmm-cli to run the capture with;
+# $warning as above.
+connection-capture-ask-body-computer = { $warning }在此应用断开连接后，用电脑上的 dmm-cli 对你手上的这台万用表进行一次引导式捕获，这是对本项目最有价值的贡献: 既能确认哪些功能正常，也能让发现的问题得到修复。
+# Above the command that runs the capture: this window has the meter, and
+# the command needs it. Copy is the button after the command, and the note
+# goes when the top bar's Disconnect is pressed, so the copy comes first.
+connection-capture-ask-disconnect = 复制此命令，断开连接后再运行:
+# A link to the contributors' guide on GitHub; ↗ marks a link.
+connection-capture-ask-link = 如何捕获 ↗
+    .hover = 打开 GitHub 上的捕获指南
+
 ## Toasts.
 
 # After shared.ftl's saved-mock-mode-unknown. Mock mode is the setting's

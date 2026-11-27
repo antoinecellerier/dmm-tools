@@ -20,6 +20,11 @@
 # e.g. 30s; $keys the two keys that step through them, e.g. [ / ].
 graph-window =
     .hover = 显示最近 { $window } 的样本 (按 { $keys } 循环切换)
+# The same choice as one list, in place of the chips on a row too narrow for
+# them. Its text is the window shown, e.g. 1m. $keys as above.
+graph-window-list =
+    .hover = 图表显示的时长 (按 { $keys } 循环切换)
+    .a11y = 时间窗口
 # A chip, lit while the graph follows the newest samples; dragging the graph
 # turns it off. Keep it short; it is set in small capitals.
 graph-live = 实时
@@ -52,6 +57,9 @@ graph-reset-zoom = 重置缩放
 
 # The caption at the start of the first box.
 graph-plot = 绘制:
+# A Plot: or Show: chip's text where the meter's series are in more than one
+# unit: $series is the series' name, e.g. Frequency, $unit its unit, e.g. Hz.
+graph-chip-with-unit = { $series } ({ $unit })
 # The Plot: chip for the meter's main reading while the meter has no name
 # for it; its text also names that reading's trace in the hover and on the
 # Show: chip. .a11y is the chip's name for a screen reader, which tells it
@@ -141,9 +149,19 @@ graph-cursors = 光标
 # Small text after Cursors until both are placed.
 graph-cursors-hint = 在图表上放置光标
 
-## The plot: the readout by the pointer, the labels on its lines, and the
-## flags of markers along its bottom edge.
+## The plot: what it says while it is empty, the readout by the pointer,
+## the labels on its lines, and the flags of markers along its bottom edge.
 
+# In the middle of the plot while it is empty and no meter is connected,
+# in small greyed text on one line: keep it short. .a11y is the same for a
+# screen reader, the last of the plot's sentences (see
+# graph-plot-a11y-no-data), with its full stop.
+graph-empty-no-meter = 连接万用表即可绘制读数
+    .a11y = 连接万用表即可绘制读数。
+# The same while a meter is connecting or connected and has sent no reading
+# yet, or after Clear.
+graph-empty-waiting = 正在等待第一个读数
+    .a11y = 正在等待第一个读数。
 # The × button on the readout of a crosshair that a tap on a touchscreen
 # left on the plot: it takes the crosshair and the readout away. Its name
 # for a screen reader.
