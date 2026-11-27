@@ -397,6 +397,40 @@ pub(crate) fn warn_other_data<T: dmm_lib::transport::Transport>(dmm: &dmm_lib::D
     );
 }
 
+/// Ask for a report, once a run, when a meter with the radio built in reads
+/// under a Bluetooth name its entry does not list: it was opened by
+/// address, and the name is what lets the next owner's be found. After a
+/// reading: the meter works.
+pub(crate) fn warn_unlisted_name<T: dmm_lib::transport::Transport>(dmm: &dmm_lib::Dmm<T>) {
+    // Looked at once: the name is the link's, and cannot change under it.
+    static LOOKED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+    if LOOKED.swap(true, std::sync::atomic::Ordering::Relaxed) {
+        return;
+    }
+    if let Some(name) = dmm.unlisted_bluetooth_name() {
+        eprintln!(
+            "{} {}",
+            warning_label(),
+            unlisted_name_text(dmm.profile(), name)
+        );
+    }
+}
+
+/// [`warn_unlisted_name`]'s text: the fact, then where to report it.
+fn unlisted_name_text(profile: &dmm_lib::protocol::DeviceProfile, name: &str) -> String {
+    let l = crate::l10n::get();
+    format!(
+        "{} {}",
+        l.help()
+            .unlisted_bluetooth_name(&prose_name(profile_name(profile)), name),
+        tr!(
+            l,
+            "connect-unlisted-name-report",
+            url = dmm_shared::help::issues_url()
+        )
+    )
+}
+
 /// Say, once a run, that the link hands readings over late, in the run's
 /// language: the stream has the notice once it has seen readings arrive in
 /// pairs, and the library only logs it.
@@ -887,6 +921,20 @@ pub(crate) fn open_mock_device(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A meter reading under a Bluetooth name its entry lacks is named with
+    /// that name and where to report it.
+    #[test]
+    fn an_unlisted_bluetooth_name_asks_for_a_report() {
+        let entry = registry::find_device("cm2100b").expect("an entry");
+        let profile = *(entry.new_protocol)().profile();
+        let text = unlisted_name_text(&profile, "Bench clamp");
+        assert!(
+            text.starts_with("The OWON CM2100B goes by the Bluetooth name \"Bench clamp\""),
+            "{text}"
+        );
+        assert!(text.ends_with("/issues so it is found by it."), "{text}");
+    }
 
     /// The late-readings notice reads as the library's, each part on a line
     /// of its own, the command last and alone so it copies clean.

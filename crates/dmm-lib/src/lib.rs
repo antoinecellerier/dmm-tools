@@ -306,6 +306,17 @@ impl<T: Transport> Dmm<T> {
         self.protocol.sends_other_entry()
     }
 
+    /// The Bluetooth name a meter with the radio built in goes by, when its
+    /// entry lists none like it: it was opened by address, and is worth a
+    /// report, since a search by name does not find it. `None` on every
+    /// other link, and for a peer no name was heard from.
+    pub fn unlisted_bluetooth_name(&self) -> Option<&str> {
+        let advertised = self.transport.advertised_name()?;
+        registry::find_device(self.protocol.profile().id)?
+            .lacks_bluetooth_name(advertised)
+            .then_some(advertised)
+    }
+
     /// The name the meter already gave on this link, without asking it: for
     /// a caller that shows the name only when it costs nothing.
     pub fn known_name(&self) -> Option<&str> {

@@ -144,6 +144,20 @@ impl SelectableDevice {
     pub fn bluetooth_only(&self) -> bool {
         !self.bluetooth_names.is_empty()
     }
+
+    /// Whether a meter with the radio built in goes by `advertised`, a name
+    /// none of its own match: it was opened by address, and a search by
+    /// name would not have found it. False for a meter behind an adapter or
+    /// a cable, whose link's name is not the meter's, and for the address
+    /// the host shows in place of a name it never heard.
+    pub(crate) fn lacks_bluetooth_name(&self, advertised: &str) -> bool {
+        self.bluetooth_only()
+            && !crate::transport::is_address_alias(advertised)
+            && !self
+                .bluetooth_names
+                .iter()
+                .any(|prefix| crate::transport::name_matches(prefix, advertised))
+    }
 }
 
 /// A name another brand sells a [`SelectableDevice`]'s meter under
@@ -1102,6 +1116,21 @@ mod tests {
         assert_eq!(ids("shared dmm"), ["first", "second"]);
         assert_eq!(ids("Own DMM"), ["own", "second"]);
         assert!(ids("Other DMM").is_empty());
+    }
+
+    /// A meter with the radio built in that answers under a name its entry
+    /// does not list is one to report; a listed name, in any case or with
+    /// more after it, is not, and an adapter's name says nothing of the
+    /// meter behind it.
+    #[test]
+    fn a_built_in_radio_under_another_name_lacks_it() {
+        let owon = find_device("b35t+").expect("an entry");
+        assert!(owon.lacks_bluetooth_name("Bench meter"));
+        assert!(!owon.lacks_bluetooth_name("BDM"));
+        assert!(!owon.lacks_bluetooth_name(" bdm\0\0"));
+        assert!(!owon.lacks_bluetooth_name("12-34-56-78-9A-BC"));
+        let behind_adapter = find_device("ut61eplus").expect("an entry");
+        assert!(!behind_adapter.lacks_bluetooth_name("Bench meter"));
     }
 
     /// A meter that advertises names of its own is on Bluetooth alone, and a

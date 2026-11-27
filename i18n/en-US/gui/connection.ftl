@@ -36,6 +36,9 @@ connection-selected-meter-named = If your meter is another, pick it in Settings 
 # After shared.ftl's unrecognised-data, in a toast: where to report it.
 # { project-link } is the top bar's Help & Feedback link.
 connection-unrecognised-report = Please report it through { project-link } in the top bar.
+# After shared.ftl's unlisted-bluetooth-name, in a toast: where to report
+# the name, unless its owner chose it. { project-link } as above.
+connection-unlisted-name-report = If the meter came with that name, please report it through { project-link } in the top bar.
 # The closing line under the steps. "Connect" is the top bar's button.
 connection-click-connect = Resolve the issue, then "Connect" again.
 # The closing line after the Bluetooth steps when nothing answered at the

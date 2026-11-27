@@ -18,6 +18,9 @@ connect-unrecognised-report = Please report it at { $url } with the meter in thi
 # The same when the data came from a recording being played back: $url as
 # above.
 connect-unrecognised-report-file = Please report it at { $url }, attaching the recording.
+# After shared.ftl's unlisted-bluetooth-name, on a warning line: where to
+# report the name, unless its owner chose it. $url is the issue tracker.
+connect-unlisted-name-report = If the meter came with that name, please report it at { $url } so it is found by it.
 # The late-readings notice's last line (lib-errors.ftl), on a link the tool
 # has no fix for yet. $url is the issue tracker.
 connect-late-readings-report = Please report it at { $url }, naming the meter and the operating system.

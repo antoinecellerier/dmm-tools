@@ -767,6 +767,17 @@ impl App {
                     let message = self.l10n.help().bluetooth_tied(count).into_owned();
                     self.toasts.push(Toast::caution(message));
                 }
+                DmmMessage::UnlistedName { opened, name } => {
+                    let pick = self.picked_listing();
+                    let opened = registry::connected_listing(pick, opened).display_name();
+                    let opened = self.l10n.label(dmm_lib::text::TextKind::Model, opened);
+                    let message = format!(
+                        "{} {}",
+                        self.l10n.help().unlisted_bluetooth_name(&opened, &name),
+                        tr!(self.l10n, "connection-unlisted-name-report")
+                    );
+                    self.toasts.push(Toast::caution(message));
+                }
                 DmmMessage::OtherData { named, opened } => {
                     // Both by the names the pick's brand sells them under.
                     let pick = self.picked_listing();
@@ -2480,6 +2491,33 @@ mod tests {
                 "Pick {} or Auto-detect in Settings (\u{2699}).",
                 named.display_name()
             )),
+            "{}",
+            toast.message
+        );
+    }
+
+    /// A meter reading under a Bluetooth name its entry lacks asks for the
+    /// name to be reported, by the meter's name and the one it advertises.
+    #[test]
+    fn an_unlisted_bluetooth_name_asks_for_a_report() {
+        let mut app = app("cm2100b", false);
+        app.connection.state = ConnectionState::Connected;
+        let opened = dmm_lib::protocol::registry::find_device("cm2100b").expect("an entry");
+        app.deliver(DmmMessage::UnlistedName {
+            opened,
+            name: "Bench clamp".to_string(),
+        });
+        let toast = app.toasts.take_latest().expect("a toast");
+        assert!(
+            toast.message.starts_with(&format!(
+                "The {} goes by the Bluetooth name \"Bench clamp\"",
+                opened.display_name()
+            )),
+            "{}",
+            toast.message
+        );
+        assert!(
+            toast.message.contains("Help & Feedback"),
             "{}",
             toast.message
         );

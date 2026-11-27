@@ -305,6 +305,17 @@ impl<'a> Help<'a> {
         tr!(self.0, "other-data", named = named, opened = opened)
     }
 
+    /// That `meter`, open and reading, goes by a Bluetooth name its entry
+    /// does not list; each app follows it with how to report it.
+    pub fn unlisted_bluetooth_name(self, meter: &str, name: &str) -> Cow<'a, str> {
+        tr!(
+            self.0,
+            "unlisted-bluetooth-name",
+            meter = meter,
+            name = name
+        )
+    }
+
     /// That the meter sent data no parser knows, as `report` has it; each
     /// app follows it with how to report it.
     pub fn unrecognised_data(self, report: &dmm_lib::protocol::Unrecognised) -> Cow<'a, str> {

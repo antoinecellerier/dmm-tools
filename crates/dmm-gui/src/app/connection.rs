@@ -342,6 +342,12 @@ pub(crate) enum DmmMessage {
     /// The open took the first of this many Bluetooth peers that matched
     /// equally well.
     BluetoothTied(usize),
+    /// The meter `opened`, with the radio built in, reads under this
+    /// Bluetooth name, which its entry does not list: once per Connect.
+    UnlistedName {
+        opened: &'static registry::SelectableDevice,
+        name: String,
+    },
 }
 
 /// Extract profile info from a newly opened device, optionally query its name,
@@ -620,6 +626,7 @@ where
     let mut stream = new_stream(&mut dmm, tick, simulated, &stop_flag, &wake);
     let mut protocol_errors: u32 = 0;
     let mut told_other_data = false;
+    let mut looked_at_name = false;
     let mut paused = false;
     let mut last_keys: ListedKeys = Default::default();
     loop {
@@ -682,6 +689,16 @@ where
                 {
                     told_other_data = true;
                     let _ = msg_tx.send(DmmMessage::OtherData { named, opened });
+                }
+                // Looked at once: the name cannot change under the link.
+                if !looked_at_name {
+                    looked_at_name = true;
+                    if let Some(name) = stream.dmm().unlisted_bluetooth_name()
+                        && let Some(opened) = registry::find_device(stream.dmm().profile().id)
+                    {
+                        let name = name.to_string();
+                        let _ = msg_tx.send(DmmMessage::UnlistedName { opened, name });
+                    }
                 }
                 // A new mode or range can change the reading's width, the one
                 // layout change that arrives without input: give it egui's

@@ -180,6 +180,11 @@ other-model-detected = The meter reports "{ $reported }"; detection opened it as
 # $named is that model, e.g. ZOYI / ZOTEK ZT-5566SE; $opened the one opened,
 # e.g. ZOYI / ZOTEK ZT-300AB. Each app follows it with what to pick.
 other-data = The meter sends { $named } data, not the { $opened } it was opened as.
+# A meter with Bluetooth built in is open and reading, under a Bluetooth
+# name this tool does not look for, said once. $meter is the meter, e.g.
+# OWON CM2100B; $name the name it advertises. Each app follows it with how
+# to report it.
+unlisted-bluetooth-name = The { $meter } goes by the Bluetooth name "{ $name }", which this tool doesn't look for.
 # The meter sent data this tool doesn't read yet, said once per run. $meter
 # is the meter, e.g. UNI-T UT61E+; $detail what it sent, in English, e.g.
 # mode byte: 0x7f. Each app follows it with how to report it.
