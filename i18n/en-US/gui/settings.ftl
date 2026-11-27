@@ -30,9 +30,16 @@ settings-device-clock = (restart without the clock flags to pick a meter)
 ## The Bluetooth device row: which Bluetooth adapter or meter is opened.
 
 # The row's caption; .a11y names its dropdown for a screen reader.
+# .hover-chosen is the hover while a device is chosen; $address is its
+# Bluetooth address, e.g. 12:34:56:78:9A:BC.
 settings-bluetooth-device = Bluetooth device:
     .a11y = Bluetooth device
     .hover = The Bluetooth adapter or meter to open
+    .hover-chosen = The Bluetooth adapter or meter to open, at { $address }
+# A device in the open list, and under a "no meter found" notice, when
+# another in range has the same name. $name is its name, e.g. UT-D07B;
+# $address its Bluetooth address.
+settings-bluetooth-device-entry = { $name } ({ $address })
 # The dropdown and its first entry while no device is chosen: the first one
 # in range whose name the meter is known by is opened.
 settings-bluetooth-device-auto = Auto (found by name)

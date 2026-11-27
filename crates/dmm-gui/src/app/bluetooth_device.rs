@@ -46,6 +46,37 @@ impl Heard {
             selector: device.path,
         }
     }
+
+    /// What a list calls this device among `others` (itself included): its
+    /// name, with what opens it when another goes by the same name, as two
+    /// adapters of one model do.
+    fn label<'a>(
+        &self,
+        l10n: &dmm_shared::l10n::Localizer,
+        mut others: impl Iterator<Item = &'a Heard>,
+    ) -> String {
+        if others.any(|o| o.name == self.name && o.selector != self.selector) {
+            tr!(
+                l10n,
+                "settings-bluetooth-device-entry",
+                name = self.name.as_str(),
+                address = short_selector(&self.selector)
+            )
+            .into_owned()
+        } else {
+            self.name.clone()
+        }
+    }
+}
+
+/// A selector short enough for a list: an address whole, a platform
+/// identifier (a UUID where there are no addresses) by its first group.
+fn short_selector(selector: &str) -> &str {
+    if selector.contains(':') {
+        selector
+    } else {
+        selector.split('-').next().unwrap_or(selector)
+    }
 }
 
 /// The scan behind the open **Bluetooth device** list, and what it heard.
@@ -359,10 +390,13 @@ impl App {
                                 for entry in &entries {
                                     let live = entry.map(|h| &h.selector)
                                         == chosen.as_ref().map(|c| &c.selector);
-                                    let name = entry.map_or(auto.as_ref(), |h| h.name.as_str());
+                                    let name = entry.map_or_else(
+                                        || auto.to_string(),
+                                        |h| h.label(&l10n, entries.iter().flatten().copied()),
+                                    );
                                     let response = ui
-                                        .selectable_label(live, choice_entry_text(name, live))
-                                        .a11y_label(name);
+                                        .selectable_label(live, choice_entry_text(&name, live))
+                                        .a11y_label(&name);
                                     // Focus lands on the live entry as the
                                     // user opens the list, and back where
                                     // it was as the list takes a new height.
@@ -393,8 +427,18 @@ impl App {
                                 picked
                             },
                         );
+                        // The address is what tells a chosen device from
+                        // another of its name.
+                        let hover = match &chosen {
+                            Some(device) => tr!(
+                                l10n,
+                                "settings-bluetooth-device.hover-chosen",
+                                address = device.selector.as_str()
+                            ),
+                            None => tr!(l10n, "settings-bluetooth-device.hover"),
+                        };
                         response
-                            .on_hover_text(tr!(l10n, "settings-bluetooth-device.hover"))
+                            .on_hover_text(hover)
                             .a11y_label(&tr!(l10n, "settings-bluetooth-device.a11y"));
                         picked
                     })
@@ -573,7 +617,7 @@ impl App {
             );
             for device in &self.bluetooth.offered {
                 let row = ui
-                    .button(&device.name)
+                    .button(device.label(&l10n, self.bluetooth.offered.iter()))
                     .on_hover_text(tr!(l10n, "connection-others-pick.hover"));
                 if row.clicked() {
                     picked = Some(device.clone());
@@ -749,6 +793,35 @@ mod tests {
             .expect("a choice");
         assert_eq!(device.name, "Renamed clamp");
         assert!(device.report_asked, "asked for it already");
+    }
+
+    /// Two devices of one name are told apart by what opens them; a name
+    /// of its own stands alone.
+    #[test]
+    fn devices_sharing_a_name_show_their_addresses() {
+        let device = |name: &str, selector: &str| Heard {
+            name: name.to_string(),
+            selector: selector.to_string(),
+        };
+        let heard = [
+            device("UT-D07B", "12:34:56:78:9A:BC"),
+            device("UT-D07B", "AA:BB:CC:DD:EE:FF"),
+            device("CM2100B", "11:22:33:44:55:66"),
+            device("BDM", "0A1B2C3D-0000-1111-2222-333344445555"),
+            device("BDM", "9F8E7D6C-0000-1111-2222-333344445555"),
+        ];
+        let l10n = crate::l10n::english();
+        let labels: Vec<String> = heard.iter().map(|h| h.label(&l10n, heard.iter())).collect();
+        assert_eq!(
+            labels,
+            [
+                "UT-D07B (12:34:56:78:9A:BC)",
+                "UT-D07B (AA:BB:CC:DD:EE:FF)",
+                "CM2100B",
+                "BDM (0A1B2C3D)",
+                "BDM (9F8E7D6C)",
+            ]
+        );
     }
 
     /// A scan's answer fills the list, the devices an entry takes by name
