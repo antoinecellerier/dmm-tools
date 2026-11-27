@@ -117,6 +117,12 @@ markers-off-recording = 記録外
 # The hover, and the name a screen reader reads, of the + a sample's row
 # shows under the pointer; $time is the sample's time, e.g. 14:02:37.512.
 markers-add = { $time } にマーカーを追加する
+# The entry of the menu a long press or a right-click on a sample's row
+# opens: it puts a marker on that reading, as the graph's menu's Mark does.
+# .a11y is its name for a screen reader; $time is the sample's time, e.g.
+# 14:02:37.512.
+markers-row-mark = マーカーの追加
+    .a11y = { $time } の測定値にマーカーを追加
 # A marker's number, drawn as its flag: the hover and the name a screen
 # reader reads. Clicking it scrolls the graph to the marker; $number is its
 # number. .hover-disabled shows while the graph no longer holds its reading.

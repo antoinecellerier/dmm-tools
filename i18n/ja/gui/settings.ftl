@@ -173,6 +173,13 @@ settings-zoom-chip =
 # those that step the zoom.
 settings-zoom-reset-chip =
     .hover = GUI の表示倍率を 100% にする ({ $reset }、または { $step } で段階的に変更)
+# How roomy the buttons are, after Firefox's Density setting: Compact fits
+# more on screen, Touch makes every button a finger-sized target. Neither
+# changes the text size, which is Zoom's.
+settings-density = 表示密度:
+    .hover = [コンパクト] は画面に多く表示し、[タッチ] は指で押しやすいようにボタンを大きくする
+settings-density-compact = コンパクト
+settings-density-touch = タッチ
 # On Android only, in place of the two checkboxes below: hides the bars
 # Android draws at the screen's edges, with the clock and the navigation
 # buttons.

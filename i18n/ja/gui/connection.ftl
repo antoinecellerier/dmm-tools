@@ -148,6 +148,25 @@ connection-late-copied = コマンドをコピーしました
 # { project-link } is the top bar's Help & Feedback link.
 connection-late-report = マルチメーターの機種とオペレーティング システムを明記して、トップ バーの [{ project-link }] から報告してください。
 
+## The note under the reading that asks, once, for a capture of a meter whose
+## support is experimental. A capture is a guided run of the dmm-cli tool
+## that records what the meter sends in each of its modes.
+
+connection-capture-ask-title = 検証にご協力ください
+# $warning is the sentence saying how far the meter's support is verified,
+# which names the meter. "yours" is the reader's own meter.
+connection-capture-ask-body = { $warning }お使いのマルチメーターでガイドに沿ったキャプチャを行うことが、このプロジェクトへの最も価値のある貢献になります。どの機能が動作するかが確認でき、問題があれば修正につながります。
+# The same on a phone, which has no dmm-cli to run the capture with;
+# $warning as above.
+connection-capture-ask-body-computer = { $warning }お使いのマルチメーターでガイドに沿ったキャプチャを行うことが、このプロジェクトへの最も価値のある貢献になります。どの機能が動作するかが確認でき、問題があれば修正につながります。キャプチャは、このアプリでマルチメーターを切断したあと、パソコンで dmm-cli を使って行います。
+# Above the command that runs the capture: this window has the meter, and
+# the command needs it. Copy is the button after the command, and the note
+# goes when the top bar's Disconnect is pressed, so the copy comes first.
+connection-capture-ask-disconnect = このコマンドをコピーし、マルチメーターを切断してから実行してください:
+# A link to the contributors' guide on GitHub; ↗ marks a link.
+connection-capture-ask-link = キャプチャの方法 ↗
+    .hover = GitHub でキャプチャのガイドを開く
+
 ## Toasts.
 
 # After shared.ftl's saved-mock-mode-unknown. Mock mode is the setting's
