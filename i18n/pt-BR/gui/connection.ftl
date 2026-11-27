@@ -149,6 +149,25 @@ connection-late-copied = Comando copiado
 # { project-link } is the top bar's Help & Feedback link.
 connection-late-report = Relate o problema pelo link { project-link }, na barra superior, indicando o multímetro e o sistema operacional.
 
+## The note under the reading that asks, once, for a capture of a meter whose
+## support is experimental. A capture is a guided run of the dmm-cli tool
+## that records what the meter sends in each of its modes.
+
+connection-capture-ask-title = Ajude a verificar este multímetro
+# $warning is the sentence saying how far the meter's support is verified,
+# which names the meter. "yours" is the reader's own meter.
+connection-capture-ask-body = { $warning } Uma captura guiada feita com o seu é a contribuição mais valiosa que você pode dar ao projeto: ela confirma o que funciona e permite corrigir qualquer problema.
+# The same on a phone, which has no dmm-cli to run the capture with;
+# $warning as above.
+connection-capture-ask-body-computer = { $warning } Uma captura guiada feita com o seu, executada com o dmm-cli em um computador depois de desconectar o multímetro deste aplicativo, é a contribuição mais valiosa que você pode dar ao projeto: ela confirma o que funciona e permite corrigir qualquer problema.
+# Above the command that runs the capture: this window has the meter, and
+# the command needs it. Copy is the button after the command, and the note
+# goes when the top bar's Disconnect is pressed, so the copy comes first.
+connection-capture-ask-disconnect = Copie este comando, desconecte o multímetro e depois execute o comando:
+# A link to the contributors' guide on GitHub; ↗ marks a link.
+connection-capture-ask-link = Como fazer uma captura ↗
+    .hover = Abrir o guia de captura no GitHub
+
 ## Toasts.
 
 # After shared.ftl's saved-mock-mode-unknown. Mock mode is the setting's
